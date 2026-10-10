@@ -125,12 +125,11 @@ def _load_providers() -> dict[str, types.ModuleType]:
 
     const = _load("be_pkg.const", PKG / "const.py")
     global _FLUVIUS_KEYS, _WALLONIA_DSO_KEYS, _BRUSSELS_DSO_KEYS
-    global _EXCISE_KNOWN_UNTIL, _VREG_CEILING_HTVA, _VREG_CEILING_KNOWN_UNTIL
+    global _VREG_CEILING_HTVA, _VREG_CEILING_KNOWN_UNTIL
     global _MAX_WELCOME_CREDIT_MONTHS
     _FLUVIUS_KEYS = const.FLUVIUS_KEYS
     _WALLONIA_DSO_KEYS = const.WALLONIA_DSO_KEYS
     _BRUSSELS_DSO_KEYS = const.BRUSSELS_DSO_KEYS
-    _EXCISE_KNOWN_UNTIL = const.FEDERAL_EXCISE_KNOWN_UNTIL
     _VREG_CEILING_HTVA = const.VREG_NETWORK_CEILING_HTVA
     _VREG_CEILING_KNOWN_UNTIL = const.VREG_NETWORK_CEILING_KNOWN_UNTIL
     _MAX_WELCOME_CREDIT_MONTHS = const.MAX_QUOTED_WELCOME_WAIT_MONTHS
@@ -267,7 +266,6 @@ _FLUVIUS_KEYS: frozenset[str] = frozenset()
 _WALLONIA_DSO_KEYS: frozenset[str] = frozenset()
 _BRUSSELS_DSO_KEYS: frozenset[str] = frozenset()
 # Filled from const.py by the loader above, like the DSO key sets.
-_EXCISE_KNOWN_UNTIL: tuple[int, int] = (2026, 8)
 _VREG_CEILING_HTVA: float = 0.3276168
 _VREG_CEILING_KNOWN_UNTIL: tuple[int, int] = (2027, 1)
 # How many cards have to PRINT the sentence before a disagreeing majority
@@ -2760,50 +2758,10 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
     )
 
 
-# How long before the excise window lapses the check starts asking for it to
-# be extended. Long enough to read the new rate off January's cards, check it
-# against the fleet and ship, without nagging for a quarter.
-_EXCISE_WINDOW_NOTICE = timedelta(days=56)
-
-
-def _check_excise_window(today: date | None = None) -> None:
-    """Ask for the excise window to be extended before it lapses.
-
-    ``resolve_federal_excise`` bills the rate the law sets instead of a stale
-    card's copy of it, but only for months inside
-    ``FEDERAL_EXCISE_KNOWN_FROM`` .. ``FEDERAL_EXCISE_KNOWN_UNTIL``, because the
-    taxshift steps the rate down every January and encoding a rate before it is
-    in force would bill a prediction. Past the window every card is read as
-    printed again, which is the old behaviour and silently re-opens the hole a
-    stale card leaves: Ecofix's September 2026 card cost 5,49 EUR/yr that way.
-
-    Nothing in the code can know the next rate, so this asks a person, on the
-    same principle as the archive workflow warning before its upload token
-    expires. Reported as a tax row, so it files in the thread the federal block
-    already uses and fails no pull request.
-    """
-    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
-    lapses = date(*_EXCISE_KNOWN_UNTIL, 1)
-    if today < lapses - _EXCISE_WINDOW_NOTICE:
-        return
-    left = (lapses - today).days
-    when = (
-        f"in {left} days"
-        if left > 0
-        else f"{-left} days ago, and it is billing cards as printed"
-    )
-    _record(
-        "_federal: the excise window needs extending",
-        False,
-        f"the law's rate is applied to months before {lapses.isoformat()}, which lapses "
-        f"{when}. Read January's rate off the fleet's cards, check the majority the way "
-        "_check_federal_tax_consensus does, then move FEDERAL_EXCISE_RESIDENTIAL_TVAC and "
-        "FEDERAL_EXCISE_KNOWN_UNTIL (const.py) and re-pin the test. Mind the basis: the "
-        "constant is VAT-inclusive EUR/kWh (4,876 c/kWh = 46,00 ex-VAT), and the announced "
-        "steps are 45,58 then 42,40 then 40,28 EUR/MWh, which need confirming in the same "
-        "basis before they are used",
-        kind="tax",
-    )
+# How long before the VREG ceiling window lapses the check starts asking for
+# it to be extended. Long enough to read the new figure off January's cards,
+# check it against the fleet and ship, without nagging for a quarter.
+_WINDOW_NOTICE = timedelta(days=56)
 
 
 def _check_vreg_ceiling_window(today: date | None = None) -> None:
@@ -2818,12 +2776,14 @@ def _check_vreg_ceiling_window(today: date | None = None) -> None:
     times too tight and drops the cap entirely for the ten suppliers that
     print none.
 
-    Nothing in the code can know next year's rate, so this asks a person, the
-    way the excise window above does.
+    Nothing in the code can know next year's rate, so this asks a person, on
+    the same principle as the archive workflow warning before its upload token
+    expires. Reported as a tax row, so it files in the thread the federal block
+    already uses and fails no pull request.
     """
     today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
     lapses = date(*_VREG_CEILING_KNOWN_UNTIL, 1)
-    if today < lapses - _EXCISE_WINDOW_NOTICE:
+    if today < lapses - _WINDOW_NOTICE:
         return
     left = (lapses - today).days
     when = (
@@ -5283,14 +5243,6 @@ async def _run(texts: Path | None = None) -> int:
             # Its own try: a catalog crash must not swallow the freshness
             # gate, which is the one check that sees a supplier superseding
             # a card we still resolve.
-            try:
-                _check_excise_window()
-            except Exception as err:
-                _record(
-                    "_federal: excise window check crashed",
-                    False,
-                    f"{type(err).__name__}: {err}",
-                )
             try:
                 _check_vreg_ceiling_window()
             except Exception as err:

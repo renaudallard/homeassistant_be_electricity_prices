@@ -262,6 +262,7 @@ class BePricesCoordinator(
         self._snapshot_power_term: tuple[float, float] | None = None
         # The VAT rates the snapshot was resolved at (coordinator_snapshot.py).
         self._snapshot_vat: tuple[float, float] = (0.0, 0.0)
+        self._snapshot_excise: float | None = None
         self._snapshot_fetched_at: datetime | None = None
         self._snapshot_probe_key: str | None = None
         # Which schema the snapshot in hand was parsed under, and what

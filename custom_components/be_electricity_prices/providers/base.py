@@ -41,15 +41,14 @@ figure copied out of one into this package is refused however plausible it
 looks. That rule is why Sibelga's power term is fetched from Brugel's
 published sheet instead of being typed in.
 
-Two REGULATED figures are the exception and they are typed in on purpose,
-because no card is their source: the flat federal excise
-(``FEDERAL_EXCISE_RESIDENTIAL_TVAC``) and the VREG network ceiling
-(``VREG_NETWORK_CEILING_HTVA``), each reaching a snapshot through a resolver
-in ``providers/_resolve.py``. Both are set by a regulator for the whole
-country or region, both are cross-checked against what the fleet prints, and
-both carry an explicit ``KNOWN_FROM`` / ``KNOWN_UNTIL`` window so they expire
-into "read the card" rather than going stale. A figure that cannot meet all
-three tests does not belong here.
+Two REGULATED figures are the exception, because no card is their source.
+The federal excise is read from the law itself (``excise_law.py``). The VREG
+network ceiling (``VREG_NETWORK_CEILING_HTVA``) is typed in on purpose: set
+by the regulator for the whole region, cross-checked against what the fleet
+prints, and carrying an explicit ``KNOWN_FROM`` / ``KNOWN_UNTIL`` window so it
+expires into "read the card" rather than going stale. Each reaches a snapshot
+through a resolver in ``providers/_resolve.py``. A figure that cannot meet
+all three tests does not belong here.
 """
 
 from __future__ import annotations

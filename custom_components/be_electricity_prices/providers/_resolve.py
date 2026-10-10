@@ -44,17 +44,14 @@ from homeassistant.util import dt as dt_util
 from ..const import (
     DSO_SIBELGA,
     FEDERAL_CONTRIBUTION_ZEROED_FROM,
-    FEDERAL_EXCISE_KNOWN_FROM,
-    FEDERAL_EXCISE_KNOWN_UNTIL,
-    FEDERAL_EXCISE_RESIDENTIAL_TVAC,
     FLUVIUS_KEYS,
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
-    VAT_RATE_REDUCED,
     VREG_NETWORK_CEILING_HTVA,
     VREG_NETWORK_CEILING_KNOWN_FROM,
     VREG_NETWORK_CEILING_KNOWN_UNTIL,
 )
+from ..excise_law import standard_excise
 from ..vat_rates import residential_vat, standard_vat
 from ._rates import (
     DynamicRates,
@@ -347,22 +344,21 @@ def resolve_federal_contribution(
     through the change and every month since, which is the professional scheme
     keeping the levy rather than three suppliers being stale in lockstep.
 
-    Open-ended, unlike the two levy corrections beside it, and deliberately so.
-    Those encode a rate that is IN FORCE and expire into reading the card,
-    because a rate goes out of date. This encodes an ABOLITION, which does
-    not: the line was struck from the law and nothing schedules its return.
-    Giving it an end date would be the harmful choice, because four
-    residential card families still print the abolished line and would be
-    billed it again the month the window closed, about 7 EUR a year each.
+    Open-ended, unlike the VREG ceiling beside it, and deliberately so. That
+    encodes a rate that is IN FORCE and expires into reading the card, because
+    a rate goes out of date. This encodes an ABOLITION, which does not: the
+    line was struck from the law and nothing schedules its return. Giving it
+    an end date would be the harmful choice, because four residential card
+    families still print the abolished line and would be billed it again the
+    month the window closed, about 7 EUR a year each.
 
     The risk that comes with that is real and is accepted: if the levy were
     ever reinstated, this would go on striking it out, and nothing would say
     so. A rate of zero trips no bound, and the consensus check compares cards
     with each other rather than with the law, so a fleet that all printed the
-    reinstated figure would agree with itself and still be zeroed here. The
-    signal to watch for is the live check's excise window request, which comes
-    up eight weeks before the excise this was folded into next steps; a
-    reinstated contribution would arrive in the same measure.
+    reinstated figure would agree with itself and still be zeroed here. A
+    reinstated contribution would come back in article 419 beside the excise,
+    which ``excise_law`` reads and does not sum it into.
     """
     taxes = snapshot.taxes
     if professional or not taxes.energy_contribution:
@@ -384,11 +380,13 @@ def resolve_federal_excise(
     prints it rounded, and Ecofix prints July's 5,03288 because its card is a
     picture of July's card, which no parser change can read differently.
 
-    Applied only inside the window the constants name, on the card's own VAT
-    basis: most print the levy including VAT, Ecopower prints it excluding and
-    the engine grosses it later, so writing one number into both would be
-    wrong by 6% for one of them. A card that already prints the rate is
-    returned unchanged, so this is identity for almost every entry.
+    The rate is the law's, read from article 419 by ``excise_law``, for every
+    month from the first step it holds; before that, or while the law has not
+    been read yet, the card is billed as printed. It is put on the card's own
+    VAT basis: most print the levy including VAT, Ecopower prints it
+    excluding and the engine grosses it later, so writing one number into
+    both would be wrong by 6% for one of them. A card that already prints the
+    rate is returned unchanged, so this is identity for almost every entry.
 
     Left alone: a professional card, whose scheme bands the levy by annual
     volume and is a different rate entirely, and any card carrying
@@ -396,32 +394,26 @@ def resolve_federal_excise(
 
     Those two were the same card when this was written and are not any more.
     Mega's and Engie's RESIDENTIAL cards print a four-tier table too, for
-    January to July 2026, and the bands guard now catches them. It is still
-    the right answer and for a different reason: those months are outside the
-    window below, where the rate above is the FLAT one the August measure
-    set, so a banded card is a month this constant does not describe rather
-    than a scheme it does not apply to. Measured over the 317 residential
-    cards the archive holds for August to December 2026, none carries a band
-    table, because the measure that flattened the levy took it off the card.
+    January to July 2026, and the bands guard catches them. It is still the
+    right answer and for a different reason: the law's text in force begins
+    in August 2026, when the measure flattened the household rate, so a
+    banded card is a month the held rates do not describe rather than a
+    scheme they do not apply to. Measured over the 317 residential cards the
+    archive holds for August to December 2026, none carries a band table.
     """
     taxes = snapshot.taxes
     if professional or taxes.federal_excise_bands:
         return snapshot
-    month = (delivery_month.year, delivery_month.month)
-    if not FEDERAL_EXCISE_KNOWN_FROM <= month < FEDERAL_EXCISE_KNOWN_UNTIL:
+    law = standard_excise(delivery_month)
+    if law is None:
         return snapshot
-    # The constant carries the reduced rate; a VAT-inclusive card takes it at
-    # the rate the card states or else the month's, an ex-VAT one without it.
-    # The ex-VAT figure is the law's whatever rate the card is on: dividing by
-    # the card's own rate would cancel the engine grossing it back up.
+    # The law's rate excludes VAT. A VAT-inclusive card takes it at the rate
+    # the card states or else the month's; an ex-VAT one takes it as it is,
+    # since the engine grosses it up later.
     rate = (
-        FEDERAL_EXCISE_RESIDENTIAL_TVAC / (1.0 + VAT_RATE_REDUCED)
+        law
         if taxes.vat_rate > 0.0
-        else FEDERAL_EXCISE_RESIDENTIAL_TVAC
-        * (
-            (1.0 + card_residential_vat(snapshot, delivery_month))
-            / (1.0 + VAT_RATE_REDUCED)
-        )
+        else law * (1.0 + card_residential_vat(snapshot, delivery_month))
     )
     if abs(rate - taxes.federal_excise) < 5e-7:
         return snapshot
@@ -592,7 +584,7 @@ def resolve_vreg_network_ceiling(
     term plus the per-kWh network term together, excluding data management,
     may not exceed it times the volume. ``fees._capped_capacity_annual``
     applies it. One rate for the whole of Flanders, so a card stating another
-    one is wrong rather than different, which is the same reasoning
+    one is wrong rather than different, which is the reasoning
     :func:`resolve_federal_excise` follows for the excise.
 
     Only the Fluvius overlays, because only Flanders has this instrument. A

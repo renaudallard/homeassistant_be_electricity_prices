@@ -596,21 +596,14 @@ CARD_ARCHIVE_FIRST_MONTH: Final = (2026, 8)
 # not a contract term, so a July bill still owes it whatever card prices it.
 FEDERAL_CONTRIBUTION_ZEROED_FROM: Final = (2026, 8)
 
-# The residential special excise the same measure set, in EUR/kWh including
-# the 6% VAT, and the months it is known to cover. A federal levy on
-# consumption: one rate for the whole country, so a card printing another one
-# for a delivery month in this window is stale rather than different, which is
-# what a picture of an older card looks like.
-#
-# Only a step that is IN EFFECT and cross-checked against the fleet belongs
-# here. The measure steps the rate down again on 1 January 2027, 2028 and
-# 2029; encoding a rate before it is in force would bill a prediction, and a
-# schedule left to go stale is worse than the card. Past the end of the window
-# the card is read as before, and the live check's consensus row is what says
-# a step has landed.
-FEDERAL_EXCISE_RESIDENTIAL_TVAC: Final = 0.04876
-FEDERAL_EXCISE_KNOWN_FROM: Final = (2026, 8)
-FEDERAL_EXCISE_KNOWN_UNTIL: Final = (2027, 1)  # exclusive
+# The special excise on electricity, as the law sets it: the consolidated text
+# of article 419 of the programme law of 27 December 2004 on Justel, read by
+# excise_law.py. French, because the parser anchors on the French wording, and
+# served in ISO-8859-1, which the page declares.
+EXCISE_LAW_URL: Final = (
+    "https://www.ejustice.just.fgov.be/cgi_loi/change_lg.pl"
+    "?language=fr&la=F&table_name=loi&cn=2004122730"
+)
 
 # The VREG maximumtarief: what a Flemish digital-meter connection may be
 # charged in DISTRIBUTION network costs per kWh, the capacity term and the
@@ -618,7 +611,7 @@ FEDERAL_EXCISE_KNOWN_UNTIL: Final = (2027, 1)  # exclusive
 # EUR/kWh EXCLUDING VAT, as the regulator sets it, with the months it is
 # known to cover.
 #
-# One rate for the whole of Flanders, exactly like the excise above, so two
+# One rate for the whole of Flanders, exactly like the excise, so two
 # cards disagreeing about it is one of them being wrong rather than a
 # difference between suppliers. Five of the seven that state it agree:
 # Luminus, Frank and energie.be print 0,3472738 including the 6%, energie.be's
@@ -635,9 +628,9 @@ FEDERAL_EXCISE_KNOWN_UNTIL: Final = (2027, 1)  # exclusive
 # the regulator. Billing their figure would cap about 1,7 times too tight and
 # UNDER-bill, which is why it is not simply wired from the card.
 #
-# Same discipline as the excise. Only a value IN EFFECT and cross-checked
-# against the fleet belongs here; past the end of the window the card is read
-# as before, and the live check's consensus row is what says it has moved.
+# Only a value IN EFFECT and cross-checked against the fleet belongs here;
+# past the end of the window the card is read as before, and the live check's
+# consensus row is what says it has moved.
 # Distribution tariffs are set per calendar year, so the window ends with one.
 VREG_NETWORK_CEILING_HTVA: Final = 0.3276168
 VREG_NETWORK_CEILING_KNOWN_FROM: Final = (2026, 1)

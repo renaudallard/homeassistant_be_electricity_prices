@@ -8939,9 +8939,8 @@ def test_a_stale_card_is_billed_the_excise_the_law_sets() -> None:
     On the card's own VAT basis, not one number for everyone: most print the
     levy including VAT, Ecopower prints it excluding and the engine grosses it
     later. The professional scheme bands the levy by annual volume and is left
-    alone, and so is any month outside the window the constants cover, since
-    the rate steps down again in 2027 and a schedule left to go stale would be
-    worse than reading the card.
+    alone. The rate is the law's, steps included: January 2027 owes the 43
+    EUR/MWh the law voted for it.
     """
     from dataclasses import replace as _replace
 
@@ -8976,12 +8975,12 @@ def test_a_stale_card_is_billed_the_excise_the_law_sets() -> None:
         card(0.04748, vat=0.06), date(2026, 8, 1), professional=False
     )
     assert ecopower.taxes.federal_excise == pytest.approx(0.046)
-    # Untouched: the professional scheme, a banded card, and a month the
-    # constants do not cover.
+    january = resolve_federal_excise(stale, date(2027, 1, 1), professional=False)
+    assert january.taxes.federal_excise == pytest.approx(0.043 * 1.06)
+    # Untouched: the professional scheme and a banded card.
     for snap, month, pro in (
         (card(0.0503288), date(2026, 9, 1), True),
         (card(0.01421, bands=((20000, 0.01421),)), date(2026, 9, 1), False),
-        (card(0.0503288), date(2027, 1, 1), False),
     ):
         left = resolve_federal_excise(snap, month, professional=pro)
         assert left is snap, (month, pro)

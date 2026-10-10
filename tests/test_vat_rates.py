@@ -12,7 +12,6 @@ import pytest
 from custom_components.be_electricity_prices import vat_rates
 from custom_components.be_electricity_prices.cohort import _CohortLegs
 from custom_components.be_electricity_prices.const import (
-    FEDERAL_EXCISE_RESIDENTIAL_TVAC,
     REGION_FLANDERS,
     REGION_WALLONIA,
     VAT_RATE_REDUCED,
@@ -51,6 +50,8 @@ from tests.test_card_vat import _restated
 pytestmark = pytest.mark.timeout(300)
 
 OCT, NOV, DEC = date(2026, 10, 1), date(2026, 11, 1), date(2026, 12, 1)
+# The household excise article 419 sets from August 2026, EUR/kWh before VAT.
+_LAW_EXCISE = 0.046
 
 
 @pytest.fixture
@@ -175,11 +176,9 @@ def test_a_card_priced_excluding_vat_takes_the_months_rate_where_it_assumed(
     # The levy excluding VAT is the law's figure whatever the month's rate,
     # so the bill moves with the rate like on a card priced including it.
     excise = resolve_federal_excise(got, NOV, professional=False).taxes
-    assert excise.federal_excise == pytest.approx(
-        FEDERAL_EXCISE_RESIDENTIAL_TVAC / (1.0 + VAT_RATE_REDUCED)
-    )
+    assert excise.federal_excise == pytest.approx(_LAW_EXCISE)
     assert excise.federal_excise * (1.0 + excise.vat_rate) == pytest.approx(
-        FEDERAL_EXCISE_RESIDENTIAL_TVAC * 1.07 / 1.06
+        _LAW_EXCISE * 1.07
     )
 
 
@@ -225,7 +224,7 @@ def test_the_regulated_figures_follow_the_months_rate(
     excise = resolve_federal_excise(
         fluvius, NOV, professional=False
     ).taxes.federal_excise
-    assert excise == pytest.approx(FEDERAL_EXCISE_RESIDENTIAL_TVAC * 1.07 / 1.06)
+    assert excise == pytest.approx(_LAW_EXCISE * 1.07)
     assert resolve_federal_excise(fluvius, OCT, professional=False) is fluvius
     ceiling = (
         resolve_vreg_network_ceiling(fluvius, NOV)

@@ -70,6 +70,7 @@ machinery.
 | `tests/test_energyknights.py` | Energy Knights extractor |
 | `tests/test_energyvision.py` | EnergyVision extractor |
 | `tests/test_engie.py` | Engie extractor |
+| `tests/test_excise_law.py` | The federal excise read from article 419 on Justel (`excise_law.py`), its store round trip, and `resolve_federal_excise` billing it |
 | `tests/test_frank.py` | Frank Energie extractor |
 | `tests/test_luminus.py` | Luminus extractor |
 | `tests/test_mega.py` | Mega extractor |
@@ -1385,13 +1386,13 @@ which is once a month in practice, when TotalEnergies republishes. On 3 October 
 five: Electricité Variable in Wallonia charges a 100,00 EUR fee in French and 94,34 in Dutch,
 and four Dutch addresses serve another product, a gas card or a formula with a comma.
 
-The tax report carries five kinds of row: a supplier whose federal block disagrees with the
+The tax report carries four kinds of row: a supplier whose federal block disagrees with the
 month's consensus (`_check_federal_tax_consensus`), the same for the VREG network ceiling
-(`_check_vreg_ceiling_consensus`) and for the VAT rate (`_check_vat_consensus`), and the standing requests to extend each window before it
-lapses (`_check_excise_window` and `_check_vreg_ceiling_window`, silent until eight weeks out).
+(`_check_vreg_ceiling_consensus`) and for the VAT rate (`_check_vat_consensus`), and the standing request to extend the VREG ceiling window before it
+lapses (`_check_vreg_ceiling_window`, silent until eight weeks out).
 All are supplier- or maintainer-side rather than a break here, which is why they share a thread
 and fail no pull request. The issue is titled after what failed, as the products one is: a run
-whose only failures are the window reminders files under the window title, so the triager is
+whose only failures are window reminders files under the window title, so the triager is
 not sent looking for a card printing a wrong levy. Every title has its own label: the thread is
 found by its label and the title is only read when an issue is opened, so two titles sharing one
 posted each problem inside the other's open issue (`test_every_issue_title_files_under_its_own_label`).

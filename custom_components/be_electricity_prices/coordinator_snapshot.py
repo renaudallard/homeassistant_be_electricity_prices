@@ -59,6 +59,7 @@ from .energy_meters import (
     _kwh_sensor_ids,
     noting_failed_reads,
 )
+from .excise_law import standard_excise
 from .meter_daily import _measured_kwh
 from .meter_hourly import _metered_sides
 from .providers import get as get_extractor
@@ -111,6 +112,13 @@ def _vat_now() -> tuple[float, float]:
     return residential_vat(today), standard_vat(today)
 
 
+def _excise_now() -> float | None:
+    """The household excise the law sets for the running month, or ``None``
+    before the law has been read: the table is refreshed on the tick, after a
+    card restored from the store was resolved without it."""
+    return standard_excise(dt_util.now().date())
+
+
 def _newer_card(card: SupplierSnapshot, held: SupplierSnapshot) -> bool:
     """Whether ``card`` ends later than ``held``, each by the date it states
     or else the month its title names (``card_valid_until``). Not when either
@@ -143,6 +151,7 @@ class _SnapshotMixin:
     _snapshot_annual_kwh: float | None
     _snapshot_power_term: tuple[float, float] | None
     _snapshot_vat: tuple[float, float]
+    _snapshot_excise: float | None
     _snapshot_fetched_at: datetime | None
     _snapshot_probe_key: str | None
     _snapshot_schema_version: int
@@ -380,7 +389,7 @@ class _SnapshotMixin:
         moved, which is every tick but the first of a day one of them changed
         on.
 
-        TWO inputs, not one. Brugel's Brussels power term is fetched on the
+        More than one input. Brugel's Brussels power term is fetched on the
         tick and cached in a module global, so it is absent after every
         restart: ``async_load_persistent`` resolves the stored card before the
         first refresh can fill it, correctly leaving the term out, and no later
@@ -388,17 +397,23 @@ class _SnapshotMixin:
         resolves nothing and this method asked only about the volume. A
         Brussels entry therefore billed 50,07 EUR a year less until the yearly
         volume next moved, and one with no meter configured never healed at
-        all. Both are stamped now, and either moving re-resolves.
+        all. The excise the law sets is the same case on the first start
+        after an upgrade, when no store holds the law yet: the stored card is
+        resolved on its own printed excise, and only this puts the law's
+        back once the tick has read it. Every input is stamped, and any of
+        them moving re-resolves.
         """
         if self._snapshot_raw is None:
             return
         annual_kwh = entry_annual_kwh(self.entry, self)
         power_term = cached_power_term(dt_util.now().year)
         vat = _vat_now()
+        excise = _excise_now()
         if (
             self._snapshot_annual_kwh == annual_kwh
             and self._snapshot_power_term == power_term
             and self._snapshot_vat == vat
+            and self._snapshot_excise == excise
         ):
             return
         self._snapshot = _resolve_snapshot(
@@ -407,6 +422,7 @@ class _SnapshotMixin:
         self._snapshot_annual_kwh = annual_kwh
         self._snapshot_power_term = power_term
         self._snapshot_vat = vat
+        self._snapshot_excise = excise
 
     def _set_snapshot(self, snap: SupplierSnapshot | None) -> None:
         """Keep the card as parsed and resolve this entry's VAT preference.
@@ -439,6 +455,7 @@ class _SnapshotMixin:
         self._snapshot_annual_kwh = annual_kwh
         self._snapshot_power_term = cached_power_term(dt_util.now().year)
         self._snapshot_vat = _vat_now()
+        self._snapshot_excise = _excise_now()
         # Every snapshot that reaches here was parsed by the running extractor,
         # so this is what _save_persistent stamps. _replay_stale_snapshot is
         # the one caller that overrides it afterwards, and it has to: without

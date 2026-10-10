@@ -56,6 +56,8 @@ from .coordinator_profiles import (
     _seed_profile_cache,
 )
 from .coordinator_spots import _spot_is_sane, _spots_for_local_days
+from .excise_law import held_table as held_excise_table
+from .excise_law import restore as restore_excise_law
 from .providers.base import SupplierSnapshot
 from .snapshot_codec import _snapshot_from_dict, _snapshot_to_dict
 from .snapshot_months import monthly_rows_to_store, restore_monthly_rows
@@ -171,6 +173,9 @@ class _PersistMixin:
         vat_table = stored.get("vat_rates")
         if isinstance(vat_table, dict):
             restore_vat_rates(vat_table)
+        excise_table = stored.get("excise_law")
+        if isinstance(excise_table, dict):
+            restore_excise_law(excise_table)
         # If the persisted blob was written under a different supplier
         # tuple (typical case: OptionsFlow swap landed while a tick was
         # still in flight, and the slow tick saved over the file after
@@ -607,6 +612,8 @@ class _PersistMixin:
         # The VAT table this process holds, so a restart without the network
         # still bills the last month the cards agreed on.
         payload["vat_rates"] = held_vat_table()
+        # The excise the law sets, for the same reason.
+        payload["excise_law"] = held_excise_table()
         # Nothing to write when nothing moved. The blob is rebuilt whole on
         # every tick and is mostly slow-changing: the card, the peak history,
         # the spot cache and the compare rows are identical on 23 ticks out of

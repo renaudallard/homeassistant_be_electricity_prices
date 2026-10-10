@@ -1213,9 +1213,7 @@ def test_a_business_keeps_the_professional_levies_it_typed(
         assert snap.taxes.federal_excise == pytest.approx(0.01421)
         assert snap.taxes.energy_contribution == pytest.approx(0.0019261)
     else:
-        assert snap.taxes.federal_excise == pytest.approx(
-            const.FEDERAL_EXCISE_RESIDENTIAL_TVAC / (1.0 + const.VAT_RATE_REDUCED)
-        )
+        assert snap.taxes.federal_excise == pytest.approx(0.046)
         assert snap.taxes.energy_contribution == 0.0
     # The typed VAT rate is the business's own either way.
     assert snap.taxes.vat_rate == pytest.approx(0.21)

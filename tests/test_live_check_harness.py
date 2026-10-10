@@ -1842,7 +1842,6 @@ def _drive_run(
     monkeypatch.setattr(lc, "_SUPPLIERS", ())
     phases: dict[str, Callable[..., Any]] = {
         "_check_catalogs": _async_no_op,
-        "_check_excise_window": _sync_no_op,
         "_check_vreg_ceiling_window": _sync_no_op,
         "_check_vreg_ceiling_consensus": _sync_no_op,
         "_check_federal_tax_consensus": _sync_no_op,
@@ -1941,7 +1940,6 @@ async def _async_crash(*_args: Any) -> None:
     ("phase", "stub", "label"),
     [
         ("_check_catalogs", _async_crash, "_catalog: probe crashed"),
-        ("_check_excise_window", _crash, "_federal: excise window check crashed"),
         (
             "_check_vreg_ceiling_window",
             _crash,
@@ -2093,16 +2091,15 @@ def test_the_extractor_issue_names_the_rows_an_earlier_attempt_passed(
 
 
 def test_the_tax_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
-    """From 6 November 2026 the excise and VREG window reminders fail every
-    night, and they filed as "a supplier's federal tax block disagrees",
-    which sends the triager looking for a card printing a wrong levy."""
+    """From 6 November 2026 the VREG window reminder fails every night, and it
+    filed as "a supplier's federal tax block disagrees", which sends the
+    triager looking for a card printing a wrong levy."""
     step = "Open or update tax-block issue"
     reminders = tmp_path / "reminders"
     reminders.mkdir()
     assert _file_catalog_issue(
         reminders,
-        "_federal: the VREG ceiling window needs extending\n"
-        "_federal: the excise window needs extending\n",
+        "_federal: the VREG ceiling window needs extending\n",
         step,
         "tax",
     ) == ("[live-check] a federal constant window needs extending")
@@ -2110,7 +2107,7 @@ def test_the_tax_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
     supplier.mkdir()
     assert _file_catalog_issue(
         supplier,
-        "_federal: the excise window needs extending\n"
+        "_federal: the VREG ceiling window needs extending\n"
         "mega/VREG ceiling disagrees for 2026-11\n",
         step,
         "tax",
@@ -2141,7 +2138,7 @@ def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
         (
             "Open or update tax-block issue",
             "tax",
-            "_federal: the excise window needs extending\n",
+            "_federal: the VREG ceiling window needs extending\n",
         ),
         (
             "Open or update tax-block issue",
@@ -2721,41 +2718,6 @@ def test_a_tax_block_printed_excluding_vat_agrees_with_the_fleet(
     assert not check.ok
     assert check.label.startswith("ecopower/")
     assert "0.0503289" in check.detail and "0.0020417" in check.detail
-
-
-def test_the_excise_window_asks_to_be_extended_before_it_lapses(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """`resolve_federal_excise` bills the law's rate instead of a stale card's
-    copy, but only inside a window, because the taxshift steps the rate down
-    every January and encoding a rate before it is in force would bill a
-    prediction. Past the window every card is read as printed again, which
-    silently re-opens the hole a stale card leaves.
-
-    Nothing in the code can know the next rate, so it asks a person, the way
-    the archive workflow warns before its upload token expires. Quiet until the
-    lapse is in sight, then it keeps asking, including after the date has
-    passed, since that is when the protection is actually gone.
-    """
-    monkeypatch.setattr(lc, "_EXCISE_KNOWN_UNTIL", (2027, 1))
-    for day in (date(2026, 9, 17), date(2026, 11, 5)):
-        lc.CHECKS.clear()
-        lc._check_excise_window(day)
-        assert lc.CHECKS == [], day
-    for day, expected in (
-        (date(2026, 11, 20), "in 42 days"),
-        (date(2027, 1, 15), "14 days ago"),
-    ):
-        lc.CHECKS.clear()
-        lc._check_excise_window(day)
-        (check,) = lc.CHECKS
-        assert not check.ok, day
-        assert check.kind == "tax", day
-        assert expected in check.detail, day
-        # The row has to say what to change, or it is a reminder with no
-        # instructions eight weeks after anyone remembered why.
-        assert "FEDERAL_EXCISE_KNOWN_UNTIL" in check.detail
-        assert "45,58" in check.detail
 
 
 def test_a_known_tax_block_reports_without_filing_until_it_expires(

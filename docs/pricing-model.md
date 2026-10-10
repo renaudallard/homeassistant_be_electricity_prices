@@ -242,31 +242,36 @@ because its card is a picture of July's card, which no parser change can read
 differently (about 5,49 EUR/year at 3.500 kWh).
 
 `resolve_federal_excise` (`providers/_resolve.py`) writes the law's figure for a
-delivery month inside the window `FEDERAL_EXCISE_KNOWN_FROM` ..
-`FEDERAL_EXCISE_KNOWN_UNTIL` (`const.py`), applied beside the contribution in
-`_resolve_snapshot` (`snapshot_resolve.py`), and it is identity for a card that
-already prints it. On the card's OWN VAT basis: most print the levy including
-VAT and Ecopower prints it excluding, the engine grossing it later, so writing
-one number into both would be 6% wrong for one of them. The ex-VAT figure is
-the law's amount whatever rate the card is on, so the bill follows the month's
-rate there as it does on a VAT-inclusive card. A professional card is
-left alone, and so is any card carrying `federal_excise_bands`: that scheme
-bands the levy by annual volume and is a different rate entirely.
+delivery month, applied beside the contribution in `_resolve_snapshot`
+(`snapshot_resolve.py`), and it is identity for a card that already prints it.
+On the card's OWN VAT basis: most print the levy including VAT and Ecopower
+prints it excluding, the engine grossing it later, so writing one number into
+both would be 6% wrong for one of them. The ex-VAT figure is the law's amount
+whatever rate the card is on, so the bill follows the month's rate there as it
+does on a VAT-inclusive card. A professional card is left alone, and so is any
+card carrying `federal_excise_bands`: that scheme bands the levy by annual
+volume and is a different rate entirely.
 
-The window is deliberately narrow. The measure steps the rate down again on
-1 January 2027, 2028 and 2029, and only a step that is in effect and
-cross-checked against the fleet's cards belongs in the constants; past the end
-of the window the card is read as before. A schedule left to go stale would be
-worse than the bug it fixes, and the live check's consensus row is what says a
-step has landed.
+The figure is read from the law, not typed in. `excise_law.py` fetches the
+consolidated text of article 419 of the programme law of 27 December 2004 from
+Justel (`EXCISE_LAW_URL`, `const.py`) once a day and reads the household rate
+under "consommation non-professionnelle", with every step the law has already
+voted ("A partir du 1er janvier 2027: ..."), so a step is billed in its own
+month. The date the current wording took effect comes from the law too: Justel
+brackets every passage an amendment wrote and titles the bracket with its entry
+into force, and the innermost bracket around the rate dates it (2026-08-01 for
+the measure that flattened it). The table is held for the process and kept in
+each entry's store, so a restart without the network still bills it.
 
-Lapsing quietly is the failure mode that costs money, so the check asks for the
-window before it closes: `_check_excise_window` (`scripts/live_check.py`) is
-silent until eight weeks out, then reports a tax row naming the constants to
-move and the announced next rate, and keeps reporting after the date has passed,
-which is when the protection is actually gone. Nothing in the code can know the
-next rate, so it asks a person, the same way the archive workflow warns before
-its upload token expires.
+Justel serves only the wording in force, so a month before the first step it
+holds is billed as the card prints it, which is every month before August 2026.
+The same holds while the law has not been read at all, on a first start with
+Justel unreachable. A page that does not parse as the article (a layout change,
+or a bot check served instead of the law) keeps what is held and logs a
+warning. GitHub's runners are served such a check, so the live check cannot
+read the law; the parser is tested on a saved copy of the page
+(`tests/fixtures/justel_loi_programme_2004_fr.html`), and the live check's
+consensus row still compares the cards with each other.
 
 ### Degressive federal excise
 

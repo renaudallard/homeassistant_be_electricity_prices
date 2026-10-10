@@ -30,6 +30,7 @@ from __future__ import annotations
 import sys
 import threading
 from collections.abc import Iterator
+from datetime import date
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -157,3 +158,32 @@ def _vat_table_holds_nothing() -> Iterator[None]:
         yield
     vat_rates._RESIDENTIAL.clear()
     vat_rates._STANDARD.clear()
+
+
+_JUSTEL_PAGE = ROOT / "tests" / "fixtures" / "justel_loi_programme_2004_fr.html"
+
+
+@pytest.fixture(scope="session")
+def excise_law_table() -> dict[str, tuple[tuple[date, float], ...]]:
+    """Article 419 as Justel served it on 2026-10-09, parsed once."""
+    from custom_components.be_electricity_prices import excise_law
+
+    return excise_law.parse(_JUSTEL_PAGE.read_bytes().decode("iso-8859-1"))
+
+
+@pytest.fixture(autouse=True)
+def _excise_law_as_published(
+    excise_law_table: dict[str, tuple[tuple[date, float], ...]],
+) -> Iterator[None]:
+    """The tick reads the excise law from Justel. Tests see the article as it
+    was published instead of the network, and whatever a test holds is put
+    back before the next one."""
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.be_electricity_prices import coordinator_tick, excise_law
+
+    excise_law._HELD.clear()
+    excise_law._HELD.update(excise_law_table)
+    with patch.object(coordinator_tick, "ensure_excise_law", AsyncMock()):
+        yield
+    excise_law._HELD.clear()

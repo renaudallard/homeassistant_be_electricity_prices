@@ -311,7 +311,9 @@ month being billed decides them, not the month your card was printed in.
 
 Since **1 August 2026** the law sets a flat excise of **4,876 c€/kWh** including VAT (4,6 excluding) and
 abolished the energy contribution, folding it into that rate. The integration
-bills exactly that for every month from then on, and a card that still prints
+reads the excise from the law itself, article 419 of the programme law of 27
+December 2004 as consolidated on Justel (ejustice.just.fgov.be), once a day,
+and bills that for every month from then on. A card that still prints
 the old pair is not billed as printed. Four suppliers were still printing some
 of it in September 2026: Ecofix, whose card is an image of its July card, and
 Aspiravi printed the whole old pair, Cociter the contribution beside the new
@@ -321,12 +323,14 @@ Aspiravi contract.
 
 Two limits worth knowing. **Professional contracts are untouched**, because
 that scheme bands the excise by annual volume and is a genuinely different
-rate. And **the correction covers the months we can verify**: the same measure
-steps the excise down again each January from 2027, so from 1 January 2027 your
-card's own excise is used again until the new rate is confirmed against the
-fleet. The contribution stays dropped: it was abolished, not set for a
-period. Before August 2026 the card's figures were always used, so a bill for an
-earlier month is unaffected.
+rate. And **the correction covers the months the law's current text sets**: the
+same measure steps the excise down each January, to 43, 40 and then 38 € per
+MWh excluding VAT from 2027 to 2029, and each step is billed from its own month
+because the law states it. Your card's own excise is used for the months
+before August 2026, so a bill for an earlier month is unaffected, and also
+while the law has not been read yet (Justel unreachable on the very first
+start). The contribution stays dropped: it was abolished, not set for a
+period.
 
 The daily live check compares every supplier's federal block against the rest
 and reports a card that drifts, which is how a supplier that corrects itself

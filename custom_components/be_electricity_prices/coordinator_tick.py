@@ -90,6 +90,7 @@ from .creg_ev import (
 from .creg_ev import (
     rate_for as ev_rate_for,
 )
+from .excise_law import ensure_excise_law
 from .fees import _compute_capacity, _compute_prosumer
 from .injection import (
     _compute_injection_price,
@@ -260,6 +261,10 @@ class _TickMixin:
         # above, and from the card archive, so only where the entry reads it.
         if self.entry.data.get(CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE):
             await ensure_vat_rates(self._session)
+        # The excise the law sets, read before the card is resolved for the
+        # same reason, and for every entry, since every residential card's
+        # excise is resolved against it.
+        await ensure_excise_law(self._session)
         if self.entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
             self._refresh_custom_snapshot()
         else:

@@ -8,7 +8,8 @@ which writes historical price and cost statistics into Home Assistant's
 long-term-statistics store so the Energy dashboard and Statistics card can show
 history that predates the entry's first live tick; and the Synergrid solar
 production profile (`synergrid.py`, Part 3), for the optional SPP-weighted
-custom injection. The first two feed the same `pricing.compute_breakdown` engine
+custom injection; the CREG home charging rate (`creg_ev.py`, Part 4); and the
+federal excise read from the law (`excise_law.py`, Part 5). The first two feed the same `pricing.compute_breakdown` engine
 the live coordinator uses, so a backfilled past hour is priced exactly as the
 live tick would have priced it at the time.
 
@@ -945,3 +946,53 @@ the row. So does one that prices it in some regions only, an empty or odd
 cell in the new month: its table is kept, so the regions it prices answer at
 once, and the file is read again after the backoff until every region is
 priced. Nothing here raises, for the reason `brugel.py` gives.
+
+## Part 5: the federal excise, read from the law (`excise_law.py`)
+
+### Why it exists
+
+The special excise on electricity is a federal levy, one household rate for
+the whole country in any month, so a card printing another figure is out of
+date rather than different. The law that sets it is article 419, i), of the
+programme law of 27 December 2004, and Justel publishes its consolidated text.
+Reading the rate there means the bill follows the law, including the steps it
+has already voted, instead of a constant someone has to move each January.
+
+### What it fetches and how
+
+One page, `EXCISE_LAW_URL` (`const.py`): the French consolidated text of the
+programme law, about 630 KB in ISO-8859-1, which the page declares and
+`fetch_text` decodes. `parse` cuts article 419 out of it and reads the two
+household rates under "consommation non-professionnelle": the protected
+residential customer's ("a) client protégé résidentiel") and everyone else's
+("b) autres"). Each rate is the ordinary excise plus the special one, in EUR
+per MWh, followed by the steps the law lists ("A partir du 1er janvier 2027:
+..."). The date the current wording took effect comes from the page as well:
+Justel brackets every passage an amendment wrote and titles the opening
+bracket with the amendment and its entry into force, so the innermost bracket
+around a rate dates it.
+
+Anything that is not the article as expected raises rather than reading half
+of it: no article, no electricity paragraph, a rate banded by volume (which
+the household rate was before August 2026), two rates where one is expected,
+steps out of order, or a rate outside the plausible range.
+
+### Caching and failure
+
+`ensure_excise_law` runs in every entry's tick, before the card is resolved,
+and reads the page once a day for the whole process. The table is kept in each
+entry's store (the `excise_law` key) and restored only into a kind nothing
+holds yet, since another entry may already have read the law. A failure keeps
+what is held and retries after six hours. A page that comes back and does not
+parse logs a warning: a layout change, or the bot check Justel serves GitHub's
+runners instead of the law. Nothing here raises.
+
+`standard_excise` answers for a month with the rate in force on its first day,
+or `None` before the first step held, which is every month before August 2026,
+since Justel serves only the wording in force. `resolve_federal_excise`
+(`providers/_resolve.py`) then bills the card as printed, which is also what
+happens on a first start with Justel unreachable.
+
+The parser is tested on the page as Justel served it on 2026-10-09
+(`tests/fixtures/justel_loi_programme_2004_fr.html`), which every test holds
+in place of the network.
