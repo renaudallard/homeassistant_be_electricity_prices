@@ -124,6 +124,10 @@ proxy) in every soft-failure case:
 - `archive_validity_check` rejects the card as not covering the month
   (`cociter.py`).
 
+A transient failure is not one of them: a timeout, a reset or a 5xx on the
+listing or the card (`is_transient_fetch_error`, `providers/_pdf.py`) is raised,
+so the month cache retries the month instead of caching it as absent.
+
 A month-indexed card (Variable, Trihoraire) is then settled on the card that
 follows it (`_settle_on_next_card`). Note (7) bills the delivery month on its
 own BELIX while the card prints its rates on the month before's, and the next

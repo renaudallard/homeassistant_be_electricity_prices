@@ -123,12 +123,14 @@ EBEM keeps an accessible public archive on the listing page, so past months can
 be billed at their own rates instead of the current-snapshot proxy.
 
 1. Look up the contract; return `None` on an unknown id.
-2. GET the listing (`fetch_text`); return `None` on `ExtractorError`.
+2. GET the listing (`fetch_text`); return `None` on `ExtractorError`, except a
+   transient one (`is_transient_fetch_error`), which is raised so the month cache
+   retries the month instead of caching it as absent.
 3. Build `target = (pdf_kind, "MM", "YYYY")` and find the first `_PDF_RE` match
    whose `(kind.lower(), MM, YYYY)` equals it; return `None` when the month is
    not published.
 4. Resolve the URL, set `label = "YYYY-MM"`, download + parse; return `None` on
-   `ExtractorError`.
+   `ExtractorError`, again raising a transient one.
 5. Pass the result through `archive_validity_check` (`_validity.py`).
 
 `archive_validity_check` is called with `month_names=None`. When

@@ -181,8 +181,10 @@ parser (the September 2024 card carries the old three-area Fluvius table); offse
 distance from today, refuses a month ahead of today before sending anything, and
 cross-checks the month the card names (`contrats conclus en <mois> <annee>`, the
 `FR_MONTHS` tier of `archive_validity_check`; the cards also print a validity
-date, which is the authoritative tier). Every failure comes back as `None`, the
-one-month answer the month cache expects.
+date, which is the authoritative tier). Every failure but a transient one comes back
+as `None`, the one-month answer the month cache expects; a timeout, a reset or a
+5xx (`is_transient_fetch_error`) is raised, so the month is asked again rather
+than cached as absent.
 
 This is what makes a contract start date work on an Engie entry. Until it was
 wired the signing-cohort splice had no card to read, so the entry stayed on the

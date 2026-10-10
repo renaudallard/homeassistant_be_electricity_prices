@@ -240,10 +240,11 @@ year_month, month_names=_NL_MONTHS)` (`providers/frank.py`). Because Frank cards
 a parseable `valid_until` (see below), that check authoritatively rejects any snapshot
 whose validity does not fall in the requested month, guarding against a CDN substituting
 the wrong card (`_validity.py`). Because `month_names` is supplied, a snapshot with no
-`valid_until` still gets the textual month cross-check. Any `ExtractorError` during
-resolution or parsing is swallowed and `fetch_for_month` returns `None`
-(`providers/frank.py`), letting the coordinator fall back to the current snapshot as a
-proxy.
+`valid_until` still gets the textual month cross-check. An `ExtractorError` during
+resolution or parsing makes `fetch_for_month` return `None` (`providers/frank.py`),
+letting the coordinator fall back to the current snapshot as a proxy, except a
+transient one (`is_transient_fetch_error`), which is raised so the month is asked
+again rather than cached as absent.
 
 ## Parsing
 
@@ -329,7 +330,7 @@ minus (`providers/frank.py`).
 
 The April fixture yields factor `0.1 * 10 = 1.0` and base `-1.150 / 100` (illustrative,
 `tests/test_frank.py`). Watch the JN tier: it carries a different injection base
-(-0,02 vs -0,0115 on the other four tiers), pinned by the parametrized tier test
+(-0,02 vs -0,0115 on the other five tiers), pinned by the parametrized tier test
 (`tests/test_frank.py` and the comment at `tests/test_frank.py`).
 
 Frank publishes no supplier-side prosumer / PV forfait; `parse_snapshot` leaves
