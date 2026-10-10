@@ -14985,6 +14985,32 @@ def test_apply_vat_grosses_the_injection_floor_with_the_rates() -> None:
     assert gross.injection.minimum == pytest.approx(0.01 * 1.21)
 
 
+def test_a_direct_debit_reduction_takes_the_standing_charge_s_basis() -> None:
+    """A card priced excluding VAT: the reduction comes off a yearly fee that
+    apply_vat has already grossed, so it has to be grossed with it. Left as
+    printed, 100 EUR less 20 at 21% billed 101,00 instead of 96,80."""
+    from custom_components.be_electricity_prices.providers._resolve import (
+        apply_vat,
+        resolve_direct_debit,
+    )
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+
+    card = replace(
+        make_snapshot(
+            energy=FixedRates(single=0.1, yearly_fixed_fee=100.0),
+            taxes=TaxOverlay(
+                federal_excise=0.0, energy_contribution=0.0, vat_rate=0.21
+            ),
+        ),
+        direct_debit_discount_eur=20.0,
+    )
+    billed = resolve_direct_debit(apply_vat(card, include_vat=True), direct_debit=True)
+    assert billed.energy.yearly_fixed_fee == pytest.approx((100.0 - 20.0) * 1.21)
+    # A business deducting VAT keeps both as printed.
+    net = resolve_direct_debit(apply_vat(card, include_vat=False), direct_debit=True)
+    assert net.energy.yearly_fixed_fee == pytest.approx(80.0)
+
+
 async def test_a_month_row_is_resolved_on_the_way_out_of_the_cache(
     hass: HomeAssistant,
 ) -> None:

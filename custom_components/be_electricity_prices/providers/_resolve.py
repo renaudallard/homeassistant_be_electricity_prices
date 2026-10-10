@@ -234,6 +234,14 @@ def apply_vat(snapshot: SupplierSnapshot, *, include_vat: bool) -> SupplierSnaps
             if snapshot.welcome_credit_direct_debit_eur is None
             else snapshot.welcome_credit_direct_debit_eur * factor
         ),
+        # Taken off the yearly fee grossed above by resolve_direct_debit,
+        # which runs after this, so it has to be on the same basis: left as
+        # printed it took an ex-VAT reduction off a VAT-inclusive charge.
+        direct_debit_discount_eur=(
+            None
+            if snapshot.direct_debit_discount_eur is None
+            else snapshot.direct_debit_discount_eur * factor
+        ),
         # The rate a free volume is valued at is an energy price like the
         # ones grossed above, so it takes the same basis.
         welcome_credit_kwh_rate=(
