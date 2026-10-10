@@ -1413,8 +1413,8 @@ def test_plenty_online_is_billed_on_the_online_formula_its_prices_stand_for() ->
     Dutch edition prints the same prices beside the Online formula, "Belpex *
     1,168 + 16,90", and the Online bands, so those are billed. The prices and
     the 0,99 EUR/month standing charge stay its own."""
-    plenty = fixture_text("bolt_plenty_online_oct.pdf", layout=True)
-    online = fixture_text("bolt_online_oct.pdf", layout=True)
+    plenty = fixture_text("bolt_plenty_online_oct_reissue.pdf", layout=True)
+    online = fixture_text("bolt_online_oct_reissue.pdf", layout=True)
     assert "1,145 + 16,45" in plenty
     for region in ("flanders", "wallonia"):
         energy = parse_snapshot(
@@ -1436,7 +1436,7 @@ def test_plenty_online_is_billed_on_the_online_formula_its_prices_stand_for() ->
 def test_plenty_online_will_not_bill_without_its_index_card() -> None:
     """Parsed alone it would fall back to the printed price, which is the
     other formula's, so a caller that forgets the Online card is told."""
-    plenty = fixture_text("bolt_plenty_online_oct.pdf", layout=True)
+    plenty = fixture_text("bolt_plenty_online_oct_reissue.pdf", layout=True)
     with pytest.raises(ExtractorError, match="online card"):
         parse_snapshot("bolt_plenty_online", plenty, "flanders")
 
@@ -1446,8 +1446,8 @@ def test_plenty_online_will_not_bill_on_another_months_index() -> None:
     fails falls back to a fixed version. One timeout between the two pairs
     October's card with September's Online card, whose index prices it 4,77
     c/kWh low, so a pair whose months differ is refused."""
-    plenty = fixture_text("bolt_plenty_online_oct.pdf", layout=True)
-    online = fixture_text("bolt_online_oct.pdf", layout=True)
+    plenty = fixture_text("bolt_plenty_online_oct_reissue.pdf", layout=True)
+    online = fixture_text("bolt_online_oct_reissue.pdf", layout=True)
     assert "Octobre 2026" in online
     september = online.replace("Octobre 2026", "Septembre 2026")
     with pytest.raises(ExtractorError, match="not the same month"):
@@ -1468,7 +1468,9 @@ def test_only_a_card_printing_the_online_prices_takes_its_formula() -> None:
         "bolt_plenty_online"
     ]
     online = parse_snapshot(
-        "bolt_online", fixture_text("bolt_online_oct.pdf", layout=True), "flanders"
+        "bolt_online",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "flanders",
     ).energy
     assert isinstance(online, VariableRates)
     own = dc_replace(online, current=0.1866, formula_factor=1.2137)
@@ -1533,9 +1535,11 @@ def test_a_variable_card_is_re_priced_on_its_quarter_index() -> None:
     153,31 / 180,89 Eco / Medium / Pic) and bill "l'indice applicable pendant
     la periode pour laquelle vous etes facture". With a key the leg resolves
     on the delivery quarter's mono index, each register keeping the card's
-    spread: at the printed index it gives back every printed rate, the Impact
-    bands only on the Impact configuration. Without a key the printed rates
-    stand."""
+    spread: at the index its table prints it gives back every printed rate,
+    the Impact bands only on the Impact configuration. Without a key the
+    printed rates stand. The edition first published for October printed
+    the second quarter's table, which no printed rate was computed on, so
+    the reissue is read and the index is taken off its own table."""
     from types import SimpleNamespace
 
     from homeassistant.util import dt as dt_util
@@ -1548,9 +1552,8 @@ def test_a_variable_card_is_re_priced_on_its_quarter_index() -> None:
         SpotMonthlyRates,
     )
 
-    snap = parse_snapshot(
-        "bolt_online", fixture_text("bolt_online_oct.pdf", layout=True), "wallonia"
-    )
+    text = fixture_text("bolt_online_oct_reissue.pdf", layout=True)
+    snap = parse_snapshot("bolt_online", text, "wallonia")
     energy = snap.energy
     assert isinstance(energy, VariableRates)
     assert energy.quarter_indexed and energy.rlp_indexed
@@ -1560,7 +1563,9 @@ def test_a_variable_card_is_re_priced_on_its_quarter_index() -> None:
     assert isinstance(leg, SpotMonthlyRates) and leg.quarter_indexed
     tz = dt_util.DEFAULT_TIME_ZONE
     wednesday = datetime(2026, 10, 14, tzinfo=tz)
-    index = 0.13936
+    table = re.search(r"Belpex Q3 2026.*?Simple\s+([\d,]+) €/MWh", text, re.S)
+    assert table is not None and table.group(1) == "139,36"
+    index = 139.36 / 1000.0
 
     def rate(hour: int, meter: str, mode: str, region: str = "wallonia") -> float:
         return energy_eur_per_kwh(
@@ -1592,12 +1597,56 @@ def test_a_variable_card_is_re_priced_on_its_quarter_index() -> None:
     )
 
 
+def test_a_card_whose_index_table_is_another_quarter_is_refused() -> None:
+    """The Online card first published for October 2026 printed 19,05 c/kWh,
+    the formula at the third quarter's index, beside the second quarter's
+    table (100,09 EUR/MWh mono), which prices it at 14,18. Its Impact bands
+    are the table's, 5 c/kWh below the rest of the card. Bolt replaced it in
+    place two days later. Such a card is refused, so the one held before
+    keeps billing, and Plenty Online, billed on the Online card's formula, is
+    refused with it."""
+    online = fixture_text("bolt_online_oct.pdf", layout=True)
+    assert "Belpex Q2 2026" in online and "19,05" in online
+    with pytest.raises(ExtractorError, match=r"\(Q2 2026\).* 14\.18 .* 19\.05"):
+        parse_snapshot("bolt_online", online, "wallonia")
+    plenty = fixture_text("bolt_plenty_online_oct_reissue.pdf", layout=True)
+    with pytest.raises(ExtractorError, match="index table"):
+        parse_snapshot("bolt_plenty_online", plenty, "flanders", index_text=online)
+
+
+@pytest.mark.parametrize(
+    ("contract", "fixture", "quarter", "mono"),
+    [
+        ("bolt_variable", "bolt_variable.pdf", "Q1 2026", 0.13251),
+        ("bolt_variable", "bolt_variable_impact_w.pdf", "Q2 2026", 0.14183),
+        ("bolt_online", "bolt_online_oct_reissue.pdf", "Q3 2026", 0.19045),
+        ("bolt_pro_variable", "bolt_pro_variable.pdf", "Q1 2026", 0.12617),
+    ],
+)
+def test_a_card_priced_on_its_own_table_is_read(
+    contract: str, fixture: str, quarter: str, mono: float
+) -> None:
+    """Each card's formula at its table's mono index gives back its printed
+    monthly price to the rounding of the price's last digit, 0,01 c/kWh."""
+    text = fixture_text(fixture, layout=True)
+    assert f"Belpex {quarter}" in text
+    energy = parse_snapshot(contract, text, "wallonia").energy
+    assert isinstance(energy, VariableRates)
+    assert energy.formula_factor is not None
+    table = re.search(r"Simple\s+([\d,]+)\s*€/MWh", text)
+    assert table is not None
+    index = float(table.group(1).replace(",", ".")) / 1000.0
+    priced = energy.formula_factor * index + (energy.formula_base or 0.0)
+    assert priced == pytest.approx(mono, abs=1e-5)
+    assert abs(priced - energy.current) < 1e-4
+
+
 @pytest.mark.parametrize(
     ("contract", "fixture"),
     [
         ("bolt_variable", "bolt_variable.pdf"),
         ("bolt_variable", "bolt_variable_impact_w.pdf"),
-        ("bolt_online", "bolt_online_oct.pdf"),
+        ("bolt_online", "bolt_online_oct_reissue.pdf"),
         ("bolt_pro_variable", "bolt_pro_variable.pdf"),
     ],
 )

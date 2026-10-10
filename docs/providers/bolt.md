@@ -681,8 +681,9 @@ Under `tests/fixtures/` (2,5 to 5 MB each, French-language, all three regions):
 | `bolt_variable.pdf` | Bolt Variable April 2026 | injection parity with fix, current-vs-annual bi-horaire selection, loud failure on missing Jour/Nuit |
 | `bolt_plenty_fix_sep.pdf` | Bolt Plenty Fixe September 2026 | the lump-and-bonus offer, its figure split from its currency by the other column |
 | `bolt_plenty_fix_oct.pdf` | Bolt Plenty Fixe October 2026, as republished on 1 October | the per-kWh offer, its Flanders gate and its basis |
-| `bolt_plenty_online_oct.pdf` | Bolt Plenty Online October 2026 | the Online card's prices beside the professional formula |
-| `bolt_online_oct.pdf` | Bolt Online October 2026 | the card its formula and Impact bands are read off |
+| `bolt_plenty_online_oct_reissue.pdf` | Bolt Plenty Online October 2026, as replaced on 2 October | the Online card's prices beside the professional formula |
+| `bolt_online_oct_reissue.pdf` | Bolt Online October 2026, as replaced on 2 October | the card Plenty Online's formula and Impact bands are read off, the quarterly re-price |
+| `bolt_online_oct.pdf` | Bolt Online October 2026, as first published | a card whose index table is the quarter before its prices', refused |
 
 Fixtures are loaded via `fixture_text("bolt_fix.pdf", layout=True)` (`tests/test_bolt.py`), which
 routes through the `pdfplumber` layout extractor so tests see the same text the live path parses.
@@ -809,3 +810,14 @@ Medium, against about 4,9 c/kWh on every register in the third quarter before, w
 second quarter's printed rates were billed. Without a
 key the printed rates stand. The quarter-hour settlement box is unaffected: it bills the same
 formula per quarter-hour.
+
+The table is checked against the price it stands beside. `check_quarter_table` (`_bolt_cards.py`)
+puts the table's mono index through the card's formula and refuses the card (an `ExtractorError`,
+so the card held before keeps billing) when the result is more than 0,01 c/kWh, one step of the
+printed price's last digit, from `Prix mensuel`. The Online card first published for October 2026
+printed 19,05 c/kWh, the formula at the third quarter's index, beside the second quarter's table
+(100,09 EUR/MWh mono), which prices it at 14,18; its Impact bands were that table's, about 5 c/kWh
+below the rest of the card. Bolt replaced the file in place two days later with the third
+quarter's table. Plenty Online is checked on the Online card's table, the one behind the formula
+it is billed on, so it is refused with it. Every other variable card on file reproduces its price
+to 0,005 c/kWh.

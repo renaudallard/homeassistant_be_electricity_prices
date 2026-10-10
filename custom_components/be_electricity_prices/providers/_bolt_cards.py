@@ -334,6 +334,39 @@ def _with_index_card_formula(
     )
 
 
+def check_quarter_table(text: str, energy: EnergyRates) -> None:
+    """Refuse a variable card whose index table is not the quarter its
+    monthly price was computed on.
+
+    The printed "Prix mensuel" is the formula at the single-meter index the
+    card's own table states, which is how every consistent card reads (Q1
+    2026: 1,1192 x 99,24 + 13,94 is 13,25 c/kWh with VAT). On 30 September
+    2026 Bolt served an Online edition whose price was already Q3's (19,05)
+    while its index table still said "Belpex Q2 2026", and replaced it in place
+    two days later. The Impact bands and the per-register spreads are read
+    off those tables, so such a card bills a Walloon Impact entry about
+    5 c/kWh low in every band. Refused rather than read, so the card held
+    before keeps serving until the supplier's copy is consistent again.
+    """
+    if (
+        not isinstance(energy, VariableRates)
+        or not energy.quarter_indexed
+        or energy.formula_factor is None
+    ):
+        return
+    match = _QUARTER_MONO_INDEX_RE.search(text)
+    if match is None:
+        return
+    index = to_float(match.group(2)) / 1000.0
+    priced = energy.formula_factor * index + (energy.formula_base or 0.0)
+    if abs(priced - energy.current) > _TABLE_TOLERANCE:
+        raise ExtractorError(
+            f"Bolt: the card's index table ({' '.join(match.group(1).split())}) "
+            f"prices its monthly rate at {priced * 100.0:.2f} c/kWh, but it "
+            f"prints {energy.current * 100.0:.2f}"
+        )
+
+
 def _impact_energy_bands(text: str, vat: float) -> dict[str, float]:
     """The three CWaPE supplier-energy rates, or ``{}``.
 
@@ -458,6 +491,14 @@ _BELPEX_FORMULA_RE = re.compile(
 # DSOs' curve, one per meter register and CWaPE band, which the card says is
 # "la moyenne ponderee par le RLP des prix par quart d'heure belges".
 _QUARTER_INDEX_RE = re.compile(r"Belpex\s+Q[1-4]\s+\d{4}")
+# The same table's single-meter row: the quarter it names and its index,
+# "Belpex Q3 2026 ... Simple 139,36 €/MWh".
+_QUARTER_MONO_INDEX_RE = re.compile(
+    r"Belpex\s+(Q[1-4]\s+\d{4}).*?Simple\s+([\d.,]+)\s*€/MWh", re.S
+)
+# How far the table's index through the formula may sit from the printed
+# monthly price: one step of the price's last printed digit, 0,01 c/kWh.
+_TABLE_TOLERANCE = 1e-4
 # The Walloon "Tarif Impact (Wallonie)" block, one row per CWaPE band:
 #   "Eco consommation 9,91 65,59 Belpex * 1,168 + 16,90"
 # printed price, that band's own quarterly index, then the shared formula.

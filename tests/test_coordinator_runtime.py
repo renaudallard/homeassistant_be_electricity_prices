@@ -9204,8 +9204,8 @@ async def test_a_card_pair_caught_in_two_months_is_not_a_layout_change(
     from custom_components.be_electricity_prices.providers import bolt
     from tests import fixture_text
 
-    plenty = fixture_text("bolt_plenty_online_oct.pdf", layout=True)
-    september = fixture_text("bolt_online_oct.pdf", layout=True).replace(
+    plenty = fixture_text("bolt_plenty_online_oct_reissue.pdf", layout=True)
+    september = fixture_text("bolt_online_oct_reissue.pdf", layout=True).replace(
         "Octobre 2026", "Septembre 2026"
     )
     entry = make_entry(

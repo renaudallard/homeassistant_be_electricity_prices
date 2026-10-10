@@ -70,7 +70,7 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
         "bolt_online",
         lambda: bolt.parse_snapshot(
             "bolt_online",
-            fixture_text("bolt_online_oct.pdf", layout=True),
+            fixture_text("bolt_online_oct_reissue.pdf", layout=True),
             REGION_WALLONIA,
         ),
     ),

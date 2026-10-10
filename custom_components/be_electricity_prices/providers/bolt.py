@@ -78,6 +78,7 @@ from ._bolt_cards import (
     _extract_promotion,
     _prints_promotion,
     _with_index_card_formula,
+    check_quarter_table,
 )
 from ._bolt_overlays import (
     _extract_brussels_dsos,
@@ -598,6 +599,12 @@ def parse_snapshot(
             energy,
             _extract_energy(index_text, contract.kind, professional=professional),
         )
+    # The table that matters is the one behind the formula billed, which is
+    # the index card's for a card printing another product's prices.
+    check_quarter_table(
+        index_text if contract.index_slug is not None and index_text else text,
+        energy,
+    )
     injection = _extract_injection(text)
     if professional and injection is not None:
         injection = replace(injection, vat_applies=True)
