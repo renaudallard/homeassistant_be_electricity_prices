@@ -129,10 +129,16 @@ Nobody can switch to the social tariff: it follows a protected status, not a
 choice. So it is never a candidate on the comparison pages, neither the 1:1
 quote (`_compare_supplier_options`, `compare_flow.py`) nor the ranking
 (`_sweep_candidates`, `flow_contracts.py`), while a social tariff entry can still compare itself
-with the commercial offers. The project's card archive does not capture it
-(`_targets`, `scripts/archive_cards.py`) and the month cache does not ask it
-(`_card_archive_may_hold`, `snapshot_months.py`): its own archive is the
-CREG's.
+with the commercial offers.
+
+The project's card archive keeps it like any card, so a past month is one
+small JSON row in `be_price_cards` rather than a CREG PDF and a supplier card.
+GitHub's runners are not served the law, so a row for a month from August 2026
+carries `protected_excise_unread` and no excise, and the integration fills the
+protected rate from the law it holds when it reads the row
+(`resolve_federal_excise`). The live check leaves these rows out of its federal
+levy, VREG ceiling and network consensus (`_OFF_MARKET_SUPPLIERS`,
+`scripts/live_check.py`): they are right and agree with no market card.
 
 ## Feed-in
 

@@ -371,7 +371,10 @@ every card carries the same figure once put on one VAT basis: a residential card
 including 6% and a professional card the regulator's ex-VAT figure. Figures within 1% of each
 other count as one (the round trip moves the last digit; the smallest real disagreement in the
 September 2026 archive is 2%), the supplier is the voter, a tie is not reported, and the month is
-the one most cards are filed under, as for the federal check.
+the one most cards are filed under, as for the federal check. The social tariff's rows are left
+out of this, the federal and the VREG ceiling consensus (`_OFF_MARKET_SUPPLIERS`): they carry the
+protected customer's excise and the CREG's flat network component in place of each operator's
+tariffs, which are right and agree with no market card.
 
 Unlike a tax block, a network figure is billed as printed, so a disagreeing card bills its
 households the card's figure. That is what nothing reported before the check existed: Bolt's
@@ -1212,7 +1215,9 @@ Per card, transient failures are retried three times with the live check's own c
 (`is_transient_fetch_error` plus a bare `TimeoutError`) and a permanent one is recorded and
 skipped, so one supplier never stops the walk. The custom supplier has no card and a supplier
 past its `deprecated_until` has left the market, so neither is asked (`_targets`,
-`scripts/archive_cards.py`). The script exits 0 when at least one card was stored or
+`scripts/archive_cards.py`). The social tariff is asked like any supplier, though the runners
+cannot read the law its excise comes from: its rows carry `protected_excise_unread` for the
+months the law decides, and the integration fills the rate when it reads them. The script exits 0 when at least one card was stored or
 confirmed unchanged and 1 when none was, which is a runner-wide problem rather than a
 supplier's; it files no issues, the live check already does that.
 

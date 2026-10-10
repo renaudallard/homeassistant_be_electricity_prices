@@ -3005,6 +3005,47 @@ def test_a_card_printing_another_network_rate_than_the_fleet_is_caught(
     assert lc._catalog_gates_ci(list(lc.CHECKS)) is True
 
 
+def test_the_social_tariff_is_left_out_of_the_regulated_consensus(
+    tmp_path: Path,
+) -> None:
+    """The archive keeps the social tariff, whose rows carry the protected
+    customer's excise and the CREG's flat network component in place of each
+    operator's tariffs. Both are right and both disagree with every market
+    card, so neither consensus may read them, whether or not its contracts
+    are registered."""
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID.clear()
+    lc._CONTRACTS_BY_ID.update(
+        {
+            "a_fixed": SimpleNamespace(professional=False),
+            "b_fixed": SimpleNamespace(professional=False),
+            "social_other": SimpleNamespace(professional=False),
+        }
+    )
+    federal = _federal_archive(
+        tmp_path / "federal",
+        {
+            ("a", "a_fixed", "wallonia"): (0.04876, 0.0),
+            ("b", "b_fixed", "wallonia"): (0.04876, 0.0),
+            ("social", "social_other", "wallonia"): (0.00106, 0.0),
+        },
+    )
+    lc._check_federal_tax_consensus(federal, date(2026, 9, 25))
+    network = _network_archive(
+        tmp_path / "network",
+        {
+            ("a", "a_fixed", "wallonia"): (0.0, {"distribution_single": 0.1083}),
+            ("b", "b_fixed", "wallonia"): (0.0, {"distribution_single": 0.1083}),
+            ("social", "social_other", "wallonia"): (
+                0.0,
+                {"distribution_single": 0.11727},
+            ),
+        },
+    )
+    lc._check_network_consensus(network, date(2026, 9, 25))
+    assert lc.CHECKS == []
+
+
 def test_a_known_network_figure_reports_without_filing_until_it_expires(
     tmp_path: Path,
 ) -> None:

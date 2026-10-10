@@ -58,7 +58,6 @@ from .const import (
     CONF_CARD_ARCHIVE,
     DEFAULT_CARD_ARCHIVE,
     SUPPLIER_CUSTOM,
-    SUPPLIER_SOCIAL,
 )
 from .providers._pdf import fetch_text, is_transient_fetch_error
 from .providers._settle import is_settled
@@ -616,8 +615,7 @@ def _card_archive_may_hold(
     ``CARD_ARCHIVE_FIRST_MONTH``: a backfill only mirrors a supplier's own
     archive, so asking for an earlier month is a 404 a day for nothing.
     """
-    if not _archive_allowed(entry) or extractor.id == SUPPLIER_SOCIAL:
-        # The social tariff is never captured: its own archive is the CREG's.
+    if not _archive_allowed(entry):
         return False
     month = (year_month.year, year_month.month)
     if month >= (today.year, today.month):

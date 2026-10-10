@@ -2758,6 +2758,13 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
     )
 
 
+# Suppliers whose archived rows are not market cards and legitimately differ
+# from the fleet on the regulated figures: the social tariff carries the
+# protected customer's excise and the CREG's flat network component in place
+# of each operator's tariffs, so the consensus checks on those leave it out.
+_OFF_MARKET_SUPPLIERS = frozenset({"social"})
+
+
 # How long before the VREG ceiling window lapses the check starts asking for
 # it to be extended. Long enough to read the new figure off January's cards,
 # check it against the fleet and ship, without nagging for a quarter.
@@ -2839,6 +2846,7 @@ def _check_vreg_ceiling_consensus(
         for row in sorted(archive.glob("cards/*/*/flanders/????-??.json"))
         if (registered := _CONTRACTS_BY_ID.get(row.parts[-3])) is not None
         and not getattr(registered, "professional", False)
+        and row.parts[-4] not in _OFF_MARKET_SUPPLIERS
     ]
     if not rows:
         return
@@ -2986,6 +2994,7 @@ def _check_federal_tax_consensus(
         # dynamically, so the registry is typed as object here.
         if (registered := _CONTRACTS_BY_ID.get(row.parts[-3])) is not None
         and not getattr(registered, "professional", False)
+        and row.parts[-4] not in _OFF_MARKET_SUPPLIERS
     ]
     if not residential:
         return
@@ -3263,7 +3272,11 @@ def _check_network_consensus(archive: Path | None, today: date | None = None) ->
     if archive is None:
         return
     today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
-    rows = sorted(archive.glob("cards/*/*/*/????-??.json"))
+    rows = [
+        row
+        for row in sorted(archive.glob("cards/*/*/*/????-??.json"))
+        if row.parts[-4] not in _OFF_MARKET_SUPPLIERS
+    ]
     if not rows:
         return
     counts: dict[str, int] = {}

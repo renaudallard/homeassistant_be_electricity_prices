@@ -20,7 +20,10 @@ from unittest.mock import ANY
 import aiohttp
 import pytest
 
-from custom_components.be_electricity_prices.const import SUPPLIER_CUSTOM
+from custom_components.be_electricity_prices.const import (
+    SUPPLIER_CUSTOM,
+    SUPPLIER_SOCIAL,
+)
 from custom_components.be_electricity_prices.providers import _pdf
 from custom_components.be_electricity_prices.providers._pdf import fetch_text
 from custom_components.be_electricity_prices.providers._rates import (
@@ -2545,10 +2548,14 @@ def test_targets_skip_the_custom_and_withdrawn_suppliers() -> None:
         _card_fetch("x"), sid="dats24", deprecated_until=date(2026, 8, 31)
     )
     custom = _extractor(_card_fetch("x"), sid=SUPPLIER_CUSTOM)
+    # The social tariff is a card like any other here: its rows leave the
+    # protected customer's excise to the integration.
+    social = _extractor(_card_fetch("x"), sid=SUPPLIER_SOCIAL)
     today = date(2026, 9, 11)
     assert [
-        (e.id, c, r) for e, c, r in ac._targets([live, gone, custom], set(), today)
-    ] == [("acme", "acme_fix", "wallonia")]
+        (e.id, c, r)
+        for e, c, r in ac._targets([live, gone, custom, social], set(), today)
+    ] == [("acme", "acme_fix", "wallonia"), ("social", "acme_fix", "wallonia")]
     # On the withdrawal day itself the supplier is still trading.
     assert len(ac._targets([gone], set(), date(2026, 8, 31))) == 1
     assert ac._targets([live], {"beta"}, today) == []
