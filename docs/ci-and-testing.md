@@ -279,7 +279,8 @@ main()                       scripts/live_check.py  asyncio.run(_run()); rc=8 on
       _check_frank                                       (cociter, dats24, ebem, ecofix, ecopower,
       _check_bolt                                         engie, luminus, mega, totalenergies,
       ...                                                 bolt, octaplus, frank, energiebe,
-                                                          energyvision, energyknights)
+                                                          energyvision, energyknights,
+                                                          trevion, aspiravi, social)
     _check_catalogs(...)     scripts/live_check.py   run each discover(), flag new and vanished product ids
     _check_card_freshness()  scripts/live_check.py   resolved card == newest advertised
     _fetch_with_retry(...)   scripts/live_check.py   transient-only retry with backoff
@@ -349,7 +350,7 @@ still printing the separate energy contribution the others had folded into the e
 
 Two checks guard the rate the cards state (`TaxOverlay.card_vat_rate`). `_expect_vat_stated`
 asserts, card by card, that a residential card of a supplier that states its rate
-(`_STATES_VAT`: every one except Bolt, energie.be and OCTA+) came back with it: a reworded
+(`_STATES_VAT`: every one except Bolt, energie.be, OCTA+, DATS 24 and the social tariff) came back with it: a reworded
 sentence would otherwise gross the formula on the assumed residential rate in silence, which
 only a rate change would show. A gap already looked at is allowed until it expires
 (`_KNOWN_VAT_GAPS`: TotalEnergies' September 2026 Brussels cards, whose text layer lost the
@@ -777,8 +778,8 @@ total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S 
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py`), with per-supplier overrides in
 `_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py`) for the known-large catalogues (Bolt,
 Ecofix, Engie, Mega, OCTA+, TotalEnergies) and `_LATENCY_BUDGET_OVERRIDES`
-(`scripts/live_check.py`) for those same multi-fetch suppliers plus EBEM, Eneco, Energy Knights and
-Luminus, which are slow per fetch rather than large. That last group is the
+(`scripts/live_check.py`) for the same suppliers but Ecofix, which has no latency override,
+plus EBEM, Eneco, Energy Knights and Luminus, which are slow per fetch rather than large. That last group is the
 recurring one: each answers a residential line in seconds and a GitHub runner
 in minutes, for a byte-identical payload, so the alert reports where the run
 executed rather than anything about the cards. Energy Knights joined it on
@@ -854,16 +855,17 @@ Direct Online or Empty House while all three cards are current
 
 ### Exit codes and the two report side-channels
 
-`_run()` (`scripts/live_check.py`) splits checks into `extractor`, `catalog`, `tax` and
-`network` kinds. The extractor report (with the metrics block) is printed to stdout, which the
+`_run()` (`scripts/live_check.py`) splits checks into `extractor`, `catalog`, `tax`,
+`network` and `edition` kinds. The extractor report (with the metrics block) is printed to stdout, which the
 workflow captures. The catalog diff is written to `catalog_report.md`, the tax rows to
-`tax_report.md`, the network rows to `network_report.md` and the drift
+`tax_report.md`, the network rows to `network_report.md`, the French-against-Dutch card rows to
+`edition_report.md` and the drift
 warnings to `drift_report.md` at the repo root (`scripts/live_check.py`), each a side-channel the
 workflow reads to file a separate issue so the failure modes never conflate in one thread. Beside
 the drift report goes `drift_fingerprint.txt`, one `<supplier> latency` or `<supplier> bytes`
-line per blown budget with no measurement in it, and beside the other two go
-`catalog_failures.txt`, `tax_failures.txt` and `network_failures.txt`, their failing labels;
-those four files are what the issues are fingerprinted on.
+line per blown budget with no measurement in it, and beside the other four go
+`catalog_failures.txt`, `tax_failures.txt`, `network_failures.txt` and `edition_failures.txt`,
+their failing labels; those five files are what the issues are fingerprinted on.
 
 The exit code is bit-encoded (`scripts/live_check.py`):
 
@@ -877,7 +879,7 @@ The exit code is bit-encoded (`scripts/live_check.py`):
 `rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
 
-All three parts of bit 1 run their step and then look at their own report: each begins with a
+All four parts of bit 1 run their step and then look at their own report: each begins with a
 `grep -q '^## Failures'` on it and exits quietly when its half is clean. Without that guard a
 run whose fifteen discovery rows all passed still opened an issue titled "new supplier products
 detected", carrying six rows about a stale tax block (issue #101).
@@ -1339,12 +1341,13 @@ on that one sighting.
 The extractor issue body leads with those persistent failures, because the report under them is the
 last attempt's and on a slow runner also lists checks that failed only that once.
 
-The job then branches on the captured `rc` to open or update four distinct issues through
+The job then branches on the captured `rc` to open or update six distinct issues through
 `scripts/file_ci_issue.sh`, which finds the one open issue by its label (never by a title substring,
 so a manually opened issue cannot catch these comments) and posts a comment only when the failure
 changed or the last post is older than a week. Each body ends in a hidden fingerprint marker: for
-the extractor issue it is a hash of `persistent_failures.txt`, for the catalog and tax issues a
-hash of `catalog_failures.txt` and `tax_failures.txt` (each report also lists every passing row
+the extractor issue it is a hash of `persistent_failures.txt`, for the catalog, tax, network and
+edition issues a hash of `catalog_failures.txt`, `tax_failures.txt`, `network_failures.txt` and
+`edition_failures.txt` (each report also lists every passing row
 under its pass count, and a tax row's detail counts the other suppliers, so hashing the report
 posted the same open failure again whenever an unrelated row changed), for the drift issue a hash
 of `drift_fingerprint.txt` (the report itself carries the measured seconds and bytes, so hashing it
@@ -1696,9 +1699,9 @@ Notes:
 - Both mypy passes matter: `--strict` on production code, and the non-strict pass over
   `tests/`/`scripts/` that also type-checks `live_check.py`.
 - `doc_ref_check.py` needs no network or fixtures and reports in seconds, so run it after any doc
-  edit: it fails on a pin past the end of its file or on a dead line, and on a rise in the
-  rewritable or unanchored-markdown counts. `--verbose` adds the moved-symbol suspects, and
-  `--write` repins only what an AST symbol can resolve.
+  edit: it fails on a file or markdown anchor that does not resolve and on a private name
+  defined nowhere in the tree. `--verbose` lists the names beside a file that the tree does not
+  define, which it only counts otherwise.
 - The suite is split across cores BY FILE, so a file's fixtures are built once in one worker
   rather than scattered across several. Measured on a Raspberry Pi 5 over 2087 tests: 21:52
   serial, 13:27 on two workers, 9:58 on four. Each worker pays one Home Assistant import, which
@@ -1708,7 +1711,8 @@ Notes:
   `pytest tests/test_bolt.py -q`.
 - The full live check is network-bound and can be run locally with
   `python scripts/live_check.py`; it writes `catalog_report.md`, `tax_report.md`,
-  `drift_report.md` and their fingerprint and failure-label files to the repo root and prints the
+  `network_report.md`, `edition_report.md`, `drift_report.md` and their fingerprint and
+  failure-label files to the repo root and prints the
   extractor report to stdout. It is not part of the pre-commit gate.
 - `python scripts/archive_cards.py --out tmp/archive` stores today's cards under `tmp/archive`
   the way the daily workflow stores them in `be_price_cards`. A full walk asks about 250

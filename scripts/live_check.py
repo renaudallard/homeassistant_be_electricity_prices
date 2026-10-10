@@ -5421,7 +5421,7 @@ async def _run(texts: Path | None = None) -> int:
     # And a card whose two editions disagree, which is neither: the French one
     # is billed, and the Dutch one only stands in when the French one breaks.
     (ROOT / "edition_report.md").write_text(_render_report(edition_checks))
-    # What the workflow fingerprints those two issues on: the failing labels.
+    # What the workflow fingerprints those issues on: the failing labels.
     # Each report also carries its pass count and every passing row, so a
     # fingerprint over it changed with any unrelated row and the same open
     # failure got a comment a day instead of a week.
