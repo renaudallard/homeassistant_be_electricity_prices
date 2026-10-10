@@ -61,6 +61,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import replace
 from datetime import date, timedelta
 
 import aiohttp
@@ -87,6 +88,7 @@ from ._rates import (
     Contract,
     EnergyRates,
     InjectionRates,
+    RlpBlend,
     VariableRates,
 )
 from ._validity import parse_valid_until
@@ -265,23 +267,79 @@ def parse_snapshot(text: str, source_url: str, region: str) -> SupplierSnapshot:
 # ---- energy ------------------------------------------------------------------
 
 
+# BE_spotRLP is published monthly and the card puts it into the formula as
+# "de meest recente waarde van BE_spotRLP (maart 2026: 97,64 EUR/MWh)".
+_RLP_INDEX_RE = re.compile(r"BE_spotRLP\s*\(\w+\s+\d{4}:\s*([\d.,]+)\s*€/MWh\)")
+# One formula per register, c€/kWh before VAT: "(BE_spotRLP x 0,1124 + 0,511)
+# + 6% btw". The day row is labelled "Tweevoudige meter Dag", the night one
+# "Nacht" alone, on the line after the feed-in formula.
+_FORMULA = rf"\(BE_spotRLP\s*x\s*([\d.,]+)\s*([{SIGN_CHARS}])\s*([\d.,]+)\)\s*\+\s*(\d+)%\s*btw"
+_FORMULA_RES = {
+    "mono": re.compile(rf"Enkelvoudige meter\s*{_FORMULA}"),
+    "peak": re.compile(rf"\bDag\s*{_FORMULA}"),
+    "offpeak": re.compile(rf"(?<!Uitsluitend )\bNacht\s*{_FORMULA}"),
+    "excl_night": re.compile(rf"Uitsluitend nachtmeter\s*{_FORMULA}"),
+}
+# The index the formula is resolved on. The card defines BE_spotRLP as the
+# RLP-weighted mean "van de profielen van de verschillende
+# distributienetbeheerders", the words Eneco and energie.be also use for two
+# different blends, so the blend is the one the card's own published values
+# reproduce. Against the values the February to July 2026 cards state for
+# January to June, the mean over every DSO column of the Synergrid sheet
+# weighting quarter-hour prices gives them to 0,04 EUR/MWh on average (the
+# first three months to the cent), and the engine's hourly weighting to
+# 0,15; the equal mean of the three distinct curves is 1,1 off and the
+# Flemish curve alone 0,4.
+_RLP_BLEND: RlpBlend = "columns"
+
+
+def _register_formulas(
+    text: str, printed: dict[str, float]
+) -> dict[str, tuple[float, float]] | None:
+    """Each register's ``(factor, base)`` onto a EUR/kWh spot, VAT included,
+    or ``None`` when the card's formulas do not reproduce its own prices.
+
+    Bound by arithmetic, not by position: every formula has to give back the
+    rate the card prints for it at the BE_spotRLP the card says it used, to
+    the cent it is rounded to. The May 2026 card is why: it printed
+    "(BE_spotRLP x 00,000 + 0,001)" in every row and an index of "085" beside
+    correct prices, and reading those coefficients would bill a few
+    hundredths of a cent. Such a card keeps its printed prices instead.
+    """
+    index_match = _RLP_INDEX_RE.search(text)
+    if index_match is None:
+        return None
+    index = to_float(index_match.group(1))
+    out: dict[str, tuple[float, float]] = {}
+    for register, pattern in _FORMULA_RES.items():
+        match = pattern.search(text)
+        if match is None:
+            return None
+        factor_c = to_float(match.group(1))
+        base_c = parse_sign(match.group(2)) * to_float(match.group(3))
+        vat = 1.0 + int(match.group(4)) / 100.0
+        if abs((index * factor_c + base_c) * vat - printed[register]) > 0.006:
+            return None
+        # c€/kWh per EUR/MWh of index onto a EUR/kWh spot: x10 the factor,
+        # /100 the base, both grossed by the VAT the row adds.
+        out[register] = (factor_c * 10.0 * vat, base_c / 100.0 * vat)
+    return out
+
+
 def _extract_energy(text: str) -> EnergyRates:
-    """Parse the indicative TVAC c€/kWh values for the current month.
+    """The four registers' rates, and the formulas they are indexed on.
 
     The card prints four values under "Afname1": single rate (mono),
-    bi-hourly day, bi-hourly night, and exclusive-night: computed
-    from the previous calendar month's BE_spotRLP applied to the
-    contract's coefficients. We use those figures directly rather than
-    re-solving the formula: spot data isn't available at parse time
-    and the printed values are exactly what the customer's monthly
-    invoice settles at.
-
-    Layout on the card (pdfplumber, columns separated by spaces):
+    bi-hourly day, bi-hourly night and exclusive-night, VAT included:
 
         Afname1 (c€/kWh) 12,18 13,48 10,97 10,97
-                         single  Day   Night Excl-night
 
-    All values include 6% VAT.
+    They are the formulas at the PREVIOUS month's BE_spotRLP, the most recent
+    one published. The contract is "maandelijks geïndexeerd" on it, so the
+    month delivered settles on its own BE_spotRLP: the formulas are kept with
+    ``month_indexed`` and resolved against the delivery month's RLP-weighted
+    mean, and the printed rates stay the fallback for an entry without the
+    profile or a key.
     """
     match = re.search(
         r"Afname1?\s*\(c€/kWh\)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)",
@@ -289,10 +347,13 @@ def _extract_energy(text: str) -> EnergyRates:
     )
     if not match:
         raise ExtractorError("could not parse DATS 24 indicative afname row")
-    single_c = to_float(match.group(1))
-    peak_c = to_float(match.group(2))
-    offpeak_c = to_float(match.group(3))
-    excl_c = to_float(match.group(4))
+    printed = dict(
+        zip(
+            ("mono", "peak", "offpeak", "excl_night"),
+            (to_float(value) for value in match.groups()),
+            strict=True,
+        )
+    )
     fee_match = re.search(r"VASTE VERGOEDING\s*\(€/jaar\)\s+([\d,.]+)", text)
     if fee_match is None:
         # The yearly standing charge is mandatory on every DATS 24 card;
@@ -300,12 +361,33 @@ def _extract_energy(text: str) -> EnergyRates:
         # the afname row above rather than silently dropping the base fee.
         raise ExtractorError("could not parse DATS 24 yearly fixed fee")
     yearly_fee = to_float(fee_match.group(1))
-    return VariableRates(
-        current=single_c / 100.0,
-        peak=peak_c / 100.0,
-        offpeak=offpeak_c / 100.0,
-        exclusive_night=excl_c / 100.0,
+    rates = VariableRates(
+        current=printed["mono"] / 100.0,
+        peak=printed["peak"] / 100.0,
+        offpeak=printed["offpeak"] / 100.0,
+        exclusive_night=printed["excl_night"] / 100.0,
         yearly_fixed_fee=yearly_fee,
+    )
+    formulas = _register_formulas(text, printed)
+    if formulas is None:
+        return rates
+    return replace(
+        rates,
+        formula=" · ".join(
+            f"{register} ({factor / 10.0:.5f} BE_spotRLP {base * 100.0:+.4f}) c€/kWh"
+            for register, (factor, base) in formulas.items()
+        ),
+        formula_factor=formulas["mono"][0],
+        formula_base=formulas["mono"][1],
+        formula_factor_peak=formulas["peak"][0],
+        formula_base_peak=formulas["peak"][1],
+        formula_factor_offpeak=formulas["offpeak"][0],
+        formula_base_offpeak=formulas["offpeak"][1],
+        formula_factor_exclusive_night=formulas["excl_night"][0],
+        formula_base_exclusive_night=formulas["excl_night"][1],
+        month_indexed=True,
+        rlp_indexed=True,
+        rlp_blend=_RLP_BLEND,
     )
 
 
@@ -562,6 +644,9 @@ EXTRACTOR = SupplierExtractor(
             # flow still offers that regime there, and the key step with it,
             # which then has no credit to index.
             spot_indexed_injection=True,
+            # Energy is indexed on the delivery month's BE_spotRLP and the
+            # card prints last month's, so the same key re-prices it.
+            month_indexed_energy=True,
         ),
     ),
     fetch=fetch,

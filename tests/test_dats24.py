@@ -95,10 +95,9 @@ def test_april_card_publication_metadata() -> None:
 
 
 def test_april_card_energy_uses_indicative_tvac_values() -> None:
-    """The card prints "Afname1 12,18 13,48 10,97 10,97" -- the
-    previous-month spot fed through the contract formula, including
-    6% VAT. We use those resolved figures directly because spot data
-    isn't available at parse time."""
+    """The card prints "Afname1 12,18 13,48 10,97 10,97": the previous
+    month's BE_spotRLP fed through the contract formula, 6% VAT included.
+    They stay the rates billed without a key to re-price the month."""
     snap = _snap("flanders")
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.current == pytest.approx(0.1218)
@@ -107,6 +106,56 @@ def test_april_card_energy_uses_indicative_tvac_values() -> None:
     assert snap.energy.exclusive_night == pytest.approx(0.1097)
     # Vaste vergoeding 38,50 EUR/yr (residential base subscription).
     assert snap.energy.yearly_fixed_fee == pytest.approx(38.50)
+
+
+def test_the_formulas_reproduce_the_card_and_re_price_the_delivery_month() -> None:
+    """The contract is indexed monthly on BE_spotRLP and the card prints its
+    rates at the previous month's (March, 97,64 EUR/MWh). Each register's
+    formula has to give back the card's own price at that index, and with a
+    key the month delivered is billed on its own index instead."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _month_indexed_leg,
+    )
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+
+    snap = _snap("flanders")
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed and energy.rlp_indexed
+    march = 0.09764
+    for factor, base, printed in (
+        (energy.formula_factor, energy.formula_base, energy.current),
+        (energy.formula_factor_peak, energy.formula_base_peak, energy.peak),
+        (energy.formula_factor_offpeak, energy.formula_base_offpeak, energy.offpeak),
+        (
+            energy.formula_factor_exclusive_night,
+            energy.formula_base_exclusive_night,
+            energy.exclusive_night,
+        ),
+    ):
+        assert factor is not None and base is not None and printed is not None
+        # The card rounds to 0,01 c/kWh, half of which is 5e-5 EUR/kWh.
+        assert factor * march + base == pytest.approx(printed, abs=6e-5)
+    # April's own index, as the May card states it: 84,69 EUR/MWh.
+    leg = _month_indexed_leg(snap, SimpleNamespace(data={"api_key": "k"}))  # type: ignore[arg-type]
+    assert leg is not None
+    noon = datetime(2026, 4, 15, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    april = energy_eur_per_kwh(leg, noon, 0.08469, meter="mono")
+    assert april == pytest.approx((84.69 * 0.1124 + 0.511) * 1.06 / 100.0)
+
+
+def test_a_card_whose_formulas_miss_its_prices_keeps_the_prices() -> None:
+    """The hand-built May fixture prints "(BE_spotRLP x 00,000 + 0,001)" in
+    every row. Formulas that do not reproduce the card's own prices are not
+    read, so the month bills the printed rates as before."""
+    text = fixture_text("dats24_groen_variabel_may.pdf", layout=True)
+    energy = parse_snapshot(text, "test://may", "flanders").energy
+    assert isinstance(energy, VariableRates)
+    assert not energy.month_indexed
+    assert energy.formula_factor is None
+    assert energy.current == pytest.approx(0.1064)
 
 
 def test_april_card_taxes_are_tvac() -> None:

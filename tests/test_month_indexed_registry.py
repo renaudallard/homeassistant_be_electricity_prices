@@ -26,6 +26,7 @@ from custom_components.be_electricity_prices.providers import (
     aspiravi,
     bolt,
     cociter,
+    dats24,
     ebem,
     ecopower,
     eneco,
@@ -85,6 +86,15 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
         "aspiravi_eco_plus_flex",
         lambda: aspiravi.parse_snapshot(
             "aspiravi_eco_plus_flex", fixture_text("aspiravi_eco_plus_flex_2026-09.pdf")
+        ),
+    ),
+    (
+        "dats24",
+        "dats24_groen_variabel",
+        lambda: dats24.parse_snapshot(
+            fixture_text("dats24_groen_variabel_apr.pdf", layout=True),
+            "t",
+            REGION_FLANDERS,
         ),
     ),
     (
@@ -536,6 +546,13 @@ def test_every_band_solves_to_the_same_month_index(
     ex_vat_base = getattr(energy, base_attr) / 1.06
     perturbed = dict(implied)
     perturbed[band] = (rate - ex_vat_base) / getattr(energy, factor_attr)
+    if abs(perturbed[band] - implied[band]) <= _MAX_INDEX_SPREAD:
+        # DATS 24 adds 0,511 c/kWh to an index near 100 EUR/MWh, so a base on
+        # the wrong VAT basis moves its solved index by less than the rounding
+        # the bound allows. A factor on the wrong basis is the slip left to
+        # prove the bound against there.
+        ex_vat_factor = getattr(energy, factor_attr) / 1.06
+        perturbed[band] = (rate - getattr(energy, base_attr)) / ex_vat_factor
     assert max(perturbed.values()) - min(perturbed.values()) > _MAX_INDEX_SPREAD, (
         f"{contract_id}: the bound is too loose to catch a VAT-basis slip"
     )

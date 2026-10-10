@@ -101,7 +101,8 @@ class Contract:
     # delivery month's mean and its card prints last month's figure: Aspiravi
     # Eco Plus Flex, Cociter Variable and Trihoraire, Ecopower Groene
     # Burgerstroom (whose card is published once its month is over), EBEM
-    # Groen Variabel and B@sic+, Engie's EPEXDAM cards, Luminus MaxxFlex,
+    # Groen Variabel and B@sic+, the withdrawn DATS 24 Groen Variabel,
+    # Engie's EPEXDAM cards, Luminus MaxxFlex,
     # SmartFlex and BasicFlex, OCTA+ Smart Variable / Flux / Eco Flux / Boost
     # Flex / Eco Boost Flex / Basic Online, Eneco Flex and Flex One,
     # TotalEnergies's five BELPEXM_RLP variable cards, and every Mega Flex plus

@@ -526,7 +526,7 @@ different, as long as the edit keeps the same supplier, contract and region
    Flex, Cociter Variable and Trihoraire, Ecopower Groene Burgerstroom, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex,
    OCTA+ Smart Variable, Boost Flex, Eco Boost Flex, Basic Online and the
    withdrawn Flux and Eco Flux, Eneco Flex and Flex One, EBEM
-   Groen Variabel and B@sic+, TotalEnergies Electricité Variable, Impact,
+   Groen Variabel and B@sic+, the withdrawn DATS 24 Groen Variabel, TotalEnergies Electricité Variable, Impact,
    myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
    card, and Bolt's variable cards on the delivery quarter's mean — and on
    the injection regime for a contract whose injection is itself
@@ -692,8 +692,8 @@ or not, for which the flow offers the key on every solar regime (Aspiravi
 Eco Plus Flex, Cociter Variable and Trihoraire, Ecopower Groene Burgerstroom,
 Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Variable, Boost Flex, Eco Boost
 Flex, Basic Online and the withdrawn Flux and Eco Flux, Eneco Flex and Flex
-One, EBEM Groen Variabel and B@sic+, TotalEnergies Electricité Variable,
-Impact, myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
+One, EBEM Groen Variabel and B@sic+, the withdrawn DATS 24 Groen Variabel,
+TotalEnergies Electricité Variable, Impact, myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
 card), and of Bolt's variable cards (Variable, Plenty, Online and Plenty
 Online, residential and pro) on the delivery quarter's, which is what Bolt
 indexes them on. Both stay off without a key rather than failing the entry: a

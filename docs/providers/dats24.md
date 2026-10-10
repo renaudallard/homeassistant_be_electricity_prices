@@ -41,8 +41,10 @@ teruglevering = (BE_spotSPP * <factor> - 1.11)           c€/kWh (VAT-exempt)
 
 `BE_spotRLP` is a monthly Belgian spot index (quarter-hourly spot, RLP-weighted);
 `BE_spotSPP` is a monthly synthetic-profile index. Both are monthly, not the
-hourly ENTSO-E day-ahead spot, which is why the extractor surfaces printed
-indicative values rather than a spot formula (see Injection below).
+hourly ENTSO-E day-ahead spot, so both formulas are resolved against the
+delivery month's weighted mean (`month_indexed` on the energy, `spp_indexed` on
+the feed-in), with the card's printed figures, which use the previous month's
+index, as the fallback without a key.
 
 > **Withdrawal.** DATS 24 is leaving residential energy supply: its own site
 > states contracts transfer automatically to EnergyVision on 31 August 2026, so
@@ -208,9 +210,26 @@ separator from `,` to `.` (see Quirks).
 
 The card prints four indicative TVAC c€/kWh values on one row under `Afname1`
 (single/mono, bi-hourly day, bi-hourly night, exclusive-night), plus a yearly
-standing charge. The extractor uses these printed indicatives directly rather than
-re-solving the formula, because spot data is not available at parse time and the
-printed values are exactly what the monthly invoice settles at (`dats24.py`).
+standing charge. They are the formulas at the PREVIOUS month's BE_spotRLP ("de
+meest recente waarde van BE_spotRLP (maart 2026: 97,64 €/MWh)" on the April card),
+while the contract is indexed monthly on it, so the delivery month settles on its
+own index. The extractor keeps the printed values as the fallback and also reads
+each register's formula, `(BE_spotRLP x 0,1124 + 0,511) + 6% btw` (the
+coefficients move with every card), as `month_indexed` coefficients on the
+`columns` RLP blend (`_register_formulas`, `dats24.py`).
+
+The formulas are bound by arithmetic: each one has to reproduce the rate the card
+prints for its register at the index the card states, to the cent. A card that
+fails that keeps its printed rates and no formula. The hand-built May fixture is
+the case: it prints `(BE_spotRLP x 00,000 + 0,001)` in every row.
+
+The blend is measured, not read: the card's wording ("rekenkundig gemiddelde van
+de profielen van de verschillende distributienetbeheerders") is the one Eneco and
+energie.be use for two different blends. Against the values the February to July
+2026 cards state for January to June, the mean over every DSO column of the
+Synergrid sheet weighting quarter-hour prices reproduces them to 0,04 EUR/MWh on
+average (January to March to the cent), and the engine's hourly weighting to 0,15;
+the distinct-curve mean is 1,1 off and the Flemish curve 0,4.
 
 Layout the regex targets (illustrative comment values, `dats24.py`):
 
@@ -228,7 +247,8 @@ Afname1 (c€/kWh) 12,18 13,48 10,97 10,97
   fee-free contract.
 
 Output is `VariableRates(current, peak, offpeak, exclusive_night,
-yearly_fixed_fee)` with the four c€/kWh values divided by 100 (`dats24.py`).
+yearly_fixed_fee)` with the four c€/kWh values divided by 100 (`dats24.py`),
+plus the four formula pairs, `month_indexed`, `rlp_indexed` and `rlp_blend`.
 All four include 6% VAT. Illustrative parse from the April fixture
 (`test_dats24.py`): `current 0.1218`, `peak 0.1348`, `offpeak 0.1097`,
 `exclusive_night 0.1097`, `yearly_fixed_fee 38.50` EUR/yr.

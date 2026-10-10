@@ -982,7 +982,9 @@ estimate that figure replaces is the previous month's index, 15,62 EUR/MWh out
 on average, which is the error that actually mattered.
 energie.be Variabel against the column-weighted mean, every DSO sub-area counting
 once, which is how it publishes the same phrase Eneco reads as the distinct
-mean. Each blend was settled against the supplier's own published table rather
+mean. DATS 24's BE_spotRLP is the column-weighted mean too, at quarter-hour
+resolution: 0,04 EUR/MWh off its six published 2026 values on average, 0,15 on
+the hourly weighting the engine uses. Each blend was settled against the supplier's own published table rather
 than against the wording, which is identical on two of the three cards. A leg
 that names no blend keeps the plain arithmetic monthly mean, a few percent
 below any of them, since households draw in the expensive hours; the note lives
