@@ -993,6 +993,14 @@ since Justel serves only the wording in force. `resolve_federal_excise`
 (`providers/_resolve.py`) then bills the card as printed, which is also what
 happens on a first start with Justel unreachable.
 
+`protected_excise` answers the protected residential customer's rate the same
+way, for the social tariff (`providers/social.py`). No card prints it reliably,
+so its two closed rates are typed in beside the law they came from (exempt
+until July 2023, then 23,62 EUR/MWh until July 2026, `_PROTECTED_CLOSED`), and
+a month from August 2026 is `None` until the law is read: a social tariff card
+then carries `protected_excise_unread`, and the coordinator publishes nothing
+for it, with the `excise_law_unread` Repairs card, until it is.
+
 The parser is tested on the page as Justel served it on 2026-10-09
 (`tests/fixtures/justel_loi_programme_2004_fr.html`), which every test holds
 in place of the network.

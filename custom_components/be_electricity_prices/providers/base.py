@@ -240,6 +240,14 @@ class TaxOverlay:
     # row leaves this False, as does any non-Walloon card, where 0.0 is the
     # honest value rather than a gap.
     region_connection_fee_unavailable: bool = False
+    # True on a social tariff card built before the law was read for its
+    # month, so ``federal_excise`` is a placeholder. The law decides the
+    # protected customer's excise, and the project's archive builds its rows
+    # where the law cannot be read, so the card carries the gap instead of
+    # failing. ``resolve_federal_excise`` fills the rate and clears this once
+    # the law is held, and the coordinator refuses to publish a price that
+    # still carries it.
+    protected_excise_unread: bool = False
     energy_fund_eur_per_month: float = 0.0
     # 0.0 means the snapshot's prices are already VAT-incl (the convention
     # for both Eneco and Cociter today). An extractor that starts shipping

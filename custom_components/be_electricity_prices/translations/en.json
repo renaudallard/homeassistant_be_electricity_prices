@@ -854,6 +854,10 @@
       "title": "{supplier} ({contract}) prices direct debit and this entry has not been asked",
       "description": "The tariff card for {contract} prices a household that pays by direct debit differently: depending on the card, a direct-debit payer pays a lower standing charge, or receives a welcome credit, or a larger one.\n\nThis entry was set up before the question was asked, so no answer is stored and the difference is left out rather than guessed. Open the integration's options and answer \"I pay by direct debit\" to have it billed. This notice clears as soon as an answer of either value is stored."
     },
+    "excise_law_unread": {
+      "title": "{supplier} ({contract}) waits for the protected customer's excise",
+      "description": "A protected customer pays a special excise of its own, which the social tariff leaves out and the law sets: article 419 of the programme law of 27 December 2004, read from Justel (ejustice.just.fgov.be). It has not been read yet, so this entry's prices would leave the excise out or bill the household rate, and neither is your bill. The sensors stay unavailable until it is read.\n\nThe law is read again every six hours and this notice clears by itself once it is. If it stays, check that Home Assistant can reach ejustice.just.fgov.be."
+    },
     "brussels_power_term_missing": {
       "title": "{supplier} ({contract}) is billed without Sibelga's power term",
       "description": "Sibelga's yearly fixed charge has two regulated parts, a metering one and a power one (\"puissance mise a disposition\"). The card for {contract} prints only the metering half, so the integration completes it from the figure Brugel publishes, and that sheet could not be read.\n\nPrices for this entry therefore exclude the power part, which under-bills by about €50 a year. Everything else on the card is priced normally. The sheet is retried every six hours and this notice clears by itself as soon as it can be read."

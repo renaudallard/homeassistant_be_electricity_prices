@@ -104,6 +104,7 @@ _ISSUE_KINDS: Final = (
     "register_pair_incomplete",
     "direct_debit_unanswered",
     "brussels_power_term_missing",
+    "excise_law_unread",
 )
 
 
@@ -324,6 +325,19 @@ class _IssuesMixin:
             gap,
             extra={"dso": str(self.entry.data.get(CONF_DSO, ""))},
         )
+
+    def _sync_excise_law_issue(self) -> bool:
+        """Flag a social tariff card still waiting for the law, and say so.
+
+        The protected customer's excise is the law's own rate, so a card
+        whose month the law has not been read for has none to bill, and the
+        tick publishes nothing for it. Returns whether that is the case.
+        """
+        unread = (
+            self._snapshot is not None and self._snapshot.taxes.protected_excise_unread
+        )
+        self._sync_issue("excise_law_unread", unread)
+        return unread
 
     def _sync_connection_fee_issue(self) -> None:
         """Flag a Walloon card that stopped printing the connection fee.

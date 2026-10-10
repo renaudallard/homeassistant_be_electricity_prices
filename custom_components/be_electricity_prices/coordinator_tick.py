@@ -159,6 +159,7 @@ class _TickMixin:
         def _snapshot_overdue(self) -> bool: ...
         def _sync_brussels_power_term_issue(self) -> None: ...
         def _sync_connection_fee_issue(self) -> None: ...
+        def _sync_excise_law_issue(self) -> bool: ...
         def _sync_deprecated_supplier_issue(self) -> None: ...
         def _sync_withdrawn_contract_issue(self) -> None: ...
         def _card_is_final(self) -> bool: ...
@@ -270,6 +271,15 @@ class _TickMixin:
         else:
             await self._maybe_refresh_snapshot()
         self._reresolve_snapshot()
+        # A social tariff card whose month the law has not been read for has
+        # no excise to bill. Nothing is published until it has: the excise is
+        # the protected customer's own rate, and neither leaving it out nor
+        # billing the household one would be the bill.
+        if self._sync_excise_law_issue():
+            raise UpdateFailed(
+                "the protected customer's excise is not known yet: the law "
+                "could not be read from Justel"
+            )
         await self._track_monthly_peak()
         # Only for an entry that ticked the box, which is the one thing that
         # lets it contact creg.be. Independent of the card: a failure only

@@ -75,6 +75,7 @@ machinery.
 | `tests/test_luminus.py` | Luminus extractor |
 | `tests/test_mega.py` | Mega extractor |
 | `tests/test_octaplus.py` | OCTA+ extractor |
+| `tests/test_social.py` | Social tariff extractor: the CREG quarterly card, the protected customer's excise, the feed-in on Engie's and Luminus's social cards |
 | `tests/test_totalenergies.py` | TotalEnergies extractor |
 | `tests/test_trevion.py` | Trevion extractor |
 | `tests/test_pricing.py` | `pricing.compute_breakdown` and its helpers (energy, network, taxes, TOU/offpeak, holidays, impact bands, meter fixed fee) |

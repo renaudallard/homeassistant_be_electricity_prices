@@ -662,6 +662,12 @@ COSTS_STORAGE_VERSION: Final = 1
 # last in the supplier dropdown and labelled as an expert option.
 SUPPLIER_CUSTOM: Final = "custom"
 
+# The social tariff a protected customer pays whoever supplies it, set by the
+# CREG each quarter (providers/social.py). Not a market product: nobody can
+# switch to it, so the comparison pages leave it out, and it has no card for
+# the project's archive to capture.
+SUPPLIER_SOCIAL: Final = "social"
+
 # One contract per energy mode (the contract step doubles as the mode picker).
 CUSTOM_CONTRACT_DYNAMIC: Final = "custom_dynamic"  # factor * live spot + base
 CUSTOM_CONTRACT_MONTHLY: Final = "custom_monthly"  # factor * monthly-mean spot + base

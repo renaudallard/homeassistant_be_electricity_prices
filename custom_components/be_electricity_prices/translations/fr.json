@@ -854,6 +854,10 @@
       "title": "{supplier} ({contract}) tarifie la domiciliation et cette entrée n'a pas été interrogée",
       "description": "La carte tarifaire de {contract} tarifie différemment un ménage qui paie par domiciliation : selon la carte, le payeur par domiciliation paie une redevance fixe plus basse, ou reçoit une ristourne de bienvenue, ou une plus grande.\n\nCette entrée a été créée avant que la question ne soit posée : aucune réponse n'est enregistrée et la différence est donc omise plutôt que devinée. Ouvrez les options de l'intégration et répondez « Je paie par domiciliation » pour qu'elle soit facturée. Cet avis disparaît dès qu'une réponse, quelle qu'elle soit, est enregistrée."
     },
+    "excise_law_unread": {
+      "title": "{supplier} ({contract}) attend l'accise du client protégé",
+      "description": "Un client protégé paie un droit d'accise spécial qui lui est propre, que le tarif social n'inclut pas et que la loi fixe : l'article 419 de la loi-programme du 27 décembre 2004, lu sur Justel (ejustice.just.fgov.be). Il n'a pas encore pu être lu : les prix de cette entrée omettraient l'accise ou factureraient le taux des ménages, et ni l'un ni l'autre n'est votre facture. Les capteurs restent indisponibles jusqu'à ce qu'il soit lu.\n\nLa loi est relue toutes les six heures et cet avis disparaît de lui-même dès qu'elle l'est. S'il persiste, vérifiez que Home Assistant peut joindre ejustice.just.fgov.be."
+    },
     "brussels_power_term_missing": {
       "title": "{supplier} ({contract}) est facturé sans le terme de puissance de Sibelga",
       "description": "La redevance fixe annuelle de Sibelga comporte deux parties réglementées, une pour le comptage et une pour la puissance mise à disposition. La carte de {contract} n'imprime que la moitié comptage, l'intégration complète donc le reste avec le chiffre publié par Brugel, et cette fiche n'a pas pu être lue.\n\nLes prix de cette entrée excluent donc la partie puissance, ce qui sous-facture d'environ 50 € par an. Tout le reste de la carte est facturé normalement. La fiche est réessayée toutes les six heures et cet avis disparaît dès qu'elle peut être lue."

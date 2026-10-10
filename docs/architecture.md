@@ -150,7 +150,7 @@ relative to that package directory.
 In addition, eighteen scraped supplier modules live under `providers/`, each exposing a top-level
 `EXTRACTOR`: `aspiravi.py`, `bolt.py`, `cociter.py`, `dats24.py`, `ebem.py`, `ecofix.py`, `ecopower.py`,
 `eneco.py`, `energiebe.py`, `energyknights.py`, `energyvision.py`, `engie.py`, `frank.py`,
-`luminus.py`, `mega.py`, `octaplus.py`, `totalenergies.py` and `trevion.py`. Each has its own page under
+`luminus.py`, `mega.py`, `octaplus.py`, `social.py`, `totalenergies.py` and `trevion.py`. Each has its own page under
 [providers/](providers/).
 
 Nine of them carry their card readers in sibling modules, named
@@ -342,7 +342,8 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
   only when the key changes, so a new publication is caught within an hour at near-zero
   bandwidth (`providers/base.py`).
 - TTL fallback: suppliers with no usable probe (energie.be, Engie, Luminus, where the only
-  cheap response is the PDF itself), and products whose probe has no key to give (Mega's
+  cheap response is the PDF itself, and the social tariff, whose CREG card changes once a
+  quarter), and products whose probe has no key to give (Mega's
   professional cards, EnergyVision's Brussels cards), fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
   `snapshot_store.py`), cut short once the card's `valid_until` has passed, or for a card that
   states none the month its title names (`card_valid_until`, `providers/_validity.py`), so the

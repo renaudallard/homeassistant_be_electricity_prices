@@ -63,6 +63,7 @@ changes, look here" reference tied to the provider's tests and fixtures.
 | Luminus | [providers/luminus.md](providers/luminus.md) |
 | Mega | [providers/mega.md](providers/mega.md) |
 | OCTA+ | [providers/octaplus.md](providers/octaplus.md) |
+| Social tariff (CREG) | [providers/social.md](providers/social.md) |
 | TotalEnergies | [providers/totalenergies.md](providers/totalenergies.md) |
 | Trevion | [providers/trevion.md](providers/trevion.md) |
 

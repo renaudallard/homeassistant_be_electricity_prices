@@ -3500,6 +3500,7 @@ _REPAIR_ISSUE_KINDS = (
     "direct_debit_unanswered",
     "brussels_power_term_missing",
     "compensation_kva_missing",
+    "excise_law_unread",
 )
 
 

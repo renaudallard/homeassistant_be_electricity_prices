@@ -758,8 +758,9 @@ def test_a_real_card_is_never_mistaken_for_an_image_only_one() -> None:
 
     Measured across all fixtures the least texty readable card, a one-page
     TotalEnergies feed-in card, carries 2435 characters against 172 and 342
-    for the rasterized Ecofix ones, so the 600-character line has a factor of
-    four of headroom either side.
+    for the rasterized Ecofix ones. The CREG's social tariff cards are one
+    table on one page and carry about 1550, which still leaves the
+    600-character line a factor of two and a half of headroom.
     This asserts the margin rather than the constant, so shrinking the
     threshold toward real data fails here.
 
@@ -772,7 +773,7 @@ def test_a_real_card_is_never_mistaken_for_an_image_only_one() -> None:
     smallest = min(
         len(fixture_text(path.name).strip()) for path in sorted(FIXTURES.glob("*.pdf"))
     )
-    assert smallest > 4 * _MIN_TEXT_LAYER_CHARS
+    assert smallest > 2.5 * _MIN_TEXT_LAYER_CHARS
 
 
 async def test_bom_prefixed_pdf_is_stripped_before_parsing() -> None:

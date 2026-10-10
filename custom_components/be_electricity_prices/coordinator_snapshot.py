@@ -59,7 +59,7 @@ from .energy_meters import (
     _kwh_sensor_ids,
     noting_failed_reads,
 )
-from .excise_law import standard_excise
+from .excise_law import protected_excise, standard_excise
 from .meter_daily import _measured_kwh
 from .meter_hourly import _metered_sides
 from .providers import get as get_extractor
@@ -112,11 +112,13 @@ def _vat_now() -> tuple[float, float]:
     return residential_vat(today), standard_vat(today)
 
 
-def _excise_now() -> float | None:
-    """The household excise the law sets for the running month, or ``None``
-    before the law has been read: the table is refreshed on the tick, after a
-    card restored from the store was resolved without it."""
-    return standard_excise(dt_util.now().date())
+def _excise_now() -> tuple[float | None, float | None]:
+    """The household and the protected customer's excise the law sets for
+    the running month, ``None`` before the law has been read: the table is
+    refreshed on the tick, after a card restored from the store was resolved
+    without it."""
+    today = dt_util.now().date()
+    return standard_excise(today), protected_excise(today)
 
 
 def _newer_card(card: SupplierSnapshot, held: SupplierSnapshot) -> bool:
@@ -151,7 +153,7 @@ class _SnapshotMixin:
     _snapshot_annual_kwh: float | None
     _snapshot_power_term: tuple[float, float] | None
     _snapshot_vat: tuple[float, float]
-    _snapshot_excise: float | None
+    _snapshot_excise: tuple[float | None, float | None]
     _snapshot_fetched_at: datetime | None
     _snapshot_probe_key: str | None
     _snapshot_schema_version: int

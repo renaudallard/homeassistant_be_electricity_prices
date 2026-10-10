@@ -47,11 +47,12 @@ from ..const import (
     FLUVIUS_KEYS,
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
+    SUPPLIER_SOCIAL,
     VREG_NETWORK_CEILING_HTVA,
     VREG_NETWORK_CEILING_KNOWN_FROM,
     VREG_NETWORK_CEILING_KNOWN_UNTIL,
 )
-from ..excise_law import standard_excise
+from ..excise_law import protected_excise, standard_excise
 from ..vat_rates import residential_vat, standard_vat
 from ._rates import (
     DynamicRates,
@@ -390,7 +391,8 @@ def resolve_federal_excise(
 
     Left alone: a professional card, whose scheme bands the levy by annual
     volume and is a different rate entirely, and any card carrying
-    ``federal_excise_bands``.
+    ``federal_excise_bands``. The social tariff takes the protected
+    customer's rate instead of the household one.
 
     Those two were the same card when this was written and are not any more.
     Mega's and Engie's RESIDENTIAL cards print a four-tier table too, for
@@ -404,7 +406,13 @@ def resolve_federal_excise(
     taxes = snapshot.taxes
     if professional or taxes.federal_excise_bands:
         return snapshot
-    law = standard_excise(delivery_month)
+    # The social tariff is a protected customer's, who owes the rate the law
+    # sets for them rather than the household one.
+    law = (
+        protected_excise(delivery_month)
+        if snapshot.supplier == SUPPLIER_SOCIAL
+        else standard_excise(delivery_month)
+    )
     if law is None:
         return snapshot
     # The law's rate excludes VAT. A VAT-inclusive card takes it at the rate
@@ -415,9 +423,12 @@ def resolve_federal_excise(
         if taxes.vat_rate > 0.0
         else law * (1.0 + card_residential_vat(snapshot, delivery_month))
     )
-    if abs(rate - taxes.federal_excise) < 5e-7:
+    if abs(rate - taxes.federal_excise) < 5e-7 and not taxes.protected_excise_unread:
         return snapshot
-    return replace(snapshot, taxes=replace(taxes, federal_excise=rate))
+    return replace(
+        snapshot,
+        taxes=replace(taxes, federal_excise=rate, protected_excise_unread=False),
+    )
 
 
 def resolve_direct_debit(
@@ -615,6 +626,10 @@ def resolve_vreg_network_ceiling(
         VREG_NETWORK_CEILING_KNOWN_FROM <= month < VREG_NETWORK_CEILING_KNOWN_UNTIL
     ):
         return snapshot
+    if snapshot.supplier == SUPPLIER_SOCIAL:
+        # The CREG's network component replaces the operator's tariffs and
+        # carries no capacity term for the ceiling to cap.
+        return snapshot
     ceiling = VREG_NETWORK_CEILING_HTVA
     if snapshot.taxes.vat_rate <= 0.0:
         # A VAT-inclusive card, so the regulator's ex-VAT figure is grossed,
@@ -677,7 +692,9 @@ def omits_brussels_power_term(
     overlay = snapshot.dsos.get(DSO_SIBELGA)
     if overlay is None or overlay.brussels_power_term_above_13kva is not None:
         return False
-    if terms is None:
+    if terms is None or snapshot.supplier == SUPPLIER_SOCIAL:
+        # The social tariff's network component replaces Sibelga's charges:
+        # the social cards print the excise alone in Brussels.
         return False
     low, _high = _brussels_terms_on_card_basis(snapshot, terms, month)
     return overlay.data_management_per_year < low

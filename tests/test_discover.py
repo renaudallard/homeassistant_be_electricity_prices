@@ -720,6 +720,7 @@ def test_readme_documents_every_repairs_issue() -> None:
         16: "Sixteen",
         17: "Seventeen",
         18: "Eighteen",
+        19: "Nineteen",
     }
     stated = re.search(r"(\w+) repair issues surface", readme)
     assert stated is not None, "the README sentence counting the issues is gone"
@@ -793,6 +794,7 @@ def test_readme_archive_lists_name_every_supplier_that_keeps_one() -> None:
         "luminus": "Luminus",
         "mega": "Mega",
         "octaplus": "OCTA+",
+        "social": "social tariff",
         "trevion": "Trevion",
     }
     archived = sorted(

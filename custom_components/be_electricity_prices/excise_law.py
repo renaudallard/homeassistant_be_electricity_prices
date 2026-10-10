@@ -37,9 +37,10 @@ passage an amendment wrote and titles the bracket with that amendment's entry
 into force, so the date the current wording took effect is read off the
 innermost bracket around it.
 
-Justel keeps only the wording in force. A rate the law no longer prints is
-not here, so the card is read for the months before the first step this
-holds. The table is held for the process, refreshed daily, and kept in every
+Justel keeps only the wording in force. A household rate the law no longer
+prints is not here, so the card is read for the months before the first step
+this holds. The protected customer has no card that prints it reliably, so
+its two closed rates are typed in beside the law they came from. The table is held for the process, refreshed daily, and kept in every
 entry's store so a restart without the network still knows the last one.
 """
 
@@ -213,6 +214,34 @@ def standard_excise(month: date) -> float | None:
     """The household excise in force on ``month``'s first day, EUR/kWh
     excluding VAT, or ``None`` before the first step held."""
     return _rate_for(STANDARD, month)
+
+
+# The protected customer's rates the law no longer prints, as (first day,
+# EUR/kWh excluding VAT), and the day the wording read from Justel replaced
+# them. Exempt before the law of 19 March 2023 (the CREG's Q4 2022 social
+# tariff card says so), still 0 under its article 14 until 30 June 2023, then
+# 23,62 EUR/MWh under its article 9, until the law of 30 May 2026. From the
+# first quarter the CREG still publishes, which is as far back as the social
+# tariff is billed.
+_PROTECTED_CLOSED: Final = ((date(2022, 10, 1), 0.0), (date(2023, 7, 1), 0.02362))
+_PROTECTED_CLOSED_UNTIL: Final = date(2026, 8, 1)
+
+
+def protected_excise(month: date) -> float | None:
+    """The protected residential customer's excise in force on ``month``'s
+    first day, EUR/kWh excluding VAT, or ``None`` when it is not known: a
+    month from August 2026 while the law has not been read, which is never
+    billed at the rate it replaced."""
+    rate = _rate_for(PROTECTED, month)
+    if rate is not None:
+        return rate
+    first = month.replace(day=1)
+    if first >= _PROTECTED_CLOSED_UNTIL:
+        return None
+    for when, value in _PROTECTED_CLOSED:
+        if when <= first:
+            rate = value
+    return rate
 
 
 def _section(rows: Any) -> tuple[tuple[date, float], ...]:

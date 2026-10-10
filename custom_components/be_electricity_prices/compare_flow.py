@@ -85,6 +85,7 @@ from .const import (
     SOLAR_REGIME_NONE,
     SPOT_PRICED_CONTRACT_KINDS,
     SUPPLIER_CUSTOM,
+    SUPPLIER_SOCIAL,
 )
 from .flow_contracts import (
     _contract_has_spot_injection,
@@ -117,8 +118,10 @@ def _compare_supplier_options(
     # put a supplier added later wherever its import happened to land.
     for ext in sorted(all_extractors(), key=lambda e: e.label.casefold()):
         # The expert custom supplier has no fetchable card, so it can't be a
-        # comparison target (only the current side of a quote).
-        if ext.id == SUPPLIER_CUSTOM:
+        # comparison target (only the current side of a quote). Nor can the
+        # social tariff, which nobody can switch to: it follows a protected
+        # status, not a choice.
+        if ext.id in (SUPPLIER_CUSTOM, SUPPLIER_SOCIAL):
             continue
         # Nor can a supplier that is leaving the market: quoting a user into
         # a contract that is about to be transferred away is never useful.

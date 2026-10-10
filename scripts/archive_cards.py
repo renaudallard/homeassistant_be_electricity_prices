@@ -131,6 +131,7 @@ from live_check import (  # type: ignore[import-not-found]  # noqa: E402
 
 from custom_components.be_electricity_prices.const import (  # noqa: E402
     SUPPLIER_CUSTOM,
+    SUPPLIER_SOCIAL,
 )
 from custom_components.be_electricity_prices.providers import (  # noqa: E402
     all_extractors,
@@ -1400,11 +1401,13 @@ def _targets(
 
     The custom supplier is assembled from the entry and has no card, and a
     supplier past its withdrawal date has left the market: its last card
-    stays up and stays stale, which is not worth a daily failure line.
+    stays up and stays stale, which is not worth a daily failure line. The
+    social tariff is the CREG's, which keeps every quarter itself, and it
+    needs the law read from Justel, which the runners are not served.
     """
     out: list[tuple[SupplierExtractor, str, str]] = []
     for ex in extractors:
-        if ex.id == SUPPLIER_CUSTOM or (only and ex.id not in only):
+        if ex.id in (SUPPLIER_CUSTOM, SUPPLIER_SOCIAL) or (only and ex.id not in only):
             continue
         if ex.deprecated_until is not None and today > ex.deprecated_until:
             continue

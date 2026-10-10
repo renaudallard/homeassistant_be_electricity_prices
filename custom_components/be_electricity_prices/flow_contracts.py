@@ -45,6 +45,7 @@ from .const import (
     DSO_CHOICES,
     KIND_GROUP,
     SUPPLIER_CUSTOM,
+    SUPPLIER_SOCIAL,
 )
 from .providers import (
     all_extractors,
@@ -261,7 +262,11 @@ def _sweep_candidates(
     """
     out: list[tuple[str, Contract, bool]] = []
     for ext in all_extractors():
-        if ext.id == SUPPLIER_CUSTOM or ext.deprecated_until is not None:
+        # The social tariff follows a protected status, not a choice, so it
+        # is never an alternative.
+        if ext.id in (SUPPLIER_CUSTOM, SUPPLIER_SOCIAL):
+            continue
+        if ext.deprecated_until is not None:
             continue
         for c in ext.contracts:
             if region not in c.regions:

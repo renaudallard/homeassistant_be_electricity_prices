@@ -127,6 +127,7 @@ body:
         - OCTA+
         - Trevion
         - Aspiravi Energy
+        - "Social tariff (CREG, protected customers only)"
         - "Expert: custom formula (no public card)"
     validations:
       required: true
