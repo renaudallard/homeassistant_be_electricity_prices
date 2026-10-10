@@ -38,7 +38,7 @@ body:
     id: integration_version
     attributes:
       label: Integration version
-      description: Settings -> Devices & Services -> be_electricity_prices -> three-dot menu -> "Download diagnostics" shows it under `manifest.version`.
+      description: Settings -> Devices & Services -> be_electricity_prices -> three-dot menu -> "Download diagnostics" shows it under `integration_manifest.version`.
       placeholder: e.g. 0.5.44
     validations:
       required: true

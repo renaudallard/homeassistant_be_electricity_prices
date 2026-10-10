@@ -17,7 +17,7 @@ body:
     attributes:
       label: Supplier
       description: The company's name as it appears on the card.
-      placeholder: e.g. Elegant, Aspiravi Energy
+      placeholder: e.g. Elegant, Sparki
     validations:
       required: true
 
