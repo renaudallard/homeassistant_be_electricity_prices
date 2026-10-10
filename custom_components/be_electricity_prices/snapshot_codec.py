@@ -424,7 +424,14 @@ class _MigratingStore(Store[dict[str, Any]]):
 # for Engie, Cociter and Eneco's feed-in, in place for Luminus, and on the
 # month's own card for Ecopower, whose Groene Burgerstroom energy is now
 # month-indexed; EnergyVision's past months read the upload sold that month.
-_SNAPSHOT_SCHEMA_VERSION = 77
+# v78: a v77 row holds what several parsers no longer store. Mega Dynamic's
+# residential formula is grossed by the card's VAT; Luminus and TotalEnergies
+# keep their pre-August 2026 excise tiers; TotalEnergies' Walloon energy legs
+# carry their single rate under Impact; Bolt refuses a card whose index table
+# is not its price's quarter; DATS 24 keeps its register formulas on the
+# delivery month's RLP; Engie's social card reads its older feed-in spelling
+# and its day and night feed-in formulas.
+_SNAPSHOT_SCHEMA_VERSION = 78
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
