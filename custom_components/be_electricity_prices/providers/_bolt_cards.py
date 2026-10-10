@@ -359,7 +359,7 @@ def check_quarter_table(text: str, energy: EnergyRates) -> None:
         return
     index = to_float(match.group(2)) / 1000.0
     priced = energy.formula_factor * index + (energy.formula_base or 0.0)
-    if abs(priced - energy.current) > _TABLE_TOLERANCE:
+    if abs(priced - energy.current) > _TABLE_TOLERANCE * abs(energy.current):
         raise ExtractorError(
             f"Bolt: the card's index table ({' '.join(match.group(1).split())}) "
             f"prices its monthly rate at {priced * 100.0:.2f} c/kWh, but it "
@@ -497,8 +497,12 @@ _QUARTER_MONO_INDEX_RE = re.compile(
     r"Belpex\s+(Q[1-4]\s+\d{4}).*?Simple\s+([\d.,]+)\s*€/MWh", re.S
 )
 # How far the table's index through the formula may sit from the printed
-# monthly price: one step of the price's last printed digit, 0,01 c/kWh.
-_TABLE_TOLERANCE = 1e-4
+# monthly price, as a share of that price. The formula is grossed by the VAT
+# the parser assumes and the price carries the one the card was printed
+# under, so a rate change moves them apart (6 to 7% is 0,94%) on a card that
+# is consistent. A wrong quarter moves them much further: 34% on the October
+# 2026 edition, and Q1 to Q2 2026 alone moved the index 8%.
+_TABLE_TOLERANCE = 0.02
 # The Walloon "Tarif Impact (Wallonie)" block, one row per CWaPE band:
 #   "Eco consommation 9,91 65,59 Belpex * 1,168 + 16,90"
 # printed price, that band's own quarterly index, then the shared formula.
