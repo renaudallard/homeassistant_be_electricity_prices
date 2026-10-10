@@ -321,6 +321,17 @@ _OCTA = (
             id="octa+ wallonia",
         ),
         pytest.param(
+            # Its aligned text mangles the unit on the second and third rows,
+            # "3.000 & 20.000 kWhW 5,0329" and "20.000 & 50.000 k h 4,8188".
+            lambda: octaplus.parse_snapshot(
+                "octaplus_ecoflux",
+                fixture_text("octaplus_ecoflux_w_mar.pdf", aligned=True),
+                "wallonia",
+            ),
+            _OCTA,
+            id="octa+ ecoflux march",
+        ),
+        pytest.param(
             lambda: ecofix.parse_snapshot(
                 "ecofix_flexy",
                 fixture_text("ecofix_flexy.pdf", layout=True),

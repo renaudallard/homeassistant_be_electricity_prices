@@ -190,7 +190,7 @@ unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 | `injection` | `_extract_injection` | flat current on non-dynamic, factor/base on dynamic |
 | `publication_label` | `_extract_publication_month` | MM/YYYY |
 | `taxes.federal_excise`, `taxes.energy_contribution` | `_extract_taxes` | first federal tier (0-3.000 kWh) |
-| `taxes.federal_excise_bands` | `_extract_taxes` | the four tiers from that row on, until July 2026 (`excise_tier_bands`, `_parse.py`); None from August 2026 |
+| `taxes.federal_excise_bands` | `_extract_taxes` | the four tiers from that row on, until July 2026 (`excise_tier_bands`, `_parse.py`), including the editions whose aligned text mangles the unit on later rows ("kWhW", "k h", Ecoflux Wallonia January to May 2026); None from August 2026 |
 | `taxes.region_connection_fee` | `_extract_taxes` | Wallonia only |
 | `taxes.flanders_renewables` | `_extract_flanders_renewables` | Flanders only, green + cogen |
 | `taxes.wallonia_renewables` | `_extract_wallonia_renewables` | Wallonia only |

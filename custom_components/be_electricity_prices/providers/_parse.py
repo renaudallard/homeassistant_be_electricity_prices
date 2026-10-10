@@ -431,7 +431,7 @@ def excise_tier_bands(
         return None
     bands: list[tuple[float, float]] = []
     while row is not None:
-        per = 1000.0 if row.group(3).lower() == "mwh" else 1.0
+        per = 1000.0 if row.group(3).lower() == "m" else 1.0
         lower = tier_bound_kwh(row.group(1)) * per
         floor = bands[-1][0] if bands else 0.0
         if bands and len(row.group(1)) == 3 and lower == (floor + 1.0) % 1000.0:
@@ -517,9 +517,11 @@ SIGN_CHARS = r"+\-‐‑‒–—−"
 # MWH") is not read into it. The rate is on the row's own line, or after a
 # colon on the next one, where a footnote wraps ("20.001-50.000 kWh :\n4,8188"):
 # Trevion's plain layout prints its rows and then their rates apart.
+# The unit is read by its first letter and tolerates the two ways OCTA+'s
+# aligned text mangles it on the rows after the first, "kWhW" and "k h".
 _TIER_BOUND = r"\d+(?:[. ]\d{3})*"
 _EXCISE_TIER_RE = re.compile(
     rf"(?<![\d.,])({_TIER_BOUND})\s*(?:[km]wh\s*)?(?:&|en|et|[{SIGN_CHARS}])\s*"
-    rf"({_TIER_BOUND})\s*([km]wh)\b(?:[^\S\n]*:\s*|[^\S\n]+)(\d+(?:[.,]\d+)?)",
+    rf"({_TIER_BOUND})\s*([km])[^\S\n]?w?h\w?\b(?:[^\S\n]*:\s*|[^\S\n]+)(\d+(?:[.,]\d+)?)",
     re.IGNORECASE,
 )
