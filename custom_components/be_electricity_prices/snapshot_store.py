@@ -114,6 +114,7 @@ _MONTHLY_SNAPSHOTS_KEY = "monthly_snapshot_cache"
 # every month that failed, short enough that the next hourly tick does.
 _MONTHLY_FAILED_FETCHES_KEY = "monthly_snapshot_failed_fetches"
 _MONTHLY_FETCHED_AT_KEY = "monthly_snapshot_fetched_at"
+_MONTHLY_ARCHIVE_SKIPPED_KEY = "monthly_snapshot_archive_skipped"
 _MONTHLY_FAILURE_TTL = timedelta(minutes=30)
 # How long a per-month archive row that can still MOVE is trusted. A card for
 # a closed month is immutable once parsed and is cached for the process life;
@@ -493,10 +494,12 @@ def _drop_monthly_rows(
         for k in monthly
         if k[0] == extractor_id and k[1] == contract and k[2] == region
     ]
+    skipped = _monthly_archive_skipped(hass)
     for k in stale:
         monthly.pop(k, None)
         monthly_failed.pop(k, None)
         monthly_stamped.pop(k, None)
+        skipped.discard(k)
     return stale
 
 
@@ -558,6 +561,19 @@ def _month_row_is_provisional(
         or snap.provisional
         or (year_month.year, year_month.month) >= (today.year, today.month)
     )
+
+
+def _monthly_archive_skipped(hass: HomeAssistant) -> set[tuple[str, str, str, str]]:
+    """Month rows cached as "no card" without asking the project's archive.
+
+    The cache is shared by every entry on a tuple, and whether the archive may
+    be asked is each entry's own choice. A "no card" established by an entry
+    that switched the archive off says nothing about what the archive holds,
+    so an entry that may ask it asks again rather than billing that month on
+    its current card.
+    """
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    return bucket.setdefault(_MONTHLY_ARCHIVE_SKIPPED_KEY, set())  # type: ignore[no-any-return]
 
 
 def _monthly_failed_fetches(

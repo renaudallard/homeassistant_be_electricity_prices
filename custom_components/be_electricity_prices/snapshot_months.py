@@ -79,6 +79,7 @@ from .snapshot_store import (
     _MONTHLY_FAILURE_TTL,
     _MONTHLY_PROVISIONAL_TTL,
     _month_row_is_provisional,
+    _monthly_archive_skipped,
     _monthly_failed_fetches,
     _monthly_fetched_at,
     _monthly_lock,
@@ -214,6 +215,10 @@ def monthly_rows_to_store(
             ):
                 continue
             out[month_id] = {"_cached_at": stamp.isoformat(), "_absent": True}
+            if cache_key in _monthly_archive_skipped(hass):
+                # Established without asking the archive, which an entry
+                # restoring this marker may be allowed to ask.
+                out[month_id]["_archive_skipped"] = True
             continue
         if (month.year, month.month) >= running:
             continue
@@ -283,6 +288,8 @@ def restore_monthly_rows(
                 continue
             cache[cache_key] = None
             stamped[cache_key] = stamp
+            if data.get("_archive_skipped") is True:
+                _monthly_archive_skipped(hass).add(cache_key)
             restored += 1
             continue
         try:
@@ -823,7 +830,20 @@ async def month_card(
         f"{year_month.year:04d}-{year_month.month:02d}",
     )
     fetched_at = _monthly_fetched_at(hass)
+    skipped = _monthly_archive_skipped(hass)
     today = dt_util.now().date()
+    may_ask_archive = _card_archive_may_hold(extractor, year_month, today, entry)
+
+    def unasked(row: SupplierSnapshot | None) -> bool:
+        """A "no card" another entry cached without asking the archive this
+        entry may ask: not an answer for this entry."""
+        return (
+            row is None and cache_key in skipped and may_ask_archive and not cached_only
+        )
+
+    if cache_key in cache and unasked(cache[cache_key]):
+        cache.pop(cache_key, None)
+        fetched_at.pop(cache_key, None)
     if cache_key in cache:
         row = cache[cache_key]
         stamped = fetched_at.get(cache_key)
@@ -873,7 +893,7 @@ async def month_card(
     async with _monthly_lock(hass, cache_key):
         # Re-check under the lock so the second waiter doesn't repeat
         # what the first just did.
-        if cache_key in cache:
+        if cache_key in cache and not unasked(cache[cache_key]):
             return resolved(cache[cache_key])
 
         last_fail = failed.get(cache_key)
@@ -886,7 +906,7 @@ async def month_card(
         archive_failed = False
         snap: SupplierSnapshot | None = None
         archived: ArchivedCard | None = None
-        if _card_archive_may_hold(extractor, year_month, today, entry):
+        if may_ask_archive:
             try:
                 archived = await _archived_card_from_github(
                     session, extractor.id, contract, region, year_month
@@ -961,4 +981,12 @@ async def month_card(
         if not fetch_failed and _tuple_generation(hass, cache_key) == gen_at_entry:
             cache[cache_key] = snap
             fetched_at[cache_key] = dt_util.utcnow()
+            if (
+                snap is None
+                and not may_ask_archive
+                and _card_archive_may_hold(extractor, year_month, today, None)
+            ):
+                skipped.add(cache_key)
+            else:
+                skipped.discard(cache_key)
     return resolved(snap)

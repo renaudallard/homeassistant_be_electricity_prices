@@ -9598,3 +9598,71 @@ async def test_the_persistent_blob_holds_the_card_as_parsed(
     with patch.object(fresh._store, "async_save", new=_fake_save2):
         await fresh._save_persistent()
     assert saved2["snapshot"]["energy"] == saved["snapshot"]["energy"]
+
+
+@pytest.mark.freeze_time("2026-10-10 10:00:00+02:00")
+async def test_an_entry_that_may_ask_the_archive_ignores_a_no_card_cached_without_it(
+    hass: HomeAssistant,
+) -> None:
+    """The month cache is shared by every entry on a tuple, while whether the
+    project's archive may be asked is each entry's own box. An entry with the
+    box off caches "no card" for a month only the archive holds; one with it
+    on must still ask the archive rather than bill that month on its current
+    card, and the marker it writes to its store says the same."""
+    from custom_components.be_electricity_prices import snapshot_months as sm
+
+    off = make_entry(
+        supplier="bolt",
+        contract="bolt_variable",
+        region="flanders",
+        dso="fluvius_antwerpen",
+        card_archive=False,
+    )
+    on = make_entry(
+        supplier="bolt",
+        contract="bolt_variable",
+        region="flanders",
+        dso="fluvius_antwerpen",
+        card_archive=True,
+    )
+    off.add_to_hass(hass)
+    on.add_to_hass(hass)
+    extractor = replace(
+        make_stub_extractor(),
+        id="bolt",
+        fetch_for_month=AsyncMock(return_value=None),
+    )
+    august = date(2026, 8, 1)
+    archive = _archive_holding({august: make_snapshot(publication_label="august")})
+    session: Any = None
+    with patch.object(sm, "_archived_card_from_github", archive):
+        assert (
+            await sm.month_card(
+                hass, session, extractor, "bolt_variable", "flanders", august, off
+            )
+            is None
+        )
+        assert archive.await_count == 0
+        blob = sm.monthly_rows_to_store(
+            hass, "bolt", "bolt_variable", "flanders", [august]
+        )
+        assert blob["2026-08"]["_archive_skipped"] is True
+        got = await sm.month_card(
+            hass, session, extractor, "bolt_variable", "flanders", august, on
+        )
+    assert got is not None
+    assert got.publication_label == "august"
+    assert archive.await_count == 1
+
+    # The same marker restored from a store is not an answer for it either.
+    sm._monthly_snapshots(hass).clear()
+    sm._monthly_fetched_at(hass).clear()
+    sm._monthly_archive_skipped(hass).clear()
+    sm.restore_monthly_rows(hass, "bolt", "bolt_variable", "flanders", blob)
+    archive.reset_mock()
+    with patch.object(sm, "_archived_card_from_github", archive):
+        got = await sm.month_card(
+            hass, session, extractor, "bolt_variable", "flanders", august, on
+        )
+    assert got is not None
+    assert archive.await_count == 1
