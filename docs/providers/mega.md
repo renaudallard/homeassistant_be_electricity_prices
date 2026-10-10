@@ -564,7 +564,8 @@ month (Mega cards are valid for the printed month).
 `TaxOverlay` (`mega.py`) is assembled from:
 
 - Federal excise: the flat `Accise speciale (c€/kWh)` value when the card prints
-  one, else the first tier `Consommation entre 0 et 3000 kWh`
+  one, else the whole tier table from `Consommation entre 0 et 3000 kWh` on, returned
+  as `federal_excise_bands` and blended over the household's volume
   (`_extract_federal_excise`, `_mega_overlays.py`), uniform across regions. On
   2026-08-01 the federal scheme folded the energy contribution into the special
   excise and flattened it, so the August card dropped the tier table; Mega renders

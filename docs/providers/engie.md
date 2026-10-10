@@ -240,7 +240,7 @@ Fields pulled from the card:
 | Energy rates | `_extract_energy` (`_engie_cards.py`) | Branches on `TariffKind`; returns Fixed/Variable/Dynamic/TOU rates. |
 | Injection | `_extract_injection` (`_engie_cards.py`) | See taxonomy below. |
 | Publication month label | `_extract_publication_month` (`engie.py`) | Anchored on `contrats conclus en <Month> <Year>`. |
-| Federal excise | `_extract_federal_excise` (`_engie_overlays.py`) | Flat "Toutes consommations" row when present, else the 0-3000 kWh tier row. The federal scheme folded the energy contribution into the special excise and flattened it on 2026-08-01, so the August card dropped the four-tier table. The energy contribution row went with it and now defaults to 0 rather than raising. |
+| Federal excise | `_extract_federal_excise` (`_engie_overlays.py`) | Flat "Toutes consommations" row when present, else the whole tier table, returned as `federal_excise_bands` beside the 0-3000 kWh rate and blended over the household's volume (a single tier row is one rate); a professional card's three bands are always read whole. The federal scheme folded the energy contribution into the special excise and flattened it on 2026-08-01, so the August card dropped the four-tier table. The energy contribution row went with it and now defaults to 0 rather than raising. |
 | Energy contribution | `_extract_energy_contribution` (`_engie_overlays.py`) | Comma-stripped digits reconstructed. |
 | Regional renewables | `_extract_consumption_renewables` (`_engie_overlays.py`) | Trailing column of the Consommation row. |
 | Flemish energy fund | `_extract_energy_fund` (`_engie_overlays.py`) | `avec`/`sans domicile` cases. |
@@ -323,8 +323,9 @@ otherwise cancel out (`0.1039 * 10.6 == 0.1039 * 1.06 * 10`).
   so `0,20417` renders as `020417`. The regex matches an optional separator and
   reconstructs the value as `0.<digits>` with a `\d{4,6}` quantifier
   (illustrative parsed value `0.0020417`, test `tests/test_engie.py`).
-- `_extract_federal_excise` (`_engie_overlays.py`): anchored on
-  `Consommation entre 0 et 3.000 kWh`; mandatory across regions, raises on miss.
+- `_extract_federal_excise` (`_engie_overlays.py`): the flat `Toutes consommations`
+  row, else every `Consommation entre ... kWh` tier row, read as bands; mandatory
+  across regions, raises when neither shape is there.
 - `_extract_consumption_renewables` (`_engie_overlays.py`): takes the last number on
   the Consommation row as the regional renewable surcharge (Flanders cogen +
   green, Wallonia green contribution, or Brussels green levy). Mandatory in every
