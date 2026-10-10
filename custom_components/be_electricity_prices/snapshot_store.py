@@ -54,6 +54,7 @@ from .const import (
 from .providers._pdf import is_transient_fetch_error
 from .providers._validity import card_valid_until
 from .providers.base import (
+    CardNotReadableError,
     SupplierExtractor,
     SupplierSnapshot,
 )
@@ -431,10 +432,13 @@ async def fetch_shared(
             if record_failure and _tuple_generation(hass, key) == gen_at_entry:
                 failed[key] = (dt_util.utcnow(), str(err), fail_count)
                 # Only a card that came back and could not be read: a network
-                # failure says nothing about the card behind the key.
+                # failure says nothing about the card behind the key. Nor a
+                # card with no text layer, which fails before any parse and
+                # whose download is the one that adopts the archive's OCR
+                # reading once it lands.
                 if (
                     probe_key is not None
-                    and not isinstance(err, TimeoutError)
+                    and not isinstance(err, (TimeoutError, CardNotReadableError))
                     and not is_transient_fetch_error(str(err))
                 ):
                     unreadable[key] = (probe_key, dt_util.utcnow())

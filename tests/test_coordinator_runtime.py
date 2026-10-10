@@ -9731,6 +9731,14 @@ async def test_a_card_that_could_not_be_read_is_not_parsed_again_every_hour(
     await tick(25)
     await tick(26)
     assert fetches == 8
+    # Nor does a card with no text layer: it fails before any parse, and the
+    # archive's OCR reading is only adopted on a download that fails this way,
+    # so it is asked again on the next tick.
+    probe_answer = "etag-IMAGE"
+    error = CardNotReadableError("the card is an image with no text layer")
+    await tick(27)
+    await tick(28)
+    assert fetches == 10
 
 
 async def test_the_refresh_service_is_not_dropped_behind_a_long_tick(
