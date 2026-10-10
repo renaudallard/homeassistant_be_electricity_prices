@@ -160,7 +160,15 @@ def _steps(text: str, start: int, end: int) -> tuple[tuple[date, float], ...]:
     chunk = text[start:end]
     heads = list(_STEP_RE.finditer(chunk))
     bounds = [0, *(m.start() for m in heads), len(chunk)]
-    out = [(_in_force(text, start), _rate(chunk[bounds[0] : bounds[1]]))]
+    # Dated where the rate itself is printed, not where its label starts: an
+    # amendment that rewrites only the rate opens its bracket after the label,
+    # and the label's own bracket is the older law that wrote the paragraph.
+    special = _SPECIAL_RE.search(chunk, 0, bounds[1])
+    if special is None:
+        raise ExciseLawError("no special excise")
+    out = [
+        (_in_force(text, start + special.start()), _rate(chunk[bounds[0] : bounds[1]]))
+    ]
     for i, head in enumerate(heads):
         day = 1 if head.group(1) == "1er" else int(head.group(1))
         when = date(int(head.group(3)), FR_MONTHS.index(head.group(2)) + 1, day)

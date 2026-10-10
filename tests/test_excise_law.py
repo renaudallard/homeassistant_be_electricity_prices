@@ -62,6 +62,38 @@ def test_the_rate_is_dated_by_the_bracket_around_it(page: str) -> None:
     assert table[excise_law.PROTECTED][0][0] == date(2026, 9, 1)
 
 
+def test_an_amendment_rewriting_only_the_rate_is_dated_by_its_own_bracket(
+    page: str,
+) -> None:
+    """Justel brackets the passage a law replaced, so a later law that rewrites
+    only the rate after "b) autres:" opens its bracket after the label. The
+    rate it sets takes effect when that law does, not when the paragraph was
+    first written: read at the label, a 2027 rate was billed from August 2026."""
+    sup = (
+        "<sup><font color=red><a href=#t title='<L 2027-02-10/01, art. 5, 072; "
+        "En vigueur : 01-03-2027>'><span style='color:red;'>2</span></a></font></sup>"
+    )
+    at = page.rindex("b) autres:") + len("b) autres:")
+    end = page.index("]<sup>", page.index("38 euros par MWh", at))
+    rewritten = (
+        "<BR>  - droit d'accise: 0 euro par MWh;"
+        "<BR>  - droit d'accise spécial: 44 euros par MWh;"
+        "<BR>  - cotisation sur l'énergie: 0 euro par MWh;"
+        "<BR>  A partir du 1er janvier 2029:"
+        "<BR>  - droit d'accise: 0 euro par MWh;"
+        "<BR>  - droit d'accise spécial: 38 euros par MWh;"
+        "<BR>  - cotisation sur l'énergie: 0 euro par MWh."
+    )
+    amended = f"{page[:at]}[{sup}{rewritten}]{sup}{page[end:]}"
+    table = excise_law.parse(amended)
+    assert table[excise_law.STANDARD] == (
+        (date(2027, 3, 1), pytest.approx(0.044)),
+        (date(2029, 1, 1), pytest.approx(0.038)),
+    )
+    # The protected rate, which the amendment left alone, keeps its date.
+    assert table[excise_law.PROTECTED][0][0] == date(2026, 8, 1)
+
+
 def test_a_page_with_no_bracket_around_the_rate_is_refused(page: str) -> None:
     unbracketed = excise_law._OPEN_RE.sub("[", page)
     with pytest.raises(excise_law.ExciseLawError, match="entry into force"):
