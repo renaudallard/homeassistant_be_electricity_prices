@@ -581,6 +581,16 @@
           "quarter_hourly": "[%key:component::be_electricity_prices::config::step::settlement::data_description::quarter_hourly%]"
         }
       },
+      "compare_direct_debit": {
+        "title": "Direct debit",
+        "description": "{contract} prices a household that pays by direct debit differently, and your own card never asked. Your answer is used for this quote only.",
+        "data": {
+          "direct_debit": "I pay by direct debit"
+        },
+        "data_description": {
+          "direct_debit": "On Mega's products it is the welcome ristourne: four grant the whole of it to a direct-debit payer alone, the rest add a supplement. On EnergyVision Groene stroom (sold as Brusol in Brussels) it is the yearly standing charge."
+        }
+      },
       "compare_settlement": {
         "title": "Settlement to quote",
         "description": "Which settlement to price {contract} on.",

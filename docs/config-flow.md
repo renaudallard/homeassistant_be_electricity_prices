@@ -724,8 +724,8 @@ user to edit the existing entry instead (`strings.json`).
 ### Compare path (one-off quote, nothing saved)
 
 The compare branch (`compare_flow.py` onward) walks `compare -> compare_contract
--> (compare_settlement) -> compare_meter -> compare_solar -> (compare_api_key) ->
-compare_result` and exits
+-> (compare_settlement) -> (compare_direct_debit) -> compare_meter -> compare_solar
+-> (compare_api_key) -> compare_result` and exits
 via `async_abort`, so it creates no entry and writes no options. Region, DSO and
 peak stay fixed to the current entry so the quote is apples-to-apples;
 supplier, contract, (for static targets) meter, the DSO tariff mode and the
@@ -853,6 +853,7 @@ rows.
 | `compare` | `compare_flow.py` | Supplier picker via `_compare_supplier_options` (`compare_flow.py`): suppliers with at least one contract in the user's region **and the entry's own segment**, excluding the expert `custom` supplier and any withdrawn one. Aborts `compare_no_alternative` if none |
 | `compare_contract` | `compare_flow.py` | Contract picker via `_compare_contract_schema` (`compare_flow.py`), spans static and dynamic kinds but never crosses the residential/professional line: a pro card is published ex-VAT and bands the excise by annual volume, so `_resolve_snapshot` grosses it at the entry's own rate and the row is neither what the household would pay nor a contract it could sign. Excludes the user's current contract only when the same supplier is picked. Aborts `compare_no_alternative` when nothing remains |
 | `compare_settlement` | `compare_flow.py` | Shown when `offers_quarter_hourly` (`providers/__init__.py`) says the target card can settle per quarter-hour (Bolt's variable family and Frank Energie): which settlement to quote the TARGET on. Defaulted from the household's own answer only where its own contract offers the same choice; read off the entry unconditionally it would quote a Bolt card per quarter-hour because the user happens to be on Frank's quarter-hourly settlement |
+| `compare_direct_debit` | `compare_flow.py` | Shown when `offers_direct_debit` says the TARGET card prices a direct-debit payer differently (Mega's ristourne cards, EnergyVision Groene stroom / Brusol) and the entry holds no answer, which it does only where its own card asks. The answer prices the target alone, through the `direct_debit` override of `_quote_entry` (`compare_inputs.py`); the household's own side is untouched. The ranking cannot ask, so it prices such a row as not paying by direct debit and tags it `NO DIRECT DEBIT` |
 | `compare_meter` | `compare_flow.py` | Only for static targets; dynamic/TOU/TOU-Impact targets are forced to `METER_DYNAMIC` and skip the step (`const.py`) |
 | `compare_solar` | `compare_flow.py` | What-if solar regime via `_compare_solar_schema` (`flow_schemas_meters.py`), narrowed to the region by the shared `_regime_options` (`flow_schemas_meters.py`). Skipped for an entry with no solar. Reached from both exits of `compare_meter`, so a dynamic target gets it too |
 | `compare_api_key` | `compare_flow.py` | Shown when `_after_compare_meter` (`compare_flow.py`) finds the quote needs spot data the entry lacks: a spot-priced target (`SPOT_PRICED_CONTRACT_KINDS` - dynamic per slot, spot-monthly on the delivery month's mean), or (injection regime) a spot-indexed-injection contract on *either* side. Key used only for the quote, not saved. Skippable like `injection_api_key`: a blank submission asks ENTSO-E nothing and goes straight on, since a quote is a one-off and every reader of the key falls back to the entry's own with `or` |

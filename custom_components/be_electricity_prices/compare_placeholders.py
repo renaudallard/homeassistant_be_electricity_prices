@@ -76,6 +76,7 @@ from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
+    CONF_DIRECT_DEBIT,
     CONF_METER,
     CONF_SUPPLIER,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
@@ -217,6 +218,7 @@ class _PlaceholdersMixin(OptionsFlow):
             other_dso_mode,
             quarter_hourly=settlement_answer(self._compare),
             meter=meter,
+            direct_debit=self._compare.get(CONF_DIRECT_DEBIT),
         )
         other_export_per_kwh: float | None = None
 
@@ -299,6 +301,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     regime,
                     quarter_hourly=settlement_answer(self._compare),
                     meter=meter,
+                    direct_debit=self._compare.get(CONF_DIRECT_DEBIT),
                 ),
                 fetched_snapshot,
             )

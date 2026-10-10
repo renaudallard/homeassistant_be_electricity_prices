@@ -70,6 +70,7 @@ from .compare_placeholders import _PlaceholdersMixin
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
+    CONF_DIRECT_DEBIT,
     CONF_METER,
     CONF_QUARTER_HOURLY,
     CONF_REGION,
@@ -77,6 +78,7 @@ from .const import (
     CONF_SUPPLIER,
     CONF_WHATIF_CONSUMPTION_KWH,
     CONF_WHATIF_INJECTION_KWH,
+    DEFAULT_DIRECT_DEBIT,
     METER_DYNAMIC,
     METER_MONO,
     METER_TYPES,
@@ -94,11 +96,17 @@ from .flow_contracts import (
     _contracts_for,
 )
 from .flow_schemas import (
+    _direct_debit_schema,
     _settlement_schema,
     _validate_entsoe_key,
 )
 from .flow_schemas_meters import _compare_solar_schema
-from .providers import all_extractors, offers_quarter_hourly, settlement_answer
+from .providers import (
+    all_extractors,
+    offers_direct_debit,
+    offers_quarter_hourly,
+    settlement_answer,
+)
 
 
 def _compare_supplier_options(
@@ -303,7 +311,7 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
         ):
             return await self.async_step_compare_settlement()
         self._compare.pop(CONF_QUARTER_HOURLY, None)
-        return await self.async_step_compare_meter()
+        return await self._after_compare_settlement()
 
     async def async_step_compare_settlement(
         self, user_input: dict[str, Any] | None = None
@@ -318,7 +326,7 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
         """
         if user_input is not None:
             self._compare.update(user_input)
-            return await self.async_step_compare_meter()
+            return await self._after_compare_settlement()
         current = self.config_entry.data
         own_answer = (
             bool(current.get(CONF_QUARTER_HOURLY, False))
@@ -338,6 +346,46 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
                 )
             },
             data_schema=_settlement_schema(defaults),
+        )
+
+    async def _after_compare_settlement(self) -> ConfigFlowResult:
+        """Ask how the household pays where the target prices it and the
+        entry holds no answer.
+
+        Direct debit is a fact about the household, so a quote inherits the
+        entry's answer. But the entry holds one only where its own card asks
+        the question, and every other household reached a Mega card priced
+        as not paying by direct debit: without a ristourne granted to a
+        direct-debit payer alone, about 429 EUR a year on Smart Fixed in
+        Wallonia.
+        """
+        if (
+            offers_direct_debit(
+                self._compare.get(CONF_SUPPLIER), self._compare.get(CONF_CONTRACT)
+            )
+            and CONF_DIRECT_DEBIT not in self.config_entry.data
+        ):
+            return await self.async_step_compare_direct_debit()
+        self._compare.pop(CONF_DIRECT_DEBIT, None)
+        return await self.async_step_compare_meter()
+
+    async def async_step_compare_direct_debit(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Whether the household pays by direct debit, for the target alone."""
+        if user_input is not None:
+            self._compare[CONF_DIRECT_DEBIT] = bool(
+                user_input.get(CONF_DIRECT_DEBIT, DEFAULT_DIRECT_DEBIT)
+            )
+            return await self.async_step_compare_meter()
+        return self.async_show_form(
+            step_id="compare_direct_debit",
+            description_placeholders={
+                "contract": _label_for_contract(
+                    self._compare[CONF_SUPPLIER], self._compare[CONF_CONTRACT]
+                )
+            },
+            data_schema=_direct_debit_schema(self._compare),
         )
 
     async def async_step_compare_meter(

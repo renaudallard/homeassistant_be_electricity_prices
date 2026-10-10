@@ -59,6 +59,7 @@ from .compare_table import DailyCompare, RankedRow
 from .compare_weighting import _compare_injection_credit, _tou_weighted_per_kwh
 from .const import (
     CONF_CONTRACT,
+    CONF_DIRECT_DEBIT,
     CONF_METER,
     CONF_REGION,
     CONF_SUPPLIER,
@@ -74,7 +75,7 @@ from .flow_contracts import (
     _ranking_candidates,
 )
 from .providers import get as get_extractor
-from .providers import settlement_answer
+from .providers import offers_direct_debit, settlement_answer
 from .providers._pdf import memoise_text_fetches
 
 _LOGGER = logging.getLogger(__name__)
@@ -716,6 +717,10 @@ class _SweepEngine(_HouseholdMixin):
             annual=annual,
             read_by_ocr=read_by_ocr,
             feed_in_uncredited=_feed_in_left_out(resolved, credit, hh),
+            # The target inherits the household's answer, which the entry
+            # holds only where its own card asks the question.
+            direct_debit_assumed=offers_direct_debit(supplier, contract)
+            and CONF_DIRECT_DEBIT not in self.config_entry.data,
         )
 
 

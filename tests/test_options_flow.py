@@ -1759,6 +1759,7 @@ async def test_compare_branch_spot_injection_current_prompts_for_api_key(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"contract": "mega_online_fixed"}
         )
+        result = await _answer_direct_debit(hass, result)
         assert result["step_id"] == "compare_meter"
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"meter": "mono"}
@@ -1865,6 +1866,7 @@ async def _drive_compare(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"contract": other_contract}
         )
+        result = await _answer_direct_debit(hass, result)
         if result["step_id"] == "compare_meter":
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"], {"meter": meter}
@@ -2905,6 +2907,7 @@ async def test_compare_solar_requires_volumes_without_an_injection_meter(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"contract": "mega_online_fixed"}
         )
+        result = await _answer_direct_debit(hass, result)
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"meter": "mono"}
         )
@@ -3178,6 +3181,7 @@ async def test_compare_solar_error_reshow_keeps_a_typed_volume(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"contract": "mega_online_fixed"}
         )
+        result = await _answer_direct_debit(hass, result)
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"meter": "mono"}
         )
@@ -3232,6 +3236,7 @@ async def test_compare_solar_step_narrows_compensation_to_wallonia(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"contract": "mega_online_fixed"}
     )
+    result = await _answer_direct_debit(hass, result)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"meter": "mono"}
     )
@@ -6950,6 +6955,21 @@ def test_the_settlement_decides_which_cell_the_household_is_ranked_in() -> None:
     )
 
 
+async def _answer_direct_debit(
+    hass: HomeAssistant, result: Any, direct_debit: bool = False
+) -> Any:
+    """Answer the compare direct-debit question when the flow asks it.
+
+    A target card that rewards a direct-debit payer asks when the entry
+    holds no answer; every other walk passes straight through.
+    """
+    if result["step_id"] == "compare_direct_debit":
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"direct_debit": direct_debit}
+        )
+    return result
+
+
 async def _compare_placeholders(
     hass: HomeAssistant,
     entry: MockConfigEntry,
@@ -6960,6 +6980,7 @@ async def _compare_placeholders(
     meter: str | None = "mono",
     api_key: str | None = None,
     solar_regime: str | None = None,
+    direct_debit: bool = False,
 ) -> dict[str, str]:
     """Drive the 1:1 compare branch to its result step and return every
     placeholder it produced.
@@ -6986,6 +7007,7 @@ async def _compare_placeholders(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"contract": contract}
         )
+        result = await _answer_direct_debit(hass, result, direct_debit)
         if result["step_id"] == "compare_meter":
             result = await hass.config_entries.options.async_configure(
                 result["flow_id"], {"meter": meter}

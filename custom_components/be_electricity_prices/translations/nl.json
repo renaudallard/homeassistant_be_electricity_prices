@@ -581,6 +581,16 @@
           "quarter_hourly": "Alleen zichtbaar als je leverancier de keuze laat. Frank Energie: uit voor de uurprijzen die de tariefkaart afdrukt, aan als je je account in de app op kwartierprijzen hebt gezet. Bolt: uit voor variabel afrekenen, waarbij je maand op het RLP-gewogen maandgemiddelde wordt afgerekend, aan voor dynamisch afrekenen, waarbij elk kwartier tegen zijn eigen Belpex-waarde wordt afgerekend. De formule blijft dezelfde, alleen de marktprijs die ze leest verandert."
         }
       },
+      "compare_direct_debit": {
+        "title": "Domiciliëring",
+        "description": "{contract} prijst een gezin dat via domiciliëring betaalt anders, en uw eigen kaart heeft dat nooit gevraagd. Uw antwoord geldt enkel voor deze offerte.",
+        "data": {
+          "direct_debit": "Ik betaal via domiciliëring"
+        },
+        "data_description": {
+          "direct_debit": "Bij de producten van Mega is het de welkomstkorting: vier kennen die volledig toe aan wie gedomicilieerd betaalt, de andere voegen een supplement toe. Bij EnergyVision Groene stroom (in Brussel verkocht als Brusol) is het de jaarlijkse vaste vergoeding."
+        }
+      },
       "compare_settlement": {
         "title": "Af te rekenen tarief",
         "description": "Op welke afrekening {contract} geprijsd wordt.",

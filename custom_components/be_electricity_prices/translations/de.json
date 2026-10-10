@@ -581,6 +581,16 @@
           "quarter_hourly": "Nur sichtbar, wenn Ihr Lieferant die Wahl lässt. Frank Energie: aus für die Stundenpreise der Tarifkarte, ein, wenn Sie Ihr Konto in der App auf Viertelstundenpreise umgestellt haben. Bolt: aus für die variable Abrechnung, bei der Ihr Monat auf dem RLP-gewichteten Monatsmittel abgerechnet wird, ein für die dynamische Abrechnung, bei der jede Viertelstunde zu ihrem eigenen Belpex-Wert abgerechnet wird. Die Formel bleibt gleich, nur der gelesene Marktpreis ändert sich."
         }
       },
+      "compare_direct_debit": {
+        "title": "Lastschrift",
+        "description": "{contract} berechnet einem Haushalt, der per Lastschrift zahlt, einen anderen Preis, und Ihre eigene Karte hat nie danach gefragt. Ihre Antwort gilt nur für dieses Angebot.",
+        "data": {
+          "direct_debit": "Ich zahle per Lastschrift"
+        },
+        "data_description": {
+          "direct_debit": "Bei den Produkten von Mega ist es der Willkommensrabatt: Vier gewähren ihn vollständig nur bei Zahlung per Lastschrift, die übrigen fügen einen Zuschlag hinzu. Bei EnergyVision Groene stroom (in Brüssel als Brusol verkauft) ist es die jährliche Grundgebühr."
+        }
+      },
       "compare_settlement": {
         "title": "Abzurechnende Variante",
         "description": "Auf welcher Abrechnung {contract} berechnet wird.",

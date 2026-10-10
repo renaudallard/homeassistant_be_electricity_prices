@@ -46,11 +46,13 @@ from .compare_table import _row_label
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_API_KEY,
+    CONF_DIRECT_DEBIT,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
     CONF_QUARTER_HOURLY,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
+    DEFAULT_DIRECT_DEBIT,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
     MEASURED_FULL_YEAR_DAYS,
@@ -349,6 +351,7 @@ def _quote_entry(
     *,
     quarter_hourly: bool | None = None,
     meter: str | None,
+    direct_debit: bool | None = None,
 ) -> ConfigEntry:
     """``entry`` itself when the what-if matches it, else a proxy holding
     the overridden regime, DSO tariff mode and settlement.
@@ -388,12 +391,15 @@ def _quote_entry(
     used the target's. ``None`` leaves the household's answer in place, which
     is what the own side wants.
 
-    Direct debit is deliberately NOT in that list and rides along inherited.
-    It is the one of these that is a fact about the household rather than
-    about the product: someone who pays by direct debit would still do so at
-    the supplier being quoted. ``_resolve_snapshot`` gates it on the TARGET
-    card's own registry flag, so it reaches the reduction only where that
-    card states one and is identity everywhere else.
+    Direct debit rides along inherited by default. It is the one of these
+    that is a fact about the household rather than about the product: someone
+    who pays by direct debit would still do so at the supplier being quoted.
+    ``_resolve_snapshot`` gates it on the TARGET card's own registry flag, so
+    it reaches the reduction only where that card states one and is identity
+    everywhere else. The entry holds an answer only where its own card asks
+    the question, though, so the one-to-one page asks when the target prices
+    it and the entry has none, and ``direct_debit`` carries that answer.
+    ``None`` leaves the household's own.
     """
     overrides: dict[str, Any] = {}
     if regime != entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE):
@@ -408,6 +414,10 @@ def _quote_entry(
         overrides[CONF_QUARTER_HOURLY] = quarter_hourly
     if meter is not None and meter != entry.data.get(CONF_METER, METER_MONO):
         overrides[CONF_METER] = meter
+    if direct_debit is not None and direct_debit != bool(
+        entry.data.get(CONF_DIRECT_DEBIT, DEFAULT_DIRECT_DEBIT)
+    ):
+        overrides[CONF_DIRECT_DEBIT] = direct_debit
     if not overrides:
         return entry
     # The yearly volume is the one site fact that does NOT live in entry.data:

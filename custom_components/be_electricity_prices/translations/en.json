@@ -581,6 +581,16 @@
           "quarter_hourly": "Only shown where your supplier lets you choose. Frank Energie: off for the hourly prices its card prints, on if you switched your account to quarter-hourly prices in the app. Bolt: off for variable settlement, where your month is billed on the month's RLP-weighted average, on for dynamic settlement, where each quarter-hour is billed at its own Belpex price. The formula is the same either way, only the market price it reads changes."
         }
       },
+      "compare_direct_debit": {
+        "title": "Direct debit",
+        "description": "{contract} prices a household that pays by direct debit differently, and your own card never asked. Your answer is used for this quote only.",
+        "data": {
+          "direct_debit": "I pay by direct debit"
+        },
+        "data_description": {
+          "direct_debit": "On Mega's products it is the welcome ristourne: four grant the whole of it to a direct-debit payer alone, the rest add a supplement. On EnergyVision Groene stroom (sold as Brusol in Brussels) it is the yearly standing charge."
+        }
+      },
       "compare_settlement": {
         "title": "Settlement to quote",
         "description": "Which settlement to price {contract} on.",

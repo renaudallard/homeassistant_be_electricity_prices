@@ -832,6 +832,11 @@ class PotentialSavingSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity
                     **({"ytd_eur": row.ytd} if row.ytd is not None else {}),
                     **({"status": row.status} if row.status else {}),
                     **({"feed_in_uncredited": True} if row.feed_in_uncredited else {}),
+                    **(
+                        {"direct_debit_assumed": True}
+                        if row.direct_debit_assumed
+                        else {}
+                    ),
                 }
                 for row in sorted(
                     result.rows,

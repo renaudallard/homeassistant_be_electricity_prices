@@ -581,6 +581,16 @@
           "quarter_hourly": "Affiché uniquement si votre fournisseur laisse le choix. Frank Energie : désactivé pour les prix horaires imprimés sur la carte, activé si vous avez basculé votre compte sur les prix au quart d'heure dans l'application. Bolt : désactivé pour la facturation variable, où votre mois est facturé sur la moyenne pondérée RLP, activé pour la facturation dynamique, où chaque quart d'heure est facturé à sa propre valeur Belpex. La formule est identique, seul l'indice de marché qu'elle lit change."
         }
       },
+      "compare_direct_debit": {
+        "title": "Domiciliation",
+        "description": "{contract} fait un prix différent au ménage qui paie par domiciliation, et votre propre carte ne l'a jamais demandé. Votre réponse ne sert qu'à ce devis.",
+        "data": {
+          "direct_debit": "Je paie par domiciliation"
+        },
+        "data_description": {
+          "direct_debit": "Sur les produits Mega, c'est la ristourne de bienvenue : quatre l'accordent entièrement au seul client domicilié, les autres ajoutent un supplément. Sur EnergyVision Groene stroom (vendu sous le nom Brusol à Bruxelles), c'est la redevance fixe annuelle."
+        }
+      },
       "compare_settlement": {
         "title": "Mode de facturation à chiffrer",
         "description": "Le mode de facturation sur lequel chiffrer {contract}.",

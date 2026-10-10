@@ -140,6 +140,12 @@ class RankedRow:
     # high by a year of that credit, and the row says so rather than ranking
     # beside cards that are credited as though its feed-in paid nothing.
     feed_in_uncredited: bool = False
+    # The card prices a direct-debit payer differently and the entry holds no
+    # answer, because the household's own card never asks, so the row is
+    # priced as not paying by direct debit. On Mega Smart Fixed in Wallonia,
+    # whose ristourne goes to a direct-debit payer alone, that is about 429 EUR
+    # a year too dear, and the row says so rather than ranking on a guess.
+    direct_debit_assumed: bool = False
 
 
 @dataclass(frozen=True)
@@ -207,6 +213,8 @@ def _eur(value: float) -> str:
 # The tag on a ranking row whose feed-in credit was left out, and the start
 # of the line under the table that says what it means.
 _NO_FEED_IN = "`NO FEED-IN`"
+# The same for a row priced as not paying by direct debit for want of an answer.
+_NO_DIRECT_DEBIT = "`NO DIRECT DEBIT`"
 
 
 def _ranking_table(
@@ -271,6 +279,8 @@ def _ranking_table(
             line += " `OCR`"
         if row.feed_in_uncredited:
             line += f" {_NO_FEED_IN}"
+        if row.direct_debit_assumed:
+            line += f" {_NO_DIRECT_DEBIT}"
         out.append(line)
     if any(row.feed_in_uncredited for row in priced):
         out.append("")
@@ -278,6 +288,14 @@ def _ranking_table(
             f"{_NO_FEED_IN} feed-in not credited: it follows the day-ahead "
             "price per slot, and a year of day-ahead and of your export is "
             "not held yet to price it, so that figure is high by a year of it."
+        )
+    if any(row.direct_debit_assumed for row in priced):
+        out.append("")
+        out.append(
+            f"{_NO_DIRECT_DEBIT} priced as not paying by direct debit: this card "
+            "rewards a direct-debit payer and your entry does not say how you "
+            "pay. Quote it on its own to answer, since a whole ristourne can "
+            "depend on it."
         )
 
     if unpriced:
