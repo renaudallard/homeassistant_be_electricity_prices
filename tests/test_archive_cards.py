@@ -3172,14 +3172,17 @@ def test_a_release_the_manifest_still_lists_is_not_deleted(tmp_path: Path) -> No
     assert (tmp_path / "deleted.txt").read_text() == "electricity-2020-02\n"
 
 
-def test_the_cards_token_never_shares_a_job_with_third_party_code() -> None:
+@pytest.mark.parametrize("token", ["secrets.BE_ELECTRICITY_CARDS", "github.token"])
+def test_a_token_never_shares_a_job_with_third_party_code(token: str) -> None:
     """The walk runs the integration, its PDF readers and the OCR package,
     and the token that writes be_price_cards was withheld from its step
     only: later steps on the same runner held it, where a git hook, a git
     config entry or a GITHUB_ENV line the walk left would have run with it.
-    A job that installs or runs Python must not see the token, in its env
-    or in a checkout credential; a job that sees it runs only gh, git and
-    jq on files handed over as artifacts."""
+    The issue token had the same exposure in the walk's own glyph step,
+    beside the OCR engine installed from its main branch. A job that
+    installs or runs Python must not see either token, in its env or in a
+    checkout credential; a job that sees one runs only gh, git and jq on
+    files handed over as artifacts."""
     import re
 
     import yaml  # type: ignore[import-untyped]
@@ -3189,30 +3192,34 @@ def test_the_cards_token_never_shares_a_job_with_third_party_code() -> None:
             Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
         ).read_text()
     )
-    secret = "secrets.BE_ELECTRICITY_CARDS"
-    assert secret not in json.dumps(workflow.get("env", {}))
+    assert token not in json.dumps(workflow.get("env", {}))
     holders = set()
     for name, job in workflow["jobs"].items():
-        assert secret not in json.dumps(job.get("env", {})), name
+        assert token not in json.dumps(job.get("env", {})), name
         steps = job["steps"]
         holds = any(
-            secret in json.dumps(s.get("env", {}))
-            or secret in json.dumps(s.get("with", {}))
+            token in json.dumps(s.get("env", {}))
+            or token in json.dumps(s.get("with", {}))
             for s in steps
         )
         runs_python = any(
             "setup-python" in s.get("uses", "")
-            or re.search(r"\b(python|pip)\b", s.get("run", ""))
+            or re.search(
+                r"\b(python|pip)\b|^\s*ocr-price-cards\b", s.get("run", ""), re.M
+            )
             for s in steps
         )
         assert not (holds and runs_python), name
         for step in steps:
             if step.get("uses", "").startswith("actions/checkout"):
-                assert secret not in json.dumps(step.get("with", {})), name
+                assert token not in json.dumps(step.get("with", {})), name
                 assert step["with"]["persist-credentials"] is False, name
         if holds:
             holders.add(name)
-    assert {"keep", "push"} <= holders
+    if token == "github.token":
+        assert {"ocr", "token", "report"} <= holders
+    else:
+        assert {"keep", "push"} <= holders
     # The walk's output reaches the token jobs only as artifacts.
     assert any(
         s.get("uses", "").startswith("actions/upload-artifact")

@@ -1500,7 +1500,7 @@ alone, as the workflow once did, left it to every step after. Neither job is giv
 its env or as a checkout credential (both check out with `persist-credentials: false`). The two
 jobs that hold it, `keep` and `push`, run only gh, git and jq, and take what the others wrote as
 artifacts, plain files and never a `.git` directory
-(`test_the_cards_token_never_shares_a_job_with_third_party_code`):
+(`test_a_token_never_shares_a_job_with_third_party_code`):
 
 | Job | Token | Does |
 | --- | --- | --- |
@@ -1509,9 +1509,11 @@ artifacts, plain files and never a `.git` directory
 | `index` | no | rewrites the sheets with that manifest (`--index-only`), writes the two READMEs, hands the lot over |
 | `push` | yes | clones the repository afresh, lays the handed-over files over it and commits and pushes when the tree changed, the push and its rebase getting the token as an authorization header on their own command line |
 
-The OCR issue, the token-expiry warning and the failure issue run in three small jobs after these.
-The `ocr` job holds `github.token` alone and takes the walk's list of cards the OCR could not read
-as an artifact, so that token does not share a runner with the readers and the engine either.
+The OCR issues, the token-expiry warning and the failure issue run in three small jobs after these.
+The `ocr` job holds `github.token` alone and takes the walk's list of cards the OCR could not read,
+and of the glyphs its library lacks (`ocr-price-cards unlearnt`, run in the walk without a token),
+as an artifact, so that token does not share a runner with the readers and the engine either; the
+same test holds `github.token` to the rule the cards token follows.
 
 The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml`) uploads the
 PDFs the script wrote under `tmp/pdfs` to releases of `renaudallard/be_price_cards`, a repository

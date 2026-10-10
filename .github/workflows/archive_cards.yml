@@ -142,19 +142,18 @@ jobs:
           ${REPARSE:+"$REPARSE"}
           ${RERENDER:+"$RERENDER"}
 
-      - name: Report glyphs the OCR library has not learnt
+      - name: Find glyphs the OCR library has not learnt
         # The OCR reads a font only through the glyphs it has learnt, and no
         # Ecofix card it learnt from sets bold 4, 7, 8, 9, Q, X, Y or Z. A card
         # published as page images still embeds the fonts of the text set over
         # its picture, so a card stored today can carry a glyph the library
         # lacks before any card needs it read from pixels, and is the card to
-        # learn it from. One issue says so, the same gap posted once a week at
-        # most; a check that fails says so in the log and the run goes on, since
-        # a gap is a reason to retrain, not a broken archive.
+        # learn it from. The ocr job files what this finds; a check that fails
+        # says so in the log and the run goes on, since a gap is a reason to
+        # retrain, not a broken archive. No token here: the engine is
+        # installed from its main branch.
         if: steps.store.outcome == 'success'
         continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           [ -d tmp/pdfs ] || exit 0
           mapfile -d '' cards < <(find tmp/pdfs -name '*.pdf' -print0 | sort -z)
@@ -163,30 +162,8 @@ jobs:
           ocr-price-cards unlearnt "${cards[@]}" > unlearnt.txt || status=$?
           [ "$status" -eq 0 ] && exit 0
           [ "$status" -eq 1 ] || exit "$status"
-          {
-            echo "## Glyphs the OCR library has not learnt"
-            echo
-            echo "Cards stored by this run embed characters, in a font the OCR has learnt"
-            echo "from, that its glyph library holds no template of. Each line is the card,"
-            echo "the font and the characters:"
-            echo
-            echo '```'
-            cat unlearnt.txt
-            echo '```'
-            echo
-            echo "Learn them in ocr_price_cards with \`ocr-price-cards specimen\` on one of"
-            echo "these cards (the PDF is the release asset of that name), check the"
-            echo "library and release it."
-          } > unlearnt_body.md
-          # The fonts and characters, not the cards: the same gap seen on next
-          # month's card adds nothing.
-          cut -d ' ' -f 2- unlearnt.txt | sort -u > unlearnt_fingerprint.txt
-          bash scripts/file_ci_issue.sh \
-            --label archive-cards-glyphs \
-            --title "[archive-cards] a card embeds glyphs the OCR library has not learnt" \
-            --body unlearnt_body.md \
-            --fingerprint unlearnt_fingerprint.txt \
-            --workflow .github/workflows/archive_cards.yml
+          mkdir -p tmp/ocr
+          mv unlearnt.txt tmp/ocr/unlearnt.txt
 
       - name: Hand the walk over
         # The rows, texts, sheets and manifest the walk wrote, and the PDFs
@@ -213,16 +190,19 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: walk-ocr
-          path: tmp/ocr/ocr_failed.txt
+          path: |
+            tmp/ocr/ocr_failed.txt
+            tmp/ocr/unlearnt.txt
           if-no-files-found: error
           retention-days: 3
 
   ocr:
-    # Files the cards the OCR could not read. A card published as page images
-    # is read by the walk and nowhere else: the live check has no reading of
-    # its bytes and can only note it, and the walk succeeds while any other
-    # card is stored. Its own job, so github.token never shares a runner with
-    # the readers and the engine; it takes the walk's list as an artifact.
+    # Files the cards the OCR could not read, and the glyphs its library
+    # lacks. A card published as page images is read by the walk and nowhere
+    # else: the live check has no reading of its bytes and can only note it,
+    # and the walk succeeds while any other card is stored. Its own job, so
+    # github.token never shares a runner with the readers and the engine; it
+    # takes the walk's lists as an artifact.
     needs: walk
     if: ${{ !cancelled() && needs.walk.result == 'success' }}
     runs-on: ubuntu-latest
@@ -264,6 +244,38 @@ jobs:
             --title "[archive-cards] the OCR could not read a card" \
             --body ocr_failed_body.md \
             --fingerprint ocr_failed_fingerprint.txt \
+            --workflow .github/workflows/archive_cards.yml
+
+      - name: Report glyphs the OCR library has not learnt
+        # One issue says so, the same gap posted once a week at most.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -s tmp/ocr/unlearnt.txt ] || exit 0
+          {
+            echo "## Glyphs the OCR library has not learnt"
+            echo
+            echo "Cards stored by this run embed characters, in a font the OCR has learnt"
+            echo "from, that its glyph library holds no template of. Each line is the card,"
+            echo "the font and the characters:"
+            echo
+            echo '```'
+            cat tmp/ocr/unlearnt.txt
+            echo '```'
+            echo
+            echo "Learn them in ocr_price_cards with \`ocr-price-cards specimen\` on one of"
+            echo "these cards (the PDF is the release asset of that name), check the"
+            echo "library and release it."
+          } > unlearnt_body.md
+          # The fonts and characters, not the cards: the same gap seen on next
+          # month's card adds nothing.
+          cut -d ' ' -f 2- tmp/ocr/unlearnt.txt | sort -u > unlearnt_fingerprint.txt
+          bash scripts/file_ci_issue.sh \
+            --label archive-cards-glyphs \
+            --title "[archive-cards] a card embeds glyphs the OCR library has not learnt" \
+            --body unlearnt_body.md \
+            --fingerprint unlearnt_fingerprint.txt \
             --workflow .github/workflows/archive_cards.yml
 
   keep:
