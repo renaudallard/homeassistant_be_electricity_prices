@@ -37,7 +37,7 @@ from __future__ import annotations
 import calendar
 import logging
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -295,9 +295,90 @@ async def _backfill_cost_sensor(
         unit_class=None,
         unit_of_measurement="EUR",
     )
-    async_import_statistics(hass, metadata, rows)
-    _seed_short_term_sum(hass, metadata, rows[-1], ytd_window_reset(entry))
+    await _import_cost_rows(
+        hass, metadata, rows, ytd_window_reset(entry), async_import_statistics
+    )
     return {sid: len(rows)}
+
+
+async def _import_cost_rows(
+    hass: HomeAssistant,
+    metadata: StatisticMetaData,
+    rows: list[Any],
+    reset: datetime,
+    import_statistics: Any,
+) -> None:
+    """Import the year-to-date rows as a continuation of the recorded chain.
+
+    Each row is built with ``sum = state``, the year-to-date bill. The live
+    compile does not restart ``sum`` at a new cycle: on a ``last_reset`` change
+    it carries the running total on (``sensor/recorder.py``, the reset branch
+    keeps ``_sum`` and sets ``old_state = 0.0``), so on an entry that ran
+    through last year the row before 1 January holds last year's whole bill.
+    Imported as they were built, the first hour of the year then reported
+    minus that bill on the Energy dashboard. So the rows are put on the
+    recorded chain first: shifted by what the chain held before the window,
+    less the part of this cycle already in it. A first backfill, with nothing
+    recorded before it, shifts by nothing and imports what it always did.
+    """
+    base = await _chain_before(hass, metadata["statistic_id"], rows[0]["start"], reset)
+    if base:
+        rows = [{**row, "sum": round(base + row["state"], 4)} for row in rows]
+    import_statistics(hass, metadata, rows)
+    _seed_short_term_sum(hass, metadata, rows[-1], reset)
+
+
+async def _chain_before(
+    hass: HomeAssistant, statistic_id: str, first: datetime, reset: datetime
+) -> float:
+    """How far the recorded ``sum`` chain runs ahead of the year-to-date bill
+    just before ``first``, or 0.0 when nothing is recorded before it.
+
+    The last long-term row before ``first`` is found by month and then by
+    hour, so a long gap costs two bounded reads. A row from before ``reset``
+    belongs to an earlier cycle, whose bill the new one starts on top of, so
+    its whole ``sum`` is carried; a row of this cycle carries its ``sum`` less
+    the bill it already counts.
+    """
+    try:
+        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+            get_instance,
+        )
+        from homeassistant.components.recorder.statistics import (
+            statistics_during_period,
+        )
+    except ImportError:  # pragma: no cover - recorder always ships with HA
+        return 0.0
+
+    async def _rows(start: datetime, period: str) -> list[Any]:
+        got = await get_instance(hass).async_add_executor_job(
+            statistics_during_period,
+            hass,
+            start,
+            first,
+            {statistic_id},
+            period,
+            None,
+            {"sum", "state"},
+        )
+        return list(got.get(statistic_id, []))
+
+    try:
+        months = await _rows(first - timedelta(days=400), "month")
+        if not months:
+            return 0.0
+        month_start = datetime.fromtimestamp(months[-1]["start"], tz=UTC)
+        hours = await _rows(month_start, "hour")
+    except Exception:  # recorder may surface anything
+        _LOGGER.debug("could not read the %s chain before the backfill", statistic_id)
+        return 0.0
+    if not hours or hours[-1].get("sum") is None:
+        return 0.0
+    last = hours[-1]
+    chain = float(last["sum"])
+    if datetime.fromtimestamp(last["start"], tz=UTC) < reset:
+        return chain
+    return chain - float(last.get("state") or 0.0)
 
 
 async def _accrue_cost(

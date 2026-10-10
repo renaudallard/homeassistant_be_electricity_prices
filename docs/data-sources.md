@@ -544,6 +544,17 @@ cost. Two rules enforce this:
   `emit_from` (`backfill.py`), so a mid-year `start` still carries the correct
   year-to-date sum instead of restarting from zero and clashing with the existing
   head of the series.
+- The imported rows continue the recorded chain. HA's live compile does not
+  restart `sum` when `last_reset` moves to 1 January: its reset branch keeps the
+  running total and only zeroes the state it measures from
+  (`sensor/recorder.py`), so on an entry that ran through last year the row
+  before 1 January holds last year's whole bill. Each row is built with
+  `sum = state`, the year-to-date bill, and `_import_cost_rows`
+  (`backfill_cost.py`) shifts them by what the chain held before the window
+  (`_chain_before`): the whole `sum` of a row from an earlier cycle, or a row of
+  this cycle's `sum` less the bill it already counts. A first backfill, with
+  nothing recorded before it, imports the rows as built.
+  `tests/recorder/test_backfill_year_join.py` pins both against a real recorder.
 - A window ending on or before Jan 1 of the *current* year rebuilds the price
   sensors only. The two rules above keep one request inside one year, but a
   finished past year's series would then sit immediately before the current
