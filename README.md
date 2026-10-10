@@ -38,9 +38,11 @@ capacity tariff billed on the monthly peak.
 
 Energy prices are fetched **live** from each supplier's own published
 tariff card. **No supplier EUR value is hardcoded in the source**: the only
-EUR rates in it are two regulated ones, the federal excise and the Flemish
-network ceiling, which replace a card's out-of-date figure for the months
-they are known for. A supplier is one
+EUR rates in it are regulated ones no live source prints: the Flemish
+network ceiling, which replaces a card's out-of-date figure for the months
+it is known for, and the protected customer's excise before August 2026,
+which the law's current text no longer states. The household excise is read
+from the law itself. A supplier is one
 Python module, split into a few helpers for the larger ones, that knows where
 to find that supplier's publication and how to read it. If yours is missing,
 **open an issue asking for it** rather than
@@ -79,7 +81,7 @@ Each of these has a section of its own further down; this is the scan.
 **Choosing a contract**
 
 - **Ranked comparison of every alternative** — prices every contract sold in your region against your own settings and sorts them cheapest first, with your own row badged and every gap signed. Optionally once a day in the background, publishing the best saving as a sensor.
-- **One-off contract comparison** — quotes one supplier and contract against your settings, including your own contract, which answers *what would this cost me on a bi-hourly meter* and *what would it cost off the compensation regime*. Your own contract is quoted at the rates you signed and with what is left of your own welcome credit, never as a new signer on today's card. Both live under [Reconfiguring later](#reconfiguring-later).
+- **One-off contract comparison** — quotes one supplier and contract against your settings, including your own contract (except on the social tariff or the expert custom supplier, neither of which can be a comparison target), which answers *what would this cost me on a bi-hourly meter* and *what would it cost off the compensation regime*. Your own contract is quoted at the rates you signed and with what is left of your own welcome credit, never as a new signer on today's card. Both live under [Reconfiguring later](#reconfiguring-later).
 - **Signing-cohort pricing** — set a contract start date and past months bill at the rate you actually signed, not at today's card, for the suppliers listed under `current_year_cost` in [Sensors](#sensors), and for every supplier through the project's [card archive](#the-card-archive) for a signing month from August 2026 on and within the twelve months it keeps. The feed-in credit follows the formula you signed, and where the card fixes its feed-in price for the term too (Mega's fixed range, Trevion Groene Energie Vast, EnergyVision's fixed-injection card) the price you signed at. See [Configuration](#configuration).
 - **Renewal reminder** — set your contract's end date and a timestamp sensor carries it, so an automation can remind you before the contract rolls over.
 
@@ -254,7 +256,7 @@ and tax values, which are identical for every supplier on your grid. The two
 federal levies among them follow the law as they do on every card (see
 [The federal levies come from the law](#the-federal-levies-come-from-the-law-not-from-your-card)):
 from August 2026 the energy contribution is dropped whatever you type, and
-through December 2026 the excise is billed at the legal flat rate. Those are
+the excise is billed at the rate the law sets for the month. Those are
 the residential figures: a business (a Yuso customer, say) still owes the
 professional excise and the contribution, so tick **Business contract** on the
 tax step and the two levies you type are billed as typed. Coefficients
@@ -287,8 +289,8 @@ The coordinator ticks once an hour. On each tick it runs the supplier's
 `ETag`, or the resolved PDF URL) — and only re-runs the full PDF fetch when
 that key changes from what we last fetched. This catches a supplier
 publication within an hour at near-zero ongoing bandwidth instead of a
-fixed 24-hour schedule. Suppliers that have no usable probe (energie.be, Engie
-and Luminus, where no cheap freshness key is exposed) keep the time-based
+fixed 24-hour schedule. Suppliers that have no usable probe (energie.be, Engie,
+Luminus and the social tariff, where no cheap freshness key is exposed) keep the time-based
 24-hour TTL, except that a card past the last day it states, or past the
 month its title names when it states no day, is asked for again at the next
 hourly tick, so the new month's card is picked up on the 1st rather than up
@@ -338,8 +340,10 @@ it was signed in. Professional contracts use the standard 21%.
 
 Two items in that `levies` term are set by federal law rather than by your
 supplier: the **special excise** and the **energy contribution**. One rate
-applies to every residential customer in the country in a given month, so the
-month being billed decides them, not the month your card was printed in.
+applies to every residential customer in the country in a given month (a
+protected customer on the social tariff owes a rate of its own, see
+[The social tariff](#the-social-tariff)), so the month being billed decides
+them, not the month your card was printed in.
 
 Since **1 August 2026** the law sets a flat excise of **4,876 c€/kWh** including VAT (4,6 excluding) and
 abolished the energy contribution, folding it into that rate. The integration
@@ -367,7 +371,9 @@ every six hours until it can. The contribution stays dropped: it was
 abolished, not set for a period.
 
 The daily live check compares every supplier's federal block against the rest
-and reports a card that drifts, which is how a supplier that corrects itself
+and reports a card that drifts (the social tariff is left out of this and of
+the network comparison below: it bills the protected rate and no network
+rows), which is how a supplier that corrects itself
 gets noticed: Bolt and Trevion both did between August and September.
 
 The network rows are compared the same way, per DSO: distribution, transport,
@@ -753,7 +759,8 @@ opens a menu of four options, five once a supplier switch has been recorded this
   year. Puts the entry back as it stood before the last switch was recorded,
   the contract you left becoming the current one again.
 - **Compare another supplier (one-off quote)** — a price quote against any
-  supplier and contract, your own included, with your region / DSO / peak
+  supplier and contract, your own included (unless it is the social tariff
+  or the expert custom supplier, which are never offered), with your region / DSO / peak
   settings held fixed for an apples-to-apples comparison. **Static
   ↔ dynamic crossings are allowed**: the flow prompts for an ENTSO-E
   API key when a side needs spot data (a dynamic or monthly-indexed
@@ -1669,7 +1676,8 @@ local, and pass a test file (`scripts/gate.sh tests/test_ebem.py`) for a
 quick pass.
 
 Tests run against fixture PDFs and HTML snippets in
-[`tests/fixtures/`](./tests/fixtures/) (real supplier cards from June 2025 on, one or more
+[`tests/fixtures/`](./tests/fixtures/) (real supplier cards from June 2025 on,
+and social tariff cards back to October 2022, one or more
 per card-publishing supplier — the expert custom supplier has no card —
 plus tiny HTML snippets under `tests/fixtures/discover/` for
 catalog-discovery tests). Refresh a current-month fixture with the
@@ -1693,7 +1701,7 @@ changed since the morning's archive walk is rendered again:
   out on a different supplier each time stays quiet, and a supplier that
   stays broken is commented on once a week rather than once a day.
 - **Catalog phase** — the `discover()` of every supplier that implements one
-  (all but energie.be and the expert custom supplier) is run against its
+  (all but energie.be, the social tariff and the expert custom supplier) is run against its
   public listing page; any product visible at the supplier but missing
   from the registry opens a separate issue
   `[live-check] new supplier products detected …` so a parser regression
@@ -1714,8 +1722,8 @@ changed since the morning's archive walk is rendered again:
 - **Cross-checks**: a supplier whose fetch blows its latency or size budget
   files `[live-check] supplier drift detected`, and a card whose federal tax
   block, stated VAT rate, Flemish network ceiling or regulated network figure
-  disagrees with the month's other cards files its own issue, as does a federal
-  or VREG constant whose known window is about to lapse. A TotalEnergies card
+  disagrees with the month's other cards files its own issue, as does the
+  VREG ceiling constant when its known window is about to lapse. A TotalEnergies card
   whose Dutch edition reads differently from the French one, or stands in for
   a French card that does not read, files one too.
 
