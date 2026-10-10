@@ -197,9 +197,10 @@ column already represents the network rate surfaced by Trevion.
   row is gone (the levy was abolished on 2026-08-01 and every other Flemish
   card may drop the row; requiring it would take every contract offline);
 - the flat `Bijzondere accijns` on current cards;
-- the `0-3 MWh` row of the degressive block on older tiered cards, the tier a
-  household pays and the one every sibling extractor reads, under either reader's
-  layout of that block;
+- the `0-3 MWh` row of the degressive block on older tiered cards, under either
+  reader's layout of that block, and with the layout reader, which keeps each
+  tier's rate on its row, the whole block into `federal_excise_bands`
+  (`excise_tier_bands`, `_parse.py`);
 - green certificate and WKK costs from `_meter_shared_values`;
 - the domiciled Energiefonds row in EUR/month, 0 when the row is gone, for the
   same reason.

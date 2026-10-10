@@ -46,7 +46,7 @@ from ..const import (
     REGION_BRUSSELS,
     REGION_FLANDERS,
 )
-from ._parse import numeric_row, parse_brussels_osp, tier_bound_kwh, to_float
+from ._parse import excise_tier_bands, numeric_row, parse_brussels_osp, to_float
 from .base import (
     DsoOverlay,
     ExtractorError,
@@ -169,10 +169,7 @@ def _extract_federal_excise(text: str) -> float:
     is a layout drift that would silently undercount the bill by ~5
     c€/kWh. Raise rather than default to 0.
     """
-    match = re.search(
-        r"Consommation entre 0 et 3\.000 kWh\s+([\d.,]+)",
-        text,
-    )
+    match = _FIRST_EXCISE_TIER_RE.search(text)
     if match is None:
         raise ExtractorError(
             "TotalEnergies: federal excise (0-3.000 kWh tier) not found"
@@ -180,7 +177,7 @@ def _extract_federal_excise(text: str) -> float:
     return to_float(match.group(1)) / 100.0
 
 
-_EXCISE_TIER_RE = re.compile(r"Consommation entre ([\d.]+) et ([\d.]+) kWh\s+([\d.,]+)")
+_FIRST_EXCISE_TIER_RE = re.compile(r"Consommation entre 0 et 3\.000 kWh\s+([\d.,]+)")
 
 
 def _extract_excise_bands(text: str) -> tuple[tuple[float, float], ...] | None:
@@ -193,15 +190,15 @@ def _extract_excise_bands(text: str) -> tuple[tuple[float, float], ...] | None:
     carry one rate, as the cards print it since August 2026, is one rate and
     leaves this None, so the law's excise still applies to it.
     """
-    tiers = _EXCISE_TIER_RE.findall(text)
-    if len(tiers) < 2:
+    match = _FIRST_EXCISE_TIER_RE.search(text)
+    if match is None:
         return None
-    bands = tuple(
-        (tier_bound_kwh(upper), to_float(rate) / 100.0) for _lower, upper, rate in tiers
+    return excise_tier_bands(
+        text,
+        to_float(match.group(1)) / 100.0,
+        start=match.start(),
+        within=match.end(),
     )
-    if len({rate for _upper, rate in bands}) == 1:
-        return None
-    return bands
 
 
 def _extract_energy_contribution(text: str) -> float | None:

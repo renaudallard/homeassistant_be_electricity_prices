@@ -440,7 +440,7 @@ VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`).
 
 | overlay field | card row | regex | required |
 | --- | --- | --- | --- |
-| `federal_excise` | Bijzondere accijns op Energie (c€/kWh) | `_EXCISE_RE` | yes |
+| `federal_excise` | Bijzondere accijns op Energie (c€/kWh) | `_EXCISE_RE` | yes; its footnote said "Degressiviteit van toepassing voor verbruik > 20,000 kWh" until July 2026 without printing the other rates, so no bands are read |
 | `energy_contribution` | Bijdrage op de Energie (c€/kWh) | `_CONTRIB_RE` | yes |
 | `flanders_renewables` | GSC + WKK (c€/kWh) | `_GSC_RE`, `_WKK_RE` | yes (both) |
 | `energy_fund_eur_per_month` | Bijdrage Energiefonds Residentieel (EUR/maand) | `_FUND_RE` | no (0.0 default) |

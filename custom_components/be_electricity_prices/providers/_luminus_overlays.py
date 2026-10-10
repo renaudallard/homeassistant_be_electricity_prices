@@ -42,7 +42,12 @@ from ..const import (
     DSO_REW,
     FLUVIUS_CARD_LABELS,
 )
-from ._parse import numeric_row, parse_vreg_network_ceiling, tier_bound_kwh, to_float
+from ._parse import (
+    excise_tier_bands,
+    numeric_row,
+    parse_vreg_network_ceiling,
+    to_float,
+)
 from ._rates import TariffKind
 from .base import DsoOverlay, ExtractorError
 
@@ -119,16 +124,6 @@ def _extract_per_kwh_taxes(text: str) -> tuple[float, float, float]:
     return excise, contribution, connection
 
 
-# The excise footnote, which names the rate per consumption tier: "(**) Tarif
-# different dependant de la consommation sur base annuelle : 0-3.000 kWh :
-# 5,0329 c€/kWh, 3.001-20.000 kWh : 5,0329 c€/kWh, 20.001-50.000 kWh : 4,8188
-# c€/kWh" until July 2026, and ">= 0 kWh : 4,8760 c€/kWh" once the scheme
-# went flat.
-_EXCISE_TIER_RE = re.compile(
-    r"(\d[\d.]*)\s*-\s*(\d[\d.]*)\s*kWh\s*:\s*(\d+,\d+)\s*c€/kWh"
-)
-
-
 def _extract_excise_bands(
     text: str, excise: float
 ) -> tuple[tuple[float, float], ...] | None:
@@ -138,7 +133,11 @@ def _extract_excise_bands(
     and the tax block prints only its first tier: a household above 20.000
     kWh was billed 5,0329 on every kWh where the footnote says 4,8188 above
     it, the way Engie's and Mega's cards print it in full. Read as bands, the
-    resolver blends them over the entry's volume.
+    resolver blends them over the entry's volume. The footnote reads "(**)
+    Tarif different dependant de la consommation sur base annuelle : 0-3.000
+    kWh : 5,0329 c€/kWh, 3.001-20.000 kWh : 5,0329 c€/kWh, 20.001-50.000 kWh :
+    4,8188 c€/kWh" until July 2026, and ">= 0 kWh : 4,8760 c€/kWh" once the
+    scheme went flat.
 
     The first tier has to be the rate the block prints, or the footnote is
     not this card's excise and the card has drifted. A footnote whose tiers
@@ -148,19 +147,11 @@ def _extract_excise_bands(
     start = text.find("Tarif différent dépendant de la consommation")
     if start < 0:
         return None
-    end = text.find("INFORMATION", start)
-    tiers = _EXCISE_TIER_RE.findall(text[start : end if end > 0 else None])
-    if len(tiers) < 2:
-        return None
-    bands = tuple(
-        (tier_bound_kwh(upper), to_float(rate) / 100.0) for _lower, upper, rate in tiers
-    )
-    if abs(bands[0][1] - excise) > 1e-9:
+    bands = excise_tier_bands(text, None, start=start)
+    if bands is not None and abs(bands[0][1] - excise) > 1e-9:
         raise ExtractorError(
             f"Luminus: excise footnote starts at {bands[0][1]}, the block prints {excise}"
         )
-    if len({rate for _upper, rate in bands}) == 1:
-        return None
     return bands
 
 

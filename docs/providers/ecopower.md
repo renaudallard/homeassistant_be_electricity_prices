@@ -324,6 +324,7 @@ would let the backfill path silently skip whole months (it swallows the resultin
 | TaxOverlay field | Card row | Regex | Required? |
 | --- | --- | --- | --- |
 | `federal_excise` | Bijzondere accijns (0 - 3.000) | `_FEDERAL_EXCISE_RE` | yes |
+| `federal_excise_bands` | the four "Bijzondere accijns verbruik tussen" rows, in euro and excluding VAT like the excise | `excise_tier_bands` (`_parse.py`) | no |
 | `energy_contribution` | Bijdrage op de energie | `_ENERGY_CONTRIB_RE` | yes |
 | `flanders_renewables` | Kost GSC + Kost WKK | `_GSC_RE` + `_WKK_RE` | yes (both) |
 | `energy_fund_eur_per_month` | Bijdrage Energiefonds euro/maand | `_FUND_RE` | optional (0 if absent) |

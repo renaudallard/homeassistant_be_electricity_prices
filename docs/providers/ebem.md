@@ -354,10 +354,13 @@ reports it, allowed on the exact figure in `_KNOWN_NETWORK_FIGURES` until
 ## Tax overlay
 
 `_extract_federal_taxes` (`ebem.py`) returns
-`(federal_excise, energy_contribution)` in EUR/kWh:
+`(federal_excise, federal_excise_bands, energy_contribution)` in EUR/kWh:
 
 - Federal excise: the residential `0-3 MWH` band (note the capital `MWH` on this
   row only, the other bands print lowercase `MWh`). Illustrative `0.050329`.
+- Its bands: the four residential rows from that one (`excise_tier_bands`,
+  `_parse.py`), 5,0329 / 5,0329 / 4,8188 / 4,7569 on the May 2026 variable card,
+  whose last row differs from the 4,7467 the other cards print.
 - Energy contribution: the value next to the `Beschermende klanten ... €0`
   residential energy-fund row. Illustrative `0.0020417`.
 

@@ -63,7 +63,14 @@ from ..const import (
     DSO_FLUVIUS_ZENNE_DIJLE,
     REGION_FLANDERS,
 )
-from ._parse import SIGN_CHARS, numeric_row, parse_prosumer_column, parse_sign, to_float
+from ._parse import (
+    SIGN_CHARS,
+    excise_tier_bands,
+    numeric_row,
+    parse_prosumer_column,
+    parse_sign,
+    to_float,
+)
 from ._pdf import (
     NL_MONTHS,
     fetch_pdf_text_layout,
@@ -461,7 +468,7 @@ def parse_snapshot(
         raise ExtractorError(f"unknown EBEM contract {contract_id!r}")
     energy = _extract_energy(text, contract)
     injection = _extract_injection(text, contract)
-    federal_excise, energy_contribution = _extract_federal_taxes(text)
+    federal_excise, excise_bands, energy_contribution = _extract_federal_taxes(text)
     flanders_renewables = _extract_flanders_renewables(text)
     card_vat, assumed_vat = vat_basis(printed_vat_rate(text, *_VAT_PATTERNS), energy)
     return SupplierSnapshot(
@@ -471,6 +478,7 @@ def parse_snapshot(
         dsos=_extract_dsos(text, contract),
         taxes=TaxOverlay(
             federal_excise=federal_excise,
+            federal_excise_bands=excise_bands,
             energy_contribution=energy_contribution,
             flanders_renewables=flanders_renewables,
             wallonia_renewables=0.0,
@@ -803,12 +811,16 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | No
 # ---- taxes ------------------------------------------------------------------
 
 
-def _extract_federal_taxes(text: str) -> tuple[float, float]:
-    """Return (federal_excise, energy_contribution) in EUR/kWh.
+def _extract_federal_taxes(
+    text: str,
+) -> tuple[float, tuple[tuple[float, float], ...] | None, float]:
+    """Return (federal_excise, federal_excise_bands, energy_contribution)
+    in EUR/kWh.
 
-    The card prints residential federal excise across four kWh bands;
-    the 0-3 MWh tier is what residential customers pay (``0-3 MWH``,
-    capital "MWH" only on this row: the others use lowercase "MWh").
+    The card prints residential federal excise across four kWh bands; the
+    0-3 MWh tier is the excise (``0-3 MWH``, capital "MWH" only on this row:
+    the others use lowercase "MWh"), and the table from it is read into
+    bands while it falls by volume (until July 2026).
     Energy contribution sits next to the residential energy-fund row
     on a single visual line (``Beschermende ... €0 0,20417``).
     """
@@ -821,7 +833,12 @@ def _extract_federal_taxes(text: str) -> tuple[float, float]:
         raise ExtractorError("EBEM: federal excise (0-3 MWH) row not found")
     if contribution is None:
         raise ExtractorError("EBEM: federal energy contribution row not found")
-    return to_float(excise.group(1)) / 100.0, to_float(contribution.group(1)) / 100.0
+    rate = to_float(excise.group(1)) / 100.0
+    return (
+        rate,
+        excise_tier_bands(text, rate, start=excise.start(), within=excise.end()),
+        to_float(contribution.group(1)) / 100.0,
+    )
 
 
 def _extract_flanders_renewables(text: str) -> float:

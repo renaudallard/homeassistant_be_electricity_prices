@@ -234,8 +234,11 @@ extra settings appear:
   applied is the blend of every band your year's volume spans rather than
   the band it lands in: at 30 000 kWh that is 0.013503 EUR/kWh, not
   0.012090. Bolt's professional cards print a single flat excise, so the
-  setting does not change what they bill per kWh. Once a full year of your
-  own meter is recorded, that measured volume is used instead of this figure.
+  setting does not change what they bill per kWh. The household excise was
+  degressive too until July 2026 (lower above 20 000 kWh/year), and the
+  residential cards that print the table bill a month before August 2026 the
+  same way. Once a full year of your own meter is recorded, that measured
+  volume is used instead of this figure.
 
 Scope limits, taken from the cards themselves: they price **low-voltage**
 (*basse tension* / *laagspanning*) connections only, with injection up to 10 kVA
@@ -363,9 +366,13 @@ rate. And **the correction covers the months the law's current text sets**: the
 same measure steps the excise down each January, to 43, 40 and then 38 € per
 MWh excluding VAT from 2027 to 2029, and each step is billed from its own month
 because the law states it. Your card's own excise is used for the months
-before August 2026, so a bill for an earlier month is unaffected, and also
-for as long as the law has never been read. Once read it is kept across
-restarts, so that only happens while Justel (ejustice.just.fgov.be) cannot
+before August 2026, which the correction leaves alone. Where the card prints
+the degressive table of the time, a household above 20 000 kWh a year is
+billed the blend over its volume; Cociter's card prints only the first tranche
+and energie.be's and Frank's say the excise is degressive without the other
+rates, so those bill the first tranche on every kWh. The card's excise is
+also used for as long as the law has never been read. Once read it is kept
+across restarts, so that only happens while Justel (ejustice.just.fgov.be) cannot
 be reached from your Home Assistant at all, and a warning in the log says so
 every six hours until it can. The contribution stays dropped: it was
 abolished, not set for a period.

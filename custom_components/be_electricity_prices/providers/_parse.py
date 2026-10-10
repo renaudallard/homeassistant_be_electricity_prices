@@ -340,7 +340,9 @@ def regional_tax_overlay(
 
     * ``excise``: MANDATORY. Patterns are tried in order and the first match
       wins, so a card printing both the flat August-2026 row and the tiered
-      one being phased out resolves to the flat rate.
+      one being phased out resolves to the flat rate. When the match is the
+      first row of a degressive table, the whole table is read into bands
+      (:func:`excise_tier_bands`).
     * ``renewables``: MANDATORY, and ALL of them must match. Summed. Some
       cards print GSC and WKK separately, others one pre-summed row, and a
       Brussels card prints a single "groene stroom" cost.
@@ -373,8 +375,12 @@ def regional_tax_overlay(
     levy = sum(
         to_float(m.group(1)) / 100.0 for m in renewables_matches if m is not None
     )
+    federal_excise = to_float(excise_match.group(1)) / 100.0
     return TaxOverlay(
-        federal_excise=to_float(excise_match.group(1)) / 100.0,
+        federal_excise=federal_excise,
+        federal_excise_bands=excise_tier_bands(
+            text, federal_excise, start=excise_match.start(), within=excise_match.end()
+        ),
         energy_contribution=(
             to_float(contribution_match.group(1)) / 100.0 if contribution_match else 0.0
         ),
@@ -388,6 +394,64 @@ def regional_tax_overlay(
         # the energy fund are VAT-exempt), so the snapshot needs no gross-up.
         vat_rate=0.0,
     )
+
+
+def excise_tier_bands(
+    text: str,
+    excise: float | None,
+    *,
+    start: int = 0,
+    within: int | None = None,
+    per_euro: float = 100.0,
+) -> tuple[tuple[float, float], ...] | None:
+    """The degressive excise table a card prints, or None.
+
+    Until July 2026 the household excise was a schedule by annual volume, and
+    most cards print it whole, as rows ("Verbruik tussen 0 en 3.000 kWh
+    5,0329") or as a footnote ("0-3.000 kwh : 5,0329 c€/kwh, 3.001 - 20.000
+    kwh : ..."). Read for their first row only, a household above 20.000 kWh
+    was billed that rate on every kWh. Read as bands, the resolver blends
+    them over the entry's volume.
+
+    The table is the one whose first row, from 0, is the first found at or
+    after ``start``; with ``within``, that row has to begin before it, which
+    is how a caller holding the match of the excise row it bills says "this
+    row's table" and no other volume table on the card, such as a tiered
+    energy price, is taken for it. Each further row starts where the one
+    before it ended, or a kWh above it. ``per_euro`` is how many of the
+    printed unit make a euro: 100 for c€/kWh, 1 for a card printing euro.
+
+    None for no table, a table of one row, one whose first rate is not the
+    ``excise`` the caller read (when given), and one whose tiers all carry one
+    rate, as several cards still print it since August 2026, so the law's
+    excise keeps replacing that rate.
+    """
+    row = _EXCISE_TIER_RE.search(text, start)
+    if row is None or (within is not None and row.start() >= within):
+        return None
+    bands: list[tuple[float, float]] = []
+    while row is not None:
+        per = 1000.0 if row.group(3).lower() == "mwh" else 1.0
+        lower = tier_bound_kwh(row.group(1)) * per
+        floor = bands[-1][0] if bands else 0.0
+        if bands and len(row.group(1)) == 3 and lower == (floor + 1.0) % 1000.0:
+            # A bound printed with a space for thousands that the text layer
+            # wrapped at it: Bolt's "3 001 - 20 000 kWh" reads "3", a line of
+            # the column beside it, then "001 - 20 000 kWh".
+            lower = floor + 1.0
+        if lower not in ((floor, floor + 1.0) if bands else (0.0,)):
+            break
+        bands.append(
+            (tier_bound_kwh(row.group(2)) * per, to_float(row.group(4)) / per_euro)
+        )
+        row = _EXCISE_TIER_RE.search(text, row.end())
+    if (
+        len(bands) < 2
+        or (excise is not None and abs(bands[0][1] - excise) > 1e-9)
+        or len({rate for _upper, rate in bands}) == 1
+    ):
+        return None
+    return tuple(bands)
 
 
 _T = TypeVar("_T")
@@ -442,3 +506,20 @@ _VREG_CEILING_RE = re.compile(
 
 SIGN_CHARS = r"+\-‐‑‒–—−"
 """Drop into a regex character class: ``[`` + SIGN_CHARS + ``]``."""
+
+# One row of a degressive excise table, by its volume range rather than its
+# label, which OCTA+'s Flemish cards mangle: "Verbruik tussen 0 en 3.000 kWh
+# 5,0329", "Verbruik tussen 0 – 20.000 kWh", "Consommation entre 0 & 3 000
+# kWh", "Verbruik tussen 0 kWh en 3.000 kWh" (DATS 24), "0-3 MWh 5,03288"
+# (Trevion, EBEM), "0 en 3.000 kWh: 0,04748 euro/kWh" (Ecopower) and the
+# footnotes' "3.001 - 20.000 kwh : 5,0329". A bound is a whole number in
+# thousands groups, so a figure printed just before the row ("0,20417 0-3
+# MWH") is not read into it. The rate is on the row's own line, or after a
+# colon on the next one, where a footnote wraps ("20.001-50.000 kWh :\n4,8188"):
+# Trevion's plain layout prints its rows and then their rates apart.
+_TIER_BOUND = r"\d+(?:[. ]\d{3})*"
+_EXCISE_TIER_RE = re.compile(
+    rf"(?<![\d.,])({_TIER_BOUND})\s*(?:[km]wh\s*)?(?:&|en|et|[{SIGN_CHARS}])\s*"
+    rf"({_TIER_BOUND})\s*([km]wh)\b(?:[^\S\n]*:\s*|[^\S\n]+)(\d+(?:[.,]\d+)?)",
+    re.IGNORECASE,
+)

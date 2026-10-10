@@ -37,7 +37,7 @@ import re
 
 from ..const import DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW
 from ._energyvision_cards import _spp_injection, _tiered_legs
-from ._parse import SIGN_CHARS, to_float
+from ._parse import SIGN_CHARS, excise_tier_bands, to_float
 from ._pdf import NUM_NO_THOUSANDS, printed_vat_rate
 from ._rates import EnergyRates, FixedRates, InjectionRates, SpotMonthlyRates
 from ._validity import parse_valid_until
@@ -149,7 +149,7 @@ def _extract_taxes_fr(text: str) -> TaxOverlay:
 
     Only the green-certificate quota cost survives on both, so it stays
     mandatory. The excise takes the flat row when present and falls back to
-    the 0-3.000 kWh tier for an older card.
+    the tier table for an older card, read whole into bands.
     """
     excise = _EXCISE_FLAT_FR_RE.search(text) or _EXCISE_FR_RE.search(text)
     cv = _CV_FR_RE.search(text)
@@ -172,8 +172,12 @@ def _extract_taxes_fr(text: str) -> TaxOverlay:
     connection = _CONNECTION_FR_RE.search(text)
     # There is no Flemish energiefonds and no GSC/WKC row on this card; the
     # header states every price includes 6% VAT, so vat_rate stays 0.0.
+    federal_excise = to_float(excise.group(1)) / 100.0
     return TaxOverlay(
-        federal_excise=to_float(excise.group(1)) / 100.0,
+        federal_excise=federal_excise,
+        federal_excise_bands=excise_tier_bands(
+            text, federal_excise, start=excise.start(), within=excise.end()
+        ),
         energy_contribution=to_float(contrib.group(1)) / 100.0 if contrib else 0.0,
         wallonia_renewables=to_float(cv.group(1)) / 100.0,
         region_connection_fee=(

@@ -352,6 +352,8 @@ Federal (both regions, mandatory, raise on miss `dats24.py`):
 - `energy_contribution`: `Energiebijdrage\s+(...)\s*c€/kWh` (`dats24.py`) /100.
 - `federal_excise`: `Verbruik tussen 0 kWh en 3\.000 kWh\s+(...)\s*c€/kWh`
   (`dats24.py`) /100. This is the lowest excise band (0-3000 kWh).
+- `federal_excise_bands`: the four "Verbruik tussen" rows from that one
+  (`excise_tier_bands`, `_parse.py`), which fall by volume on every card.
 
 Flanders-only (`dats24.py`):
 

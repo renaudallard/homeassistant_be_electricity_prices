@@ -125,6 +125,14 @@ The card still prints the federal excise and energy contribution of before
 August 2026 (5,03288 and 0,2042 c€/kWh). Both levies are billed from the law,
 and the live check lists the pair among its known tax blocks.
 
+That excise is the first row of the degressive table every card prints,
+"Verbruik tussen 0 – 20.000 kWh 5,03288", then 4,81876 to 50.000 kWh
+("Verbruikt tussen", sic) and 4,74668 to 100.000. `regional_tax_overlay`
+(`_parse.py`) reads the whole table into `federal_excise_bands`
+(`excise_tier_bands`), which the resolver blends over the household's volume
+for the months before August 2026. The stale table on the cards since then
+gives way to the law's one rate with the rest of the block.
+
 ## Archive
 
 Every card from April 2024 on is in the current layout and parses. The cards

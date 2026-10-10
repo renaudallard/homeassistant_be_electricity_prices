@@ -69,6 +69,7 @@ from ..const import (
 )
 from ._parse import (
     SIGN_CHARS,
+    excise_tier_bands,
     numeric_row,
     parse_prosumer_column,
     parse_sign,
@@ -239,7 +240,7 @@ def parse_snapshot(
     injection = _extract_injection(text, contract.kind)
     publication_label, valid_until = _extract_publication(text)
 
-    federal_excise, energy_contribution = _extract_federal_taxes(text)
+    federal_excise, excise_bands, energy_contribution = _extract_federal_taxes(text)
     region_connection_fee = (
         _extract_wallonia_connection_fee(text) if region == REGION_WALLONIA else 0.0
     )
@@ -267,6 +268,7 @@ def parse_snapshot(
             dsos=dsos,
             taxes=TaxOverlay(
                 federal_excise=federal_excise,
+                federal_excise_bands=excise_bands,
                 energy_contribution=energy_contribution,
                 flanders_renewables=flanders_renewables,
                 wallonia_renewables=wallonia_renewables,
@@ -579,12 +581,16 @@ def _extract_publication(text: str) -> tuple[str, date | None]:
 # ---- taxes ------------------------------------------------------------------
 
 
-def _extract_federal_taxes(text: str) -> tuple[float, float]:
-    """Return (federal_excise, energy_contribution) in EUR/kWh.
+def _extract_federal_taxes(
+    text: str,
+) -> tuple[float, tuple[tuple[float, float], ...] | None, float]:
+    """Return (federal_excise, federal_excise_bands, energy_contribution)
+    in EUR/kWh.
 
     The card's federal block prints residential excise across four kWh
-    bands; the 0-3.000 kWh tier is what residential customers pay.
-    Energy contribution (Energiebijdrage) is single-rate.
+    bands: the 0-3.000 kWh tier is the excise, and the table from it is read
+    into bands while it falls by volume (until July 2026). Energy
+    contribution (Energiebijdrage) is single-rate.
     """
     excise = re.search(r"Verbruik tussen 0\s*&\s*3\.000\s*kWh\s+([\d,]+)", text)
     contribution = re.search(r"Energiebijdrage\s+([\d,]+)", text)
@@ -592,7 +598,12 @@ def _extract_federal_taxes(text: str) -> tuple[float, float]:
         raise ExtractorError("Ecofix: federal excise (0-3.000 kWh) row not found")
     if contribution is None:
         raise ExtractorError("Ecofix: federal energy contribution row not found")
-    return to_float(excise.group(1)) / 100.0, to_float(contribution.group(1)) / 100.0
+    rate = to_float(excise.group(1)) / 100.0
+    return (
+        rate,
+        excise_tier_bands(text, rate, start=excise.start(), within=excise.end()),
+        to_float(contribution.group(1)) / 100.0,
+    )
 
 
 def _extract_wallonia_connection_fee(text: str) -> float:

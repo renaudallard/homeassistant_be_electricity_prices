@@ -55,7 +55,7 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from ._parse import parse_brussels_osp, to_float
+from ._parse import excise_tier_bands, parse_brussels_osp, to_float
 from .base import (
     DsoOverlay,
     ExtractorError,
@@ -138,6 +138,24 @@ def _row_is_explicit_zero(text: str, label: str) -> bool:
         if token:
             values.append(token)
     return len(values) >= 3 and all(v in {"-", "\u2013", "\u2014"} for v in values)
+
+
+def _extract_excise_bands(
+    text: str, excise: float
+) -> tuple[tuple[float, float], ...] | None:
+    """The degressive excise the footnote prints, or None.
+
+    The tax table prints the first tier alone and its footnote the schedule:
+    "Tarif réduit en fonction de la consommation annuelle : 0 - 3 000 kWh :
+    5,0329 c€/kWh, 3 001 - 20 000 kWh : 5,0329 c€/kWh, 20 001 - 50 000 kWh :
+    4,8188 c€/kWh". The professional cards print the residential footnote
+    beside their own 1,4210, which is not its first tier, so they keep one
+    rate.
+    """
+    start = text.find("Tarif réduit en fonction de la consommation annuelle")
+    if start < 0:
+        return None
+    return excise_tier_bands(text, excise, start=start)
 
 
 def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:

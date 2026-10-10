@@ -249,9 +249,12 @@ On the card's OWN VAT basis: most print the levy including VAT and Ecopower
 prints it excluding, the engine grossing it later, so writing one number into
 both would be 6% wrong for one of them. The ex-VAT figure is the law's amount
 whatever rate the card is on, so the bill follows the month's rate there as it
-does on a VAT-inclusive card. A professional card is left alone, and so is any
-card carrying `federal_excise_bands`: that scheme bands the levy by annual
-volume and is a different rate entirely.
+does on a VAT-inclusive card. A professional card is left alone: that scheme
+bands the levy by annual volume and is a different rate entirely. A residential
+card printing the household's degressive table is billed it for the months
+before August 2026, which the law's text in force does not describe, and takes
+the law's one rate from August on, its bands dropped: Aspiravi's cards went on
+printing the July table into October 2026.
 
 The figure is read from the law, not typed in. `excise_law.py` fetches the
 consolidated text of article 419 of the programme law of 27 December 2004 from
@@ -297,8 +300,16 @@ on an annual basis, so the year's total over the year's volume is the honest
 per-kWh figure, and the annual bill is exact whenever the volume estimate is.
 
 A volume past the last band is billed at the last band's rate for the
-remainder. Residential cards leave `federal_excise_bands` at `None`, where the
-resolver is identity.
+remainder. Until July 2026 the household excise was a schedule too (5,0329 to
+20.000 kWh, then 4,8188 and 4,7467), and most residential cards print it,
+as rows or as a footnote. `excise_tier_bands` (`providers/_parse.py`) reads it
+from the row the parser bills, each further row starting where the one before
+ended, so another volume table on the card is never taken for it, and a table
+whose tiers all carry one rate leaves `federal_excise_bands` at `None`, where
+the resolver is identity. Cociter prints the first tranche alone, and
+energie.be and Frank say the excise is degressive without printing the other
+rates, so a household above 20.000 kWh on those cards is billed the first
+tranche on every kWh.
 
 ### The Flemish network ceiling
 

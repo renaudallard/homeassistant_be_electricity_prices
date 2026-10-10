@@ -44,7 +44,7 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_FLANDERS,
 )
-from ._parse import SIGN_CHARS, to_float
+from ._parse import SIGN_CHARS, excise_tier_bands, to_float
 from ._pdf import (
     NL_MONTHS,
     fetch_pdf_text_layout,
@@ -621,9 +621,8 @@ _EXCISE_ROWS = (
         rf"^Bijzondere accijns[^\n]*?\)[^\S\n]+({_DEC})[^\S\n]*$",
         re.IGNORECASE | re.MULTILINE,
     ),
-    # The degressive block older cards print. The 0-3 MWh row is the tier a
-    # household pays and the one every sibling extractor reads; the layout
-    # reader keeps each tier's value on its row.
+    # The degressive block older cards print, from its 0-3 MWh row; the layout
+    # reader keeps each tier's value on its row, so the block is read whole.
     re.compile(rf"^0-3\s*MWh[^\S\n]+({_DEC})", re.IGNORECASE | re.MULTILINE),
     # The plain reader prints the four labels and then the four values in the
     # same order, so the first figure after the last label is that same tier.
@@ -653,8 +652,18 @@ def _extract_taxes(text: str) -> TaxOverlay:
     # other suppliers answered by deleting the row, so a card without it is
     # the abolished levy, not a layout drift, and must not take every
     # contract offline the day Trevion does the same.
+    federal_excise = _number(excise_value) / 100.0
     return TaxOverlay(
-        federal_excise=_number(excise_value) / 100.0,
+        federal_excise=federal_excise,
+        # The layout reader keeps each tier's value on its row; the plain one
+        # prints them apart and is read for the 0-3 MWh rate alone.
+        federal_excise_bands=(
+            excise_tier_bands(
+                text, federal_excise, start=excise.start(), within=excise.end()
+            )
+            if excise is not None
+            else None
+        ),
         energy_contribution=(
             _number(contribution.group(1)) / 100.0 if contribution else 0.0
         ),

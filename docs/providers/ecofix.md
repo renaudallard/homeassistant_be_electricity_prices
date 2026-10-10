@@ -432,7 +432,11 @@ silently billing at the first sub-area's rate
 
 `_extract_federal_taxes` (`ecofix.py`) reads the residential federal excise
 from the 0-3.000 kWh band (`Verbruik tussen 0 & 3.000 kWh`) and the single-rate
-`Energiebijdrage`; both missing rows are fatal. Regional levies are region-gated in
+`Energiebijdrage`; both missing rows are fatal. The four bands from that row on
+go to `federal_excise_bands` (`excise_tier_bands`, `_parse.py`) while they fall
+by volume, so a month before August 2026 is blended over the household's volume;
+the August and September cards, pictures of July's, carry the same table and
+give way to the law's one rate. Regional levies are region-gated in
 `parse_snapshot`:
 
 | TaxOverlay field | Flanders | Wallonia |

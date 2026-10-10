@@ -448,8 +448,7 @@ _DSO_ROWS = FLUVIUS_CARD_TOKENS
 # Excise, taken from the first consumption band. The card prints three bands
 # and they have not always been equal: every month from 2024-06 to 2026-07 read
 # 5,0329 / 5,0329 / 4,8188, and only the August 2026 card is flat at 4,8760.
-# Band 1 is what a residential entry bills on for the volumes this integration
-# models, and it is the same convention every sibling extractor follows.
+# regional_tax_overlay reads the table this row opens into bands.
 _EXCISE_RE = re.compile(
     rf"Verbruik\s+tussen\s+0\s+en\s+3\.000\s+kWh\s+{_NUM}", re.IGNORECASE
 )

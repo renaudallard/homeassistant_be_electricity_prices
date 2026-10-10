@@ -18,6 +18,21 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.be_electricity_prices import excise_law
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+from custom_components.be_electricity_prices.providers import (
+    aspiravi,
+    bolt,
+    dats24,
+    ebem,
+    ecofix,
+    ecopower,
+    eneco,
+    energiebe,
+    energyknights,
+    energyvision,
+    frank,
+    octaplus,
+    trevion,
+)
 from custom_components.be_electricity_prices.providers._resolve import (
     resolve_federal_excise,
 )
@@ -26,7 +41,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
-from tests import make_snapshot
+from tests import fixture_text, make_snapshot
 
 _PAGE = (
     Path(__file__).resolve().parent / "fixtures" / "justel_loi_programme_2004_fr.html"
@@ -222,6 +237,269 @@ def test_a_stale_card_is_billed_the_law_and_an_earlier_month_the_card() -> None:
     assert july is stale
     january = resolve_federal_excise(stale, date(2027, 1, 1), professional=False)
     assert january.taxes.federal_excise == pytest.approx(0.043 * 1.06)
+
+
+_EK = ((3000.0, 0.050329), (20000.0, 0.050329), (50000.0, 0.048188))
+_EV = (
+    (3000.0, 0.0503288),
+    (20000.0, 0.0503288),
+    (50000.0, 0.0481876),
+    (1000000.0, 0.0474668),
+)
+_OCTA = (
+    (3000.0, 0.050329),
+    (20000.0, 0.050329),
+    (50000.0, 0.048188),
+    (1000000.0, 0.047467),
+)
+
+
+@pytest.mark.parametrize(
+    ("parse", "bands"),
+    [
+        pytest.param(
+            lambda: energyknights.parse_snapshot(
+                "energyknights_agilior",
+                fixture_text("energyknights_agilior_may.pdf", layout=True),
+                "t://",
+            ),
+            _EK,
+            id="energy knights may",
+        ),
+        pytest.param(
+            lambda: aspiravi.parse_snapshot(
+                "aspiravi_eco_plus_flex",
+                fixture_text("aspiravi_eco_plus_flex_2026-03.pdf"),
+            ),
+            ((20000.0, 0.0503288), (50000.0, 0.0481876), (100000.0, 0.0474668)),
+            id="aspiravi march",
+        ),
+        pytest.param(
+            lambda: energyvision.parse_snapshot(
+                "energyvision_dynamic",
+                fixture_text("energyvision_dynamic_jul.pdf", layout=True),
+                "t://",
+            ),
+            _EV,
+            id="energyvision flanders july",
+        ),
+        pytest.param(
+            lambda: energyvision.parse_snapshot(
+                "energyvision_fixed_1y",
+                fixture_text("energyvision_fixed_1y_wal_jul.pdf", layout=True),
+                "t://",
+            ),
+            _EV,
+            id="energyvision wallonia july",
+        ),
+        pytest.param(
+            lambda: energyvision.parse_snapshot(
+                "energyvision_groene_stroom",
+                fixture_text("energyvision_groene_stroom_bxl_jan.pdf", layout=True),
+                "t://",
+                region="brussels",
+            ),
+            _EV,
+            id="energyvision brussels january",
+        ),
+        pytest.param(
+            lambda: octaplus.parse_snapshot(
+                "octaplus_dynamic",
+                fixture_text("octaplus_dynamic_v_jan.pdf", aligned=True),
+                "flanders",
+            ),
+            _OCTA,
+            id="octa+ flanders january",
+        ),
+        pytest.param(
+            lambda: octaplus.parse_snapshot(
+                "octaplus_dynamic",
+                fixture_text("octaplus_dynamic_w.pdf", aligned=True),
+                "wallonia",
+            ),
+            _OCTA,
+            id="octa+ wallonia",
+        ),
+        pytest.param(
+            lambda: ecofix.parse_snapshot(
+                "ecofix_flexy",
+                fixture_text("ecofix_flexy.pdf", layout=True),
+                "flanders",
+            ),
+            _EV,
+            id="ecofix",
+        ),
+        pytest.param(
+            lambda: dats24.parse_snapshot(
+                fixture_text("dats24_groen_variabel_apr.pdf", layout=True),
+                "t://",
+                "flanders",
+            ),
+            _EV,
+            id="dats 24 april",
+        ),
+        pytest.param(
+            lambda: trevion.parse_snapshot(
+                "groene_energie_vast",
+                fixture_text("trevion_vast_2026-04.pdf", layout=True),
+            ),
+            _EV,
+            id="trevion april",
+        ),
+        pytest.param(
+            lambda: eneco.parse_snapshot(
+                fixture_text("eneco_flex_dec25.pdf"), "power_flex", "t://", "flanders"
+            ),
+            _OCTA,
+            id="eneco december 2025",
+        ),
+        pytest.param(
+            lambda: ebem.parse_snapshot(
+                "ebem_variable", fixture_text("ebem_variable_2026-05.pdf", layout=True)
+            ),
+            # EBEM prints 4,7569 above 50 MWh where the others print 4,7467.
+            (*_OCTA[:3], (1000000.0, 0.047569)),
+            id="ebem may",
+        ),
+        pytest.param(
+            lambda: ecopower.parse_snapshot(
+                fixture_text("ecopower_burgerstroom_jul.pdf", layout=True),
+                "t://",
+                "2026-07",
+            ),
+            # In euro and excluding VAT, like the excise beside it.
+            (
+                (3000.0, 0.04748),
+                (20000.0, 0.04748),
+                (50000.0, 0.04546),
+                (1000000.0, 0.04478),
+            ),
+            id="ecopower july",
+        ),
+        pytest.param(
+            lambda: bolt.parse_snapshot(
+                "bolt_variable",
+                fixture_text("bolt_variable.pdf", layout=True),
+                "wallonia",
+            ),
+            _EK,
+            id="bolt footnote wrapped at its thousands space",
+        ),
+        pytest.param(
+            lambda: bolt.parse_snapshot(
+                "bolt_fix",
+                fixture_text("bolt_fix_jan_legacy.pdf", layout=True),
+                "brussels",
+            ),
+            _EK,
+            id="bolt footnote wrapped after a colon",
+        ),
+        # The professional card prints the household footnote beside its own
+        # 1,4210, which is not its first tier.
+        pytest.param(
+            lambda: bolt.parse_snapshot(
+                "bolt_pro_fix",
+                fixture_text("bolt_pro_fix.pdf", layout=True),
+                "wallonia",
+            ),
+            None,
+            id="bolt professional",
+        ),
+        # From August 2026 the table is gone or carries one rate.
+        pytest.param(
+            lambda: eneco.parse_snapshot(
+                fixture_text("eneco_flex_aug26.pdf"), "power_flex", "t://", "flanders"
+            ),
+            None,
+            id="eneco august",
+        ),
+        pytest.param(
+            lambda: energyknights.parse_snapshot(
+                "energyknights_agilior",
+                fixture_text("energyknights_agilior_aug.pdf", layout=True),
+                "t://",
+            ),
+            None,
+            id="energy knights august",
+        ),
+        pytest.param(
+            lambda: energyvision.parse_snapshot(
+                "energyvision_fixed_1y",
+                fixture_text("energyvision_fixed_1y_wal_aug.pdf", layout=True),
+                "t://",
+            ),
+            None,
+            id="energyvision wallonia august",
+        ),
+        pytest.param(
+            lambda: energyvision.parse_snapshot(
+                "energyvision_groene_stroom",
+                fixture_text("energyvision_groene_stroom_bxl_sep.pdf", layout=True),
+                "t://",
+                region="brussels",
+            ),
+            None,
+            id="energyvision brussels september",
+        ),
+        pytest.param(
+            lambda: octaplus.parse_snapshot(
+                "octaplus_fixed",
+                fixture_text("octaplus_fixed_w_aug.pdf", aligned=True),
+                "wallonia",
+            ),
+            None,
+            id="octa+ wallonia august",
+        ),
+        # A card that says the excise is degressive and prints no tier rates.
+        pytest.param(
+            lambda: energiebe.parse_snapshot(
+                fixture_text("energiebe_dynamic_jul.pdf", layout=True), "t://"
+            ),
+            None,
+            id="energie.be july",
+        ),
+        pytest.param(
+            lambda: frank.parse_snapshot(
+                fixture_text("frank_dynamic_apr.pdf", layout=True),
+                "t://",
+                "frank_dynamic",
+            ),
+            None,
+            id="frank april",
+        ),
+    ],
+)
+def test_a_card_printing_the_degressive_table_is_read_whole(
+    parse: Any, bands: tuple[tuple[float, float], ...] | None
+) -> None:
+    """Until July 2026 the household excise fell by annual volume, and these
+    cards print the whole table where only its first row was read: a household
+    above 20.000 kWh was billed that row's rate on every kWh. The first row
+    stays the excise the card states; from August the table is gone or flat."""
+    taxes = parse().taxes
+    if bands is None:
+        assert taxes.federal_excise_bands is None
+        return
+    assert taxes.federal_excise == pytest.approx(bands[0][1])
+    got = taxes.federal_excise_bands
+    assert got is not None
+    assert [upper for upper, _rate in got] == [upper for upper, _rate in bands]
+    assert [rate for _upper, rate in got] == pytest.approx(
+        [rate for _upper, rate in bands]
+    )
+
+
+def test_a_stale_table_gives_way_to_the_law() -> None:
+    """Aspiravi's September 2026 card still prints July's table. September is
+    billed the law's one rate and the table goes; July keeps it."""
+    card = aspiravi.parse_snapshot(
+        "aspiravi_eco_plus_flex", fixture_text("aspiravi_eco_plus_flex_2026-09.pdf")
+    )
+    assert card.taxes.federal_excise_bands is not None
+    september = resolve_federal_excise(card, date(2026, 9, 1), professional=False)
+    assert september.taxes.federal_excise == pytest.approx(0.04876)
+    assert september.taxes.federal_excise_bands is None
+    assert resolve_federal_excise(card, date(2026, 7, 1), professional=False) is card
 
 
 def test_an_ex_vat_card_takes_the_law_as_it_is() -> None:

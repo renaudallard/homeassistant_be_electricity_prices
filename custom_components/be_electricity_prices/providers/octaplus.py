@@ -425,8 +425,8 @@ def parse_snapshot(
     energy = _extract_energy(text, contract.kind)
     injection = _extract_injection(text, contract.kind)
     publication_label = _extract_publication_month(text)
-    federal_excise, energy_contribution, region_connection_fee = _extract_taxes(
-        text, region
+    federal_excise, energy_contribution, region_connection_fee, excise_bands = (
+        _extract_taxes(text, region)
     )
     flanders_renewables = 0.0
     wallonia_renewables = 0.0
@@ -448,6 +448,7 @@ def parse_snapshot(
         dsos=dsos,
         taxes=TaxOverlay(
             federal_excise=federal_excise,
+            federal_excise_bands=excise_bands,
             energy_contribution=energy_contribution,
             flanders_renewables=flanders_renewables,
             wallonia_renewables=wallonia_renewables,

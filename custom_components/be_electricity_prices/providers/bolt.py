@@ -83,6 +83,7 @@ from ._bolt_cards import (
 from ._bolt_overlays import (
     _extract_brussels_dsos,
     _extract_energy_fund,
+    _extract_excise_bands,
     _extract_flanders_dsos,
     _extract_renewables,
     _extract_taxes,
@@ -672,6 +673,7 @@ def parse_snapshot(
         dsos=dsos,
         taxes=TaxOverlay(
             federal_excise=federal_excise,
+            federal_excise_bands=_extract_excise_bands(text, federal_excise),
             energy_contribution=energy_contribution,
             flanders_renewables=flanders_renewables,
             wallonia_renewables=wallonia_renewables,

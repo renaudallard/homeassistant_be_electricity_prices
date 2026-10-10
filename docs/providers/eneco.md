@@ -409,6 +409,7 @@ Illustrative Antwerpen values: `distribution_single = 0.0535`,
 | field | source token | line |
 | --- | --- | --- |
 | `federal_excise` | first number in the "Verbruik tussen 0 en 3.000 kWh" or "Alle verbruik" tier (Tiers are abolished 2026-08-01) | `eneco.py` |
+| `federal_excise_bands` | the four "Verbruik tussen" tiers from that one, while they fall by volume (`excise_tier_bands`, `_parse.py`) | `eneco.py` |
 | `energy_contribution` | second number in that tier (0.0 default, abolished 2026-08-01) | `eneco.py` |
 | `flanders_renewables` | "Bijdrage groene stroom en WKK ... (€cent/kWh)" | `eneco.py` |
 | `wallonia_renewables` | "Bijdrage groene stroom Wallonie ... (€cent/kWh)" | `eneco.py` |

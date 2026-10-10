@@ -488,7 +488,8 @@ Region specifics:
 - `federal_excise`: first excise tier (0-3000 kWh), mandatory, raises on a miss
   (`_totalenergies_overlays.py`). Illustrative pinned value 0.0503 EUR/kWh across all
   three regions (`tests/test_totalenergies.py`).
-- `federal_excise_bands`: every `Consommation entre ... kWh` tier, which the cards print
+- `federal_excise_bands`: every `Consommation entre ... kWh` tier from the first
+  (`excise_tier_bands`, `_parse.py`), which the cards print
   as a degressive schedule until July 2026 (5,03 / 5,03 / 4,82 / 4,75), so
   `resolve_excise_band` blends it over the household's volume as it does Engie's and
   Mega's. A table whose tiers all carry one rate (August 2026 on) is one rate and leaves

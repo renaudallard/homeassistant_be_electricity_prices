@@ -63,7 +63,7 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
+from ._parse import SIGN_CHARS, excise_tier_bands, numeric_row, parse_sign, to_float
 from ._pdf import (
     NL_MONTHS,
     fetch_pdf_text,
@@ -784,6 +784,9 @@ def _extract_taxes(text: str, region: str) -> TaxOverlay:
     )
     return TaxOverlay(
         federal_excise=excise,
+        federal_excise_bands=excise_tier_bands(
+            text, excise, start=tier_match.start(), within=tier_match.end()
+        ),
         energy_contribution=contribution,
         flanders_renewables=to_float(wkk.group(1)) / 100.0 if wkk else 0.0,
         wallonia_renewables=(

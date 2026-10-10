@@ -209,6 +209,14 @@ whole schedule Engie and Mega publish, so a professional Bolt snapshot carries n
 `federal_excise_bands` and a site above 20 MWh/year is billed the first band's rate. Nothing can be
 done about that from the card alone, and inventing the other bands would put EUR values in source.
 
+A residential card prints its schedule in the excise footnote, "Tarif réduit en fonction de la
+consommation annuelle : 0 - 3 000 kWh : 5,0329 c€/kWh, 3 001 - 20 000 kWh : 5,0329 c€/kWh, 20 001 -
+50 000 kWh : 4,8188 c€/kWh" until July 2026, and `_extract_excise_bands` (`_bolt_overlays.py`) reads
+it into `federal_excise_bands` through the shared `excise_tier_bands` (`_parse.py`). The layout reader
+wraps "3 001" at its thousands space with a line of the next column between, which the shared reader
+puts back together. The professional cards print the same household footnote beside their own
+1,4210, which is not its first tier, so they keep one rate.
+
 The same limitation applies to **Brussels**, and it is worth stating so nobody "fixes" it by
 hardcoding. Sibelga bills two separate regulated annual terms for a residential connection:
 *Activités de mesure et de comptage* and *Puissance mise à disposition ≤13 kVA*. Engie sums both

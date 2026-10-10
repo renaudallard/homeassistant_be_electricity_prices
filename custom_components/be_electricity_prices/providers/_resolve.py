@@ -308,10 +308,12 @@ def resolve_excise_band(
 
     A card without ``federal_excise_bands`` prints one rate and is returned
     unchanged (identity), which is every residential card from August 2026 on,
-    when the scheme flattened and the tranche table came off them. Before
-    that the Engie and Mega residential cards printed the same four tranches
-    the professional ones do, and they reach the blend below like any other
-    schedule: 203 archived Engie rows and 151 Mega ones carry bands.
+    when the scheme flattened and the tranche table came off them or a stale
+    one gave way to the law (``resolve_federal_excise``). Before that most
+    residential cards printed the household schedule, and they reach the
+    blend below like any other: every supplier but Cociter, which prints the
+    first tranche alone, and energie.be and Frank, which say the excise is
+    degressive without printing the other rates.
 
     A card that prints a schedule bills it per tranche, so the rate the engine
     reads is the blend over the entry's estimated annual volume rather than
@@ -398,21 +400,20 @@ def resolve_federal_excise(
     rate is returned unchanged, so this is identity for almost every entry.
 
     Left alone: a professional card, whose scheme bands the levy by annual
-    volume and is a different rate entirely, and any card carrying
-    ``federal_excise_bands``. The social tariff takes the protected
-    customer's rate instead of the household one.
+    volume and is a different rate entirely. The social tariff takes the
+    protected customer's rate instead of the household one.
 
-    Those two were the same card when this was written and are not any more.
-    Mega's and Engie's RESIDENTIAL cards print a four-tier table too, for
-    January to July 2026, and the bands guard catches them. It is still the
-    right answer and for a different reason: the law's text in force begins
-    in August 2026, when the measure flattened the household rate, so a
-    banded card is a month the held rates do not describe rather than a
-    scheme they do not apply to. Measured over the 317 residential cards the
-    archive holds for August to December 2026, none carries a band table.
+    A residential card printing the degressive table (every supplier that
+    prints one, for January to July 2026) is left alone too, simply because
+    the law's text in force begins in August 2026: those months have no held
+    rate and keep their bands. A month the law does describe takes its one
+    rate and drops the bands, since the measure flattened the household
+    scheme. Aspiravi's September 2026 card still printed the old table, a
+    stale block beside the abolished energy contribution, and keeping its
+    bands billed that month on the July schedule.
     """
     taxes = snapshot.taxes
-    if professional or taxes.federal_excise_bands:
+    if professional:
         return snapshot
     # The social tariff is a protected customer's, who owes the rate the law
     # sets for them rather than the household one.
@@ -431,11 +432,20 @@ def resolve_federal_excise(
         if taxes.vat_rate > 0.0
         else law * (1.0 + card_residential_vat(snapshot, delivery_month))
     )
-    if abs(rate - taxes.federal_excise) < 5e-7 and not taxes.protected_excise_unread:
+    if (
+        abs(rate - taxes.federal_excise) < 5e-7
+        and not taxes.protected_excise_unread
+        and not taxes.federal_excise_bands
+    ):
         return snapshot
     return replace(
         snapshot,
-        taxes=replace(taxes, federal_excise=rate, protected_excise_unread=False),
+        taxes=replace(
+            taxes,
+            federal_excise=rate,
+            federal_excise_bands=None,
+            protected_excise_unread=False,
+        ),
     )
 
 

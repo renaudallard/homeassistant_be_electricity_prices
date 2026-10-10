@@ -43,7 +43,7 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_WALLONIA,
 )
-from ._parse import to_float
+from ._parse import excise_tier_bands, to_float
 from ._rates import TariffKind
 from .base import DsoOverlay, ExtractorError, walloon_dso_overlay
 
@@ -73,16 +73,20 @@ def _extract_supplier_prosumer(text: str, kind: TariffKind) -> float | None:
     return to_float(match.group(1)) * 12.0
 
 
-def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
-    """Return (federal_excise, energy_contribution, region_connection_fee).
+def _extract_taxes(
+    text: str, region: str
+) -> tuple[float, float, float, tuple[tuple[float, float], ...] | None]:
+    """Return (federal_excise, energy_contribution, region_connection_fee,
+    federal_excise_bands).
 
     OCTA+ prints four federal-tax tier rows on the second page:
 
       ``Consommation entre 0 & 3.000 kWh 5,0329 0,2042``
 
-    The first tier (0-3.000 kWh) is the residential one we surface.
-    Wallonia adds a one-line connection fee (``Redevance raccordement
-    Wallonie (c€/kWh) 0,075``).
+    The first tier (0-3.000 kWh) is the excise and energy contribution the
+    card bills; until July 2026 the excise falls further on the tiers below
+    it, which are read into bands. Wallonia adds a one-line connection fee
+    (``Redevance raccordement Wallonie (c€/kWh) 0,075``).
     """
     # Anchor on the kWh range; the leading "Consommation" word can be
     # mangled on Flanders cards where the federal column shares its row
@@ -112,7 +116,14 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
             # coordinator would rather keep the last good snapshot.
             raise ExtractorError("OCTA+: Wallonia connection fee row not found")
         region_connection_fee = to_float(fee.group(1)) / 100.0
-    return federal_excise, energy_contribution, region_connection_fee
+    return (
+        federal_excise,
+        energy_contribution,
+        region_connection_fee,
+        excise_tier_bands(
+            text, federal_excise, start=tier1.start(), within=tier1.end()
+        ),
+    )
 
 
 def _extract_wallonia_renewables(text: str) -> float:

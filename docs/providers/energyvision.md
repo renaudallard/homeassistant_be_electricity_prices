@@ -284,6 +284,7 @@ are VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`
 | overlay field | card row | regex | required |
 | --- | --- | --- | --- |
 | `federal_excise` | Federale accijns, Verbruik tussen 0 & 3.000 kWh | `_EXCISE_RE` | yes |
+| `federal_excise_bands` | the four "Verbruik tussen" rows from that one, until July 2026 | `excise_tier_bands` (`_parse.py`) | no (None from August 2026) |
 | `energy_contribution` | Energiebijdrage | `_CONTRIB_RE` | yes |
 | `flanders_renewables` | Kosten GSC en WKC geldig voor | `_GSC_WKC_RE` | yes |
 | `energy_fund_eur_per_month` | Standaard tarief gedomicilieerd (EUR/maand) | `_FUND_RE` | no (0.0 default) |
@@ -305,6 +306,7 @@ anchors only:
 | overlay field | card row | regex | required |
 | --- | --- | --- | --- |
 | `federal_excise` | Bijzondere accijns | `_FLAT_EXCISE_RE`, then `_EXCISE_RE` | yes |
+| `federal_excise_bands` | the tier rows from the 0-3.000 kWh one, until July 2026 (the Walloon card's "Consommation entre" rows likewise) | `excise_tier_bands` (`_parse.py`) | no (None on the flat row) |
 | `brussels_renewables` | Kosten Groene stroom | `_BRUSSELS_GREEN_RE` | yes |
 
 Nothing else is looked for. Brussels levies no energy fund, that being Flemish, and the
@@ -643,6 +645,7 @@ The fixtures live under `tests/fixtures/`:
 | `energyvision_tiered_1800_sep.pdf` | the GS1800V card for Flanders, September 2026 |
 | `energyvision_tiered_1800_bxl_sep.pdf` | the Brusol GS1800V card for Brussels, same month |
 | `energyvision_groene_stroom_bxl_sep.pdf` | the Brusol GRS card, September 2026: the untranched shape |
+| `energyvision_groene_stroom_bxl_jan.pdf` | the same card for January 2026, the archive's copy: the degressive excise table on a Brussels card |
 | `energyvision_tiered_1800_wal_sep.pdf` | the GS1800V card for Wallonia, same month: the French publication of the tiered shape |
 
 Tests load them through `fixture_text("energyvision_<...>.pdf", layout=True)`, matching

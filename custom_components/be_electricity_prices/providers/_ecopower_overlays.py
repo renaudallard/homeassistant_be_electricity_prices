@@ -43,7 +43,7 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     VAT_RATE_REDUCED,
 )
-from ._parse import numeric_row, to_float
+from ._parse import excise_tier_bands, numeric_row, to_float
 from ._pdf import printed_vat_rate
 from .base import (
     DsoOverlay,
@@ -243,8 +243,17 @@ def _extract_taxes(text: str) -> TaxOverlay:
     if not gsc_match or not wkk_match:
         raise ExtractorError("could not parse Ecopower GSC/WKK renewable surcharge")
     printed = printed_vat_rate(text, _VAT_RE)
+    federal_excise = to_float(federal_match.group(1))
     return TaxOverlay(
-        federal_excise=to_float(federal_match.group(1)),
+        federal_excise=federal_excise,
+        # Printed in euro, and excluding VAT like the excise beside it.
+        federal_excise_bands=excise_tier_bands(
+            text,
+            federal_excise,
+            start=federal_match.start(),
+            within=federal_match.end(),
+            per_euro=1.0,
+        ),
         energy_contribution=to_float(contrib_match.group(1)),
         flanders_renewables=(
             to_float(gsc_match.group(1)) + to_float(wkk_match.group(1))
