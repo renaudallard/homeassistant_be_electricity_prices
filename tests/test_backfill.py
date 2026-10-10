@@ -64,6 +64,7 @@ from custom_components.be_electricity_prices.providers._rates import (
     SpotMonthlyRates,
 )
 from custom_components.be_electricity_prices.providers.base import (
+    DsoOverlay,
     ExtractorError,
     SupplierSnapshot,
     TaxOverlay,
@@ -3540,3 +3541,109 @@ async def test_a_signing_month_read_that_failed_leaves_the_whole_contract_out(
         (date(2026, 4, 1), date(2026, 6, 1), True)
     ]
     assert "2026-03" in spans[0][2]
+
+
+# The day the register pair tests are frozen on, whose reading has not
+# arrived yet.
+_PAIR_TODAY = date(2026, 4, 30)
+
+
+def _register_pair_read_daily(entity_id: str, hour: datetime) -> float | None:
+    """A day/night pair a portal reads once a day: both registers' kWh land at
+    23:00 local, and every other hour is a zero row."""
+    local = dt_util.as_local(hour)
+    if local.hour != 23 or local.date() >= _PAIR_TODAY:
+        return 0.0 if entity_id in ("sensor.day", "sensor.night") else None
+    return {"sensor.day": 6.0, "sensor.night": 4.0}.get(entity_id)
+
+
+async def test_a_register_pair_read_once_a_day_backfills_what_the_sensor_bills(
+    hass: HomeAssistant,
+) -> None:
+    """The per-day walk bills each register of a pair as read. Spread over the
+    day and banded by the clock, the backfill put part of the day register on
+    the night rate and the other way round: 383,01 against 439,20 over four
+    months. Each register now goes to the hours of its own band."""
+    snap = make_snapshot(
+        energy=FixedRates(single=0.18, peak=0.25, offpeak=0.10, yearly_fixed_fee=60.0),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.12,
+                distribution_offpeak=0.06,
+                transport=0.0145,
+            )
+        },
+    )
+    entry = make_entry(
+        meter="bi",
+        title="pair read daily",
+        solar_regime="none",
+        day_consumption_kwh="sensor.day",
+        night_consumption_kwh="sensor.night",
+    )
+    back, live = await _live_and_backfill(
+        hass, entry, snap, _PAIR_TODAY, _register_pair_read_daily
+    )
+    assert back == pytest.approx(live, abs=0.01)
+
+
+async def test_a_register_pair_read_once_a_day_is_billed_by_register_hour_by_hour(
+    hass: HomeAssistant,
+) -> None:
+    """A contract billed by the hour walks the hours too, so the live figure
+    lost which register a kWh was read on as well. It now equals the same
+    daily totals put on the hours of their own band from the start."""
+    from custom_components.be_electricity_prices.pricing import is_offpeak
+
+    last = _PAIR_TODAY
+    hours = bf._hour_iter(
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC),
+        dt_util.start_of_local_day(last + timedelta(days=1)).astimezone(UTC),
+    )
+    band: dict[tuple[date, bool], int] = {}
+    for hour in hours:
+        local = dt_util.as_local(hour)
+        key = (local.date(), is_offpeak(local, "wallonia"))
+        band[key] = band.get(key, 0) + 1
+
+    def in_band(entity_id: str, hour: datetime) -> float | None:
+        local = dt_util.as_local(hour)
+        off = is_offpeak(local, "wallonia")
+        day = local.date()
+        if day >= last:
+            return _register_pair_read_daily(entity_id, hour)
+        if entity_id == "sensor.day":
+            return 0.0 if off else 6.0 / band[(day, False)]
+        if entity_id == "sensor.night":
+            return 4.0 / band[(day, True)] if off else 0.0
+        return None
+
+    snap = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.02, yearly_fixed_fee=60.0),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.12,
+                distribution_offpeak=0.06,
+                transport=0.0145,
+            )
+        },
+    )
+    spots = dict.fromkeys(hours, 0.08)
+    live: dict[str, float] = {}
+    for name, per_hour in (
+        ("read daily", _register_pair_read_daily),
+        ("in band", in_band),
+    ):
+        entry = make_entry(
+            meter="dynamic",
+            title=f"pair {name}",
+            solar_regime="none",
+            day_consumption_kwh="sensor.day",
+            night_consumption_kwh="sensor.night",
+        )
+        _back, live[name] = await _live_and_backfill(
+            hass, entry, snap, last, per_hour, spots=spots
+        )
+    assert live["read daily"] == pytest.approx(live["in band"], abs=0.01)

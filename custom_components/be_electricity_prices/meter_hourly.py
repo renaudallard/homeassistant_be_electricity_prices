@@ -44,6 +44,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from . import energy_meters
+from .const import CONF_REGION
 from .energy_meters import (
     _LOGGER,
     _bills_injection,
@@ -59,6 +60,7 @@ from .meter_faults import (
     _stopped,
     _total_stands_in,
 )
+from .pricing import is_offpeak
 
 # The fewest past days a side must have moved on before it can count as read
 # once a day. A real hourly feed-in meter moves in a single hour on a dull
@@ -100,8 +102,9 @@ async def _metered_hourly_kwh(
     hour. An empty map when nothing is wired on this side.
 
     A side read once a day has each day spread over its hours
-    (:func:`_spread_daily_readings`), which is said once in the log and
-    carried as ``read_daily``.
+    (:func:`_spread_daily_readings`), a day/night pair each register over the
+    hours of its band (:func:`_spread_pair_readings`), which is said once in
+    the log and carried as ``read_daily``.
     """
     metered = await _side_hourly_kwh(hass, entry, side, start, end)
     if metered is None:
@@ -128,12 +131,18 @@ async def _metered_hourly_kwh(
         polled_count += polled_before
     if moving < _READ_DAILY_MIN_DAYS or polled_count < _SHORT_BELOW * moving:
         return metered
-    _spread_daily_readings(metered.kwh, polled)
+    if metered.halves is not None:
+        _spread_pair_readings(
+            metered.kwh, polled, metered.halves, str(entry.data.get(CONF_REGION, ""))
+        )
+    else:
+        _spread_daily_readings(metered.kwh, polled)
     if metered.sensors not in _READ_DAILY_LOGGED:
         _READ_DAILY_LOGGED.add(metered.sensors)
         _LOGGER.warning(
             "%s reports its kWh once a day rather than hour by hour, so each "
-            "day is spread evenly over its hours: a contract priced by the "
+            "day is spread evenly over its hours, a day/night pair each "
+            "register over the hours of its band: a contract priced by the "
             "hour bills it at the day's average rather than at the hour the "
             "reading arrived",
             ", ".join(metered.sensors),
@@ -189,6 +198,7 @@ async def _side_hourly_kwh(
         frozenset((day.keys() | night.keys()) - kwh.keys()),
         today_ok=not _stopped(((ids[0], day), (ids[1], night))),
         last=((ids[0], max(day)), (ids[1], max(night))) if day else (),
+        halves=(day, night),
     )
 
 
@@ -412,6 +422,38 @@ def _spread_daily_readings(
             kwh[first + timedelta(hours=i)] = whole / count
 
 
+def _spread_pair_readings(
+    kwh: dict[datetime, float],
+    polled: Mapping[date, tuple[datetime, int]],
+    halves: tuple[Mapping[datetime, float], Mapping[datetime, float]],
+    region: str,
+) -> None:
+    """Spread, in place, the ``polled`` days of a day/night register pair read
+    once a day, each register over the hours it counts.
+
+    :func:`_spread_daily_readings` spreads a day over every hour, and the
+    hourly paths then put each hour on its band by the clock, so a pair read
+    once a day was billed as if its night register had moved by day: the
+    per-day walk bills each register as read, and the backfill of the same
+    days came out 56 EUR under it over four months. The day register's kWh go
+    to the day's peak hours and the night register's to its off-peak hours, on
+    the region's schedule; a register that moved on a day with no hours of its
+    band (a Flemish weekend is off-peak throughout) is spread over the day.
+    """
+    day, night = halves
+    for first, count in polled.values():
+        hours = [first + timedelta(hours=i) for i in range(count)]
+        off = [hour for hour in hours if is_offpeak(dt_util.as_local(hour), region)]
+        peak = [hour for hour in hours if hour not in off]
+        for hour in hours:
+            kwh[hour] = 0.0
+        for half, band in ((day, peak), (night, off)):
+            moved = sum(half.get(hour, 0.0) for hour in hours)
+            spread = band or hours
+            for hour in spread:
+                kwh[hour] += moved / len(spread)
+
+
 @dataclass(frozen=True)
 class MeteredHours:
     """One side's per-UTC-hour kWh and the sensors it was read from.
@@ -440,6 +482,10 @@ class MeteredHours:
     # went silent when the side did (:func:`_silent_sensors`). Empty for a
     # side read off one sensor.
     last: tuple[tuple[str, datetime], ...] = ()
+    # A day/night pair's two registers, hour by hour, on the days both report,
+    # so a pair read once a day can be spread register by register
+    # (:func:`_spread_pair_readings`). None for a side read off one sensor.
+    halves: tuple[dict[datetime, float], dict[datetime, float]] | None = None
 
 
 async def _measured_hour_weights(
