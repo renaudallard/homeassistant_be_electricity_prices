@@ -494,11 +494,12 @@ hyphen (`test_dynamic_injection_uses_separate_htva_formula_with_endash`,
 `test_mega.py`). The tail regex accepts dot or comma decimals so a re-render of
 `* 1,05 + 1,35` as `* 1.05 + 1.35` does not dead-end the snapshot.
 
-Because the consumption formula is already TVAC with the spot in c€/kWh, the parsed
-`factor` maps EUR/kWh-spot to EUR/kWh-energy directly (no VAT multiplier); only the
-base cents are converted to EUR (`_mega_cards.py`). Illustrative: factor 1.05, base
-0.0135 EUR, fee 42.4 EUR/yr (`test_mega.py`); injection factor 1.0, base -0.04
-EUR (`test_mega.py`).
+With the spot in c€/kWh, the parsed `factor` maps EUR/kWh-spot to EUR/kWh-energy
+directly and the base cents are converted to EUR (`_mega_cards.py`); a residential card
+then grosses both by its stated VAT rate, a professional one keeps them as printed.
+Illustrative: factor 1.05 x 1.06 and base 0.0135 x 1.06 EUR on the residential card,
+1.05 and 0.0135 on the professional one, fee 42.4 EUR/yr (`test_mega.py`); injection
+factor 1.0, base -0.04 EUR (`test_mega.py`).
 
 ### DSO overlays
 
