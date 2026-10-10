@@ -25,6 +25,7 @@ from custom_components.be_electricity_prices.providers._rates import (
     InjectionRates,
     SpotMonthlyRates,
 )
+from custom_components.be_electricity_prices.providers.base import DsoOverlay
 from custom_components.be_electricity_prices.year_ahead import YearAhead
 from custom_components.be_electricity_prices.year_end_cost import (
     _compute_year_end_cost,
@@ -45,9 +46,11 @@ def _hours_of(day: date) -> list[datetime]:
     return out
 
 
-def _recorder(per_day: _PerDay) -> Any:
+def _recorder(per_day: _PerDay, read_at: int | None = None) -> Any:
     """``_read_deltas`` fake: ``per_day`` gives a day's kWh, spread evenly
-    over its hours for an hourly read, ``None`` for no bucket."""
+    over its hours for an hourly read, ``None`` for no bucket. With
+    ``read_at``, a meter read once a day: the day lands in that local hour
+    and every other hour is a zero row."""
 
     async def _fake(
         _hass: object, entity_id: str, start: date, end: date, period: str
@@ -61,7 +64,13 @@ def _recorder(per_day: _PerDay) -> Any:
                     out.append((dt_util.start_of_local_day(day).astimezone(UTC), kwh))
                 else:
                     hours = _hours_of(day)
-                    out.extend((h, kwh / len(hours)) for h in hours)
+                    if read_at is not None:
+                        out.extend(
+                            (h, kwh if dt_util.as_local(h).hour == read_at else 0.0)
+                            for h in hours
+                        )
+                    else:
+                        out.extend((h, kwh / len(hours)) for h in hours)
             day += timedelta(days=1)
         return out
 
@@ -88,12 +97,13 @@ async def _year_end(
     per_day: _PerDay,
     *,
     card: Any = None,
+    read_at: int | None = None,
     **kw: Any,
 ) -> tuple[float | None, dict[str, Any]]:
     diag: dict[str, Any] = {}
     kw.setdefault("energy_index", None)
     kw.setdefault("previous_eur", 0.0)
-    with patch.object(energy_meters, "_read_deltas", new=_recorder(per_day)):
+    with patch.object(energy_meters, "_read_deltas", new=_recorder(per_day, read_at)):
         got = await _compute_year_end_cost(
             hass,
             None,  # type: ignore[arg-type]
@@ -185,6 +195,40 @@ async def test_no_live_reading_on_the_last_day_read_ahead(
         )
     live.assert_not_awaited()
     assert got[date(2026, 12, 31)] == _seasonal("sensor.cons", date(2025, 12, 31))
+
+
+async def test_last_years_days_read_once_a_day_are_spread_too(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A meter read once a day books each day in one hour. The days metered
+    this year were spread over their hours and last year's days read ahead
+    were not, so a bill priced by the hour billed the rest of the year at
+    the hour the reading arrived, 23 EUR over on an Impact grid."""
+    freezer.move_to("2026-06-15 12:00:00+02:00")
+    snap = make_snapshot(
+        energy=FixedRates(single=0.18, yearly_fixed_fee=60.0),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                distribution_pic=0.20,
+                distribution_medium=0.10,
+                distribution_eco=0.04,
+            )
+        },
+    )
+    entry = make_entry(
+        meter="dynamic",
+        title="impact read daily",
+        solar_regime="none",
+        dso_tariff_mode="impact",
+        consumption_kwh="sensor.cons",
+    )
+    entry.add_to_hass(hass)
+    hourly, _ = await _year_end(hass, entry, snap, _seasonal)
+    read_daily, diag = await _year_end(hass, entry, snap, _seasonal, read_at=23)
+    assert hourly is not None, diag
+    assert read_daily == pytest.approx(hourly, abs=0.01)
 
 
 async def test_an_hour_shifted_onto_a_shorter_day_keeps_its_energy(

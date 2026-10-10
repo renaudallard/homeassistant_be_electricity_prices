@@ -61,6 +61,7 @@ from .meter_faults import (
     _total_stands_in,
 )
 from .pricing import is_offpeak
+from .year_ahead import last_year
 
 # The fewest past days a side must have moved on before it can count as read
 # once a day. A real hourly feed-in meter moves in a single hour on a dull
@@ -109,8 +110,12 @@ async def _metered_hourly_kwh(
     metered = await _side_hourly_kwh(hass, entry, side, start, end)
     if metered is None:
         return None
+    # Today has not closed and keeps its reading where it landed, unless the
+    # year-end walk reads it off last year with the rest of the year
+    # (:mod:`year_ahead`), whose days all have.
     today = dt_util.now().date()
-    moving, polled = _polled_days(metered.kwh, today)
+    until = end + timedelta(days=1) if energy_meters._read_ahead(today) else today
+    moving, polled = _polled_days(metered.kwh, until)
     if not polled:
         return metered
     polled_count = len(polled)
@@ -342,7 +347,9 @@ def _polled_days(
     and Home Assistant still writes a row every hour: 23 of change zero and
     one holding the whole day. A day has that shape when it holds a row for
     every one of its hours, 23 or 25 on a DST seam day, and moved in exactly
-    one.
+    one. A day the year-end walk reads off last year (:mod:`year_ahead`)
+    holds last year's rows on its own wall times, as many as the shorter of
+    the two days has hours.
     """
     rows: dict[date, int] = {}
     moving: dict[date, list[datetime]] = {}
@@ -358,9 +365,19 @@ def _polled_days(
         first = dt_util.start_of_local_day(day).astimezone(UTC)
         after = dt_util.start_of_local_day(day + timedelta(days=1)).astimezone(UTC)
         count = round((after - first) / timedelta(hours=1))
-        if len(hours) == 1 and rows[day] == count:
+        need = count
+        if energy_meters._read_ahead(day):
+            need = min(count, _hours_in(last_year(day)))
+        if len(hours) == 1 and rows[day] == need:
             polled[day] = (first, count)
     return len(moving), polled
+
+
+def _hours_in(day: date) -> int:
+    """The hours of a local day: 23, 24 or 25."""
+    first = dt_util.start_of_local_day(day)
+    after = dt_util.start_of_local_day(day + timedelta(days=1))
+    return round((after - first) / timedelta(hours=1))
 
 
 async def _read_daily_before(
@@ -414,10 +431,12 @@ def _spread_daily_readings(
     ``_READ_DAILY_MIN_DAYS`` of its own also the ``_READ_DAILY_SPAN_DAYS``
     before it (:func:`_read_daily_before`). Each
     such day's kWh is spread evenly over its hours, the neutral guess without
-    a profile. Today is left as it is: it is not over.
+    a profile. Today is left as it is: it is not over, unless the year-end
+    walk reads it off last year.
     """
     for first, count in polled.values():
-        whole = sum(kwh[first + timedelta(hours=i)] for i in range(count))
+        # A day read off last year can lack the repeated hour of its own.
+        whole = sum(kwh.get(first + timedelta(hours=i), 0.0) for i in range(count))
         for i in range(count):
             kwh[first + timedelta(hours=i)] = whole / count
 
