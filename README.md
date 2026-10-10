@@ -637,8 +637,11 @@ different, as long as the edit keeps the same supplier, contract and region
    or a supplier switch only while the year or the contract holds fewer than
    seven days of its own, and each day is spread evenly over its hours, so a
    contract priced by the hour bills it at the day's average rather than at
-   the hour the reading arrived; the log says so once and the diagnostics
-   flag it. Two ways to wire it:
+   the hour the reading arrived. A day/night register pair read that way is
+   spread register by register, the day register over the day's peak hours
+   and the night register over its off-peak ones on your region's schedule,
+   so neither lands on the other's rate. The log says so once and the
+   diagnostics flag it. Two ways to wire it:
    - **Day/night register sensors** (4 fields): point at the cumulative
      kWh registers from your meter. The integration reads each day's
      delta from HA's long-term statistics, so the sensor reflects
