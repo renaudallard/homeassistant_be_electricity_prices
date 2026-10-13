@@ -819,7 +819,11 @@ ticked it (`creg_ev.py`).
 `run_full_sweep` (`compare_engine.py`) and parks the result on
 `coordinator.daily_compare`, which is all the delivery the sensor needs: it is
 a `CoordinatorEntity`, so setting the attribute and calling
-`async_update_listeners` is the whole path, with no dispatcher.
+`async_update_listeners` is the whole path, with no dispatcher. The time
+listener in `__init__.py` is a callback that starts the sweep as a background
+task of the entry, so an unload or a reload cancels a sweep still running; a
+coroutine listener runs as a task Home Assistant owns, which an unload leaves
+alone.
 
 Three things differ from the dialog's sweep, all for the same reason - nobody
 is watching:

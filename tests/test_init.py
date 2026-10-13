@@ -107,7 +107,7 @@ _MODULE = "custom_components.be_electricity_prices"
 
 
 async def _setup_capturing_time_listeners(
-    hass: HomeAssistant,
+    hass: HomeAssistant, **extra: Any
 ) -> tuple[list[tuple[dict[str, Any], Any]], AsyncMock]:
     """Run ``async_setup_entry`` with the network and platform work stubbed,
     capturing every ``async_track_time_change`` registration.
@@ -132,7 +132,7 @@ async def _setup_capturing_time_listeners(
     async def _no_backfill(*_a: object, **_kw: object) -> None:
         return None
 
-    entry = make_entry()
+    entry = make_entry(**extra)
     entry.add_to_hass(hass)
     with (
         patch.object(BePricesCoordinator, "async_load_persistent", AsyncMock()),
@@ -207,6 +207,43 @@ async def test_the_slot_push_follows_the_resolution_the_table_ends_up_with(
             CoordinatorData(hourly={}, resolution=RESOLUTION_QUARTER)
         )
         assert len([r for r in registered if r["hour"] is None]) == 2
+
+
+async def test_the_daily_compare_stops_with_the_entry(hass: HomeAssistant) -> None:
+    """The sweep fetches a card from every supplier in the region and runs for
+    minutes. Home Assistant runs a coroutine time listener as a background
+    task of its own, which an unload does not cancel, so a reload during the
+    sweep kept it fetching for a coordinator that was gone. It has to run as a
+    task of the entry."""
+    import asyncio
+
+    from homeassistant.core import is_callback
+
+    from custom_components.be_electricity_prices import compare_sweep_flow
+
+    registered, _refresh = await _setup_capturing_time_listeners(
+        hass, daily_compare=True
+    )
+    action = next(fn for _spec, fn in registered if fn.__name__ == "_daily_compare")
+    assert is_callback(action)
+    started = asyncio.Event()
+
+    async def _sweep(*_a: object) -> None:
+        started.set()
+        await asyncio.Event().wait()
+
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    with patch.object(compare_sweep_flow, "async_run_daily_compare", _sweep):
+        action(dt_util.now())
+        await started.wait()
+    (task,) = [
+        t
+        for t in entry._background_tasks
+        if isinstance(t, asyncio.Task) and "daily_compare" in t.get_name()
+    ]
+
+    await entry._async_process_on_unload(hass)
+    assert task.cancelled()
 
 
 async def test_setup_registers_a_local_midnight_rebuild(hass: HomeAssistant) -> None:

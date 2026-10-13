@@ -551,13 +551,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
             % DAILY_COMPARE_WINDOW_MINUTES
         )
 
-        async def _daily_compare(_now: datetime) -> None:
+        async def _run_daily_compare() -> None:
             # Imported here rather than at module scope: compare_flow pulls in
             # the whole options-flow branch, which setup has no other reason
             # to load.
             from .compare_sweep_flow import async_run_daily_compare
 
             await async_run_daily_compare(hass, entry, coordinator)
+
+        # A callback that hands the sweep to the entry, because Home
+        # Assistant runs a coroutine listener as a background task of its
+        # own that an unload does not cancel: a reload during the sweep left
+        # it fetching cards for a coordinator that was gone.
+        @callback
+        def _daily_compare(_now: datetime) -> None:
+            entry.async_create_background_task(
+                hass,
+                _run_daily_compare(),
+                f"{DOMAIN}_daily_compare_{entry.entry_id}",
+            )
 
         entry.async_on_unload(
             async_track_time_change(
