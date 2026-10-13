@@ -105,27 +105,38 @@ Loading an offline boot from disk lets the entry serve last-known prices before 
 
 ## 2. The refresh path
 
-The base class calls `_async_update_data` (`coordinator.py`) every tick. It wraps `_update_body` (`coordinator_tick.py`) and, on `UpdateFailed`, refreshes the stale-snapshot Repairs placeholder with the current `_last_error` before re-raising (`coordinator_tick.py`). The body runs these steps in order.
+The base class calls `_async_update_data` (`coordinator.py`) every tick. It wraps `_update_body` (`coordinator_tick.py`) and, on `UpdateFailed`, refreshes the stale-snapshot Repairs placeholder with the current `_last_error` before re-raising (`coordinator.py`). The body runs these steps in order.
 
 ```
-_update_body (coordinator.py)
- ├─ _maybe_refresh_snapshot()            probe / TTL / fetch, may adopt sibling cache
+_update_body (coordinator_tick.py)
+ ├─ _sync_deprecated_supplier_issue(), _sync_withdrawn_contract_issue()
+ ├─ unless the setup tick: warm_meter_reads(), _ensure_annual_volume()
+ ├─ ensure_power_term(year)              Brussels only (brugel.py)
+ ├─ ensure_vat_rates()                   card archive on (vat_rates.py)
+ ├─ ensure_excise_law()                  every entry (excise_law.py)
+ ├─ _refresh_custom_snapshot() | _maybe_refresh_snapshot()
+ │                                       custom formula | probe / TTL / fetch, may adopt sibling cache
+ ├─ _reresolve_snapshot()                volume, Brugel term, VAT, excise or month moved
+ ├─ _sync_excise_law_issue()             social card with no law read -> UpdateFailed
  ├─ _track_monthly_peak()                Flanders capacity peak (rolling max)
+ ├─ ensure_ev_rates() + ev_rate_for()    EV home charging rate opted in (creg_ev.py)
  ├─ if self._snapshot is None: raise UpdateFailed("no supplier snapshot ...")
- ├─ clear extractor issue if _last_error empty
- ├─ if energy is DynamicRates:           fetch ENTSO-E spot (hard: auth fails the tick)
- │    elif _injection_needs_spot(...):   fetch ENTSO-E spot (soft: failure only drops injection)
- ├─ raise entsoe_auth issue on a refused key, clear it otherwise (never both in one tick)
- ├─ hourly = _build_hourly(spot_prices)  KeyError(DSO) -> UpdateFailed
+ ├─ priced = _cohort_legs(...).splice()  signing-cohort energy and feed-in legs
+ ├─ _tick_spot_prices(priced)            clear extractor issue if _last_error empty;
+ │    dynamic / spot-monthly:            fetch ENTSO-E spot (hard: auth fails the tick)
+ │    elif injection needs a spot:       fetch ENTSO-E spot (soft: failure only drops injection)
+ │                                       entsoe_auth issue raised on a refused key, cleared otherwise
+ ├─ _tick_profiles()                     SPP / RLP profiles, _ensure_historical_spots(window, today)
+ ├─ _tick_month_means()                  plain and weighted month means
+ ├─ hourly = _build_hourly(...)          KeyError(DSO) -> UpdateFailed
  ├─ capacity_cost   = _compute_capacity(...)   (Flanders only)
  ├─ prosumer_cost   = _compute_prosumer(...)
  ├─ injection_price = _compute_injection_price(...)
- ├─ injection_hourly = _build_injection_hourly(...)   (injection regime, card with a feed-in)
- ├─ if dynamic or _injection_needs_spot: _ensure_historical_spots(Jan1, today)
- ├─ current_year_cost = _compute_current_year_cost(...)
+ ├─ costs = _held_tick_costs() on the setup tick, else _tick_costs()
  ├─ _save_persistent()
- ├─ _sync_stale_issue(age > 7 days)
- └─ return CoordinatorData(...)
+ ├─ _sync_stale_issue() and the other per-tick Repairs syncs
+ └─ return CoordinatorData(..., resolution read off hourly's keys,
+                           injection_hourly = _build_injection_hourly(...))
 ```
 
 ### 2.1 Snapshot freshness: probe vs stored key vs TTL

@@ -79,7 +79,7 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 | `FEE_SENSORS` (6 fee/cost sensors) | `sensor.py` | always |
 | `projected_year_consumption`, `rolling_year_consumption` (2) | `sensor.py` | always |
 | `EV_RATE_SENSORS` (1) | `sensor.py` | `CONF_EV_HOME_CHARGING_RATE` is on |
-| `BI_HOURLY_SENSORS` (2 band prices) | `sensor.py` | `CONF_METER == METER_BI`, except on Tarif Impact (`DSO_MODE_IMPACT`) for any supplier but the custom one |
+| `BI_HOURLY_SENSORS` (2 band prices) | `sensor.py` | `CONF_METER == METER_BI`, or `METER_DYNAMIC` on a contract whose kind is not in `SMART_METER_CONTRACT_KINDS`, except on Tarif Impact (`DSO_MODE_IMPACT`) for any supplier but the custom one |
 | `CAPACITY_SENSORS` (2) | `sensor.py` | `CONF_REGION == REGION_FLANDERS` |
 | `PROSUMER_SENSORS` (1) | `sensor.py` | `solar_kva > 0`, `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` and `CONF_REGION == REGION_WALLONIA` |
 | `projected_year_injection`, `rolling_year_injection` (2) | `sensor.py` | `CONF_SOLAR_REGIME` is compensation or injection |
