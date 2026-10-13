@@ -482,8 +482,8 @@ than adopted: a partial table would be persisted and shared, and the entry on th
 area would fail every tick with no Repairs card while the last good card was gone from
 the cache. `test_a_card_missing_a_fluvius_row_is_refused` drops a row from the real card.
 
-The parser narrows to the "Nettarieven" section, then for each label matches
-`Fluvius (<prefix>)` followed by the first four numbers (the digital-meter columns):
+The parser narrows to the "Nettarieven" section, then for each area reads the
+first four numbers of its row (the digital-meter columns):
 
 ```
 databeheer  -> data_management_per_year    (EUR/year, no /100)
@@ -492,18 +492,24 @@ normal      -> distribution_single         (c€/kWh /100)
 excl_night  -> distribution_exclusive_night (c€/kWh /100)
 ```
 
-The row is asked for by label and width: `Fluvius (<prefix>` and eight figures.
-The label stops at the area name because the card wraps two of them mid-word -
+The row is asked for by label and width: the whole label, `Fluvius
+(Halle-Vilvoorde)`, and eight figures, then the leading token, `Fluvius
+(<prefix>`, if that finds nothing. The card wraps two labels mid-word -
 `Fluvius (Halle-` sits on a line of its own above its figures, and so does the
 Midden-Vlaanderen row - and `numeric_row` reads a label that wrapped that way as
-part of the row underneath it. `test_dso_wrapped_label_halle_vilvoorde` and
-`test_dso_wrapped_label_midden_vlaanderen` pin both wrapped rows.
+part of the row underneath it. It scores the label it is given against the whole
+row label, so the wrapped head falls below its threshold against the whole
+label, and the token alone does against a row printed on one line; asking for
+both keeps either rendering readable, and neither form reaches the threshold
+against another area's row. `test_dso_wrapped_label_halle_vilvoorde` and
+`test_dso_wrapped_label_midden_vlaanderen` pin both wrapped rows,
+`test_long_labels_printed_on_one_line_still_bind` the unwrapped ones.
 
 `transport` is always 0.0 (bundled into distribution, `test_dso_transport_is_zero`). The
 klassieke-meter and prosumer columns that follow on the card are ignored: a dynamic-contract
 customer must have a digital SMR3 meter, so the reverse-running-meter prosumer regime does
 not apply, and `DsoOverlay.prosumer_eur_per_kva_year` stays `None` (matching Frank). A label
-that does not match is skipped (not fatal); the eight-sub-area test is the safety net.
+that does not match leaves its area out, and the card is then refused as above.
 
 ## valid_until
 

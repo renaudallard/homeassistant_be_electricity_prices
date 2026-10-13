@@ -159,6 +159,27 @@ def test_dso_wrapped_label_midden_vlaanderen() -> None:
     assert mv.capacity_eur_per_kw_year == pytest.approx(53.13)
 
 
+def test_long_labels_printed_on_one_line_still_bind() -> None:
+    """Only the wrap kept the two long rows readable: asked for by their
+    leading token, "Fluvius (Halle-Vilvoorde)" on one line scores below
+    numeric_row's threshold and a re-render that stopped wrapping refused
+    the card. Each must still bind to its own figures."""
+    import re
+
+    text = _text()
+    joined = re.sub(
+        r"(Fluvius \((?:Halle|Midden)-)\n([^\n]+)\n(Vilvoorde|Vlaanderen) ?\)",
+        r"\1\3) \2",
+        text,
+    )
+    assert "Fluvius (Halle-Vilvoorde) 18,92 59,41" in joined
+    assert "Fluvius (Midden-Vlaanderen) 18,92 53,13" in joined
+    assert "Fluvius (Halle-\n" not in joined
+    assert "Fluvius (Midden-\n" not in joined
+    snap = parse_snapshot(joined, "test://energiebe-jul")
+    assert snap.dsos == _snap().dsos
+
+
 def test_injection_factor() -> None:
     """(1 x Belpex - 0,98), Belpex in c€/kWh, VAT-exempt => factor = 1.0."""
     snap = _snap()

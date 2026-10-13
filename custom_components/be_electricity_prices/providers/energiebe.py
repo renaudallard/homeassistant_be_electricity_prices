@@ -64,6 +64,7 @@ from datetime import date
 import aiohttp
 
 from ..const import (
+    FLUVIUS_CARD_LABELS,
     FLUVIUS_CARD_TOKENS,
     REGION_FLANDERS,
     VAT_RATE_REDUCED,
@@ -171,6 +172,13 @@ _PROF_HEADER_RE = re.compile(
 # the Midden-Vlaanderen row), so each entry anchors on the leading token and
 # grabs the four digital-meter columns that follow, wherever they land.
 _DSO_ROWS = FLUVIUS_CARD_TOKENS
+# The whole label, "Fluvius (Halle-Vilvoorde)", for a row the card prints on
+# one line. numeric_row scores the label it is given against the whole row
+# label, so the leading token alone falls below its threshold there.
+_DSO_LABELS = {
+    key: label.replace("Fluvius ", "Fluvius (", 1) + ")"
+    for label, key in FLUVIUS_CARD_LABELS.items()
+}
 
 # Accept both decimal separators: a dot-decimal re-render must not truncate a
 # mandatory value to its integer part (matches the sibling extractors).
@@ -676,10 +684,14 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for prefix, key in _DSO_ROWS:
         # Eight figures: the four digital-meter columns read here, then the
-        # four classic-meter ones. The label asked for stops at the area
-        # name, because the card wraps its two longest ones mid-word
-        # ("Fluvius (Halle-" sits on a line of its own above the figures).
-        row = numeric_row(section, f"Fluvius ({prefix}", 8)
+        # four classic-meter ones. Asked for by the whole label first, then
+        # by the leading token, because the card wraps its two longest
+        # labels mid-word ("Fluvius (Halle-" sits on a line of its own above
+        # the figures) and that head scores too low against the whole label.
+        # Neither form reaches the threshold against another area's row.
+        row = numeric_row(section, _DSO_LABELS[key], 8) or numeric_row(
+            section, f"Fluvius ({prefix}", 8
+        )
         if not row:
             continue
         databeheer = to_float(row[0])
