@@ -409,7 +409,10 @@ all (`tests/test_ecofix.py`).
 
 Sub-areas mapped: `fluvius_antwerpen`, `fluvius_halle_vilvoorde`, `fluvius_imewo`,
 `fluvius_iveka`, `fluvius_limburg`, `fluvius_intergem`, `fluvius_west`,
-`fluvius_zenne_dijle` (all eight, `tests/test_ecofix.py`).
+`fluvius_zenne_dijle` (all eight, `tests/test_ecofix.py`). A table missing
+any of them is refused rather than adopted with a hole in it, since an entry on
+the missing area would fail every tick until the next good card
+(`test_a_network_table_missing_an_area_is_refused`, `tests/test_ecofix.py`).
 
 ### Wallonia
 
@@ -426,7 +429,8 @@ Non-ORES DSOs mapped from `_WALLONIA_LABELS`: `aieg`, `aiesh`, `rew` (label `WAV
 which are collapsed to a single `ores` key. If a future card splits sub-areas
 (different numbers per row), `_extract_ores` raises `ExtractorError` rather than
 silently billing at the first sub-area's rate
-(`test_ores_subarea_drift_is_rejected`, `tests/test_ecofix.py`).
+(`test_ores_subarea_drift_is_rejected`, `tests/test_ecofix.py`). The five
+Walloon keys, ORES among them, are all required, the same rule as in Flanders.
 
 ## Tax overlay
 

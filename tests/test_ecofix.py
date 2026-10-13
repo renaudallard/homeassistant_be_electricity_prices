@@ -33,7 +33,10 @@ from typing import Any
 
 import pytest
 
-from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
+from custom_components.be_electricity_prices.const import (
+    FLUVIUS_CARD_LABELS,
+    FLUVIUS_KEYS,
+)
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
@@ -188,21 +191,23 @@ def test_dynamic_injection_missing_formula_is_fatal() -> None:
 def test_flanders_data_management_column_follows_metering_regime() -> None:
     # The Fluvius row carries two data-management columns: per-kwartier
     # (quarter-hourly, billed to dynamic contracts) and monthly/yearly
-    # (billed to Flexy). They are equal on today's cards, so craft a row
+    # (billed to Flexy). They are equal on today's cards, so craft a table
     # where they diverge and assert each kind reads its own column.
+    rows = "".join(
+        f"{label} 52,3679 5,35329 4,81301 11,11 22,22\n"
+        for label in FLUVIUS_CARD_LABELS
+    )
     text = (
         "Vlaams gewest Digitale meter\n"
-        "Fluvius Antwerpen 52,3679 5,35329 4,81301 11,11 22,22\n"
-        "Vlaams gewest Analoge meter\n"
-        "Fluvius Antwerpen 52,3679 5,35329 4,81301 11,11 33,33\n"
-        "Ecofix Gas & Power\n"
+        + rows
+        + "Vlaams gewest Analoge meter\n"
+        + rows.replace("22,22", "33,33")
+        + "Ecofix Gas & Power\n"
     )
     dynamic = _extract_flanders_dsos(text, "dynamic")
     variable = _extract_flanders_dsos(text, "variable")
-    assert next(iter(dynamic.values())).data_management_per_year == pytest.approx(11.11)
-    assert next(iter(variable.values())).data_management_per_year == pytest.approx(
-        22.22
-    )
+    assert all(o.data_management_per_year == 11.11 for o in dynamic.values())
+    assert all(o.data_management_per_year == 22.22 for o in variable.values())
 
 
 def test_motion_online_wallonia_dsos() -> None:
@@ -387,6 +392,37 @@ def test_ores_subarea_drift_is_rejected() -> None:
     )
     with pytest.raises(ExtractorError, match=r"ORES sub-area .* diverged"):
         parse_snapshot("ecofix_motion_online", bumped, "wallonia", "x")
+
+
+# ---- partial network tables -------------------------------------------------
+
+
+def _without_rows(text: str, *prefixes: str) -> str:
+    kept = [line for line in text.splitlines() if not line.strip().startswith(prefixes)]
+    assert len(kept) < len(text.splitlines())
+    return "\n".join(kept)
+
+
+@pytest.mark.parametrize(
+    ("region", "prefixes", "missing"),
+    [
+        ("flanders", ("Fluvius Limburg",), "fluvius_limburg"),
+        ("wallonia", ("AIESH",), "aiesh"),
+        ("wallonia", ("ORES",), "ores"),
+    ],
+)
+def test_a_network_table_missing_an_area_is_refused(
+    region: str, prefixes: tuple[str, ...], missing: str
+) -> None:
+    """A row that stopped reading used to leave the area out and the card was
+    adopted anyway: an entry on that area then failed every tick with no
+    overlay to price from. ORES counts as one of the Walloon areas, so losing
+    all nine of its rows is refused too."""
+    text = _without_rows(_layout(_MOTION), *prefixes)
+    with pytest.raises(
+        ExtractorError, match=rf"DSO rows not found for \['{missing}'\]"
+    ):
+        parse_snapshot("ecofix_motion", text, region, "x")
 
 
 def test_unknown_contract_raises() -> None:

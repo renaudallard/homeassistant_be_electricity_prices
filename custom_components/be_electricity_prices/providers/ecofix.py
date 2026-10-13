@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 
@@ -739,7 +740,22 @@ def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]
             capacity_eur_per_kw_year=capacity,
             prosumer_eur_per_kva_year=prosumer_by_key.get(key),
         )
+    _require_every_area(out, _FLANDERS_LABELS.values())
     return out
+
+
+def _require_every_area(out: dict[str, DsoOverlay], keys: Iterable[str]) -> None:
+    """Refuse a network table that lacks one of the region's areas.
+
+    A partial table is worse than none: the areas are what every entry picks
+    its network cost from, and a card missing one would be adopted, persisted
+    and shared, leaving the entry on that area with no overlay and every tick
+    failing, while the last good card is gone from the cache. Refusing keeps
+    that card serving.
+    """
+    missing = sorted(key for key in keys if key not in out)
+    if missing:
+        raise ExtractorError(f"Ecofix: DSO rows not found for {missing}")
 
 
 _WALLONIA_LABELS: tuple[tuple[str, str], ...] = (
@@ -792,6 +808,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     ores = _extract_ores(text)
     if ores is not None:
         out[DSO_ORES] = ores
+    _require_every_area(out, (*(key for _, key in _WALLONIA_LABELS), DSO_ORES))
     return out
 
 
