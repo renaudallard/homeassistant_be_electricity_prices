@@ -1222,27 +1222,10 @@ async def test_a_closed_epexdam_month_is_settled_on_the_index_the_next_card_name
     )
     assert running is not None and running.provisional
     assert len(urls) == 1
-
-    # A next card naming another month settles nothing.
-    freezer.move_to("2026-09-11 12:00:00+02:00")
-    monkeypatch.setattr(
-        engie, "fetch_pdf_text", _serving(text, following.replace("Avril", "Mai"))
-    )
-    kept = await engie.fetch_for_month(
-        None,  # type: ignore[arg-type]
-        "engie_empower_variable",
-        REGION_FLANDERS,
-        date(2026, 4, 1),
-    )
-    assert kept is not None and not kept.provisional
-    assert (
-        kept.energy
-        == parse_snapshot("engie_empower_variable", {REGION_FLANDERS: text}).energy
-    )
     assert EXTRACTORS["engie"].settles_on_next_card is True
 
 
-@pytest.mark.parametrize("named", ["Mars", "Février"])
+@pytest.mark.parametrize("named", ["Mars", "Février", "Mai"])
 async def test_a_month_whose_next_card_is_not_out_stays_provisional(
     monkeypatch: pytest.MonkeyPatch, freezer: Any, named: str
 ) -> None:
@@ -1251,7 +1234,9 @@ async def test_a_month_whose_next_card_is_not_out_stays_provisional(
     before it. That settled nothing and the month came back final, so the
     store kept it on the printed estimate for good. A next card naming an
     earlier month than the one asked is not out yet: the month stays
-    provisional and is asked again."""
+    provisional and is asked again. So does one naming a later month, which
+    is not the next card either: the card archive filed 29 August 2026 rows
+    on July's index that way."""
     from custom_components.be_electricity_prices.providers import engie
 
     freezer.move_to("2026-05-01 03:00:00+02:00")

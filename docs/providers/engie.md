@@ -208,8 +208,11 @@ prices to 0,01 c/kWh. The running month has no next card and comes back
 `provisional`, and so does a month whose "next card" names an earlier month than
 it: that is the month's own card still served, as on the 1st before Engie puts
 the new month's card out, so the month is asked again rather than stored as
-settled on its estimate. An ENDEX101 card has nothing to settle and costs no
-download.
+settled on its estimate. A "next card" naming a later month is not the next card
+either and is asked again the same way: filed as settled on their own estimate, 29
+August 2026 rows of the card archive took October's card as the next one and kept July's index (15,29
+against 17,73 c/kWh on Empower Variable in Wallonia). An ENDEX101 card has nothing
+to settle and costs no download.
 `EXTRACTOR.settles_on_next_card` is set, so a closed month the card archive caught
 live is asked again until it is settled.
 
