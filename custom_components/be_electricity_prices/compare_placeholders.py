@@ -164,6 +164,7 @@ class _PlaceholdersMixin(OptionsFlow):
             meter=meter,
         )
         region = hh.region
+        day_start = hh.day_start
         dso = hh.dso
         current_meter = hh.current_meter
         dso_mode = hh.dso_mode
@@ -336,6 +337,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     meter,
                     other_dso_mode,
                     hour_weights,
+                    day_start=day_start,
                 )
                 other_export_per_kwh = await _export_rate_for(
                     other_snap, meter, other_dso_mode
@@ -363,6 +365,7 @@ class _PlaceholdersMixin(OptionsFlow):
                         annual_kwh,
                         rolling_inj_kwh,
                         regime=regime,
+                        day_start=day_start,
                     )
                 else:
                     # A customer signing this card today, over the coming
@@ -381,6 +384,7 @@ class _PlaceholdersMixin(OptionsFlow):
                         annual_kwh,
                         rolling_inj_kwh,
                         regime=regime,
+                        day_start=day_start,
                     )
 
         # Per-supplier injection price (only used in the "injection"
@@ -523,6 +527,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     annual_kwh,
                     rolling_inj_kwh,
                     regime=stored_regime,
+                    day_start=day_start,
                 ),
             )
         placeholders["solar_note"] = _whatif_note(
@@ -873,6 +878,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     regime=regime,
                     window_start=ytd_from,
                     fee_proration=fee_proration,
+                    day_start=day_start,
                 ),
             )
             placeholders["compare_ytd"] = f"{compare_ytd:.2f}"

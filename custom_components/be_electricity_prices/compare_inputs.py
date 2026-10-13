@@ -576,6 +576,8 @@ class _HouseholdQuote:
     """
 
     region: str
+    # The hour the household's day register starts (day_night.day_start_for).
+    day_start: int
     dso: str
     current_meter: str
     dso_mode: str
@@ -645,7 +647,13 @@ class _HouseholdQuote:
         from .compare_weighting import _register_weights
 
         return tuple(
-            _register_weights(self.region, weights, meter=meter, dso_mode=dso_mode)
+            _register_weights(
+                self.region,
+                weights,
+                meter=meter,
+                dso_mode=dso_mode,
+                day_start=self.day_start,
+            )
             for weights in (self.hour_weights, self.inj_hour_weights)
         )
 
@@ -659,7 +667,10 @@ class _HouseholdQuote:
             return None
         from .compare_weighting import _register_names, _register_rates
 
-        if len(_register_names(meter, dso_mode, self.region)) < 2:
+        if (
+            len(_register_names(meter, dso_mode, self.region, day_start=self.day_start))
+            < 2
+        ):
             return None
         spot = await self.spot_for(snapshot)
         first_day = dt_util.as_local(self.now_utc).date()
@@ -673,6 +684,7 @@ class _HouseholdQuote:
                 meter,
                 dso_mode,
                 weights,
+                day_start=self.day_start,
             )
             for weights in (self.hour_weights, self.inj_hour_weights)
         )

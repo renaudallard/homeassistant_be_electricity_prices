@@ -661,6 +661,7 @@ class _SweepEngine(_HouseholdMixin):
             meter,
             dso_mode,
             hour_weights=hh.hour_weights,
+            day_start=hh.day_start,
         )
         if per_kwh is None:
             return RankedRow(label=label, annual=None, status="could not be priced")
@@ -682,6 +683,7 @@ class _SweepEngine(_HouseholdMixin):
             hh.annual_kwh,
             hh.rolling_inj_kwh,
             regime=hh.regime,
+            day_start=hh.day_start,
         )
         credit = _compare_injection_credit(
             resolved,

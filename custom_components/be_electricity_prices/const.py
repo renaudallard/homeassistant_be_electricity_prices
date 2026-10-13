@@ -237,6 +237,19 @@ CONF_MANUAL_YEARLY_FEE: Final = "manual_yearly_fee"
 
 CONF_METER: Final = "meter"
 
+# The weekday hours a Flemish two-register meter counts on its day register.
+# Fluvius switches at 07:00 and 22:00 except in the municipalities on its own
+# list, where the day register runs from 06:00 to 21:00. Where the list marks
+# a municipality, the switch time was set per meter at installation, so only
+# the household can say which one it has. Only read for a Flemish entry.
+CONF_DAY_HOURS: Final = "day_hours"
+DAY_HOURS_STANDARD: Final = "07_22"
+DAY_HOURS_EARLY: Final = "06_21"
+DAY_HOURS: Final = (DAY_HOURS_STANDARD, DAY_HOURS_EARLY)
+# The hour each schedule's day register starts on a weekday.
+DAY_START: Final = 7
+DAY_START_EARLY: Final = 6
+
 # Whether this household settles its dynamic contract on the 15-minute grid
 # rather than the hourly one the card prints. Only meaningful on a contract
 # whose supplier offers the choice (``Contract.quarter_hourly_option``);

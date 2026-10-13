@@ -67,6 +67,7 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
+from .day_night import day_start_for
 from .fees import (
     _welcome_credit_eur,
     first_year_net_kwh,
@@ -78,11 +79,7 @@ from .injection import (
     _historical_injection_rate,
 )
 from .meter_daily import _resolve_daily_kwh
-from .pricing import (
-    MeterType,
-    renewables_eur_per_kwh,
-    static_breakdown,
-)
+from .pricing import MeterType, renewables_eur_per_kwh, static_breakdown
 from .providers._rates import (
     DynamicRates,
     ImpactRates,
@@ -284,6 +281,7 @@ async def _compute_current_year_cost(
     # not the alternative's.
     contract = contract_override or entry.data[CONF_CONTRACT]
     region = entry.data.get(CONF_REGION, "")
+    day_start = day_start_for(entry.data)
     dso = entry.data.get(CONF_DSO, "")
     meter = meter_override or entry.data.get(CONF_METER, METER_MONO)
     dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
@@ -718,7 +716,9 @@ async def _compute_current_year_cost(
             # Yearly net metering, per register, priced after the walk by
             # _NetAllocation: on the day's RLP mass when the profile is
             # loaded, else as metered.
-            day_weights = _day_register_weights(rlp_weights, day, bi_capable, region)
+            day_weights = _day_register_weights(
+                rlp_weights, day, bi_capable, region, day_start=day_start
+            )
             if bi_capable:
                 netting.add(
                     "peak",
@@ -786,6 +786,7 @@ async def _compute_current_year_cost(
                     ),
                     meter=meter,
                     region=region,
+                    day_start=day_start,
                 )
                 for hour in (_DAY_REGISTER_HOUR, _NIGHT_REGISTER_HOUR)
             )

@@ -85,6 +85,7 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
 )
+from .day_night import day_start_for
 from .providers._rates import (
     DynamicRates,
     SpotMonthlyRates,
@@ -299,6 +300,7 @@ async def _compute_projected_year_cost(
 
     dso = entry.data[CONF_DSO]
     region = entry.data[CONF_REGION]
+    day_start = day_start_for(entry.data)
     meter = entry.data.get(CONF_METER, METER_MONO)
     dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
 
@@ -311,7 +313,15 @@ async def _compute_projected_year_cost(
     # hours, so a time-of-use card is projected on the kWh it actually bills.
     hour_weights = await _measured_hour_weights(hass, entry, trailing_start, today)
     per_kwh = _tou_weighted_per_kwh(
-        priced, dso, region, dt_util.now(), None, meter, dso_mode, hour_weights
+        priced,
+        dso,
+        region,
+        dt_util.now(),
+        None,
+        meter,
+        dso_mode,
+        hour_weights,
+        day_start=day_start,
     )
     if per_kwh is None:
         return None
@@ -438,7 +448,15 @@ async def _compute_projected_year_cost(
     export_per_kwh: float | None = None
     if regime == SOLAR_REGIME_COMPENSATION and inj_hour_weights:
         export_per_kwh = _tou_weighted_per_kwh(
-            priced, dso, region, dt_util.now(), None, meter, dso_mode, inj_hour_weights
+            priced,
+            dso,
+            region,
+            dt_util.now(),
+            None,
+            meter,
+            dso_mode,
+            inj_hour_weights,
+            day_start=day_start,
         )
     # What is left of the household's first-year welcome credit over the
     # coming year, off the card it signed and capped on the same three
@@ -461,6 +479,7 @@ async def _compute_projected_year_cost(
         annual.kwh,
         annual_inj,
         regime=regime,
+        day_start=day_start,
     )
     # Under compensation each meter register nets on its own, so the bill needs
     # the household's own day/night split of both sides rather than two annual
@@ -472,15 +491,43 @@ async def _compute_projected_year_cost(
         from .compare_weighting import _register_rates, _register_weights
 
         register_weights = (
-            _register_weights(region, hour_weights, meter=meter, dso_mode=dso_mode),
-            _register_weights(region, inj_hour_weights, meter=meter, dso_mode=dso_mode),
+            _register_weights(
+                region,
+                hour_weights,
+                meter=meter,
+                dso_mode=dso_mode,
+                day_start=day_start,
+            ),
+            _register_weights(
+                region,
+                inj_hour_weights,
+                meter=meter,
+                dso_mode=dso_mode,
+                day_start=day_start,
+            ),
         )
         register_rates = (
             _register_rates(
-                priced, dso, region, today, None, meter, dso_mode, hour_weights
+                priced,
+                dso,
+                region,
+                today,
+                None,
+                meter,
+                dso_mode,
+                hour_weights,
+                day_start=day_start,
             ),
             _register_rates(
-                priced, dso, region, today, None, meter, dso_mode, inj_hour_weights
+                priced,
+                dso,
+                region,
+                today,
+                None,
+                meter,
+                dso_mode,
+                inj_hour_weights,
+                day_start=day_start,
             ),
         )
     projected = _annual_bill(

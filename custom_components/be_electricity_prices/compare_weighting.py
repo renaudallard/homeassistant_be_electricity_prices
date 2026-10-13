@@ -44,6 +44,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     CONF_METER,
     CONF_REGION,
+    DAY_START,
     DSO_MODE_BI_HORAIRE,
     DSO_MODE_IMPACT,
     METER_BI,
@@ -146,7 +147,7 @@ def _slot_weights(
 
 @lru_cache(maxsize=16)
 def _register_hours(
-    region: str, year: int, meter: str, dso_mode: str
+    region: str, year: int, meter: str, dso_mode: str, day_start: int = DAY_START
 ) -> tuple[dict[int, float], ...]:
     """Per meter register, how many hours of ``year`` each clock hour spends
     in it, counted off the same rule the engine bills by.
@@ -186,7 +187,9 @@ def _register_hours(
     when = datetime.combine(date(year, 1, 1), time())
     end = datetime.combine(date(year + 1, 1, 1), time())
     while when < end:
-        (night if is_offpeak(when, region) else day)[when.hour] += 1.0
+        (night if is_offpeak(when, region, day_start=day_start) else day)[
+            when.hour
+        ] += 1.0
         when += timedelta(hours=1)
     return day, night
 
@@ -197,16 +200,22 @@ def _register_weights(
     *,
     meter: str = METER_BI,
     dso_mode: str = DSO_MODE_BI_HORAIRE,
+    day_start: int = DAY_START,
 ) -> tuple[float, ...]:
     """Weight of each meter register, the way :func:`_tou_slot_weights`
     weights the TOU slots. Two on a bi-hourly meter, three under Tarif
     Impact, one otherwise."""
     return _slot_weights(
-        _register_hours(region, dt_util.now().year, meter, dso_mode), hour_weights
+        _register_hours(
+            region, dt_util.now().year, meter, dso_mode, day_start=day_start
+        ),
+        hour_weights,
     )
 
 
-def _register_names(meter: Any, dso_mode: Any, region: str) -> tuple[str, ...]:
+def _register_names(
+    meter: Any, dso_mode: Any, region: str, *, day_start: int = DAY_START
+) -> tuple[str, ...]:
     """The names :func:`spot_stats._register_for` gives the registers, in
     :func:`_register_hours`' order."""
     from .spot_stats import _register_for
@@ -215,11 +224,21 @@ def _register_names(meter: Any, dso_mode: Any, region: str) -> tuple[str, ...]:
         return ("pic", "medium", "eco")
     if meter in (METER_BI, METER_DYNAMIC):
         return ("peak", "offpeak")
-    return (_register_for(dt_util.start_of_local_day(), meter, dso_mode, region),)
+    return (
+        _register_for(
+            dt_util.start_of_local_day(), meter, dso_mode, region, day_start=day_start
+        ),
+    )
 
 
 def _register_network_rates(
-    snapshot: Any, dso: str, region: str, meter: Any, dso_mode: Any
+    snapshot: Any,
+    dso: str,
+    region: str,
+    meter: Any,
+    dso_mode: Any,
+    *,
+    day_start: int = DAY_START,
 ) -> tuple[float, ...] | None:
     """Distribution and transport per kWh in each meter register, VAT as the
     bill carries it, in :func:`_register_hours`' order.
@@ -234,16 +253,24 @@ def _register_network_rates(
     from .spot_stats import _register_for
 
     when = dt_util.start_of_local_day(date(dt_util.now().year, 1, 1))
-    names = _register_names(meter, dso_mode, region)
+    names = _register_names(meter, dso_mode, region, day_start=day_start)
     first: dict[str, datetime] = {}
     # A week holds every register of every schedule the engine knows.
     for _ in range(7 * 24):
-        first.setdefault(_register_for(when, meter, dso_mode, region), when)
+        first.setdefault(
+            _register_for(when, meter, dso_mode, region, day_start=day_start), when
+        )
         when += timedelta(hours=1)
     try:
         return tuple(
             compute_network_and_taxes(
-                snapshot, dso, region, first[name], meter, dso_mode
+                snapshot,
+                dso,
+                region,
+                first[name],
+                meter,
+                dso_mode,
+                day_start=day_start,
             ).network
             for name in names
         )
@@ -260,6 +287,8 @@ def _register_rates(
     meter: Any,
     dso_mode: Any,
     hour_weights: dict[int, float] | None,
+    *,
+    day_start: int = DAY_START,
 ) -> tuple[float | None, ...]:
     """Each register's own all-in EUR/kWh over the year from ``first_day``,
     weighted by ``hour_weights``, in :func:`_register_hours`' order.
@@ -283,8 +312,9 @@ def _register_rates(
             dso_mode,
             hour_weights,
             register=name,
+            day_start=day_start,
         )
-        for name in _register_names(meter, dso_mode, region)
+        for name in _register_names(meter, dso_mode, region, day_start=day_start)
     )
 
 
@@ -466,6 +496,7 @@ def _compare_injection_credit(
     quoted last month's index beside a sensor showing this month's, by
     ``factor`` times the gap between the two.
     """
+    from .day_night import day_start_for
     from .injection import (
         _bake_monthly_injection,
         _compute_injection_price,
@@ -526,6 +557,7 @@ def _compare_injection_credit(
             inj_hour_weights,
             meter=METER_BI,
             dso_mode=DSO_MODE_BI_HORAIRE,
+            day_start=day_start_for(entry.data),
         )
         day, night = (_floor_injection(r, inj) for r in (inj.peak, inj.offpeak))
         return float((day * wd + night * wn) / (wd + wn))
@@ -606,6 +638,8 @@ def _year_avg_all_in(
     hour_weights: dict[int, float] | None = None,
     component: str = "all_in",
     register: str | None = None,
+    *,
+    day_start: int = DAY_START,
 ) -> float | None:
     """Mean all-in EUR/kWh over the ``num_days`` from ``first_day``, priced
     once per kind of day. ``component`` names another field of the breakdown
@@ -674,12 +708,20 @@ def _year_avg_all_in(
             when = midnight + timedelta(hours=hour)
             if (
                 register is not None
-                and _register_for(when, meter, dso_mode, region) != register
+                and _register_for(when, meter, dso_mode, region, day_start=day_start)
+                != register
             ):
                 continue
             try:
                 bd = compute_breakdown(
-                    snapshot, dso, region, when, spot, meter, dso_mode
+                    snapshot,
+                    dso,
+                    region,
+                    when,
+                    spot,
+                    meter,
+                    dso_mode,
+                    day_start=day_start,
                 )
             except Exception:
                 return None
@@ -699,6 +741,8 @@ def _tou_weighted_per_kwh(
     dso_mode: Any,
     hour_weights: dict[int, float] | None = None,
     component: str = "all_in",
+    *,
+    day_start: int = DAY_START,
 ) -> float | None:
     """Per-kWh EUR/kWh for the compare flow's annual estimate, with a
     TOU-aware weighted average when the snapshot's energy rate splits by
@@ -738,7 +782,16 @@ def _tou_weighted_per_kwh(
     from .providers._rates import ImpactRates
 
     try:
-        bd = compute_breakdown(snapshot, dso, region, when_now, spot, meter, dso_mode)
+        bd = compute_breakdown(
+            snapshot,
+            dso,
+            region,
+            when_now,
+            spot,
+            meter,
+            dso_mode,
+            day_start=day_start,
+        )
     except Exception:
         return None
     # The all-in is time-of-day dependent not only for TOU/Impact energy
@@ -807,5 +860,6 @@ def _tou_weighted_per_kwh(
         dso_mode,
         hour_weights,
         component=component,
+        day_start=day_start,
     )
     return year_avg if year_avg is not None else float(getattr(bd, component))

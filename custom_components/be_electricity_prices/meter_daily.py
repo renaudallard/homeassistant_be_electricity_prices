@@ -52,9 +52,10 @@ from .const import (
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
     CONF_REGION,
+    DAY_START,
     METER_MONO,
 )
-from .day_night import is_offpeak
+from .day_night import day_start_for, is_offpeak
 from .energy_meters import (
     _LOGGER,
     _MEMO_METER_KEYS,
@@ -80,7 +81,13 @@ from .pricing import MeterType
 
 
 async def _recorder_daily_band_ratio(
-    hass: HomeAssistant, entity_id: str, start: date, end: date, region: str
+    hass: HomeAssistant,
+    entity_id: str,
+    start: date,
+    end: date,
+    region: str,
+    *,
+    day_start: int = DAY_START,
 ) -> dict[date, tuple[float, float]]:
     """Per-day (day_ratio, night_ratio) for ``entity_id``.
 
@@ -101,7 +108,7 @@ async def _recorder_daily_band_ratio(
         bucket = local.date()
         if delta > 0.0:
             moving_hours[bucket] = moving_hours.get(bucket, 0) + 1
-        if is_offpeak(local, region):
+        if is_offpeak(local, region, day_start=day_start):
             per_day_night[bucket] = per_day_night.get(bucket, 0.0) + delta
         else:
             per_day_day[bucket] = per_day_day.get(bucket, 0.0) + delta
@@ -125,7 +132,7 @@ async def _recorder_daily_band_ratio(
             # bi-hourly energy rate splits on this same ratio so it compounds.
             # The day-of-week default is a poor estimate; a single hour is a
             # confident wrong one.
-            out[day] = _default_band_ratio_for(day, region)
+            out[day] = _default_band_ratio_for(day, region, day_start=day_start)
     return out
 
 
@@ -192,6 +199,7 @@ async def _resolve_daily_kwh(
     """
     meter = meter or entry.data.get(CONF_METER, METER_MONO)
     region = entry.data.get(CONF_REGION, "")
+    day_start = day_start_for(entry.data)
     window_start = start or date(today.year, 1, 1)
     # Keyed on the entry DATA this reads, never on the entry object: the
     # compare page passes a proxy carrying only .data, and reaching for an
@@ -203,6 +211,7 @@ async def _resolve_daily_kwh(
         "daily",
         meter,
         region,
+        day_start,
         tuple(entry.data.get(k) for k in _MEMO_METER_KEYS),
         # The regime decides whether the injection side is read, and a
         # what-if row quoting one shares the household's meter keys.
@@ -307,10 +316,12 @@ async def _resolve_daily_kwh(
         reported[slot_day] = set(_without_today(per_day, today))
         if meter in ("bi", "dynamic"):
             ratios = await _recorder_daily_band_ratio(
-                hass, total_id, window_start, today, region
+                hass, total_id, window_start, today, region, day_start=day_start
             )
             for day, total in per_day.items():
-                d_ratio, n_ratio = ratios.get(day, _default_band_ratio_for(day, region))
+                d_ratio, n_ratio = ratios.get(
+                    day, _default_band_ratio_for(day, region, day_start=day_start)
+                )
                 row = out.setdefault(day, [0.0, 0.0, 0.0, 0.0])
                 row[slot_day] += total * d_ratio
                 row[slot_night] += total * n_ratio
@@ -381,7 +392,9 @@ async def _resolve_daily_kwh(
     return resolved
 
 
-def _default_band_ratio_for(day: date, region: str) -> tuple[float, float]:
+def _default_band_ratio_for(
+    day: date, region: str, *, day_start: int = DAY_START
+) -> tuple[float, float]:
     """Time-weighted (day_ratio, night_ratio) fallback for a day with no
     hourly recorder stats yet.
 
@@ -405,7 +418,7 @@ def _default_band_ratio_for(day: date, region: str) -> tuple[float, float]:
             hour,
             tzinfo=dt_util.DEFAULT_TIME_ZONE,
         )
-        if not is_offpeak(when, region):
+        if not is_offpeak(when, region, day_start=day_start):
             peak_hours += 1
     if peak_hours == 0:
         return (0.0, 1.0)

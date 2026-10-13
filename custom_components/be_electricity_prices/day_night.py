@@ -32,10 +32,16 @@ no Home Assistant dependencies.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime, timedelta
-from typing import Final
+from typing import Any, Final
 
 from .const import (
+    CONF_DAY_HOURS,
+    CONF_REGION,
+    DAY_HOURS_EARLY,
+    DAY_START,
+    DAY_START_EARLY,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
@@ -85,7 +91,28 @@ def is_belgian_holiday(d: date) -> bool:
     return d == easter + timedelta(days=50)  # Pentecost Monday
 
 
-def is_offpeak(when: datetime, region: str = REGION_FLANDERS) -> bool:
+# How many hours the day register runs on a weekday.
+_DAY_LENGTH: Final = 15
+
+
+def day_start_for(data: Mapping[str, Any]) -> int:
+    """The hour an entry's day register starts on a weekday.
+
+    06:00 for a Flemish entry whose meter runs its day register from 06:00
+    to 21:00 (``CONF_DAY_HOURS``), 07:00 for every other entry. Read off the
+    entry's data alone, so the compare page's stand-in entry answers too.
+    """
+    if (
+        data.get(CONF_REGION) == REGION_FLANDERS
+        and data.get(CONF_DAY_HOURS) == DAY_HOURS_EARLY
+    ):
+        return DAY_START_EARLY
+    return DAY_START
+
+
+def is_offpeak(
+    when: datetime, region: str = REGION_FLANDERS, *, day_start: int = DAY_START
+) -> bool:
     """Classic bi-hourly (tweevoudig / bi-horaire) off-peak hour, by region.
 
     The night/weekend schedule and the public-holiday treatment differ by
@@ -93,7 +120,9 @@ def is_offpeak(when: datetime, region: str = REGION_FLANDERS) -> bool:
 
       Flanders (Fluvius): off-peak Mon-Fri 22:00-07:00 and all weekend.
         Weekday public holidays bill at the DAY rate - the meter's tariff
-        clock switches on weekday/weekend only, not on holidays.
+        clock switches on weekday/weekend only, not on holidays. In the
+        municipalities on Fluvius's list the weekday night runs from 21:00
+        to 06:00 instead, which ``day_start`` says (see ``day_start_for``).
       Brussels (Sibelga): off-peak 22:00-07:00, all weekend AND weekday
         public holidays (the historical Brussels exception; unchanged).
       Wallonia (from 2026-01-01): one uniform schedule every day including
@@ -105,7 +134,7 @@ def is_offpeak(when: datetime, region: str = REGION_FLANDERS) -> bool:
         return True
     if region == REGION_BRUSSELS and is_belgian_holiday(when.date()):
         return True
-    return when.hour < 7 or when.hour >= 22
+    return when.hour < day_start or when.hour >= day_start + _DAY_LENGTH
 
 
 # Wallonia's uniform every-day off-peak schedule (22:00-07:00 plus the

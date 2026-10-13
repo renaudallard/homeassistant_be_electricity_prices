@@ -511,6 +511,17 @@ different, as long as the edit keeps the same supplier, contract and region
    Trihoraire, Mega Off-peak Impact, OCTA+ Boost Fix Impact, Eco Boost Fix Impact
    and the withdrawn Fixed Impact) lock the picker to
    *dynamic* — the SMR3 meter is required to bill by hour-of-day.
+   A Flemish entry is also asked its **Day tariff hours**. Fluvius bills the
+   day rate on weekdays from 07:00 to 22:00, except in the municipalities on
+   [its list](https://www.fluvius.be/nl/aansluitingen/uren-van-het-dag-en-nachttarief),
+   where the day register runs from 06:00 to 21:00. Where the list marks a
+   municipality with an asterisk, the switch time was set when the meter was
+   installed, so check yours. The answer moves the day/night split of the
+   prices, the running bill and the comparison on a bi-hourly or digital
+   meter, and changes nothing on a mono one. Hours already written to the
+   long-term statistics keep the schedule they were priced on until the
+   [backfill service](#be_electricity_pricesbackfill_statistics-service)
+   is run again.
 5. **Professional contract** *(pro contracts only)* — **Prices include VAT
    (21%)** and **Estimated yearly consumption**; see *Professional (B2B)
    tariffs* above.

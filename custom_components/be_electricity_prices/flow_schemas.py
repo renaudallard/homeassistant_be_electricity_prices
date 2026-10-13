@@ -86,6 +86,7 @@ from .const import (
     CONF_CUSTOM_TAX_FEDERAL_EXCISE,
     CONF_CUSTOM_TAX_REGION_CONNECTION_FEE,
     CONF_CUSTOM_TAX_REGIONAL_RENEWABLES,
+    CONF_DAY_HOURS,
     CONF_DIRECT_DEBIT,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
@@ -102,6 +103,8 @@ from .const import (
     CONF_REGION,
     CONF_SUPPLIER,
     CONNECTION_KVA_TIERS,
+    DAY_HOURS,
+    DAY_HOURS_STANDARD,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_CONNECTION_KVA_TIER,
     DEFAULT_DIRECT_DEBIT,
@@ -112,6 +115,7 @@ from .const import (
     METER_DYNAMIC,
     METER_MONO,
     METER_TYPES,
+    REGION_FLANDERS,
     REGIONS,
     SMART_METER_CONTRACT_KINDS,
     SPOT_PRICED_CONTRACT_KINDS,
@@ -412,17 +416,32 @@ def _meter_schema(
         fallback = METER_MONO
     current = defaults.get(CONF_METER) if defaults.get(CONF_METER) in options else None
     current = current or fallback
-    return vol.Schema(
-        {
-            vol.Required(CONF_METER, default=current): SelectSelector(
-                SelectSelectorConfig(
-                    options=options,
-                    mode=SelectSelectorMode.LIST,
-                    translation_key="meter",
-                )
-            ),
-        }
-    )
+    fields: dict[Any, Any] = {
+        vol.Required(CONF_METER, default=current): SelectSelector(
+            SelectSelectorConfig(
+                options=options,
+                mode=SelectSelectorMode.LIST,
+                translation_key="meter",
+            )
+        ),
+    }
+    # Only Fluvius has a second day/night schedule, so only a Flemish entry
+    # is asked which one its meter counts on.
+    if defaults.get(CONF_REGION) == REGION_FLANDERS:
+        hours = defaults.get(CONF_DAY_HOURS)
+        fields[
+            vol.Required(
+                CONF_DAY_HOURS,
+                default=hours if hours in DAY_HOURS else DAY_HOURS_STANDARD,
+            )
+        ] = SelectSelector(
+            SelectSelectorConfig(
+                options=list(DAY_HOURS),
+                mode=SelectSelectorMode.LIST,
+                translation_key="day_hours",
+            )
+        )
+    return vol.Schema(fields)
 
 
 def _settlement_schema(defaults: dict[str, Any]) -> vol.Schema:

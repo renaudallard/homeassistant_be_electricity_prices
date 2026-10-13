@@ -59,6 +59,7 @@ from .const import (
     CONF_API_KEY,
     CONF_CONNECTION_KVA_TIER,
     CONF_CONTRACT,
+    CONF_DAY_HOURS,
     CONF_DOUBLE_FLOW_METER,
     CONF_DSO,
     CONF_PREVIOUS_CONTRACTS,
@@ -248,9 +249,10 @@ def recorded_contracts(data: Mapping[str, Any]) -> list[tuple[date, Mapping[str,
 _HOUSEHOLD_BLANKS = (CONF_SOLAR_KVA, CONF_API_KEY, CONF_CONNECTION_KVA_TIER)
 
 # Questions a copy recorded before they were asked cannot answer. Whether the
-# meter counts draw and injection apart is the meter's own, so a copy that
-# says no keeps it; one that does not say at all takes the entry's answer.
-_UNASKED_FACTS = (CONF_DOUBLE_FLOW_METER,)
+# meter counts draw and injection apart, and which hours its day register
+# counts, are the meter's own, so a copy that answers keeps its answer; one
+# that does not say at all takes the entry's.
+_UNASKED_FACTS = (CONF_DOUBLE_FLOW_METER, CONF_DAY_HOURS)
 
 
 def _with_household_facts(

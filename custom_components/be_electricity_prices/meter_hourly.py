@@ -44,8 +44,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from . import energy_meters
-from .const import CONF_REGION
-from .day_night import is_offpeak
+from .const import CONF_REGION, DAY_START
+from .day_night import day_start_for, is_offpeak
 from .energy_meters import (
     _LOGGER,
     _bills_injection,
@@ -138,7 +138,11 @@ async def _metered_hourly_kwh(
         return metered
     if metered.halves is not None:
         _spread_pair_readings(
-            metered.kwh, polled, metered.halves, str(entry.data.get(CONF_REGION, ""))
+            metered.kwh,
+            polled,
+            metered.halves,
+            str(entry.data.get(CONF_REGION, "")),
+            day_start=day_start_for(entry.data),
         )
     else:
         _spread_daily_readings(metered.kwh, polled)
@@ -446,6 +450,8 @@ def _spread_pair_readings(
     polled: Mapping[date, tuple[datetime, int]],
     halves: tuple[Mapping[datetime, float], Mapping[datetime, float]],
     region: str,
+    *,
+    day_start: int = DAY_START,
 ) -> None:
     """Spread, in place, the ``polled`` days of a day/night register pair read
     once a day, each register over the hours it counts.
@@ -462,7 +468,11 @@ def _spread_pair_readings(
     day, night = halves
     for first, count in polled.values():
         hours = [first + timedelta(hours=i) for i in range(count)]
-        off = [hour for hour in hours if is_offpeak(dt_util.as_local(hour), region)]
+        off = [
+            hour
+            for hour in hours
+            if is_offpeak(dt_util.as_local(hour), region, day_start=day_start)
+        ]
         peak = [hour for hour in hours if hour not in off]
         for hour in hours:
             kwh[hour] = 0.0

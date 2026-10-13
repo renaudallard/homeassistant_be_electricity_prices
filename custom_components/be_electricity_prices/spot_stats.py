@@ -45,6 +45,7 @@ from .const import (
     CONF_SUPPLIER,
     CUSTOM_CONTRACT_MONTHLY,
     CUSTOM_INJECTION_MODE_FORMULA,
+    DAY_START,
     RESOLUTION_HOURLY,
     RESOLUTION_QUARTER,
     SOLAR_REGIME_INJECTION,
@@ -757,7 +758,12 @@ def _spp_injection_spot(
 
 
 def _register_for(
-    local: datetime, meter: MeterType, dso_mode: DsoTariffMode, region: str
+    local: datetime,
+    meter: MeterType,
+    dso_mode: DsoTariffMode,
+    region: str,
+    *,
+    day_start: int = DAY_START,
 ) -> str:
     """The meter register a local hour's net kWh lands in under yearly net
     metering: the dedicated circuit for an exclusive-night meter, the CWaPE
@@ -769,12 +775,17 @@ def _register_for(
     if dso_mode == "impact":
         return dso_impact_band(local)
     if meter in ("bi", "dynamic"):
-        return "offpeak" if is_offpeak(local, region) else "peak"
+        return "offpeak" if is_offpeak(local, region, day_start=day_start) else "peak"
     return "single"
 
 
 def _day_register_weights(
-    weights: RlpWeights | None, day: date, bi_capable: bool, region: str
+    weights: RlpWeights | None,
+    day: date,
+    bi_capable: bool,
+    region: str,
+    *,
+    day_start: int = DAY_START,
 ) -> dict[str, float]:
     """A day's RLP mass per register, for the static per-day walk: the sum of
     the day's hourly weights landing in ``peak`` / ``offpeak`` on a bi-hourly
@@ -792,7 +803,7 @@ def _day_register_weights(
         if weight is None:
             continue
         register = (
-            ("offpeak" if is_offpeak(local, region) else "peak")
+            ("offpeak" if is_offpeak(local, region, day_start=day_start) else "peak")
             if bi_capable
             else "single"
         )

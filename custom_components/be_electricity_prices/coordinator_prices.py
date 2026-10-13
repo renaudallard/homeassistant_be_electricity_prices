@@ -67,6 +67,7 @@ from .contract_periods import (
     periods_need_spots,
     previous_periods,
 )
+from .day_night import day_start_for
 from .injection import (
     _bake_monthly_injection,
     _injection_bakes_to_month_mean,
@@ -74,10 +75,7 @@ from .injection import (
     _injection_needs_spot,
     _injection_price_for_slot,
 )
-from .pricing import (
-    PriceBreakdown,
-    compute_breakdown,
-)
+from .pricing import PriceBreakdown, compute_breakdown
 from .providers import (
     DynamicRates,
     SpotMonthlyRates,
@@ -539,6 +537,7 @@ class _PricesMixin:
         # not necessarily self._snapshot.
         dso = self.entry.data[CONF_DSO]
         region = self.entry.data[CONF_REGION]
+        day_start = day_start_for(self.entry.data)
         meter = self.entry.data.get(CONF_METER, METER_MONO)
         dso_mode = self.entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
 
@@ -547,7 +546,14 @@ class _PricesMixin:
             for utc_hour, spot in spot_prices.items():
                 local = dt_util.as_local(utc_hour)
                 hourly[utc_hour] = compute_breakdown(
-                    snap, dso, region, local, spot, meter, dso_mode
+                    snap,
+                    dso,
+                    region,
+                    local,
+                    spot,
+                    meter,
+                    dso_mode,
+                    day_start=day_start,
                 )
             return hourly
 
@@ -590,7 +596,14 @@ class _PricesMixin:
         while utc < end_utc:
             local = dt_util.as_local(utc)
             hourly[utc] = compute_breakdown(
-                snap, dso, region, local, slot_spot, meter, dso_mode
+                snap,
+                dso,
+                region,
+                local,
+                slot_spot,
+                meter,
+                dso_mode,
+                day_start=day_start,
             )
             utc += timedelta(hours=1)
         return hourly
@@ -623,6 +636,7 @@ class _PricesMixin:
             return {}
         meter = self.entry.data.get(CONF_METER, METER_MONO)
         region = self.entry.data.get(CONF_REGION, REGION_FLANDERS)
+        day_start = day_start_for(self.entry.data)
         out: dict[datetime, float] = {}
         for utc in grid_keys:
             rate = _injection_price_for_slot(
@@ -632,6 +646,7 @@ class _PricesMixin:
                 dt_util.as_local(utc),
                 meter=meter,
                 region=region,
+                day_start=day_start,
             )
             if rate is not None:
                 out[utc] = rate

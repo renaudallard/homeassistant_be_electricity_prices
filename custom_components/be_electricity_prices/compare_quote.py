@@ -57,6 +57,7 @@ from .const import (
     CONF_DSO_TARIFF_MODE,
     CONF_REGION,
     CONF_SOLAR_REGIME,
+    DAY_START,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DSO_MODE_BI_HORAIRE,
     MEASURED_FULL_YEAR_DAYS,
@@ -68,6 +69,7 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SOLAR_REGIME_NONE,
 )
+from .day_night import day_start_for
 from .fees import (
     _annual_static_fees,
     _compensation_kva,
@@ -310,11 +312,16 @@ def _annual_network_rebate(
     dso = entry.data.get(CONF_DSO, "")
     region = entry.data.get(CONF_REGION, "")
     dso_mode = entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
-    rates = _register_network_rates(snapshot, dso, region, meter, dso_mode)
+    day_start = day_start_for(entry.data)
+    rates = _register_network_rates(
+        snapshot, dso, region, meter, dso_mode, day_start=day_start
+    )
     if rates is None:
         return 0.0
     if register_weights is None or len(register_weights[0]) != len(rates):
-        clock = _register_weights(region, None, meter=meter, dso_mode=dso_mode)
+        clock = _register_weights(
+            region, None, meter=meter, dso_mode=dso_mode, day_start=day_start
+        )
         register_weights = (clock, clock)
     cons_w, inj_w = register_weights
     cons_total = sum(cons_w)
@@ -400,6 +407,7 @@ def _ytd_welcome_credit(
     regime: str,
     window_start: date,
     fee_proration: float,
+    day_start: int = DAY_START,
 ) -> float:
     """The welcome credit the year-to-date window has already accrued.
 
@@ -430,6 +438,7 @@ def _ytd_welcome_credit(
         dso_mode,
         hour_weights,
         component="energy",
+        day_start=day_start,
     )
     if energy_per_kwh is None:
         return 0.0
@@ -472,6 +481,7 @@ def _annual_welcome_credit(
     injection_kwh: float = 0.0,
     *,
     regime: str,
+    day_start: int = DAY_START,
 ) -> float:
     """The welcome credit the coming year takes off ``snapshot``'s annual quote.
 
@@ -499,6 +509,7 @@ def _annual_welcome_credit(
         dso_mode,
         hour_weights,
         component="energy",
+        day_start=day_start,
     )
     if energy_per_kwh is None:
         return 0.0
@@ -549,6 +560,7 @@ def _candidate_welcome_credit(
     injection_kwh: float = 0.0,
     *,
     regime: str,
+    day_start: int = DAY_START,
 ) -> float:
     """What a customer signing ``snapshot`` today is granted over the coming
     year, by :func:`_annual_welcome_credit`.
@@ -572,6 +584,7 @@ def _candidate_welcome_credit(
         consumption_kwh,
         injection_kwh,
         regime=regime,
+        day_start=day_start,
     )
 
 

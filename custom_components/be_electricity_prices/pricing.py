@@ -50,6 +50,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
 from .const import (
+    DAY_START,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
@@ -188,6 +189,7 @@ def _routed_rate(
     *,
     bi_capable: bool,
     dso_tariff_mode: DsoTariffMode = "bi_horaire",
+    day_start: int = DAY_START,
 ) -> float:
     """Meter-routing shared by the Fixed and Variable energy branches.
 
@@ -210,7 +212,11 @@ def _routed_rate(
             if energy.single_under_impact:
                 return base
             return energy.offpeak if dso_impact_band(when) == "eco" else energy.peak
-        return energy.offpeak if is_offpeak(when, region) else energy.peak
+        return (
+            energy.offpeak
+            if is_offpeak(when, region, day_start=day_start)
+            else energy.peak
+        )
     return base
 
 
@@ -221,6 +227,8 @@ def energy_eur_per_kwh(
     meter: MeterType = "mono",
     region: str = REGION_FLANDERS,
     dso_tariff_mode: DsoTariffMode = "bi_horaire",
+    *,
+    day_start: int = DAY_START,
 ) -> float:
     """Return the energy component in EUR/kWh for the given hour.
 
@@ -242,6 +250,7 @@ def energy_eur_per_kwh(
             region,
             bi_capable=bi_capable,
             dso_tariff_mode=dso_tariff_mode,
+            day_start=day_start,
         )
     if isinstance(energy, VariableRates):
         if (
@@ -271,6 +280,7 @@ def energy_eur_per_kwh(
             region,
             bi_capable=bi_capable,
             dso_tariff_mode=dso_tariff_mode,
+            day_start=day_start,
         )
         if energy.ceiling_single is None:
             return rate
@@ -297,6 +307,7 @@ def energy_eur_per_kwh(
                 region,
                 bi_capable=bi_capable,
                 dso_tariff_mode=dso_tariff_mode,
+                day_start=day_start,
             ),
         )
     if isinstance(energy, DynamicRates):
@@ -392,7 +403,7 @@ def energy_eur_per_kwh(
             if dso_tariff_mode == "impact":
                 off = dso_impact_band(when) == "eco"
             else:
-                off = is_offpeak(when, region)
+                off = is_offpeak(when, region, day_start=day_start)
             if off:
                 factor = energy.factor_offpeak
                 base = energy.base_offpeak or 0.0
@@ -423,6 +434,7 @@ def energy_eur_per_kwh(
                 region,
                 bi_capable=bi_capable,
                 dso_tariff_mode=dso_tariff_mode,
+                day_start=day_start,
             ),
         )
     if isinstance(energy, TimeOfUseRates):
@@ -720,6 +732,8 @@ def network_eur_per_kwh(
     meter: MeterType = "mono",
     dso_tariff_mode: DsoTariffMode = "bi_horaire",
     region: str = REGION_FLANDERS,
+    *,
+    day_start: int = DAY_START,
 ) -> float:
     """Distribution + transport (EUR/kWh) for the given hour.
 
@@ -785,7 +799,7 @@ def network_eur_per_kwh(
     ):
         dist = (
             dso.distribution_offpeak
-            if is_offpeak(when, region)
+            if is_offpeak(when, region, day_start=day_start)
             else dso.distribution_peak
         )
     else:
@@ -844,6 +858,8 @@ def compute_breakdown(
     spot_eur_per_kwh: float | None = None,
     meter: MeterType = "mono",
     dso_tariff_mode: DsoTariffMode = "bi_horaire",
+    *,
+    day_start: int = DAY_START,
 ) -> PriceBreakdown:
     """Return the all-in EUR/kWh breakdown for one hour.
 
@@ -857,9 +873,17 @@ def compute_breakdown(
     """
     overlay = _require_overlay(snapshot, dso_key)
     energy = energy_eur_per_kwh(
-        snapshot.energy, when, spot_eur_per_kwh, meter, region, dso_tariff_mode
+        snapshot.energy,
+        when,
+        spot_eur_per_kwh,
+        meter,
+        region,
+        dso_tariff_mode,
+        day_start=day_start,
     )
-    network = network_eur_per_kwh(overlay, when, meter, dso_tariff_mode, region)
+    network = network_eur_per_kwh(
+        overlay, when, meter, dso_tariff_mode, region, day_start=day_start
+    )
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
     return _finalize_breakdown(
         energy,
@@ -877,6 +901,8 @@ def compute_network_and_taxes(
     when: datetime,
     meter: MeterType = "mono",
     dso_tariff_mode: DsoTariffMode = "bi_horaire",
+    *,
+    day_start: int = DAY_START,
 ) -> PriceBreakdown:
     """:func:`compute_breakdown` for an hour with no spot, energy leg zeroed.
 
@@ -894,7 +920,9 @@ def compute_network_and_taxes(
     one.
     """
     overlay = _require_overlay(snapshot, dso_key)
-    network = network_eur_per_kwh(overlay, when, meter, dso_tariff_mode, region)
+    network = network_eur_per_kwh(
+        overlay, when, meter, dso_tariff_mode, region, day_start=day_start
+    )
     taxes = taxes_eur_per_kwh(snapshot.taxes, region)
     return _finalize_breakdown(
         0.0,

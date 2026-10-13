@@ -57,6 +57,7 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
 )
+from .day_night import day_start_for
 from .energy_meters import _hourly_injection_sensors
 from .fees import bills_gross_network, gross_network_rebate, in_first_contract_year
 from .injection import (
@@ -211,6 +212,7 @@ async def _ytd_hourly_energy(
     current card rather than today's, as the per-day walk does.
     """
     region = entry.data.get(CONF_REGION, "")
+    day_start = day_start_for(entry.data)
     dso = entry.data.get(CONF_DSO, "")
     contract = contract or entry.data[CONF_CONTRACT]
     meter = meter or entry.data.get(CONF_METER, METER_MONO)
@@ -402,11 +404,18 @@ async def _ytd_hourly_energy(
                 # on one instead of dropping the hour whole; the energy term is
                 # the only part actually unknown.
                 bd = compute_network_and_taxes(
-                    snap_h, dso, region, local, meter, dso_mode
+                    snap_h, dso, region, local, meter, dso_mode, day_start=day_start
                 )
             else:
                 bd = compute_breakdown(
-                    snap_h, dso, region, local, spot, meter, dso_mode
+                    snap_h,
+                    dso,
+                    region,
+                    local,
+                    spot,
+                    meter,
+                    dso_mode,
+                    day_start=day_start,
                 )
                 if not unrecorded:
                     hours_priced += 1
@@ -446,7 +455,7 @@ async def _ytd_hourly_energy(
             # priced by _NetAllocation after the walk, on the profile when it
             # is loaded, else as metered.
             netting.add(
-                _register_for(local, meter, dso_mode, region),
+                _register_for(local, meter, dso_mode, region, day_start=day_start),
                 kwh_cons - kwh_inj,
                 bd.all_in,
                 _rlp_hour_weight(rlp_weights, local),
@@ -523,6 +532,7 @@ async def _ytd_hourly_energy(
                 when=local,
                 meter=meter,
                 region=region,
+                day_start=day_start,
             )
             if inj_rate is not None:
                 d_cost -= kwh_inj * inj_rate

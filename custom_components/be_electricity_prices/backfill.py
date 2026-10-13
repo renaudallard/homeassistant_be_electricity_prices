@@ -272,6 +272,7 @@ async def _backfill_price_sensors(
             hass, seg_entry, coordinator, seg_hours, snapshot=seg_snap
         )
         region = ctx.region
+        day_start = ctx.day_start
         dso = ctx.dso
         meter = ctx.meter
         dso_mode = ctx.dso_mode
@@ -300,7 +301,14 @@ async def _backfill_price_sensors(
                 continue
             try:
                 bd = compute_breakdown(
-                    snap_h, dso, region, local, spot, meter, dso_mode
+                    snap_h,
+                    dso,
+                    region,
+                    local,
+                    spot,
+                    meter,
+                    dso_mode,
+                    day_start=day_start,
                 )
             except (KeyError, ValueError):
                 # Missing DSO row for an archived month or non-static rate
@@ -332,6 +340,7 @@ async def _backfill_price_sensors(
                         today=today,
                         meter=meter,
                         region=region,
+                        day_start=day_start,
                     )
                     if inj_rate is None:
                         continue

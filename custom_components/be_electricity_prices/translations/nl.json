@@ -49,7 +49,11 @@
         "title": "Metertype",
         "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten. Het exclusief-nachtcircuit is alleen voor een tweede invoer voor een aparte meter die enkel 's nachts telt: hier gekozen rekent het de hele invoer tegen het nachttarief aan.",
         "data": {
-          "meter": "Meter"
+          "meter": "Meter",
+          "day_hours": "Uren van het dagtarief"
+        },
+        "data_description": {
+          "day_hours": "Fluvius rekent op weekdagen het dagtarief aan van 07:00 tot 22:00, behalve in de gemeenten op zijn lijst, waar het van 06:00 tot 21:00 loopt. Staat een gemeente met een sterretje op de lijst, dan werd het schakelmoment bij de plaatsing van de meter bepaald: kijk dan uw meter na. Enkel gebruikt bij een tweevoudige of digitale meter."
         }
       },
       "professional": {
@@ -395,7 +399,11 @@
         "title": "Metertype",
         "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten. Het exclusief-nachtcircuit is alleen voor een tweede invoer voor een aparte meter die enkel 's nachts telt: hier gekozen rekent het de hele invoer tegen het nachttarief aan.",
         "data": {
-          "meter": "Meter"
+          "meter": "Meter",
+          "day_hours": "Uren van het dagtarief"
+        },
+        "data_description": {
+          "day_hours": "Fluvius rekent op weekdagen het dagtarief aan van 07:00 tot 22:00, behalve in de gemeenten op zijn lijst, waar het van 06:00 tot 21:00 loopt. Staat een gemeente met een sterretje op de lijst, dan werd het schakelmoment bij de plaatsing van de meter bepaald: kijk dan uw meter na. Enkel gebruikt bij een tweevoudige of digitale meter."
         }
       },
       "professional": {
@@ -658,6 +666,12 @@
       "options": {
         "current": "Vast tarief",
         "formula": "Formule (factor x index + basis)"
+      }
+    },
+    "day_hours": {
+      "options": {
+        "07_22": "07:00 tot 22:00 (standaard)",
+        "06_21": "06:00 tot 21:00"
       }
     }
   },

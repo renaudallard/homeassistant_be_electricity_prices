@@ -64,7 +64,7 @@ class PriceBreakdown:      # pricing.py
 | `_routed_rate(base, energy, when, meter, region, *, bi_capable, dso_tariff_mode)` | `pricing.py` | `float` | Shared Fixed/Variable meter routing. |
 | `tou_slot(when, weekend_rule="weekend_offpeak")` | `pricing.py` | `"peak"|"transition"|"offpeak"` | TOU band for a datetime. |
 | `dso_impact_band(when)` | `pricing.py` | `"pic"|"medium"|"eco"` | Wallonia Tarif Impact band for a datetime. |
-| `is_offpeak(when, region)` | `day_night.py` | `bool` | Classic bi-horaire off-peak test, per region. |
+| `is_offpeak(when, region, *, day_start)` | `day_night.py` | `bool` | Classic bi-horaire off-peak test, per region; `day_start` is the hour the entry's day register starts (`day_start_for`). |
 | `is_belgian_holiday(d)` | `day_night.py` | `bool` | Federal public-holiday test. |
 | `static_energy_eur_per_kwh(energy, band)` | `pricing.py` | `float | None` | Stable (no time-of-day) rate for a band. |
 | `static_breakdown(snapshot, dso_key, region, band, dso_tariff_mode)` | `pricing.py` | `PriceBreakdown | None` | All-in for a static band, used by the YTD/current-year path. |
@@ -1133,7 +1133,7 @@ when the DSO does not publish Impact rates (`const.py`).
 
 | Region | Off-peak schedule |
 | --- | --- |
-| Flanders (Fluvius) | Mon-Fri 22:00-07:00 and all weekend. Weekday public holidays bill at the DAY rate (the meter clock switches on weekday/weekend only). |
+| Flanders (Fluvius) | Mon-Fri 22:00-07:00 and all weekend, or Mon-Fri 21:00-06:00 in the municipalities on Fluvius's list (`CONF_DAY_HOURS`, issue #131). Weekday public holidays bill at the DAY rate (the meter clock switches on weekday/weekend only). |
 | Brussels (Sibelga) | 22:00-07:00, all weekend, AND weekday public holidays (historical Brussels exception). |
 | Wallonia (from 2026-01-01) | One uniform schedule every day including weekends and holidays: 22:00-07:00 and 11:00-17:00. |
 
@@ -1143,6 +1143,15 @@ regional holidays are deliberately excluded because DSO billing applies federal
 rules uniformly (`day_night.py`). The fixed-holiday set is lifted to module
 scope so it is not reallocated on every call along the 8760-iteration backfill
 path (`day_night.py`).
+
+The Flemish schedule is the household's, not the region's: `day_start_for`
+(`day_night.py`) reads `CONF_DAY_HOURS` off the entry data and answers 6 for a
+Flemish entry on the 06:00-21:00 schedule and 7 for every other entry, so a
+stray answer outside Flanders is inert. Every function that decides a band
+takes it as the keyword `day_start`, defaulting to 7, and the functions that
+receive the entry read it there. A default left in place at a call site bills
+the standard hours in silence, so `tests/test_day_hours.py` walks the
+package's calls and fails on any that pass a region without a `day_start`.
 
 ### Exclusive-night yearly fee routing
 

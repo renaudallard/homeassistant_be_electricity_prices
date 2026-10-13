@@ -49,7 +49,11 @@
         "title": "Type de compteur",
         "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique. Le circuit exclusif nuit ne sert qu'à une seconde entrée couvrant un compteur séparé qui ne compte que la nuit : choisi ici, il facture toute l'entrée au tarif de nuit.",
         "data": {
-          "meter": "Compteur"
+          "meter": "Compteur",
+          "day_hours": "Heures du tarif jour"
+        },
+        "data_description": {
+          "day_hours": "Fluvius facture le tarif jour de 07:00 à 22:00 en semaine, sauf dans les communes de sa liste, où il court de 06:00 à 21:00. Pour une commune marquée d'un astérisque sur la liste, l'heure de basculement a été fixée à la pose du compteur : vérifiez le vôtre. Utilisé uniquement avec un compteur bi-horaire ou numérique."
         }
       },
       "professional": {
@@ -395,7 +399,11 @@
         "title": "Type de compteur",
         "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique. Le circuit exclusif nuit ne sert qu'à une seconde entrée couvrant un compteur séparé qui ne compte que la nuit : choisi ici, il facture toute l'entrée au tarif de nuit.",
         "data": {
-          "meter": "Compteur"
+          "meter": "Compteur",
+          "day_hours": "Heures du tarif jour"
+        },
+        "data_description": {
+          "day_hours": "Fluvius facture le tarif jour de 07:00 à 22:00 en semaine, sauf dans les communes de sa liste, où il court de 06:00 à 21:00. Pour une commune marquée d'un astérisque sur la liste, l'heure de basculement a été fixée à la pose du compteur : vérifiez le vôtre. Utilisé uniquement avec un compteur bi-horaire ou numérique."
         }
       },
       "professional": {
@@ -658,6 +666,12 @@
       "options": {
         "current": "Tarif fixe",
         "formula": "Formule (facteur x indice + base)"
+      }
+    },
+    "day_hours": {
+      "options": {
+        "07_22": "07:00 à 22:00 (standard)",
+        "06_21": "06:00 à 21:00"
       }
     }
   },

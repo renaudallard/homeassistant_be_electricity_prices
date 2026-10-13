@@ -76,6 +76,7 @@ from .contract_periods import (
     previous_periods,
 )
 from .coordinator import BePricesCoordinator
+from .day_night import day_start_for
 from .injection import _injection_hourly_on_cohort
 from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
@@ -261,6 +262,8 @@ class _BackfillContext:
     """
 
     region: str
+    # The hour the day register starts (day_night.day_start_for).
+    day_start: int
     dso: str
     meter: MeterType
     dso_mode: DsoTariffMode
@@ -377,6 +380,7 @@ async def _build_context(
             await ensure_power_term(coordinator._session, year)
     return _BackfillContext(
         region=region,
+        day_start=day_start_for(entry.data),
         dso=entry.data[CONF_DSO],
         meter=entry.data.get(CONF_METER, METER_MONO),
         dso_mode=entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE),

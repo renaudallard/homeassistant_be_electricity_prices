@@ -49,6 +49,7 @@ from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
+    CONF_DAY_HOURS,
     CONF_DIRECT_DEBIT,
     CONF_DSO_TARIFF_MODE,
     CONF_INCLUDE_VAT,
@@ -346,6 +347,11 @@ class _WizardStepsMixin:
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._data.update(user_input)
+            if self._data[CONF_REGION] != REGION_FLANDERS:
+                # Asked of a Flemish entry only. An answer kept from before a
+                # move to another region would be inert, and would come back
+                # into force if the entry moved back without being asked.
+                self._data.pop(CONF_DAY_HOURS, None)
             return await self._ask_professional()
         return self.async_show_form(
             step_id="meter",

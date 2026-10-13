@@ -49,7 +49,11 @@
         "title": "Meter type",
         "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts. The exclusive-night circuit is only for a second entry covering a separate night-only meter: chosen here, it bills the whole entry at the night rate.",
         "data": {
-          "meter": "Meter"
+          "meter": "Meter",
+          "day_hours": "Day tariff hours"
+        },
+        "data_description": {
+          "day_hours": "Fluvius bills the day rate from 07:00 to 22:00 on weekdays, except in the municipalities on its list, where it runs from 06:00 to 21:00. Where the list marks a municipality with an asterisk, the switch time was set when the meter was installed, so check yours. Only used with a dual-time or digital meter."
         }
       },
       "professional": {
@@ -395,7 +399,11 @@
         "title": "Meter type",
         "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts. The exclusive-night circuit is only for a second entry covering a separate night-only meter: chosen here, it bills the whole entry at the night rate.",
         "data": {
-          "meter": "Meter"
+          "meter": "Meter",
+          "day_hours": "Day tariff hours"
+        },
+        "data_description": {
+          "day_hours": "Fluvius bills the day rate from 07:00 to 22:00 on weekdays, except in the municipalities on its list, where it runs from 06:00 to 21:00. Where the list marks a municipality with an asterisk, the switch time was set when the meter was installed, so check yours. Only used with a dual-time or digital meter."
         }
       },
       "professional": {
@@ -658,6 +666,12 @@
       "options": {
         "current": "Flat rate",
         "formula": "Formula (factor x index + base)"
+      }
+    },
+    "day_hours": {
+      "options": {
+        "07_22": "07:00 to 22:00 (standard)",
+        "06_21": "06:00 to 21:00"
       }
     }
   },

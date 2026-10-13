@@ -96,6 +96,7 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .contract_periods import billed_from, previous_periods
+from .day_night import day_start_for
 from .flow_contracts import _contract_has_spot_injection, _contract_kind
 from .meter_daily import _measured_kwh
 from .meter_hourly import (
@@ -218,6 +219,7 @@ class _HouseholdMixin:
         """
         current = self.config_entry.data
         region = current[CONF_REGION]
+        day_start = day_start_for(current)
         dso = current[CONF_DSO]
         # Comparison may override the meter type for static contracts;
         # falls back to the current entry's setting.
@@ -324,11 +326,11 @@ class _HouseholdMixin:
 
                 try:
                     client = EntsoeClient(api_key, async_get_clientsession(self.hass))
-                    day_start = now_utc.replace(
+                    midnight = now_utc.replace(
                         hour=0, minute=0, second=0, microsecond=0
                     )
                     spot_dict = await client.fetch_day_ahead(
-                        day_start, day_start + timedelta(days=1)
+                        midnight, midnight + timedelta(days=1)
                     )
                 except Exception:  # degrade to '-' for the dynamic side
                     pass
@@ -721,6 +723,7 @@ class _HouseholdMixin:
                 meter_type,
                 mode,
                 inj_hour_weights,
+                day_start=day_start,
             )
 
         signing_snapshot = current_snapshot
@@ -735,6 +738,7 @@ class _HouseholdMixin:
                 current_meter,
                 dso_mode,
                 hour_weights,
+                day_start=day_start,
             )
             current_export_per_kwh = await _export_rate_for(
                 current_snapshot, current_meter, dso_mode
@@ -765,9 +769,11 @@ class _HouseholdMixin:
                 annual_kwh,
                 rolling_inj_kwh,
                 regime=regime,
+                day_start=day_start,
             )
         return _HouseholdQuote(
             region=region,
+            day_start=day_start,
             dso=dso,
             current_meter=current_meter,
             dso_mode=dso_mode,
@@ -799,10 +805,18 @@ class _HouseholdMixin:
             inj_hour_weights=inj_hour_weights,
             register_weights=(
                 _register_weights(
-                    region, hour_weights, meter=current_meter, dso_mode=dso_mode
+                    region,
+                    hour_weights,
+                    meter=current_meter,
+                    dso_mode=dso_mode,
+                    day_start=day_start,
                 ),
                 _register_weights(
-                    region, inj_hour_weights, meter=current_meter, dso_mode=dso_mode
+                    region,
+                    inj_hour_weights,
+                    meter=current_meter,
+                    dso_mode=dso_mode,
+                    day_start=day_start,
                 ),
             ),
             current_per_kwh=current_per_kwh,

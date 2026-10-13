@@ -55,6 +55,7 @@ from .backfill_window import (
 from .cohort import _parse_iso_date
 from .const import (
     CONF_CONTRACT_START_DATE,
+    DAY_START,
     METER_MONO,
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
@@ -126,6 +127,7 @@ def _injection_rate_for_hour(
     today: date,
     meter: MeterType = METER_MONO,
     region: str = REGION_FLANDERS,
+    day_start: int = DAY_START,
 ) -> float | None:
     """The feed-in rate for one backfilled hour, or None when it has none.
 
@@ -185,6 +187,7 @@ def _injection_rate_for_hour(
         when=local,
         meter=meter,
         region=region,
+        day_start=day_start,
     )
 
 
@@ -495,6 +498,7 @@ async def _accrue_cost(
     bill = 0.0
     ctx = await _build_context(hass, entry, coordinator, hours, snapshot=snapshot)
     region = ctx.region
+    day_start = ctx.day_start
     dso = ctx.dso
     meter = ctx.meter
     dso_mode = ctx.dso_mode
@@ -613,10 +617,19 @@ async def _accrue_cost(
         no_spot = spot is None and _energy_needs_spot(snap_h.energy)
         try:
             bd = (
-                compute_network_and_taxes(snap_h, dso, region, local, meter, dso_mode)
+                compute_network_and_taxes(
+                    snap_h, dso, region, local, meter, dso_mode, day_start=day_start
+                )
                 if no_spot
                 else compute_breakdown(
-                    snap_h, dso, region, local, spot, meter, dso_mode
+                    snap_h,
+                    dso,
+                    region,
+                    local,
+                    spot,
+                    meter,
+                    dso_mode,
+                    day_start=day_start,
                 )
             )
         except (KeyError, ValueError):
@@ -638,7 +651,7 @@ async def _accrue_cost(
                 running_credit_kwh += cons
             if is_compensation:
                 netting.add(
-                    _register_for(local, meter, dso_mode, region),
+                    _register_for(local, meter, dso_mode, region, day_start=day_start),
                     cons - inj,
                     bd.all_in,
                     _rlp_hour_weight(ctx.rlp_weights, local),
@@ -661,6 +674,7 @@ async def _accrue_cost(
                     today=today,
                     meter=meter,
                     region=region,
+                    day_start=day_start,
                 )
                 if inj_rate is not None:
                     running_energy -= inj * inj_rate

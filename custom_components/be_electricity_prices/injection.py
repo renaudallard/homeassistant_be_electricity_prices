@@ -46,11 +46,12 @@ from .const import (
     CONF_METER,
     CONF_REGION,
     CONF_SOLAR_REGIME,
+    DAY_START,
     METER_MONO,
     REGION_FLANDERS,
     SOLAR_REGIME_INJECTION,
 )
-from .day_night import is_offpeak
+from .day_night import day_start_for, is_offpeak
 from .pricing import MeterType, tou_slot
 from .providers._rates import (
     DynamicRates,
@@ -340,6 +341,7 @@ def _tou_injection_rate(
     *,
     meter: MeterType = METER_MONO,
     region: str = REGION_FLANDERS,
+    day_start: int = DAY_START,
 ) -> float | None:
     """Per-slot injection rate for a time-of-use contract whose feed-in
     tariff varies by slot (Engie Empower Flextime), or per register for a
@@ -380,7 +382,7 @@ def _tou_injection_rate(
     if rule is None:
         if not inj.bi_hourly or meter not in ("bi", "dynamic"):
             return None
-        night = is_offpeak(when, region)
+        night = is_offpeak(when, region, day_start=day_start)
         registers = _register_coefficients(inj)
         if (
             registers is not None
@@ -564,6 +566,7 @@ def _injection_price_for_slot(
     *,
     meter: MeterType = METER_MONO,
     region: str = REGION_FLANDERS,
+    day_start: int = DAY_START,
 ) -> float | None:
     """Injection price in EUR/kWh for a single slot.
 
@@ -587,7 +590,9 @@ def _injection_price_for_slot(
     credit would flip to a spot-varying one on the several dynamic-injection
     cards that publish BOTH a ``current`` and ``factor``/``base``.
     """
-    tou_rate = _tou_injection_rate(inj, energy, when, meter=meter, region=region)
+    tou_rate = _tou_injection_rate(
+        inj, energy, when, meter=meter, region=region, day_start=day_start
+    )
     if tou_rate is not None:
         return tou_rate
     if _injection_is_spot_formula(inj, energy):
@@ -625,6 +630,7 @@ def _compute_injection_price(
         dt_util.now(),
         meter=entry.data.get(CONF_METER, METER_MONO),
         region=entry.data.get(CONF_REGION, REGION_FLANDERS),
+        day_start=day_start_for(entry.data),
     )
 
 
@@ -637,13 +643,15 @@ def _historical_injection_rate(
     when: datetime | None = None,
     meter: MeterType = METER_MONO,
     region: str = REGION_FLANDERS,
+    day_start: int = DAY_START,
 ) -> float | None:
     """Best-effort EUR/kWh injection rate for a *past* hour.
 
     Mirrors the live ``_compute_injection_price`` priority: a per-slot TOU
     or per-register rate first (Engie Empower Flextime, Trevion Vast on a
-    two-register meter, when ``energy`` + ``when`` are given; ``meter`` and
-    ``region`` say which registers and whose day/night schedule, and default
+    two-register meter, when ``energy`` + ``when`` are given; ``meter``,
+    ``region`` and ``day_start`` say which registers and whose day/night
+    schedule, and default
     to a single-register meter, which is credited at ``current``), then the
     spot-indexed formula ``factor*spot + base`` when both
     the formula and a historical spot are available, falling back to the
@@ -676,7 +684,13 @@ def _historical_injection_rate(
             rate
             for rate in (
                 _historical_injection_rate(
-                    injection, q, energy=energy, when=when, meter=meter, region=region
+                    injection,
+                    q,
+                    energy=energy,
+                    when=when,
+                    meter=meter,
+                    region=region,
+                    day_start=day_start,
                 )
                 for q in quarters
             )
@@ -687,7 +701,13 @@ def _historical_injection_rate(
         # ``spot`` is the month mean whenever the caller settles this credit
         # on one, which is exactly when a month-indexed triplet may use it.
         tou_rate = _tou_injection_rate(
-            injection, energy, when, spot, meter=meter, region=region
+            injection,
+            energy,
+            when,
+            spot,
+            meter=meter,
+            region=region,
+            day_start=day_start,
         )
         if tou_rate is not None:
             return tou_rate
