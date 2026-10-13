@@ -3562,7 +3562,7 @@ async def test_compare_tou_uses_weighted_average_across_slots(
     # each kind over the coming year and weight the published slot
     # durations by them. A representative week put the ten weekday
     # holidays at their weekday mix, 0,0026 EUR/kWh high on this card.
-    from custom_components.be_electricity_prices.pricing import is_belgian_holiday
+    from custom_components.be_electricity_prices.day_night import is_belgian_holiday
 
     weekday_day = 9 * 0.30 + 9 * 0.20 + 6 * 0.10
     offpeak_day = 24 * 0.10
@@ -3914,7 +3914,7 @@ def test_compare_injection_credit_averages_a_register_pair_over_the_year(
     from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
-    from custom_components.be_electricity_prices.pricing import is_offpeak
+    from custom_components.be_electricity_prices.day_night import is_offpeak
     from custom_components.be_electricity_prices.providers._rates import (
         FixedRates,
         InjectionRates,

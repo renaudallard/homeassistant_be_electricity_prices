@@ -64,8 +64,8 @@ class PriceBreakdown:      # pricing.py
 | `_routed_rate(base, energy, when, meter, region, *, bi_capable, dso_tariff_mode)` | `pricing.py` | `float` | Shared Fixed/Variable meter routing. |
 | `tou_slot(when, weekend_rule="weekend_offpeak")` | `pricing.py` | `"peak"|"transition"|"offpeak"` | TOU band for a datetime. |
 | `dso_impact_band(when)` | `pricing.py` | `"pic"|"medium"|"eco"` | Wallonia Tarif Impact band for a datetime. |
-| `is_offpeak(when, region)` | `pricing.py` | `bool` | Classic bi-horaire off-peak test, per region. |
-| `is_belgian_holiday(d)` | `pricing.py` | `bool` | Federal public-holiday test. |
+| `is_offpeak(when, region)` | `day_night.py` | `bool` | Classic bi-horaire off-peak test, per region. |
+| `is_belgian_holiday(d)` | `day_night.py` | `bool` | Federal public-holiday test. |
 | `static_energy_eur_per_kwh(energy, band)` | `pricing.py` | `float | None` | Stable (no time-of-day) rate for a band. |
 | `static_breakdown(snapshot, dso_key, region, band, dso_tariff_mode)` | `pricing.py` | `PriceBreakdown | None` | All-in for a static band, used by the YTD/current-year path. |
 | `yearly_fixed_fee_for_meter(energy, meter)` | `pricing.py` | `float` | Supplier yearly fixed fee for the meter type. |
@@ -1129,7 +1129,7 @@ when the DSO does not publish Impact rates (`const.py`).
 ### is_offpeak schedule, per region
 
 `is_offpeak` differs by region and Wallonia changed on 2026-01-01
-(`pricing.py`):
+(`day_night.py`):
 
 | Region | Off-peak schedule |
 | --- | --- |
@@ -1140,9 +1140,9 @@ when the DSO does not publish Impact rates (`const.py`).
 `is_belgian_holiday` covers the seven fixed federal dates plus Easter Monday
 (+1), Ascension (+39) and Pentecost Monday (+50) off Gregorian-computus Easter;
 regional holidays are deliberately excluded because DSO billing applies federal
-rules uniformly (`pricing.py`). The fixed-holiday set is lifted to module
+rules uniformly (`day_night.py`). The fixed-holiday set is lifted to module
 scope so it is not reallocated on every call along the 8760-iteration backfill
-path (`pricing.py`).
+path (`day_night.py`).
 
 ### Exclusive-night yearly fee routing
 

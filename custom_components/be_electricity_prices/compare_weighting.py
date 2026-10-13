@@ -164,7 +164,8 @@ def _register_hours(
     annual clamp, which lets one band pay off another, and a bi-hourly one
     split its year day/night while the engine split it three ways.
     """
-    from .pricing import dso_impact_band, is_offpeak
+    from .day_night import is_offpeak
+    from .pricing import dso_impact_band
 
     days = float((date(year + 1, 1, 1) - date(year, 1, 1)).days)
     if meter != METER_EXCLUSIVE_NIGHT and dso_mode == DSO_MODE_IMPACT:
@@ -640,9 +641,10 @@ def _year_avg_all_in(
     summer-only cheap midday of Luminus SmartFlex the kWh of a winter one.
     Returns None on any compute failure so the caller can fall back.
     """
+    from .day_night import is_belgian_holiday
     from .injection import _tou_weekend_rule
     from .meter_hourly import HourShares
-    from .pricing import _is_smartflex_summer, compute_breakdown, is_belgian_holiday
+    from .pricing import _is_smartflex_summer, compute_breakdown
     from .spot_stats import _register_for
 
     seasons = (

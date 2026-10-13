@@ -45,6 +45,7 @@ from homeassistant.util import dt as dt_util
 
 from . import energy_meters
 from .const import CONF_REGION
+from .day_night import is_offpeak
 from .energy_meters import (
     _LOGGER,
     _bills_injection,
@@ -60,7 +61,6 @@ from .meter_faults import (
     _stopped,
     _total_stands_in,
 )
-from .pricing import is_offpeak
 from .year_ahead import last_year
 
 # The fewest past days a side must have moved on before it can count as read

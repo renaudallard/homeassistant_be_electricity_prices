@@ -3594,7 +3594,7 @@ async def test_a_register_pair_read_once_a_day_is_billed_by_register_hour_by_hou
     """A contract billed by the hour walks the hours too, so the live figure
     lost which register a kWh was read on as well. It now equals the same
     daily totals put on the hours of their own band from the start."""
-    from custom_components.be_electricity_prices.pricing import is_offpeak
+    from custom_components.be_electricity_prices.day_night import is_offpeak
 
     last = _PAIR_TODAY
     hours = bf._hour_iter(

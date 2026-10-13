@@ -50,13 +50,8 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SUPPLIER_CUSTOM,
 )
-from .pricing import (
-    DsoTariffMode,
-    MeterType,
-    dso_impact_band,
-    is_offpeak,
-    slot_start,
-)
+from .day_night import is_offpeak
+from .pricing import DsoTariffMode, MeterType, dso_impact_band, slot_start
 from .providers._rates import (
     DynamicRates,
     EnergyRates,

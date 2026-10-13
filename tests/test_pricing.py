@@ -33,14 +33,16 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from custom_components.be_electricity_prices.day_night import (
+    is_belgian_holiday,
+    is_offpeak,
+)
 from custom_components.be_electricity_prices.pricing import (
     DsoTariffMode,
     MeterType,
     compute_breakdown,
     dso_impact_band,
     energy_eur_per_kwh,
-    is_belgian_holiday,
-    is_offpeak,
     network_eur_per_kwh,
     taxes_eur_per_kwh,
     taxes_vat_exempt_eur_per_kwh,

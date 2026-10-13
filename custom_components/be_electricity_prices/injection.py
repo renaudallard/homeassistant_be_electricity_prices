@@ -50,11 +50,8 @@ from .const import (
     REGION_FLANDERS,
     SOLAR_REGIME_INJECTION,
 )
-from .pricing import (
-    MeterType,
-    is_offpeak,
-    tou_slot,
-)
+from .day_night import is_offpeak
+from .pricing import MeterType, tou_slot
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
