@@ -1361,7 +1361,8 @@ async def _check_cociter(
     session: aiohttp.ClientSession, cociter: types.ModuleType
 ) -> None:
     expected_dso_keys = _WALLONIA_DSO_KEYS
-    for cid in ("cociter_variable", "cociter_variable_impact", "cociter_dynamic"):
+    for contract in cociter.EXTRACTOR.contracts:
+        cid = contract.id
         prefix = f"cociter/{cid}"
         try:
             snap = await _fetch_with_retry(
@@ -1771,10 +1772,10 @@ async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) 
 async def _check_energiebe(
     session: aiohttp.ClientSession, energiebe: types.ModuleType
 ) -> None:
-    # Three products, three independently published PDFs, three fetches: each
-    # card is its own document and drifts on its own.
-    for cid in ("energiebe_dynamic", "energiebe_variable", "energiebe_fixed"):
-        await _check_flanders_card(session, energiebe, "energiebe", cid)
+    # One independently published PDF per product, one fetch each: each card
+    # is its own document and drifts on its own.
+    for contract in energiebe.EXTRACTOR.contracts:
+        await _check_flanders_card(session, energiebe, "energiebe", contract.id)
 
 
 async def _check_energyknights(

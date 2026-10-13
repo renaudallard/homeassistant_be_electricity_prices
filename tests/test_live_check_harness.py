@@ -1156,6 +1156,42 @@ def test_bytes_are_counted_from_the_providers_reads(
     assert lc.METRICS["ecofix"]["bytes"] == 5.0
 
 
+def test_every_registered_supplier_is_checked() -> None:
+    """_SUPPLIERS is written by hand; a supplier added to the registry and
+    not here would never be fetched by the live check. The custom formula
+    has no card to fetch."""
+    from custom_components.be_electricity_prices.providers import all_extractors
+
+    registered = {e.id for e in all_extractors()} - {"custom"}
+    assert set(lc._SUPPLIERS) == registered
+
+
+@pytest.mark.parametrize(
+    ("supplier", "region"), [("cociter", "wallonia"), ("energiebe", "flanders")]
+)
+def test_the_contract_walk_follows_the_registry(
+    monkeypatch: pytest.MonkeyPatch, supplier: str, region: str
+) -> None:
+    """Both checks named their contracts in a literal tuple, so a product
+    added to the extractor was never fetched."""
+    mod = lc._load_providers()[supplier]
+    extra = replace(mod.EXTRACTOR.contracts[0], id=f"{supplier}_new")
+    monkeypatch.setattr(
+        mod,
+        "EXTRACTOR",
+        replace(mod.EXTRACTOR, contracts=(*mod.EXTRACTOR.contracts, extra)),
+    )
+    fetched: list[tuple[str, str]] = []
+
+    async def _fetch(_session: object, cid: str, where: str) -> None:
+        fetched.append((cid, where))
+        raise mod.ExtractorError("stop here")
+
+    monkeypatch.setattr(mod, "fetch", _fetch)
+    asyncio.run(lc._CHECKS_BY_SUPPLIER[supplier](None, mod))
+    assert fetched == [(c.id, region) for c in mod.EXTRACTOR.contracts]
+
+
 def test_withdrawn_products_are_read_from_the_registry() -> None:
     from custom_components.be_electricity_prices.providers import octaplus
 
