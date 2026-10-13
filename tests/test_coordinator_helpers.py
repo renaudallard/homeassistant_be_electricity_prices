@@ -10073,6 +10073,55 @@ async def test_a_past_month_is_re_priced_on_its_own_card_not_todays(
     assert live.energy.factor == pytest.approx(1.177)
 
 
+async def test_a_start_date_with_no_signing_card_re_prices_each_month_on_its_own(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A start date no archive holds a card for locks nothing, so each month
+    is billed on its own card, as it is with no start date at all. The
+    fallback took the current card's leg instead, so a year-to-date walk
+    re-priced January on today's coefficients, and moved it onto today's VAT
+    rather than leaving it on the month's own."""
+    from custom_components.be_electricity_prices import cohort
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    today = make_snapshot(
+        energy=VariableRates(
+            current=0.20, month_indexed=True, formula_factor=1.177, formula_base=0.0184
+        )
+    )
+    january = make_snapshot(
+        energy=VariableRates(
+            current=0.15, month_indexed=True, formula_factor=1.200, formula_base=0.0240
+        )
+    )
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return today
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", api_key="k", contract_start_date="2024-03-15")
+    with patch.object(cohort, "month_card", AsyncMock(return_value=None)):
+        legs = await cohort._cohort_legs(
+            hass,
+            MagicMock(),
+            _fixed_extractor(_ffm),
+            "test",
+            "wallonia",
+            entry,
+            today,
+            month_snapshot=january,
+        )
+        live = await cohort._cohort_legs(
+            hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, today
+        )
+    assert isinstance(legs.energy, SpotMonthlyRates)
+    assert legs.energy.factor == pytest.approx(1.200)
+    assert legs.energy.base == pytest.approx(0.0240)
+    assert legs.vat_rate is None
+    assert isinstance(live.energy, SpotMonthlyRates)
+    assert live.energy.factor == pytest.approx(1.177)
+
+
 def test_the_month_is_priced_on_its_own_card_at_the_only_site_that_can() -> None:
     """``_cohort_legs`` honours ``month_snapshot``; something has to pass it.
 

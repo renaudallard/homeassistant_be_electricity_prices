@@ -255,14 +255,15 @@ async def _cohort_legs(
     ``None`` otherwise.
 
     Resolution order is a hand-entered signing rate, then the archive, then
-    the current card. What the user typed wins per field: only they know
+    the card of the month being billed (``month_snapshot``, the current card
+    on the live path). What the user typed wins per field: only they know
     whether they signed at the card rate or at a promotional, brokered or
     negotiated one, and the form that collected the value promises to price
     the contract with it. The archived signing-month card fills in every field
     left blank when an archive holds it: the supplier's own, or the
     repository's, which from August 2026 also holds the cards of suppliers
     that keep none (TotalEnergies, Ecofix). Asking the supplier's alone left
-    those cohorts billed on each month's card. The current card fills in
+    those cohorts billed on each month's card. The month's own card fills in
     otherwise.
 
     Both legs are ``None`` for a ``contract`` that isn't the entry's own (the
@@ -393,22 +394,23 @@ async def _cohort_legs(
         # Impact card printing resolved bands with no formula behind them, and
         # a spot-monthly leg is dropped above without a key).
         #
-        # The current card either way, and for the same reason in all four:
-        # this must not switch a month-indexed card onto its printed figure,
-        # which is LAST month's index by the card's own words. The
-        # coefficients the current card prints are the ones an archived card
-        # would have been re-priced from anyway, so the delivery month keeps
-        # its own mean, exactly as it does for an entry that names no cohort
-        # month at all. In the keyless case _month_indexed_leg returns None
-        # too, so the entry keeps the printed rate, which is the same answer
-        # the gate above reached.
-        energy = _month_indexed_leg(current_snapshot, entry)
+        # With no signing rate to hold, the month is billed on its own card,
+        # as it is for an entry that names no cohort month at all: the card of
+        # the month being billed (``month_snapshot``), or the current card on
+        # the live path, where it is that card. Today's coefficients for a
+        # past month re-priced it on a formula that moves every month on
+        # these products. Re-priced on the month's mean rather than its
+        # printed figure, which is LAST month's index by the card's own
+        # words. In the keyless case _month_indexed_leg returns None, so the
+        # entry keeps the printed rate, the same answer the gate above
+        # reached.
+        energy = _month_indexed_leg(month_snapshot or current_snapshot, entry)
     if manual is not None:
         source = "hand-entered signing rate"
     elif archived is not None:
         source = "archived signing-month card"
     elif energy is not None:
-        source = "current card, re-priced on the delivery month's index"
+        source = "billed month's card, re-priced on its own index"
     else:
         source = "current card (no cohort rate available)"
     # Which of the three resolutions won is otherwise invisible: the sensors
@@ -435,7 +437,8 @@ async def _cohort_legs(
     # The VAT the leg's coefficients carry: the signing month's, on the card
     # retrieved for it or, for a rate typed off the household's own contract
     # with no card retrieved, the month it was signed in whatever today's card
-    # states; today's on the current card's own leg.
+    # states; none to move on the card of the month being billed; today's on
+    # the current card's own leg.
     vat_rate: float | None
     if archived_snap is not None and (manual is not None or archived is not None):
         vat_rate = _leg_vat(archived_snap, start)
@@ -445,6 +448,8 @@ async def _cohort_legs(
             if _leg_vat(current_snapshot, start) is None
             else residential_vat(start)
         )
+    elif month_snapshot is not None:
+        vat_rate = None
     else:
         vat_rate = _leg_vat(current_snapshot, now.date())
     # A frozen feed-in leg bills off the signing card only where it is not

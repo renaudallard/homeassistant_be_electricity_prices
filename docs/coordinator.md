@@ -248,15 +248,17 @@ reading the start date, which is about when the household began being supplied.
 
 **Cohort resolution order** (`_cohort_legs`, `cohort.py`): the
 hand-entered signing rate first, then the archived signing-month card, then the
-current card. The signing-month card comes from the supplier's own archive or
+card of the month being billed (the current card on the live path). The signing-month card comes from the supplier's own archive or
 from the repository's card archive, which from August 2026 holds the cards of
 suppliers that keep none (`_month_card_retrievable`, `snapshot_months.py`); asking
 the supplier's alone left a TotalEnergies or Ecofix cohort billed on each month's
 card. When neither of the first two yields a rate (a contract signed
 this month, a month neither archive holds, a month older than the archive
-reaches), a month-indexed card still takes `_month_indexed_leg` (`cohort_legs.py`),
-exactly as it does with no cohort month at all: its printed figure is last
-month's index by the card's own words, and a date the archive cannot serve is
+reaches), the month being billed keeps its own card's leg, and a month-indexed
+card takes `_month_indexed_leg` (`cohort_legs.py`) on it, exactly as it does with
+no cohort month at all. Re-pricing a past month on the current card's
+coefficients billed it on a formula that moves every month. A month-indexed
+card's printed figure is last month's index by the card's own words, and a date the archive cannot serve is
 no reason to bill it. `_manual_energy_leg` (`cohort_legs.py`) overlays what the user
 typed onto whichever card was retrieved, **per field**, so a half-filled form
 keeps the archived signing-month values for the boxes left blank rather than

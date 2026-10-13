@@ -1858,8 +1858,8 @@ and nothing else, and the month lookup only asks for a month the archive can
 hold: a closed one, and for a supplier with no archive of its own not before August
 2026, the earliest month the daily captures reach. A signing month older than
 the twelve kept, which the supplier's own archive does not hold either, bills
-on the current card as an entry with no signing month does, unless you typed
-the rate you signed. A signing card an installation has read is kept on disk until an
+each month on that month's own card as an entry with no signing month does,
+unless you typed the rate you signed. A signing card an installation has read is kept on disk until an
 update changes the stored card format, so this matters when the entry is
 new, its signing date changes, or such an update is installed.
 
