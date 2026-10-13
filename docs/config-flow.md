@@ -921,11 +921,23 @@ the token step and the annual note say; the household's own row keeps the
 cache, since its current_year_cost sensor bills on it.
 The builder is in two halves: `_resolve_household` (`compare_household.py`) resolves everything that does not depend on which contract is being quoted -- the meter reads, the recorder walk, the measured hour shapes, the day-ahead window -- and returns a `_HouseholdQuote` (`compare_inputs.py`); the rest of `_build_compare_placeholders` (`compare_placeholders.py`) is the target side, recomputed per contract. The household half is O(1) in the number of contracts compared, which is what makes quoting more than one affordable. Placeholder
 tokens map to `options.step.compare_result.description` (`strings.json`), which
-references `{meter_used}`, `{current_annual}`, `{delta_ytd}`, the ASCII bar charts
+references `{current_annual}`, `{delta_ytd}`, the ASCII bar charts
 `{annual_chart}`/`{ytd_chart}`, `{card_note}` (per-side caveats about what a card
 does not print, built by `_card_caveats`), and so on; `_build_compare_placeholders` always
-populates every token (even the reloading-entry fallback at `compare_placeholders.py`)
-so HA never renders a raw `{token}`.
+populates every token so HA never renders a raw `{token}`. While the entry has no
+coordinator (mid-reload) it returns `None` and the step aborts with
+`compare_all_entry_reloading`, the reason the ranking already used.
+
+No placeholder carries a slug: the meter the target is quoted on is said in the
+template's own words (the one picked on `compare_meter`, or the digital meter a
+dynamic or time-of-use contract forces), as the ranking leaves out its region and
+group. A few tokens still carry English prose in every language, on purpose: the
+flow cannot know which language the reader's frontend renders, and a template
+cannot branch on a value. They are `{consumption_source}` (where the yearly volume
+came from, with its day count, built by `_volume_of` in `compare_quote.py` or by
+`_resolve_household`), `{solar_note}`, `{card_note}` and `{error}`. Each is a
+variable, figure-bearing explanation rather than a fixed label, so translating it
+would mean a template per case.
 
 ## strings.json and translations
 

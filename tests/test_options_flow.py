@@ -1771,18 +1771,19 @@ async def test_compare_branch_spot_injection_current_prompts_for_api_key(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_compare_result_renders_when_coordinator_not_ready(
+async def test_compare_result_aborts_when_coordinator_not_ready(
     hass: HomeAssistant,
 ) -> None:
     """If the user opens 'compare' while the entry is mid-reload,
-    runtime_data is HA's UNDEFINED sentinel and _build_compare_placeholders
-    short-circuits. Every placeholder the result template references must
-    still be set; otherwise HA renders raw '{token}' literals."""
+    runtime_data is HA's UNDEFINED sentinel and there is nothing to quote.
+    The step aborts with a translated reason: rendering the page instead put
+    English prose ("default (entry reloading)") into every language's
+    template around a page of dashes."""
+    from homeassistant import data_entry_flow
+
     entry = _make_entry()
     entry.add_to_hass(hass)
-    # Deliberately do NOT assign entry.runtime_data: the isinstance
-    # check in _build_compare_placeholders falls through to the
-    # entry-reloading branch.
+    # Deliberately do NOT assign entry.runtime_data.
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "compare"}
@@ -1798,34 +1799,26 @@ async def test_compare_result_renders_when_coordinator_not_ready(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"meter": "mono"}
         )
-    assert result["step_id"] == "compare_result"
-    ph = result["description_placeholders"]
-    assert ph is not None
-    # Every token referenced by the result template must be set.
-    for key in (
-        "ytd_injection_kwh",
-        "solar_note",
-        "meter_used",
-        "annual_kwh",
-        "ytd_from",
-        "ytd_kwh",
-        "consumption_source",
-        "current_supplier",
-        "compare_supplier",
-        "current_per_kwh",
-        "compare_per_kwh",
-        "current_annual",
-        "compare_annual",
-        "delta_annual",
-        "current_ytd",
-        "compare_ytd",
-        "delta_ytd",
-        "annual_chart",
-        "ytd_chart",
-        "error",
+    assert result["type"] is data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "compare_all_entry_reloading"
+
+
+def test_compare_result_injects_no_meter_slug() -> None:
+    """The meter used to be rendered as its raw slug ("bi",
+    "exclusive_night") in every language. The template now says in its own
+    words which meter the target is quoted on, and the placeholder is gone."""
+    import json
+    from pathlib import Path
+
+    base = Path("custom_components/be_electricity_prices")
+    for path in (
+        base / "strings.json",
+        *sorted((base / "translations").glob("*.json")),
     ):
-        assert key in ph, f"missing placeholder: {key}"
-    assert ph["error"].startswith("current entry is reloading")
+        desc = json.loads(path.read_text(encoding="utf-8"))["options"]["step"][
+            "compare_result"
+        ]["description"]
+        assert "{meter_used}" not in desc, path
 
 
 async def _drive_compare(
@@ -3415,8 +3408,6 @@ async def test_compare_meter_override_changes_per_kwh(
     # Mono uses the single-rate column; bi routes through peak/offpeak
     # depending on the current hour. Either way the two should not
     # produce the same compare_per_kwh.
-    assert ph_mono["meter_used"] == "mono"
-    assert ph_bi["meter_used"] == "bi"
     assert ph_mono["compare_per_kwh"] != ph_bi["compare_per_kwh"]
 
 
@@ -7054,7 +7045,6 @@ _GOLDEN_BASE = {
     "delta_annual": "-70.00",
     "delta_ytd": "+0.00",
     "error": "",
-    "meter_used": "mono",
     "solar_note": "",
     "ytd_chart": "  Eneco   ████████████████████ 20 EUR\n  Cociter ████████████████████ 20 EUR",
     "ytd_from": "01/01/2026",
@@ -7080,7 +7070,6 @@ _GOLDEN_DYNAMIC_TARGET = {
     "delta_annual": "-",
     "delta_ytd": "-",
     "error": "compute failed",
-    "meter_used": "dynamic",
     "solar_note": "",
     "ytd_chart": "",
     "ytd_from": "01/01/2026",
@@ -7106,36 +7095,9 @@ _GOLDEN_METER_OVERRIDE = {
     "delta_annual": "-70.00",
     "delta_ytd": "+0.00",
     "error": "",
-    "meter_used": "bi",
     "solar_note": "",
     "ytd_chart": "  Eneco   ████████████████████ 20 EUR\n  Cociter ████████████████████ 20 EUR",
     "ytd_from": "01/01/2026",
-    "ytd_injection_kwh": "-",
-    "ytd_kwh": "-",
-}
-
-_GOLDEN_ENTRY_RELOADING = {
-    "annual_chart": "",
-    "annual_kwh": "3500",
-    "card_note": "",
-    "compare_annual": "-",
-    "compare_contract": "cociter_variable",
-    "compare_per_kwh": "-",
-    "compare_supplier": "cociter",
-    "compare_ytd": "-",
-    "consumption_source": "default (entry reloading)",
-    "current_annual": "-",
-    "current_contract": "power_fix",
-    "current_per_kwh": "-",
-    "current_supplier": "eneco",
-    "current_ytd": "-",
-    "delta_annual": "-",
-    "delta_ytd": "-",
-    "error": "current entry is reloading; try again in a moment",
-    "meter_used": "mono",
-    "solar_note": "",
-    "ytd_chart": "",
-    "ytd_from": "-",
     "ytd_injection_kwh": "-",
     "ytd_kwh": "-",
 }
@@ -7170,7 +7132,7 @@ async def test_golden_placeholders_meter_override(
 ) -> None:
     """The target quoted on a meter the household is not on. Same money here,
     because the stub card prints one rate and a bi meter splits nothing, but a
-    distinct path: the override reaches meter_used and must not leak onto the
+    distinct path: the override reaches the target and must not leak onto the
     household side."""
     freezer.move_to("2026-04-29 13:00:00+02:00")
     entry = _make_entry()
@@ -7226,28 +7188,6 @@ async def test_golden_placeholders_dynamic_target_degrades(
     )
 
 
-@pytest.mark.usefixtures("enable_custom_integrations")
-async def test_golden_placeholders_entry_reloading(
-    hass: HomeAssistant, freezer: Any
-) -> None:
-    """The short-circuit taken when runtime_data is not a coordinator yet.
-    Every token still has to be populated or HA renders the raw literal, and
-    this is the path where that is easiest to forget."""
-    freezer.move_to("2026-04-29 13:00:00+02:00")
-    entry = _make_entry()
-    entry.add_to_hass(hass)
-    assert (
-        await _compare_placeholders(
-            hass,
-            entry,
-            supplier="cociter",
-            contract="cociter_variable",
-            target_snapshot=_stub_snapshot("cociter", "cociter_variable", 0.16),
-        )
-        == _GOLDEN_ENTRY_RELOADING
-    )
-
-
 def test_golden_dicts_cover_every_template_token() -> None:
     """The golden dicts are only a net if they span the template. A token
     added to strings.json without a default lands here first."""
@@ -7265,7 +7205,6 @@ def test_golden_dicts_cover_every_template_token() -> None:
         _GOLDEN_BASE,
         _GOLDEN_DYNAMIC_TARGET,
         _GOLDEN_METER_OVERRIDE,
-        _GOLDEN_ENTRY_RELOADING,
     ):
         assert set(golden) == tokens
 
@@ -10257,7 +10196,7 @@ async def test_compare_weights_the_month_it_fetched_on_the_load_profile(
     engine = _SweepEngine(hass, entry, {"api_key": "key"})  # type: ignore[arg-type]
     with patch.object(BePricesCoordinator, "_ensure_historical_spots", _fetch):
         household = await engine._resolve_household(
-            coord, candidates=[("energyvision", "x", False)], meter="mono"
+            coord, candidates=[("energyvision", "x", False)]
         )
         quoted = await household.spot_for(card)
 

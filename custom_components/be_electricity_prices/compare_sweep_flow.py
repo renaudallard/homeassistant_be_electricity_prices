@@ -49,8 +49,6 @@ from .compare_table import RankedRow, _ranking_table
 from .const import (
     COMPARE_SWEEP_BUDGET_S,
     CONF_API_KEY,
-    CONF_METER,
-    METER_MONO,
     SOLAR_REGIME_INJECTION,
     SPOT_PRICED_CONTRACT_KINDS,
 )
@@ -199,7 +197,6 @@ class _SweepStepsMixin(_CompareStepsMixin):
         sweep["household"] = await self._engine._resolve_household(
             coord,
             candidates=sweep["candidates"],
-            meter=self.config_entry.data.get(CONF_METER, METER_MONO),
         )
         return None
 

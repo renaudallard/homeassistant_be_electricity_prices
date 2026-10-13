@@ -60,11 +60,9 @@ from .compare_weighting import _compare_injection_credit, _tou_weighted_per_kwh
 from .const import (
     CONF_CONTRACT,
     CONF_DIRECT_DEBIT,
-    CONF_METER,
     CONF_REGION,
     CONF_SUPPLIER,
     DOMAIN,
-    METER_MONO,
     SOLAR_REGIME_INJECTION,
     SPOT_PRICED_CONTRACT_KINDS,
 )
@@ -425,7 +423,6 @@ class _SweepEngine(_HouseholdMixin):
         sweep["household"] = await self._resolve_household(
             coord,
             candidates=sweep["candidates"],
-            meter=self.config_entry.data.get(CONF_METER, METER_MONO),
         )
         rows: list[RankedRow] = []
         own = await self._sweep_own_row(sweep["household"])

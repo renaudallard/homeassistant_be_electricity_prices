@@ -79,7 +79,6 @@ from .const import (
     CONF_DIRECT_DEBIT,
     CONF_METER,
     CONF_SUPPLIER,
-    DEFAULT_ANNUAL_CONSUMPTION_KWH,
     METER_MONO,
     SOLAR_REGIME_INJECTION,
     SPOT_PRICED_CONTRACT_KINDS,
@@ -103,7 +102,7 @@ class _PlaceholdersMixin(OptionsFlow):
         @property
         def _engine(self) -> _SweepEngine: ...
 
-    async def _build_compare_placeholders(self) -> dict[str, str]:
+    async def _build_compare_placeholders(self) -> dict[str, str] | None:
         """Fetch the picked supplier's snapshot and compute a side-by-side
         annual estimate against the user's current entry.
 
@@ -111,6 +110,7 @@ class _PlaceholdersMixin(OptionsFlow):
         yearly fees are yearly_fixed_fee + 12 * energy_fund + 12 *
         capacity (Flanders) + 12 * prosumer (Wallonia compensation +
         solar). Errors collapse to ``-`` so the page always renders.
+        ``None`` while the entry has no coordinator to quote from.
         """
 
         from .coordinator import BePricesCoordinator
@@ -118,38 +118,11 @@ class _PlaceholdersMixin(OptionsFlow):
         current = self.config_entry.data
         coord = getattr(self.config_entry, "runtime_data", None)
         # Coordinator may not be a BePricesCoordinator if the entry is
-        # mid-reload (UNDEFINED sentinel) or never finished setup. We
-        # still need to populate every placeholder the result template
-        # references; otherwise HA renders the missing ones as raw
-        # ``{token}`` text.
+        # mid-reload (UNDEFINED sentinel) or never finished setup. There is
+        # nothing to quote then, and the step aborts with a translated reason
+        # rather than render a page of dashes around English placeholders.
         if not isinstance(coord, BePricesCoordinator):
-            return {
-                "current_supplier": str(current.get(CONF_SUPPLIER, "")),
-                "current_contract": str(current.get(CONF_CONTRACT, "")),
-                "compare_supplier": str(self._compare.get(CONF_SUPPLIER, "")),
-                "compare_contract": str(self._compare.get(CONF_CONTRACT, "")),
-                "current_per_kwh": "-",
-                "compare_per_kwh": "-",
-                "current_annual": "-",
-                "compare_annual": "-",
-                "delta_annual": "-",
-                "current_ytd": "-",
-                "compare_ytd": "-",
-                "delta_ytd": "-",
-                "annual_kwh": f"{DEFAULT_ANNUAL_CONSUMPTION_KWH:.0f}",
-                "ytd_from": "-",
-                "ytd_kwh": "-",
-                "ytd_injection_kwh": "-",
-                "solar_note": "",
-                "meter_used": str(
-                    self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
-                ),
-                "consumption_source": "default (entry reloading)",
-                "annual_chart": "",
-                "ytd_chart": "",
-                "card_note": "",
-                "error": "current entry is reloading; try again in a moment",
-            }
+            return None
 
         meter = self._compare.get(CONF_METER, current.get(CONF_METER, METER_MONO))
         hh = await self._engine._resolve_household(
@@ -161,7 +134,6 @@ class _PlaceholdersMixin(OptionsFlow):
                     settlement_answer(self._compare),
                 )
             ],
-            meter=meter,
         )
         region = hh.region
         day_start = hh.day_start

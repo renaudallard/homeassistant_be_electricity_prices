@@ -582,6 +582,8 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
         if user_input is not None:
             return self.async_abort(reason="compare_done")
         placeholders = await self._build_compare_placeholders()
+        if placeholders is None:
+            return self.async_abort(reason="compare_all_entry_reloading")
         return self.async_show_form(
             step_id="compare_result",
             data_schema=vol.Schema({}),

@@ -197,7 +197,6 @@ class _HouseholdMixin:
         coord: Any,
         *,
         candidates: Sequence[tuple[str, str, bool]],
-        meter: str,
     ) -> _HouseholdQuote:
         """Everything a quote needs that does not depend on which contract is
         being quoted.
@@ -212,10 +211,9 @@ class _HouseholdMixin:
         ``candidates`` is read for one decision only: whether any row will
         need day-ahead spots, because that window is fetched here and shared.
 
-        ``meter`` is the target's, not the household's: it lands in the
-        rendered ``meter_used`` token, and a dynamic or slot contract forces
-        its own. The household's real meter stays on ``current_meter``, so a
-        mono household's own bill is never quoted at the target's rates.
+        Only the household's own meter is resolved here, on
+        ``current_meter``: the target's is the quote's, so a mono household's
+        own bill is never quoted at the target's rates.
         """
         current = self.config_entry.data
         region = current[CONF_REGION]
@@ -616,7 +614,6 @@ class _HouseholdMixin:
             ),
             "solar_note": _solar_note(regime, rolling_inj_kwh),
             "consumption_source": consumption_source,
-            "meter_used": meter,
             "card_note": "",
             "error": "",
         }
