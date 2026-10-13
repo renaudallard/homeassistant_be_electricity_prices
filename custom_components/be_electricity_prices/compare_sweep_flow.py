@@ -135,6 +135,10 @@ class _SweepStepsMixin(_CompareStepsMixin):
         if stored is not None and stored.rows:
             self._sweep["rows"] = list(stored.rows)
             self._sweep["ran_at"] = stored.ran_at
+            # The scheduled run fills the year-to-date column itself, so a
+            # ranking that already carries one is not offered the pass again.
+            if any(row.ytd is not None for row in stored.rows):
+                self._sweep["ytd_done"] = True
             return await self.async_step_compare_all_result()
         self._sweep_task = None
         if not hasattr(self, "_compare"):

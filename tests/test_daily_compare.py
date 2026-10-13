@@ -1320,6 +1320,35 @@ async def test_year_to_date_works_on_a_stored_ranking(hass: Any) -> None:
     assert "with_ytd" not in result["data_schema"].schema
 
 
+async def test_a_stored_ranking_with_a_year_to_date_does_not_offer_it_again(
+    hass: Any,
+) -> None:
+    """The scheduled run fills the year-to-date column before it stores the
+    ranking, so a page serving those rows already shows the column. Offering
+    the box anyway re-ran a pass whose answer was on screen."""
+    from tests.test_options_flow import _make_entry, _real_coordinator, _stub_snapshot
+
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.18))
+    coord.daily_compare = _result(
+        rows=(
+            RankedRow("Mega Online Fixed", 1102.75, ytd=812.40),
+            RankedRow("Eneco Zon & Wind Flex", 1272.75, is_own=True, ytd=930.10),
+        )
+    )
+    entry.runtime_data = coord
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "compare_all"}
+    )
+    assert result["step_id"] == "compare_all_result"
+    assert "with_ytd" not in result["data_schema"].schema
+    # Refresh is still there: the stored answer can always be priced again.
+    assert "refresh" in result["data_schema"].schema
+
+
 async def test_refresh_after_the_year_to_date_pass_keeps_the_own_row(
     hass: Any,
 ) -> None:
