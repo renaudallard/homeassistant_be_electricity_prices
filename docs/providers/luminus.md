@@ -456,13 +456,27 @@ card).
 
 ## Injection
 
-`_extract_injection(text, kind)` (`_luminus_cards.py`) covers two of the three
-injection shapes in the project taxonomy, selected by contract kind:
+`_extract_injection(text, kind)` (`_luminus_cards.py`) covers three of the
+injection shapes in the project taxonomy (`docs/pricing-model.md`), selected by
+contract kind and by the card's indexation sentence:
 
-- **fixed / variable / tou -> monthly-indicative-only.** The extractor reads the
+- **fixed / variable / tou -> month-indexed formula.** The extractor reads the
   applicable `Tarif de l'énergie injectée` row and stores it as
-  `InjectionRates.current` (`_luminus_cards.py`). `factor` / `base` stay `None`,
-  so the pricing engine credits the indicative and never needs a spot.
+  `InjectionRates.current` (`_luminus_cards.py`). Where the card also prints
+  `Formule tarifaire de l'énergie injectée = <factor> x Belpex <sign> <base>`
+  followed by `Votre tarif sera indexé tous les mois` (or `chaque mois`),
+  `_INJECTION_MONTHLY_RE` reads the formula: `factor = factor_pdf * 10.0`,
+  `base = base_pdf_cents / 100.0`, no VAT (the block is HTVA at 0%), and
+  `month_indexed = True`. The credit then settles on the delivery month's Belpex
+  mean, and the printed `current`, computed on the previous month's value, is
+  only the fallback while that mean is unpublished. Comfy, Comfy Plus, MaxxFix,
+  MaxxFlex, BasicFix, BasicFlex and SmartFlex print it, which is why they set
+  `spot_indexed_injection` (`_MONTHLY_INJECTION_CONTRACTS`, `luminus.py`).
+- **ComfyFlex and ComfyFlex+ -> monthly-indicative-only.** They print the same
+  formula but index it quarterly (`tous les trimestres`), so the regex, gated on
+  the cadence sentence rather than the formula, does not match: `factor` /
+  `base` stay `None` and the engine credits the printed `current`, with no spot
+  needed.
 - **dynamic -> hourly `factor*spot + base`.** `_INJECTION_FORMULA_RE`
   (`_luminus_cards.py`) parses `Injection (...) = <factor> x Belpex H <sign>
   <base>`. Residential injection is VAT-exempt, so **no VAT multiplier is
@@ -475,7 +489,12 @@ Illustrative: dynamic Wallonia injection `0,1019 x Belpex H - 1,2737` yields
 `test_dynamic_extracts_injection_formula_with_negative_base`,
 `test_luminus.py`). Non-dynamic indicative
 (`test_injection_uses_applicable_rate_not_annual_estimate`): comfy Wallonia
-`0.0381`, comfyflex Flanders `0.0396`.
+`0.0381`, comfyflex Flanders `0.0396`. Month-indexed
+(`test_monthly_cards_carry_the_injection_formula`): Comfy, MaxxFlex and
+SmartFlex Wallonia print `0,0481 x Belpex - 0,6392`, so `factor == 0.481` and
+`base == -0.006392`, which reproduces the printed `0.0381` at the card's index;
+`test_quarterly_cards_keep_their_printed_figure` pins the two quarterly cards
+to their printed figure.
 
 Two anchoring subtleties in the indicative regex (`_luminus_cards.py`):
 
