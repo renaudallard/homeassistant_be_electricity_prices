@@ -25,23 +25,54 @@
 
 """Config flow for the Belgian Electricity Prices integration.
 
-Both ConfigFlow and OptionsFlow walk the same chain of steps:
+Both ConfigFlow and OptionsFlow walk the same chain of steps, which lives in
+``flow_wizard.py`` (``_WizardStepsMixin``). Steps in brackets are asked only
+where they apply:
 
-  user      -> supplier (registry) + region
-  contract  -> contract (filtered by supplier)
-  dso       -> DSO (filtered by region)
-  meter     -> mono / bi / dynamic
-  api_key   -> ENTSO-E key (when the contract is priced off the day-ahead
-               market: dynamic per slot, spot-monthly on the month mean)
-  capacity  -> Flemish capacity peak source (only when region = flanders)
+  user               -> supplier (registry) + region (``edit`` in options)
+  contract           -> contract (filtered by supplier and region), optional
+                        start, tariff card and end dates
+  [settlement]       -> monthly or quarter-hourly, where the supplier sells
+                        both
+  [signed_rate]      -> the rate actually signed at, on a dated fixed or
+                        spot-priced contract
+  dso                -> DSO (filtered by region)
+  meter              -> mono / bi / exclusive night / dynamic, and the day
+                        hours on a Flemish entry
+  [professional]     -> VAT treatment and yearly volume, professional cards
+  [direct_debit]     -> whether the household pays by direct debit, where
+                        the card prices it
+  [dso_tariff_mode]  -> Walloon DSO billing mode
+  [api_key]          -> ENTSO-E key (when the contract is priced off the
+                        day-ahead market: dynamic per slot, spot-monthly on
+                        the month mean); an unreachable ENTSO-E offers
+                        api_key_recheck or api_key_unverified
+  [custom_energy]    -> the expert custom supplier's energy formula
+  [capacity]         -> Flemish capacity peak source
+  [connection_power] -> Brussels connection power
+  solar              -> solar regime and inverter power
+  [injection_api_key] -> optional ENTSO-E key for an index-linked leg the
+                        contract kind does not collect one for
+  [custom_injection] / [custom_dso] / [custom_tax]
+                     -> the custom supplier's feed-in, network and tax
+  meters             -> kWh sensors
+
+OptionsFlow opens on a menu: ``edit`` re-runs the chain, ``switch`` records
+a change of supplier and then re-runs it, ``remove_switch`` undoes the last
+one recorded this year, and ``compare`` / ``compare_all`` quote other
+contracts without saving anything (``compare_flow.py``,
+``compare_sweep_flow.py``).
 
 OptionsFlow pre-fills every field with the current value, so the user can
 change anything (including supplier/contract/region) post-install. On
 finalize, OptionsFlow writes back to ``entry.data`` and updates the entry
 title, unless the user renamed the entry.
 
-No EUR values are asked. Energy + network + tax rates are fetched live by
-the coordinator from each supplier's own publication.
+Energy, network and tax rates are fetched live by the coordinator from each
+supplier's own publication, so the chain mostly asks structural questions.
+Two branches do ask for EUR figures: ``signed_rate``, which wins over the
+archived card of the signing month, and the ``custom_*`` steps, since the
+expert custom supplier has no card.
 """
 
 from __future__ import annotations

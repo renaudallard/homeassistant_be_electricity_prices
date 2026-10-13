@@ -65,9 +65,9 @@ the "Shown when" column gives the gate.
 | --- | --- | --- | --- | --- |
 | `user` | `async_step_user` (`config_flow.py`) | Supplier, region | `CONF_SUPPLIER`, `CONF_REGION` | Always (install entry step) |
 | `contract` | `async_step_contract` (`flow_wizard.py`) | Contract (region-filtered), optional start / tariff card / end date | `CONF_CONTRACT`, `CONF_CONTRACT_START_DATE`, `CONF_TARIFF_CARD_DATE`, `CONF_CONTRACT_END_DATE` | Always. A supplier/region mismatch is now caught on the step where BOTH are chosen (`_region_mismatch_error`) and re-shows that form with `supplier_region_unavailable` on the supplier field, instead of aborting a step later and discarding every other edit made in the same options run; rejects a future start, a future tariff card month, an end not after the start, or a start before the last recorded supplier switch (`start_date_before_switch`), since the contract configured is the one supplying since that switch, and a rejected form comes back with the answers typed (`add_suggested_values_to_schema`), as does a refused `switch` date. The card month is deliberately NOT ordered against the start date: a switcher signs before supply begins and a renewal re-signs a years-old supply onto a recent card |
+| `settlement` | `async_step_settlement` (`flow_wizard.py`) | Which settlement this household is on | `CONF_QUARTER_HOURLY` | Only on a contract whose supplier sells both (`Contract.quarter_hourly_option`); runs directly after `contract` |
 | `signed_rate` | `async_step_signed_rate` (`flow_wizard.py`) | The rate actually signed at: single / peak / offpeak / exclusive night, or spot factor / base, plus the yearly fee | The 6 `CONF_MANUAL_*` keys (`_MANUAL_RATE_KEYS`) | `_needs_manual_rate` true (`flow_wizard.py`): a start date or a tariff card month is set on a fixed, dynamic or spot-monthly contract of a non-custom supplier (the two spot-priced kinds sign a coefficient pair, so they get the factor / base boxes; fixed gets the rate boxes). Offered whether or not the supplier archives past cards, because what is typed wins over the archived card. The kind test is `takes_signing_rate` (`providers/__init__.py`), which the runtime shares: when the step is skipped the six keys are dropped (`_after_settlement`), and `_cohort_legs` (`cohort.py`) refuses a typed rate on any other kind, so a rate left on an entry moved to a variable card is never billed on it. In Edit settings each box also shows what the current card gives it (`_card_figures`, `config_flow.py`), per-kWh figures as the entry holds them, which is how a typed one is read, and the fee including VAT; setup shows none, since the card is not fetched until the entry exists, and neither does an edit that moves the entry to another supplier, contract or region, which recording a switch always does, since the card loaded is the one being left |
 | `dso` | `async_step_dso` (`flow_wizard.py`) | Distribution operator | `CONF_DSO` | Always |
-| `settlement` | `async_step_settlement` (`flow_wizard.py`) | Which settlement this household is on | `CONF_QUARTER_HOURLY` | Only on a contract whose supplier sells both (`Contract.quarter_hourly_option`); runs directly after `contract` |
 | `meter` | `async_step_meter` (`flow_wizard.py`) | Meter type, and on a Flemish entry the day tariff hours | `CONF_METER`, `CONF_DAY_HOURS` | Always; option list narrows by the EFFECTIVE contract kind, which the settlement step may have moved. The day hours field (07:00-22:00 or 06:00-21:00, Fluvius's municipality list) is on the schema only for Flanders, and the step drops a stored answer on any other region, so it cannot come back into force after a move back. Every earlier contract recorded by a switch reads the entry's answer, which belongs to the meter rather than the supplier, so a correction made after the switch reaches the months before it; a switch keeps none in its copy (`_ENTRY_FACTS`, `contract_periods.py`) |
 | `professional` | `async_step_professional` (`flow_wizard.py`) | Whether prices include VAT, and the estimated yearly consumption | `CONF_INCLUDE_VAT`, `CONF_ANNUAL_CONSUMPTION_KWH` | Only on a professional contract (`Contract.professional`, through `_contract_is_professional`); runs after `meter`. Not asked means both keys are DROPPED (`_ask_professional`) |
 | `direct_debit` | `async_step_direct_debit` (`flow_wizard.py`) | Whether this household pays by direct debit | `CONF_DIRECT_DEBIT` | Only on a contract whose card prices a direct-debit payer (`Contract.direct_debit_discount`); runs after `meter` and after the professional step, where nothing downstream reads it. Not asked means the stored key is DROPPED (`_ask_direct_debit`), so an answer given on one contract cannot come back into force on another the day the user switches to a card that does grant a reduction |
@@ -93,13 +93,24 @@ the "Shown when" column gives the gate.
                                           │
                           async_step_contract  (region-filtered)
                                           │
-      _after_contract → _needs_manual_rate? ┼── yes → async_step_signed_rate
+ _after_contract → offers_quarter_hourly? ┼── yes → async_step_settlement
+                                          │              │
+                          _after_settlement  ◄──────────┘
+                                          │
+                     _needs_manual_rate? ─┼── yes → async_step_signed_rate
                                           │              │ (all fields optional)
                           async_step_dso  ◄─────────────┘
                                           │
                           async_step_meter  (kind-narrowed list)
                                           │
-                          _after_meter  ── install adds unique-id reject
+ _ask_professional → professional card? ──┼── yes → async_step_professional
+                                          │              │
+                          _ask_direct_debit  ◄──────────┘
+                                          │
+          offers_direct_debit? ───────────┼── yes → async_step_direct_debit
+                                          │              │
+                          _after_meter  ◄───────────────┘
+                                          │  install adds unique-id reject
                                           │
                      region == wallonia? ─┼── yes → async_step_dso_tariff_mode
                                           │        (skipped for tou_impact,
@@ -130,7 +141,8 @@ the "Shown when" column gives the gate.
 ```
 
 The branch helpers that join the conditional steps back into the main line are all
-in the mixin: `_after_meter` (`flow_wizard.py`), `_after_dso_tariff_mode`
+in the mixin: `_after_contract`, `_after_settlement`, `_ask_professional`,
+`_ask_direct_debit`, `_after_meter` (`flow_wizard.py`), `_after_dso_tariff_mode`
 (`flow_wizard.py`), `_after_api_key` (`flow_wizard.py`), `_before_solar`
 (`flow_wizard.py`), and `_after_solar` (`flow_wizard.py`).
 
