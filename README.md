@@ -518,7 +518,9 @@ different, as long as the edit keeps the same supplier, contract and region
    municipality with an asterisk, the switch time was set when the meter was
    installed, so check yours. The answer moves the day/night split of the
    prices, the running bill and the comparison on a bi-hourly or digital
-   meter, and changes nothing on a mono one. Hours already written to the
+   meter, and changes nothing on a mono one. It belongs to the meter, so the
+   contracts held before a recorded
+   [supplier switch](#switching-supplier-during-the-year) are billed on it too. Hours already written to the
    long-term statistics keep the schedule they were priced on until the
    [backfill service](#be_electricity_pricesbackfill_statistics-service)
    is run again.
@@ -977,8 +979,10 @@ A switch recorded with the wrong date, or by mistake, is undone with
 **Configure → Remove the last supplier switch**, which puts the entry back as
 it stood before that switch was recorded: the contract you left becomes the
 current one again, with the settings it had then, and anything changed since
-is undone, except the answer to a question added after the switch was
-recorded (whether the meter counts draw and injection apart), which is kept.
+is undone, except two answers that belong to the meter: the Flemish day
+hours, which every contract reads from the entry, and the answer to a
+question added after the switch was recorded (whether the meter counts draw
+and injection apart), which is kept.
 To correct the date, remove the switch, record it again with the
 right date and pick the new contract again. A switch recorded in an earlier
 year is not offered: it no longer prices anything, and removing it would bring

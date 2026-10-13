@@ -46,6 +46,10 @@ from custom_components.be_electricity_prices.contract_periods import (
 )
 from custom_components.be_electricity_prices.day_night import day_start_for, is_offpeak
 from custom_components.be_electricity_prices.flow_schemas import _meter_schema
+from custom_components.be_electricity_prices.flow_switch import (
+    _record_switch,
+    _remove_last_switch,
+)
 from custom_components.be_electricity_prices.pricing import compute_breakdown
 from custom_components.be_electricity_prices.providers._rates import FixedRates
 from custom_components.be_electricity_prices.providers.base import (
@@ -263,9 +267,12 @@ async def test_the_answer_is_dropped_outside_flanders(
     assert (const.CONF_DAY_HOURS in flow._data) is kept
 
 
-def test_an_earlier_contract_recorded_before_the_question_takes_the_entry_answer() -> (
-    None
-):
+def test_every_earlier_contract_reads_the_entrys_day_hours() -> None:
+    """The day register's hours belong to the meter, set when it was
+    installed, not to the supplier. A copy kept by a switch, with or without
+    an answer of its own, reads the entry's, so an answer corrected after the
+    switch reaches the months before it. A switch keeps none in its copy, and
+    removing it leaves the entry's answer in place."""
     entry = {
         const.CONF_REGION: const.REGION_FLANDERS,
         const.CONF_DAY_HOURS: const.DAY_HOURS_EARLY,
@@ -276,5 +283,15 @@ def test_an_earlier_contract_recorded_before_the_question_takes_the_entry_answer
     )
     answered = {**old, const.CONF_DAY_HOURS: const.DAY_HOURS_STANDARD}
     assert _with_household_facts(answered, entry)[const.CONF_DAY_HOURS] == (
-        const.DAY_HOURS_STANDARD
+        const.DAY_HOURS_EARLY
     )
+    # An entry that holds no answer, after a move out of Flanders, leaves none.
+    assert const.CONF_DAY_HOURS not in _with_household_facts(answered, {})
+
+    before = {**old, const.CONF_DAY_HOURS: const.DAY_HOURS_STANDARD}
+    recorded = _record_switch(before, date(2026, 6, 1))
+    [record] = recorded[const.CONF_PREVIOUS_CONTRACTS]
+    assert const.CONF_DAY_HOURS not in record["data"]
+    recorded[const.CONF_DAY_HOURS] = const.DAY_HOURS_EARLY
+    back = _remove_last_switch(recorded)
+    assert back[const.CONF_DAY_HOURS] == const.DAY_HOURS_EARLY

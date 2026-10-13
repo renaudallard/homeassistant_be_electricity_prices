@@ -193,10 +193,16 @@ def _record_switch(data: Mapping[str, Any], until: date) -> dict[str, Any]:
     the old contract go: its card month, a typed signing rate and its end date,
     none of which describe the new one. So does the box that bills the year
     from the contract start, which would leave the old contract out of the year.
+    The meter's day hours are not kept with the old contract: every contract
+    reads the entry's (``_ENTRY_FACTS``), so a later correction reaches it.
     """
-    from .contract_periods import recorded_contracts
+    from .contract_periods import _ENTRY_FACTS, recorded_contracts
 
-    held = {key: value for key, value in data.items() if key != CONF_PREVIOUS_CONTRACTS}
+    held = {
+        key: value
+        for key, value in data.items()
+        if key != CONF_PREVIOUS_CONTRACTS and key not in _ENTRY_FACTS
+    }
     kept = [
         {"until": when.isoformat(), "data": dict(settings)}
         for when, settings in recorded_contracts(data)
@@ -246,14 +252,20 @@ def _remove_last_switch(data: Mapping[str, Any]) -> dict[str, Any]:
     last, and it would keep the contract set up since as the one left. The one
     exception is a question added after the switch was recorded: the copy holds
     no answer to it, so the entry's answer is kept rather than lost, the way
-    the earlier contract's period reads it while the switch stands.
+    the earlier contract's period reads it while the switch stands. The
+    meter's day hours are the entry's whatever the copy holds, as they are
+    while the switch stands.
     """
-    from .contract_periods import _unasked_facts, recorded_contracts
+    from .contract_periods import (
+        _unasked_facts,
+        _with_entry_facts,
+        recorded_contracts,
+    )
 
     records = recorded_contracts(data)
     if not records:
         return dict(data)
-    held = dict(records[-1][1])
+    held = _with_entry_facts(records[-1][1], data)
     held.update(_unasked_facts(held, data))
     held.pop(CONF_PREVIOUS_CONTRACTS, None)
     kept = [
