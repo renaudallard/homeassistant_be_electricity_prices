@@ -5320,6 +5320,7 @@ async def _september_from_a_live_row(
     *,
     captured_live: bool = True,
     settles_on_next_card: bool = True,
+    parsed_before: bool = False,
 ) -> tuple[SupplierSnapshot, int]:
     """September asked on 1 October, the archive holding ``caught``."""
     asked = 0
@@ -5341,7 +5342,10 @@ async def _september_from_a_live_row(
     )
     github = AsyncMock(
         return_value=ArchivedCard(
-            snapshot=caught, read_by_ocr=False, captured_live=captured_live
+            snapshot=caught,
+            read_by_ocr=False,
+            captured_live=captured_live,
+            parsed_before=parsed_before,
         )
     )
     _monthly_snapshots(hass).clear()
@@ -5500,6 +5504,80 @@ async def test_an_archive_row_needing_no_settlement_does_not_ask_the_supplier(
     )
     assert snap is settled
     assert asked == 0
+
+
+async def test_a_mirrored_row_from_an_older_parser_is_settled_by_the_supplier(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The archive mirrored Eneco Fix's feed-in months from the supplier's
+    archive before the credit was settled, and its replay could not settle
+    them, so they stayed at the schema they were parsed under. Mirrored
+    rather than caught live, the month lookup billed each as it was: August
+    2026's credit at the printed 6,38 c/kWh against the 8,06 it settled at,
+    for every keyless entry. Such a row is now asked about like a live one.
+    A row of that schema that already carries its settled index is not."""
+    from custom_components.be_electricity_prices.snapshot_codec import (
+        _SNAPSHOT_SCHEMA_VERSION,
+    )
+
+    freezer.move_to("2026-10-01 10:00:00+02:00")
+    credit = InjectionRates(
+        current=0.0638, factor=0.84, base=-0.028, month_indexed=True
+    )
+    printed = make_snapshot(
+        energy=FixedRates(single=0.2028),
+        injection=credit,
+        publication_label="as printed",
+    )
+    settled = replace(
+        printed,
+        injection=replace(credit, current=0.0806, index_realised=0.1293),
+        publication_label="settled",
+    )
+
+    async def _read(row_snap: SupplierSnapshot, schema: int) -> ArchivedCard:
+        row = _snapshot_to_dict(row_snap, dt_util.utcnow(), schema_version=schema)
+        row["_via"] = "archive"
+
+        async def _body(*_args: object, **_kw: object) -> str:
+            return json.dumps(row)
+
+        with patch.object(snapshot_months, "fetch_text", _body):
+            card = await _archived_card_from_github(
+                MagicMock(), "test", "test", "flanders", date(2026, 9, 1)
+            )
+        assert card is not None
+        return card
+
+    async def _september(card: ArchivedCard, answer: Any) -> tuple[Any, int]:
+        return await _september_from_a_live_row(
+            hass,
+            card.snapshot,
+            answer,
+            captured_live=card.captured_live,
+            parsed_before=card.parsed_before,
+        )
+
+    stale = await _read(printed, _SNAPSHOT_SCHEMA_VERSION - 1)
+    snap, asked = await _september(stale, settled)
+    assert snap is settled and asked == 1
+    row = _monthly_snapshots(hass)[("test", "test", "flanders", "2026-09")]
+    assert not _month_row_is_provisional(row, date(2026, 9, 1), date(2026, 10, 1))
+
+    # The supplier could not be asked: the row bills and is asked again.
+    snap, _ = await _september(stale, ExtractorError("timeout"))
+    assert snap.injection == printed.injection and snap.provisional
+
+    # Mirrored at the running schema, the row is what the supplier settled.
+    current = await _read(settled, _SNAPSHOT_SCHEMA_VERSION)
+    snap, asked = await _september(current, None)
+    assert asked == 0 and snap.injection == settled.injection
+
+    # Settled under an older schema: it waits for the archive to re-read it,
+    # not for the supplier.
+    settled_before = await _read(settled, _SNAPSHOT_SCHEMA_VERSION - 1)
+    snap, asked = await _september(settled_before, None)
+    assert asked == 0 and snap.provisional
 
 
 def test_every_supplier_that_settles_a_month_on_the_next_card_says_so() -> None:

@@ -511,9 +511,12 @@ class _ReplaySession:
     candidate URLs before choosing one (Eneco's archive walks issue
     numbers) lands on the card the row was parsed from, and a GET for the
     kept card's file under another folder or another spelling answers 404
-    the same way (the Brusol, Mega and Bolt walks below). Anything else is refused as a network error, which
-    the readers wrap the way they wrap a real one, and the row is left as
-    it was and reported.
+    the same way (the Brusol, Mega and Bolt walks below). The cards the
+    supplier's other rows of the month and the next month's row read
+    (``related``) are answered like the row's own, since a month can settle
+    on the next card or be priced on another product's. Anything else is
+    refused as a network error, which the readers wrap the way they wrap a
+    real one, and the row is left as it was and reported.
     """
 
     def __init__(
@@ -530,6 +533,8 @@ class _ReplaySession:
         self._kept = kept or {}
         # url -> digest for the row being replayed.
         self.pdfs: dict[str, str] = {}
+        # url -> digest for the cards its sibling and next month's rows read.
+        self.related: dict[str, str] = {}
         self._cache = Path(tempfile.mkdtemp(prefix="cards-replay-"))
         # Set when a kept card could not be downloaded, retries included, for
         # a reason that says nothing about the card: a network error, a 5xx,
@@ -542,13 +547,17 @@ class _ReplaySession:
         return self._get(url)
 
     def head(self, url: str, **_kw: Any) -> Any:
-        return self._Pending(self._probe(url), self.pdfs.get(url, ""))
+        return self._Pending(self._probe(url), self._digest(url) or "")
+
+    def _digest(self, url: str) -> str | None:
+        """The kept card answering ``url``: the row's own, else a related one."""
+        return self.pdfs.get(url) or self.related.get(url)
 
     async def _probe(self, url: str) -> bytes | None:
-        return b"" if url in self.pdfs else None
+        return b"" if self._digest(url) is not None else None
 
     async def _fetch(self, url: str) -> bytes:
-        digest = self.pdfs.get(url)
+        digest = self._digest(url)
         if digest is None:
             raise aiohttp.ClientConnectionError(f"offline replay has nothing for {url}")
         if self._pdf_dir is not None:
@@ -617,7 +626,7 @@ class _ReplaySession:
         return await self._fetch(f"card:{digest}")
 
     def _get(self, url: str) -> _Pending:
-        if url not in self.pdfs and (
+        if self._digest(url) is None and (
             _file_name(url) in {_file_name(read) for read in self.pdfs}
             or _respelled(url) in self.pdfs
         ):
@@ -631,7 +640,7 @@ class _ReplaySession:
             # French alone is the same case: a row captured before the Dutch
             # card was read is replayed on the French reading it was made on.
             return self._Pending(self._probe(url))
-        return self._Pending(self._fetch(url), self.pdfs.get(url, ""))
+        return self._Pending(self._fetch(url), self._digest(url) or "")
 
 
 def _file_name(url: str) -> str:
@@ -1529,6 +1538,47 @@ def _sibling_sources(path: Path) -> list[dict[str, str]]:
     return sources
 
 
+# An address in a stored page: a listing's links, a JSON answer's URLs.
+_LINKED_URL_RE = re.compile(r"https?://[^\s\"'<>]+")
+
+
+# The year and month folder an upload is filed under, as "/2026/09/".
+_UPLOAD_MONTH_RE = re.compile(r"/\d{4}/\d{2}/")
+
+
+def _relisted(
+    pages: Iterable[str], sources: list[dict[str, str]]
+) -> list[dict[str, str]]:
+    """``sources`` again under the address ``pages`` link the same file at.
+
+    Cociter files a card under the month it uploads it and links whichever
+    upload is current, so the listing the August 2026 row read links
+    September's card at ``uploads/2026/09/`` while the September row, read
+    later, holds it at ``uploads/``. The two uploads are not the same bytes,
+    but they print the same figures, and the next month's row reading of
+    that card is what the month settles on: refused under the address the
+    row's own listing gives, the replay left the month unsettled.
+
+    Cociter moves a card either way between a month folder and none. Two
+    month folders are two cards, not one under two addresses: Aspiravi
+    reuses one file name for its January and July cards.
+    """
+    linked: dict[str, set[str]] = {}
+    for page in pages:
+        for url in _LINKED_URL_RE.findall(page):
+            linked.setdefault(_file_name(url), set()).add(url)
+    return [
+        {**source, "url": url}
+        for source in sources
+        if source["variant"] != "text"
+        for url in sorted(linked.get(_file_name(source["url"]), ()))
+        if url != source["url"]
+        and not (
+            _UPLOAD_MONTH_RE.search(source["url"]) and _UPLOAD_MONTH_RE.search(url)
+        )
+    ]
+
+
 async def _replay_row(
     path: Path,
     extractors: dict[str, SupplierExtractor],
@@ -1600,7 +1650,25 @@ async def _replay_row(
     # for a card priced on another product's card: where both hold one
     # address, a sibling read it this month and the follower next month.
     # Best effort: the newest month has no follower and must still replay.
-    for source in [*_sibling_sources(path), *_follower_sources(path)]:
+    related = [*_sibling_sources(path), *_follower_sources(path)]
+    pages = [
+        dict.__getitem__(memo, source["url"])
+        for source in own
+        if source["variant"] == "text" and source["url"] in memo
+    ]
+    relisted = _relisted(pages, related)
+    # The kept card each related address served, so a source the parse reads
+    # there names its PDF. Not for a relisted address, which never served the
+    # bytes it stands in with.
+    cards.digests.update(
+        {s["url"]: digest_of(s["pdf"]) for s in reversed(related) if "pdf" in s}
+    )
+    related += relisted
+    replay.related = {}
+    for source in related:
+        if "pdf" in source:
+            replay.related.setdefault(source["url"], digest_of(source["pdf"]))
+    for source in related:
         text_path = out / source["text"]
         key = _memo_key(source)
         if key in memo or not text_path.exists():
@@ -1723,6 +1791,7 @@ async def _retry_unparsed(
             summary.unreplayable.append(f"{label}: kept bytes name no url to replay")
             continue
         replay.pdfs = pdfs
+        replay.related = {}
         cards.digests.update(pdfs)
         cards.calls.clear()
         cards.seen.clear()

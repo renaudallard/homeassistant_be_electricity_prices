@@ -348,6 +348,7 @@ class ArchivedCard:
     # two are the same document. For one indexed on its own month they are
     # not: see ``_awaits_settlement``.
     captured_live: bool = False
+    parsed_before: bool = False  # under an older schema than the running one
 
 
 def _settles_after_its_month(snap: SupplierSnapshot) -> bool:
@@ -377,8 +378,12 @@ def _awaits_settlement(archived: ArchivedCard) -> bool:
     month is such a row until the daily walk has asked the supplier's own
     archive for it again, and served as settled it billed a keyless Eneco,
     EBEM or Mega September 9 to 10 EUR under what was invoiced, for good.
+    So does an unsettled older-schema row the archive could not re-read:
+    Eneco Fix's August 2026 feed-in billed 6,38 c/kWh, not the 8,06 settled.
     """
-    return archived.captured_live and _settles_after_its_month(archived.snapshot)
+    snap = archived.snapshot
+    stale = archived.parsed_before and not is_settled(snap)
+    return (archived.captured_live or stale) and _settles_after_its_month(snap)
 
 
 async def _settled_by_supplier(
@@ -488,7 +493,8 @@ async def _archived_card_from_github(
     except (KeyError, TypeError, ValueError) as err:
         _LOGGER.debug("card archive row %s does not decode: %s", url, err)
         return None
-    if row.get("_schema_version", 1) < _SNAPSHOT_SCHEMA_VERSION:
+    parsed_before = row.get("_schema_version", 1) < _SNAPSHOT_SCHEMA_VERSION
+    if parsed_before:
         # Parsed before the running parser, and re-parsed on the archive's next
         # run. Good enough to bill until then, not to keep: cached as settled
         # it was persisted under the running schema and served from disk for
@@ -499,6 +505,7 @@ async def _archived_card_from_github(
         snapshot=snapshot,
         read_by_ocr=_row_read_by_ocr(row),
         captured_live=row.get("_via", "live") == "live",
+        parsed_before=parsed_before,
     )
 
 
@@ -782,7 +789,8 @@ async def month_card(
     card, so that month falls to the current snapshot. It is also asked over a
     row the archive caught live on a card indexed on its own month, which
     holds the estimate the card printed rather than what the month settled
-    at (``_awaits_settlement``); a supplier that settles in place
+    at, or that the archive could not re-read and never settled
+    (``_awaits_settlement``); a supplier that settles in place
     (``settle_month``, Luminus) re-prices the row it holds instead, whichever
     tier gave it. None when neither has the month: the current card is then
     the proxy, and it is the running month's card by definition, so that

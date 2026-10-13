@@ -2992,6 +2992,189 @@ async def test_a_next_months_card_other_readers_made_still_settles_a_replay(
     assert not ac.rerender_due(out)
 
 
+def _settling_rows(
+    out: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    august: list[tuple[str, str, str]],
+    september: list[tuple[str, str, str]],
+) -> Path:
+    """An August row the supplier's archive answered, waiting on the card
+    after it, and the September row holding that card. Each source is
+    (url, variant, text); a PDF source names a kept card read by the
+    installed readers."""
+    _readers(monkeypatch, "pypdf==1 render=a")
+
+    def sources(read: list[tuple[str, str, str]]) -> list[dict[str, str]]:
+        out_sources = []
+        for url, variant, text in read:
+            source = {
+                "url": url,
+                "variant": variant,
+                "text": ac._write_text(out, "2026-10", text),
+            }
+            if variant != "text":
+                source["pdf"] = hashlib.sha256(url.encode()).hexdigest()
+                source["readers"] = "pypdf==1 render=a"
+            out_sources.append(source)
+        return out_sources
+
+    for month, read in (("2026-08", august), ("2026-09", september)):
+        ac._write_card(
+            out,
+            "acme",
+            "acme_fix",
+            "wallonia",
+            month,
+            make_snapshot(
+                supplier="acme",
+                contract="acme_fix",
+                energy=FixedRates(single=0.1),
+                publication_label=month,
+            ),
+            sources(read),
+            NOW,
+            "archive",
+            date(2026, 10, 2),
+        )
+    return out / "cards/acme/acme_fix/wallonia/2026-08.json"
+
+
+async def _replay_one(
+    out: Path,
+    path: Path,
+    fetch_for_month: Callable[..., Awaitable[SupplierSnapshot | None]],
+) -> Any:
+    extractor = replace(
+        _extractor(_card_fetch("unused")), fetch_for_month=fetch_for_month
+    )
+    summary = ac._Summary()
+    replay = ac._ReplaySession(None, None, None)  # type: ignore[arg-type]
+    await ac._replay_row(
+        path,
+        {"acme": extractor},
+        ac._Cards(out, None, "2026-10"),
+        replay,
+        NOW,
+        summary,
+    )
+    return summary
+
+
+def _settled(text: str) -> SupplierSnapshot:
+    return make_snapshot(
+        supplier="acme",
+        contract="acme_fix",
+        energy=FixedRates(single=float(text.split("index=")[1])),
+        publication_label="2026-08",
+    )
+
+
+async def test_a_replay_settles_on_the_next_card_it_probes_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Eneco's archive path HEADs a card before reading it, the next month's
+    included, and the replay answered 404 for every card but the row's own.
+    Its Fix feed-in months, mirrored before the credit settled, could never
+    be settled by the replay and stayed at the schema they were read under,
+    billed at the printed estimate. The next month's row holds that card."""
+    aug, sep = "https://acme.test/2608.pdf", "https://acme.test/2609.pdf"
+    path = _settling_rows(
+        tmp_path,
+        monkeypatch,
+        [(aug, "plain", "august card")],
+        [(sep, "plain", "september card index=0.13")],
+    )
+
+    async def fetch_for_month(
+        session: Any, _contract: str, _region: str, _month: date
+    ) -> SupplierSnapshot | None:
+        await _pdf.head_or_raise(session, aug)
+        await _pdf.fetch_pdf_text(session, aug)
+        try:
+            await _pdf.head_or_raise(session, sep)
+        except ExtractorError:
+            return replace(_settled("index=0.1"), provisional=True)
+        return _settled(await _pdf.fetch_pdf_text(session, sep))
+
+    summary = await _replay_one(tmp_path, path, fetch_for_month)
+    assert (summary.reparsed, summary.unreplayable) == (1, [])
+    row = json.loads(path.read_text())
+    assert row["energy"]["single"] == 0.13
+    # The next card is named with the PDF the September row kept for it.
+    pdfs = {s["url"]: s.get("pdf") for s in row["_sources"]}
+    assert pdfs[sep] == hashlib.sha256(sep.encode()).hexdigest()
+
+
+async def test_a_replay_settles_on_a_next_card_the_listing_links_elsewhere(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cociter links each card under the folder of the month it was uploaded.
+    The listing the August 2026 row read links September's card under
+    uploads/2026/09/, the September row read later holds the re-upload under
+    uploads/, and the replay refused the address the listing gives, so the
+    month never settled. The September row's reading of that card stands in
+    for it."""
+    listing = "https://acme.test/tarifs/"
+    aug = "https://acme.test/uploads/2026/09/card-2608.pdf"
+    linked = "https://acme.test/uploads/2026/09/card-2609.pdf"
+    held = "https://acme.test/uploads/card-2609.pdf"
+    path = _settling_rows(
+        tmp_path,
+        monkeypatch,
+        [
+            (listing, "text", f'<a href="{aug}"></a><a href="{linked}"></a>'),
+            (aug, "plain", "august card"),
+        ],
+        [
+            (listing, "text", f'<a href="{held}"></a>'),
+            (held, "plain", "september card index=0.15"),
+        ],
+    )
+
+    async def fetch_for_month(
+        session: Any, _contract: str, _region: str, _month: date
+    ) -> SupplierSnapshot | None:
+        page = await fetch_text(session, listing)
+        cards = [part.split('"')[0] for part in page.split('href="')[1:]]
+        await _pdf.fetch_pdf_text(session, cards[0])
+        return _settled(await _pdf.fetch_pdf_text(session, cards[1]))
+
+    summary = await _replay_one(tmp_path, path, fetch_for_month)
+    assert (summary.reparsed, summary.unreplayable) == (1, [])
+    assert json.loads(path.read_text())["energy"]["single"] == 0.15
+
+
+def test_a_card_in_one_month_folder_is_not_relisted_under_another() -> None:
+    """Aspiravi files its January and July cards under one file name in two
+    month folders. Those are two cards, so the July address must not stand
+    in for January's bytes. Cociter moves one card between a month folder
+    and none, in either direction, and that is still followed."""
+    page = (
+        '<a href="https://acme.test/uploads/2026/07/card.pdf"></a>'
+        '<a href="https://acme.test/uploads/2026/09/other.pdf"></a>'
+    )
+    january = {
+        "url": "https://acme.test/uploads/2026/01/card.pdf",
+        "variant": "plain",
+        "text": "t",
+    }
+    reupload = {
+        "url": "https://acme.test/uploads/other.pdf",
+        "variant": "plain",
+        "text": "t",
+    }
+    foldered = {
+        "url": "https://acme.test/uploads/2026/01/third.pdf",
+        "variant": "plain",
+        "text": "t",
+    }
+    page += '<a href="https://acme.test/uploads/third.pdf"></a>'
+    assert ac._relisted([page], [january, reupload, foldered]) == [
+        {**reupload, "url": "https://acme.test/uploads/2026/09/other.pdf"},
+        {**foldered, "url": "https://acme.test/uploads/third.pdf"},
+    ]
+
+
 @pytest.mark.parametrize("flaky_pull", [False, True])
 def test_the_archive_push_survives_the_water_archives_push(
     tmp_path: Path, flaky_pull: bool

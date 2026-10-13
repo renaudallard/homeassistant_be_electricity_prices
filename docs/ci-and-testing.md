@@ -1049,7 +1049,11 @@ own month, so it goes ahead of the follower where both hold one address. A card 
 has moved its address since is seeded under the new address as well (`_URL_MOVES`), since the
 row names the old one and the replayed parse asks for the new: Energy Knights put every card
 under `par` in October 2026, which left all 72 of its rows unreplayable although each held its
-card's text. The clock is pinned with freezegun to the row's
+card's text. A follower or sibling card the row's own listing links under another address with
+the same file name is seeded under that address too (`_relisted`): Cociter files a card under the
+folder of the month it uploaded it, so the listing the August 2026 row read links September's card
+under `uploads/2026/09/` while the September row holds the later upload under `uploads/`, and the
+two months it hit never settled. The clock is pinned with freezegun to the row's
 `_seen_on` at noon Brussels (ticking, so the
 loop's timers and the render threads keep working; some extractors choose a card by today's
 date), and the row is re-run through `fetch`, or `fetch_for_month` for a backfilled row, with a
@@ -1059,7 +1063,10 @@ with another PDF reader asks for, served from the `--pdfs` directory or download
 cards releases (`--pdf-base-url`), with a download kept on disk for the sibling rows that read
 the same card; a HEAD answers 200 for a kept card and 404 for anything else, so an extractor
 that probes candidate URLs before choosing one (Eneco's archive walks issue numbers) lands on the
-card the row was parsed from; a GET for that card's file under another folder answers the 404 the
+card the row was parsed from. The cards the follower and sibling rows read count as kept for this
+(`related`), HEAD and download alike: Eneco's archive path probes the next month's card before it
+reads it, and with a 404 for it the 24 Power Fix rows whose feed-in it settles stayed at the
+schema they were mirrored under, billing the printed credit; a GET for that card's file under another folder answers the 404 the
 site did, since EnergyVision's Brusol files each card under the month it uploaded it and the month
 before delivery is asked first, and so does a GET for the card's file under its other spelling
 (`_respelled`), since Mega's professional fixed cards turned "-Fixed.pdf" into "-Fix.pdf" in
