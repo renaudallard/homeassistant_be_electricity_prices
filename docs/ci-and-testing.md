@@ -693,7 +693,9 @@ runs these gates:
   (`_expect_registers`), every month-indexed coefficient pair a variable, TOU or Impact card
   carries, which must also come whole (`_expect_coefficient_pair`), the Impact bands and price
   ceilings, every per-kWh network rate, the transport rate, the prosumer tariff, the VREG ceiling
-  and the Sibelga power term on each DSO overlay (`_validate_dsos`), the per-slot feed-in formula
+  and the Sibelga power term on each DSO overlay (`_validate_dsos`, which also fails a row whose
+  exclusive-night distribution rate exceeds its single one, the trace of two swapped columns that
+  both sit in range), the per-slot feed-in formula
   and the printed pair or triplet (`_validate_injection`), the welcome credit's five amounts,
   its share and its wait (`_expect_welcome_credit`, bounded at BOTH ends because the slip this
   repository actually had was a figure a thousand times too small that every ceiling accepted,

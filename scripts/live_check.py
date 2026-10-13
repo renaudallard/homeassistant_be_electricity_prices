@@ -4749,6 +4749,19 @@ def _validate_dsos(
                 getattr(overlay, field, None),
                 _NETWORK_RATE_BOUNDS,
             )
+        # An exclusive-night meter only runs in off-peak hours, and no DSO
+        # tariff charges it more than the single register: in October 2026
+        # every archived row sat at or below 0,92 of it. A row above is a
+        # swapped or misread column, which the bounds above cannot see, as
+        # Bolt's professional cards of late 2025 print for Fluvius Intergem.
+        night = getattr(overlay, "distribution_exclusive_night", None)
+        single = getattr(overlay, "distribution_single", None)
+        if night is not None and single is not None:
+            _expect(
+                f"{prefix}: {key} exclusive night distribution <= single",
+                night <= single,
+                detail=f"exclusive_night={night} single={single}",
+            )
         # Zero is a published value here: the Flemish cards fold transport
         # into the distribution rate. The ceiling is the slip check.
         _expect_rate(

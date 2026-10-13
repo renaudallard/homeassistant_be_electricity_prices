@@ -2361,6 +2361,18 @@ def test_every_populated_rate_is_bounded_against_a_unit_slip(
     assert _failures(lambda: lc._validate_dsos("x", slipped)) == [
         "ores distribution_single EUR/kWh in [0.02, 0.5]"
     ]
+    # Both figures in range, but the exclusive night and single columns
+    # swapped: only their order gives it away. Equal still passes.
+    swapped = replace(
+        ores, distribution_single=0.0739, distribution_exclusive_night=0.1198
+    )
+    slipped = SimpleNamespace(injection=pair, dsos={"ores": swapped}, taxes=taxes)
+    assert _failures(lambda: lc._validate_dsos("x", slipped)) == [
+        "ores exclusive night distribution <= single"
+    ]
+    level = replace(ores, distribution_exclusive_night=0.1198)
+    slipped = SimpleNamespace(injection=pair, dsos={"ores": level}, taxes=taxes)
+    assert _failures(lambda: lc._validate_dsos("x", slipped)) == []
     slipped = SimpleNamespace(
         injection=pair, dsos={"ores": replace(ores, transport=2.74)}, taxes=taxes
     )
