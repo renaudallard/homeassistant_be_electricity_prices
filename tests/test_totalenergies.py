@@ -789,6 +789,29 @@ def test_the_month_formula_resolves_to_what_the_card_prints() -> None:
     assert 0.05 <= resolved <= 0.60
 
 
+@pytest.mark.parametrize(
+    ("fixture", "contract", "region"),
+    [
+        ("totalenergies_mycomfort_v.pdf", "totalenergies_mycomfort", "flanders"),
+        ("totalenergies_impact_w.pdf", "totalenergies_impact", "wallonia"),
+    ],
+)
+def test_the_month_formula_resolves_on_the_columns_blend(
+    fixture: str, contract: str, region: str
+) -> None:
+    """The card's BELPEXM_RLP weights by "la moyenne arithmétique des profils
+    de consommations RLP ... de tous les gestionnaires de réseau", every DSO
+    column alike. This myComfort card's monthly rates solve to a March 2026
+    index of 97,64 EUR/MWh: the columns blend gives 97,41 hourly and 97,64 by
+    quarter hour, the distinct one 96,85. Both shapes of the formula, four
+    meter columns and Impact's one pair, carry it."""
+    text = fixture_text(fixture, layout=True)
+    energy = parse_snapshot(contract, text, region, "t://").energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed and energy.rlp_indexed
+    assert energy.rlp_blend == "columns"
+
+
 def test_a_dutch_card_reads_as_its_french_edition() -> None:
     """The October 2026 myComfort card for Wallonia was served in Dutch at its
     French address. Every figure below is the card's own: the realised prices

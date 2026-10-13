@@ -439,6 +439,21 @@ same kind of formula: `factor * vat * 10`, `base * vat / 100`. Dividing both by
 100 instead put the mono column at 0.02275 EUR/kWh against the 0.18140 it
 prints, about 555 EUR a year at 3500 kWh.
 
+The card defines the index's profile as "la moyenne arithmétique des profils
+de consommations RLP ... de tous les gestionnaires de réseau en Belgique", every
+DSO column alike, so the leg carries `rlp_blend="columns"`, as energie.be and
+Luminus BasicFlex do for the same words. Solving the monthly rates for the
+index, on the archived cards and the web.archive.org captures of the `latest/`
+addresses (September 2025 to September 2026, April and June not captured),
+gives the columns blend's monthly mean each time, to within 0,3 EUR/MWh on
+the hourly reading the engine resolves and to 0,02 at quarter-hour resolution
+in 2026; the distinct blend misses by up to 2,2 EUR/MWh in summer (August 2026:
+the cards solve to 135,11, columns gives 134,93 hourly and 135,11 by quarter,
+distinct 133,44), about 0,2 c/kWh on that month's rate. The October 2026 cards fold the green energy
+contribution into the formula base but print a monthly rate with the
+contribution outside the VAT, and solve to the September columns mean once it
+is taken out that way.
+
 The four carry the registry twin `month_indexed_energy` (`_MONTH_INDEXED_ENERGY`,
 `totalenergies.py`), without which the config flow never offers the optional
 ENTSO-E key on the no-solar and compensation regimes and the re-price has no

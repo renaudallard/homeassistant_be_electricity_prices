@@ -320,12 +320,20 @@ def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
     # BELPEXM_RLP is the day-ahead weighted by the residual load profile,
     # which the injection leg's plain BELPEXM is not: the guard on
     # _MONTH_FORMULA_RE exists to keep the two apart.
+    #
+    # The card defines the profile as "la moyenne arithmétique des profils
+    # de consommations RLP ... de tous les gestionnaires de réseau", every
+    # DSO column alike: the columns blend. The index the cards' own monthly
+    # rates solve to, for eleven months from September 2025 to September
+    # 2026, is that blend's to within 0,3 EUR/MWh on the hourly reading
+    # resolved here, where the distinct blend is up to 2,2 low in summer.
     if len(pairs) == 1:
         factor, base = pairs[0]
         return replace(
             rates,
             month_indexed=True,
             rlp_indexed=True,
+            rlp_blend="columns",
             formula_factor=factor * vat * 10.0,
             formula_base=base * vat / 100.0,
         )
@@ -334,6 +342,7 @@ def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
         rates,
         month_indexed=True,
         rlp_indexed=True,
+        rlp_blend="columns",
         formula_factor=fm * vat * 10.0,
         formula_base=bm * vat / 100.0,
         formula_factor_peak=fp * vat * 10.0,
