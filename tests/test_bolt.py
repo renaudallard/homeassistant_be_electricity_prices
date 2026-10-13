@@ -886,7 +886,7 @@ def test_a_tax_row_is_bounded_and_may_hold_whole_numbers() -> None:
     # A whole-number levy parses instead of taking the snapshot down.
     i = text.find("Contribution sur l'énergie")
     assert i > 0
-    zeroed = text[:i] + text[i : i + 90].replace("0,20417", "0") + text[i + 90 :]
+    zeroed = text[:i] + re.sub(r"0,204\d+", "0", text[i : i + 90]) + text[i + 90 :]
     assert bolt_mod.parse_snapshot(
         "bolt_fix", zeroed, "wallonia"
     ).taxes.energy_contribution == pytest.approx(0.0)
@@ -1186,6 +1186,67 @@ def test_a_dashed_excise_row_still_raises() -> None:
     )
     with pytest.raises(ExtractorError, match="Droit d'accise"):
         bolt_mod._extract_taxes(dashed_excise, "wallonia")
+
+
+# The professional cards of October to December 2025, verbatim: the text layer
+# breaks the Flemish contribution and the Walloon connection fee in two.
+_SPLIT_DECIMALS = (
+    "Droit d’accise spécial (c€/mois) (**) 1,4210\n 1,4210\n 1,4210\n"
+    " Certificats verts (c€/kWh)*\n\n"
+    "Contribution sur l'énergie (c€/kWh)\n 0,19 26\n 0,1926\n 0,1926\n\n"
+    "Redevance de raccordement (c€/kWh) (**) - 0,0 75 - Le coût de l’énergie\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("region", "contribution", "connection"),
+    [
+        ("flanders", 0.001926, 0.0),
+        ("wallonia", 0.001926, 0.00075),
+        ("brussels", 0.001926, 0.0),
+    ],
+)
+def test_a_decimal_the_text_layer_split_is_read_whole(
+    region: str, contribution: float, connection: float
+) -> None:
+    """Taking the last three numbers of "0,19 26 0,1926 0,1926" made the tail
+    the Flemish column, a 0,26 EUR/kWh contribution, and "- 0,0 75 -" billed
+    Wallonia no connection fee and Brussels one of 0,75 EUR/kWh."""
+    excise, got_contribution, got_connection = bolt_mod._extract_taxes(
+        _SPLIT_DECIMALS, region
+    )
+    assert excise == pytest.approx(0.01421)
+    assert got_contribution == pytest.approx(contribution)
+    assert got_connection == pytest.approx(connection)
+
+
+def test_federal_columns_printed_to_other_precisions_agree() -> None:
+    """Bolt prints the Flemish column to four decimals and the others to five
+    ("0,1926" beside "0,19261"): one rate, so it is read."""
+    text = _SPLIT_DECIMALS.replace(
+        "0,19 26\n 0,1926\n 0,1926", "0,1926\n 0,19261\n 0,19261"
+    )
+    assert bolt_mod._extract_taxes(text, "flanders")[1] == pytest.approx(0.001926)
+
+
+@pytest.mark.parametrize(
+    ("printed", "misread"),
+    [
+        ("0,19 26\n 0,1926\n 0,1926", "0,1926\n 0,2042\n 0,1926"),
+        ("0,19 26\n 0,1926\n 0,1926", "0,1926\n 0,1926\n 0"),
+        ("- 0,0 75 -", "0,075 - -"),
+    ],
+)
+def test_a_tax_row_whose_columns_cannot_be_right_raises(
+    printed: str, misread: str
+) -> None:
+    """A federal levy is one rate in all three regions and the connection fee
+    is Walloon only, so a row read otherwise was misread and is refused rather
+    than billed."""
+    text = _SPLIT_DECIMALS.replace(printed, misread)
+    assert text != _SPLIT_DECIMALS
+    with pytest.raises(ExtractorError, match=r"not print one rate|outside Wallonia"):
+        bolt_mod._extract_taxes(text, "wallonia")
 
 
 def test_every_variable_card_offers_the_settlement_choice() -> None:

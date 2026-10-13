@@ -556,6 +556,16 @@ permitted (returns 0). Its regex eats up to three integer footnote markers ahead
 values (`_bolt_overlays.py`); the `{0,4}` cap deliberately stops a future integer-only Flanders value from
 being mistaken for a footnote and silently shifting the columns.
 
+The professional cards of October to December 2025 (`fix_pro_el_fr_2025{10,11,12}.pdf`, read by
+`bolt_pro_fix` and `bolt_pro_plenty_fix`) break two values in their text layer: the Flemish
+contribution renders as `0,19 26` and the connection fee as `- 0,0 75 -`. Read as printed, the tail
+became a column of its own, so Flanders paid a 0,26 EUR/kWh contribution, Wallonia no connection
+fee and Brussels one of 0,75 EUR/kWh. `_join_split_decimals` (`_bolt_overlays.py`) puts a digit run
+one space after a decimal back on it before either row is read. Neither row is trusted on that
+alone: the excise and contribution columns must print one rate, compared at the coarsest precision
+printed since Flanders prints `0,1926` beside `0,19261`, and the connection fee must be `-` in the
+Flemish and Brussels columns. A row that fails either check raises.
+
 `test_taxes_split_correctly_per_region` (`tests/test_bolt.py`) checks nationwide excise
 (0.050329) and contribution (0.002042), Wallonia connection fee (0.00075), and per-region renewables
 (all illustrative).

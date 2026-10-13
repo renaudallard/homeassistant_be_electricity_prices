@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import logging
 import re
+from decimal import ROUND_HALF_UP, Decimal
 
 from ..const import (
     DSO_AIEG,
@@ -65,6 +66,46 @@ from .base import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# A digit run one space after a decimal, and not the start of a number of its
+# own: the tail of a value the text layer broke in two.
+_SPLIT_DECIMAL = re.compile(r"(\d[.,]\d+) (\d+)(?![\d.,])")
+
+
+def _join_split_decimals(line: str) -> str:
+    """``line`` with each decimal the text layer broke in two put back.
+
+    The professional cards of October to December 2025 render the energy
+    contribution as "0,19 26" and the connection fee as "0,0 75". Read as
+    printed, the tail became a column of its own: Flanders paid a 0,26
+    EUR/kWh contribution, Brussels a 0,75 EUR/kWh connection fee and Wallonia
+    none. These rows print no whole number beside a decimal, and the callers
+    check the columns they get, so a join that was wrong raises.
+    """
+    return _SPLIT_DECIMAL.sub(r"\1\2", line)
+
+
+def _require_one_rate(row: tuple[str, str, str], label: str) -> None:
+    """Raise unless the three columns of a federal levy print one rate.
+
+    A federal levy is the same in every region, so columns that differ were
+    misread. A column may be printed to fewer decimals than the others
+    ("0,1926" beside "0,19261"), so they are compared at the coarsest one
+    that prints any; a whole number beside them must then match exactly.
+    """
+    places = min(
+        (len(f) for v in row if (f := v.replace(",", ".").partition(".")[2])),
+        default=0,
+    )
+    quantum = Decimal(1).scaleb(-places)
+    rates = {
+        Decimal(v.replace(",", ".")).quantize(quantum, rounding=ROUND_HALF_UP)
+        for v in row
+    }
+    if len(rates) != 1:
+        raise ExtractorError(
+            f"Bolt: the {label} row does not print one rate: {' / '.join(row)}"
+        )
+
 
 def _three_col_row(text: str, label: str) -> tuple[str, str, str] | None:
     """The three FL / WAL / BX values of one tax row, or ``None``.
@@ -88,7 +129,8 @@ def _three_col_row(text: str, label: str) -> tuple[str, str, str] | None:
     a new one, and take the LAST three numbers found. A leading marker falls
     off the front, whole numbers are fine, and a row that really is missing
     its values yields fewer than three and returns ``None`` for the caller to
-    raise on.
+    raise on. A value the text layer broke in two is joined first (see
+    :func:`_join_split_decimals`), or its tail is one of the three.
     """
     m = re.search(label, text)
     if m is None:
@@ -101,7 +143,7 @@ def _three_col_row(text: str, label: str) -> tuple[str, str, str] | None:
         # on it (the unit, "(c€/kWh)") does not open a new row.
         if n and re.match(r"\s*[^\W\d_]", line):
             break
-        row.append(line)
+        row.append(_join_split_decimals(line))
     nums = re.findall(r"-?\d+(?:[.,]\d+)?", " ".join(row))
     if len(nums) < 3:
         return None
@@ -186,6 +228,8 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
         if not _row_is_explicit_zero(text, r"Contribution sur l['’]énergie"):
             raise ExtractorError("Bolt: 'Contribution sur l'énergie' row not found")
         contribution_row = ("0", "0", "0")
+    _require_one_rate(excise_row, "'Droit d'accise spécial'")
+    _require_one_rate(contribution_row, "'Contribution sur l'énergie'")
     # Connection fee row prints footnote refs ahead of the values, as bare
     # integers on a current card and as parenthesised stars on an archived
     # pre-redesign one:
@@ -200,8 +244,17 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
         r"Redevance de raccordement[^\n]*?\(c€/kWh\)\s*"
         r"(?:(?:\(\*+\)|\d+)\s*){0,4}"
         r"(-|[\d.,]+)\s+(-|[\d.,]+)\s+(-|[\d.,]+)",
-        text,
+        _join_split_decimals(text),
     )
+    # The fee is Walloon, so a rate in the Flemish or Brussels column means
+    # the row was misread.
+    if connection_match is not None and (
+        connection_match.group(1) != "-" or connection_match.group(3) != "-"
+    ):
+        raise ExtractorError(
+            "Bolt: the 'Redevance de raccordement' row prints a rate outside "
+            f"Wallonia: {' / '.join(connection_match.groups())}"
+        )
 
     def _pick(row: tuple[str, str, str] | None, region: str) -> float:
         if row is None:
