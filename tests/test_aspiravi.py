@@ -308,12 +308,33 @@ async def test_fetch_for_month_refuses_a_card_of_another_month(
 
 async def test_discover_names_every_product_code() -> None:
     page = (
-        _link("2026/09/900027_Eco_Plus_flex_huishoudelijk-formule.pdf", "Huidige")
-        + _link("2025/06/900027-eco-plus-flex-huishoudelijk-juni-25.pdf", "juni 25")
-        + _link("2027/01/900031_Eco_Plus_vast_huishoudelijk.pdf", "Vast")
+        _link(
+            "2026/09/900027_Eco_Plus_flex_huishoudelijk-formule.pdf",
+            "Huidige tariefkaart",
+        )
+        + _link(
+            "2025/06/900027-eco-plus-flex-huishoudelijk-juni-25.pdf",
+            "900027 eco plus flex (huishoudelijk) juni 25",
+        )
+        + _link(
+            "2027/01/900031_Eco_Plus_vast_huishoudelijk.pdf",
+            "900031 eco plus vast (huishoudelijk) jan 27",
+        )
         + _link("2024/10/GeneralConditions_current.pdf", "Algemene voorwaarden")
     )
     assert await aspiravi.discover(make_text_session(page)) == {
         _CID,
         "aspiravi_900031",
     }
+
+
+async def test_discover_skips_the_terms_filed_under_a_date() -> None:
+    # Issue #130: the October 2026 terms upload, linked from both pages.
+    page = _link(
+        "2026/10/900027_Eco_Plus_flex_huishoudelijk-formule-2026-1.pdf",
+        "Huidige tariefkaart",
+    ) + _link(
+        "2026/10/231026_Algemene_Voorwaarden_Aspiravi_Energy.pdf",
+        "Alg. voorwaarden",
+    )
+    assert await aspiravi.discover(make_text_session(page)) == {_CID}

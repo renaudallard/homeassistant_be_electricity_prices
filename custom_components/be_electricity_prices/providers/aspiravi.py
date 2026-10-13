@@ -75,6 +75,11 @@ _ARCHIVE_URL = "https://aspiravi-energy.be/tariefkaarten/"
 # is a product the registry does not know yet.
 _PRODUCT_CODES = {"900027": _CONTRACT_ID}
 _PRODUCT_CODE_RE = re.compile(r"(?:^|[_-])(\d{6})[_-]")
+# Both pages link the terms and forms too, and the terms are filed under a
+# date ("231026_Algemene_Voorwaarden"), which reads as a product code. A card
+# is the downloads page's current card or an archive link, whose label opens
+# with the product code.
+_CARD_LABEL_RE = re.compile(r"^(?:huidige tariefkaart$|\d{6}\s)", re.I)
 
 _LINK_RE = re.compile(r'<a\b[^>]*\bhref="([^"]+\.pdf)"[^>]*>(.*?)</a>', re.I | re.S)
 # "900027 eco plus flex (huishoudelijk) aug 26": the month, spelled out or cut
@@ -247,7 +252,9 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
             page = await fetch_text(session, page_url)
         except ExtractorError:
             continue
-        for url, _label in _links(page):
+        for url, label in _links(page):
+            if _CARD_LABEL_RE.match(label) is None:
+                continue
             match = _PRODUCT_CODE_RE.search(url.rsplit("/", 1)[-1])
             if match is not None:
                 code = match.group(1)
