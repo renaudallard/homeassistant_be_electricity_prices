@@ -121,6 +121,13 @@ def _excise_now() -> tuple[float | None, float | None]:
     return standard_excise(today), protected_excise(today)
 
 
+def _month_now() -> tuple[int, int]:
+    """The running (year, month), which the resolver dates the VREG ceiling
+    and the federal contribution by."""
+    today = dt_util.now().date()
+    return today.year, today.month
+
+
 def _newer_card(card: SupplierSnapshot, held: SupplierSnapshot) -> bool:
     """Whether ``card`` ends later than ``held``, each by the date it states
     or else the month its title names (``card_valid_until``). Not when either
@@ -154,6 +161,7 @@ class _SnapshotMixin:
     _snapshot_power_term: tuple[float, float] | None
     _snapshot_vat: tuple[float, float]
     _snapshot_excise: tuple[float | None, float | None]
+    _snapshot_month: tuple[int, int] | None
     _snapshot_fetched_at: datetime | None
     _snapshot_probe_key: str | None
     _snapshot_schema_version: int
@@ -402,8 +410,10 @@ class _SnapshotMixin:
         all. The excise the law sets is the same case on the first start
         after an upgrade, when no store holds the law yet: the stored card is
         resolved on its own printed excise, and only this puts the law's
-        back once the tick has read it. Every input is stamped, and any of
-        them moving re-resolves.
+        back once the tick has read it. The month is the last input: the
+        resolver reads the VREG ceiling for the month it runs in, so a
+        December card held into January kept the ceiling of a year that had
+        ended. Every input is stamped, and any of them moving re-resolves.
         """
         if self._snapshot_raw is None:
             return
@@ -411,11 +421,13 @@ class _SnapshotMixin:
         power_term = cached_power_term(dt_util.now().year)
         vat = _vat_now()
         excise = _excise_now()
+        month = _month_now()
         if (
             self._snapshot_annual_kwh == annual_kwh
             and self._snapshot_power_term == power_term
             and self._snapshot_vat == vat
             and self._snapshot_excise == excise
+            and self._snapshot_month == month
         ):
             return
         self._snapshot = _resolve_snapshot(
@@ -425,6 +437,7 @@ class _SnapshotMixin:
         self._snapshot_power_term = power_term
         self._snapshot_vat = vat
         self._snapshot_excise = excise
+        self._snapshot_month = month
 
     def _set_snapshot(self, snap: SupplierSnapshot | None) -> None:
         """Keep the card as parsed and resolve this entry's VAT preference.
@@ -458,6 +471,7 @@ class _SnapshotMixin:
         self._snapshot_power_term = cached_power_term(dt_util.now().year)
         self._snapshot_vat = _vat_now()
         self._snapshot_excise = _excise_now()
+        self._snapshot_month = _month_now()
         # Every snapshot that reaches here was parsed by the running extractor,
         # so this is what _save_persistent stamps. _replay_stale_snapshot is
         # the one caller that overrides it afterwards, and it has to: without

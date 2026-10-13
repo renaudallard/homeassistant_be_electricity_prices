@@ -265,6 +265,9 @@ class BePricesCoordinator(
         # The VAT rates the snapshot was resolved at (coordinator_snapshot.py).
         self._snapshot_vat: tuple[float, float] = (0.0, 0.0)
         self._snapshot_excise: tuple[float | None, float | None] = (None, None)
+        # And the month, which the resolver reads for the VREG ceiling's
+        # window and the federal contribution's gate.
+        self._snapshot_month: tuple[int, int] | None = None
         self._snapshot_fetched_at: datetime | None = None
         self._snapshot_probe_key: str | None = None
         # Which schema the snapshot in hand was parsed under, and what

@@ -8938,6 +8938,36 @@ def test_a_solar_weighted_formula_is_never_priced_at_one_slot() -> None:
     assert _injection_is_spot_formula(plain, energy) is True
 
 
+async def test_a_card_held_into_a_new_month_is_resolved_for_it(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The resolver dates the VREG ceiling by the month it runs in, and the
+    ceiling is only known until the end of 2026. A December card still held in
+    January was not resolved again, because none of the other stamped inputs
+    moved, so it kept the 2026 ceiling into a year that has none yet. The
+    excise law steps on the same day, which re-resolved the card by chance
+    when the law had been read; without it nothing did."""
+    from custom_components.be_electricity_prices import excise_law
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    excise_law._HELD.clear()
+    freezer.move_to("2026-12-31 23:00:00+01:00")
+    entry = make_entry(region="flanders", dso="fluvius_antwerpen")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    overlay = DsoOverlay(distribution_single=0.10, transport=0.0145)
+    coord._set_snapshot(make_snapshot(dsos={"fluvius_antwerpen": overlay}))
+    assert coord._snapshot is not None
+    dso = coord._snapshot.dsos["fluvius_antwerpen"]
+    assert dso.network_ceiling_eur_per_kwh is not None
+
+    freezer.move_to("2027-01-02 09:00:00+01:00")
+    coord._reresolve_snapshot()
+
+    dso = coord._snapshot.dsos["fluvius_antwerpen"]
+    assert dso.network_ceiling_eur_per_kwh is None
+
+
 async def test_the_first_tick_splits_a_tiered_card_on_the_measured_volume(
     hass: HomeAssistant, freezer: Any
 ) -> None:
