@@ -607,6 +607,19 @@ def test_missing_fixed_card_sections_fail_loudly(old: str, message: str) -> None
         parse_snapshot("groene_energie_vast", _layout(_VAST).replace(old, "missing"))
 
 
+def test_a_network_table_missing_an_area_is_refused() -> None:
+    """One relabelled row used to leave seven areas, and the card was adopted:
+    an entry on the eighth then failed every tick with no overlay to price
+    from, while the last good card was gone from the cache."""
+    text = _layout("trevion_flex_2026-09.pdf")
+    relabelled = text.replace("Fluvius West 60,53", "Fluvius-West 60,53", 1)
+    assert relabelled != text
+    with pytest.raises(
+        ExtractorError, match=r"DSO rows not found for \['fluvius_west'\]"
+    ):
+        parse_snapshot("groene_stroom_flex", relabelled)
+
+
 @pytest.mark.parametrize(
     ("contract_id", "fixture"),
     [

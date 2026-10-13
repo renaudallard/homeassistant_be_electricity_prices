@@ -189,7 +189,10 @@ the commodity and feed-in columns as regulated levies.
 current Fluvius labels to the canonical keys. Each row provides capacity tariff,
 single consumption distribution, exclusive-night distribution, and annual data
 management fee. The transport field is zero because the card's distribution
-column already represents the network rate surfaced by Trevion.
+column already represents the network rate surfaced by Trevion. A table
+missing any of the eight areas is refused like an empty one, the rule Frank,
+energie.be and Energy Knights keep: a partial card would be adopted and
+an entry on the missing area would fail every tick until the next good card.
 
 `_extract_taxes` reads:
 

@@ -605,6 +605,14 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             )
     if not out:
         raise ExtractorError("Trevion: digital-meter DSO table not found")
+    missing = [key for key in _DSOS.values() if key not in out]
+    if missing:
+        # A partial table is worse than none: the areas are what every
+        # entry picks its network cost from, and a card missing one would
+        # be adopted, persisted and shared, leaving the entry on that area
+        # with no overlay and every tick failing, while the last good card
+        # is gone from the cache. Refusing keeps that card serving.
+        raise ExtractorError(f"Trevion: DSO rows not found for {sorted(missing)}")
     return out
 
 
