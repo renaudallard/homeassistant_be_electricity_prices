@@ -529,7 +529,9 @@ so the month is asked again rather than settled on a draft.
 
 Rows the card archive filed `via archive` before this came from the plain file, and a
 replay of the archive's stored texts reproduces them (its offline session answers 404 for
-the reissues), so they move only when the month is fetched again.
+the reissues), so they move only when the month is fetched again. A row that read a
+reissue replays on it: the offline session answers the HEAD for every earlier upload of
+that card, so the walk reaches the one the row holds.
 
 Each product has its own horizon and the site states none: GS1800V reaches back to March
 2026, GSDYN only to June. A month before it answers Drupal's 404 page, which is HTML

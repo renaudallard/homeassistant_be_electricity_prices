@@ -1207,6 +1207,33 @@ def test_a_probe_in_a_replay_finds_only_the_card_the_row_read(tmp_path: Path) ->
     )  # type: ignore[arg-type]
 
 
+def test_a_replay_walks_up_to_the_reupload_the_row_read(tmp_path: Path) -> None:
+    """EnergyVision's archive path HEADs a card's Drupal reissues from _0 up
+    until one is missing, then reads them newest first and the plain name
+    last. A row that read _4 got a 404 for _0 and was sent to the plain
+    name, which it does not hold, so the replay refused it and six rows
+    stayed at the schema they were read under. The uploads before the one
+    the row read are still on the site, and answer as such."""
+    from custom_components.be_electricity_prices.providers import energyvision
+
+    base = "https://www.energyvision.be/sites/default/files/inline-files/"
+    plain = f"{base}EV-0226-GS3JV-nl.pdf"
+    read = f"{base}EV-0226-GS3JV-nl_4.pdf"
+    replay = ac._ReplaySession(None, tmp_path, None)  # type: ignore[arg-type]
+    replay.pdfs = {read: "abc"}
+    walked = asyncio.run(
+        energyvision._uploads_newest_first(replay, plain, date(2026, 2, 1))  # type: ignore[arg-type]
+    )
+    assert walked[0] == read
+    assert walked[-1] == plain
+    assert len(walked) == 6
+    # Another card's reissues, and a later one of this card, are not held.
+    other = f"{base}EV-0226-GS1800V-nl_0.pdf"
+    assert not asyncio.run(_pdf.head_ok(replay, other))  # type: ignore[arg-type]
+    later = f"{base}EV-0226-GS3JV-nl_5.pdf"
+    assert not asyncio.run(_pdf.head_ok(replay, later))  # type: ignore[arg-type]
+
+
 def test_a_text_that_changed_bytes_but_not_its_parse_is_not_a_new_card() -> None:
     """A listing page with a nonce, or a render that is not byte-stable, gives
     a new text file every day; the row is rewritten only when what a source

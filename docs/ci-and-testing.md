@@ -1066,7 +1066,11 @@ that probes candidate URLs before choosing one (Eneco's archive walks issue numb
 card the row was parsed from. The cards the follower and sibling rows read count as kept for this
 (`related`), HEAD and download alike: Eneco's archive path probes the next month's card before it
 reads it, and with a 404 for it the 24 Power Fix rows whose feed-in it settles stayed at the
-schema they were mirrored under, billing the printed credit; a GET for that card's file under another folder answers the 404 the
+schema they were mirrored under, billing the printed credit. A HEAD for an earlier Drupal
+upload of a card the row read (`<name>_<n>.pdf` below the `_<m>` it holds) answers 200 too
+(`_earlier_upload`), since the site keeps every upload and EnergyVision's archive path walks
+them up from `_0` until one is missing: answered 404, a row that read `_4` was sent to the
+plain name it does not hold, and six rows stayed at the schema they were read under; a GET for that card's file under another folder answers the 404 the
 site did, since EnergyVision's Brusol files each card under the month it uploaded it and the month
 before delivery is asked first, and so does a GET for the card's file under its other spelling
 (`_respelled`), since Mega's professional fixed cards turned "-Fixed.pdf" into "-Fix.pdf" in

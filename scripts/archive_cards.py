@@ -547,14 +547,39 @@ class _ReplaySession:
         return self._get(url)
 
     def head(self, url: str, **_kw: Any) -> Any:
-        return self._Pending(self._probe(url), self._digest(url) or "")
+        return self._Pending(self._probe(url, uploads=True), self._digest(url) or "")
 
     def _digest(self, url: str) -> str | None:
         """The kept card answering ``url``: the row's own, else a related one."""
         return self.pdfs.get(url) or self.related.get(url)
 
-    async def _probe(self, url: str) -> bytes | None:
-        return b"" if self._digest(url) is not None else None
+    async def _probe(self, url: str, uploads: bool = False) -> bytes | None:
+        held = self._digest(url) is not None
+        return b"" if held or (uploads and self._earlier_upload(url)) else None
+
+    def _earlier_upload(self, url: str) -> bool:
+        """Whether ``url`` is an upload of a card made before the one the row
+        read, which the site still serves.
+
+        Drupal files a card uploaded again as ``<name>_0.pdf``, then ``_1``,
+        and keeps every earlier file. EnergyVision's archive path walks the
+        uploads up with HEAD requests until one is missing, so a row that
+        read ``_4`` was asked ``_0`` first, got a 404 and fell back to the
+        plain name, which it does not hold: six rows stayed at the schema
+        they were read under, five without their excise bands.
+        """
+        asked = _UPLOAD_RE.fullmatch(url)
+        if asked is None:
+            return False
+        for read in self.pdfs:
+            held = _UPLOAD_RE.fullmatch(read)
+            if (
+                held is not None
+                and held[1] == asked[1]
+                and int(held[2]) > int(asked[2])
+            ):
+                return True
+        return False
 
     async def _fetch(self, url: str) -> bytes:
         digest = self._digest(url)
@@ -641,6 +666,10 @@ class _ReplaySession:
             # card was read is replayed on the French reading it was made on.
             return self._Pending(self._probe(url))
         return self._Pending(self._fetch(url), self._digest(url) or "")
+
+
+# A Drupal upload of a card made again: ``<name>_<n>.pdf``.
+_UPLOAD_RE = re.compile(r"(.+)_(\d+)\.pdf")
 
 
 def _file_name(url: str) -> str:
