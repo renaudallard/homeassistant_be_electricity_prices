@@ -633,6 +633,32 @@ async def test_a_restart_in_a_new_year_keeps_last_years_spp_profile(
     assert reloaded._spp_failed_at is not None
 
 
+async def test_the_shared_store_keeps_this_year_and_the_last(
+    hass: HomeAssistant, hass_storage: dict[str, Any], freezer: Any
+) -> None:
+    """Each year adds about 0,77 MB of curves to the shared file and to memory,
+    and nothing read a year before the last one, so they were kept for good."""
+    from custom_components.be_electricity_prices import coordinator_profiles as cp
+
+    freezer.move_to("2027-03-01 12:00:00+01:00")
+    stamp = datetime(2027, 3, 1, tzinfo=UTC)
+    cache = cp._profile_cache(hass)
+    for year in (2025, 2026, 2027):
+        cache[("spp", year, "")] = ({(6, 1, 12): 1.0}, stamp)
+
+    await cp._save_profile_cache(hass)
+
+    assert sorted(cache) == [("spp", 2026, ""), ("spp", 2027, "")]
+    stored = hass_storage[f"{const.DOMAIN}_profiles"]["data"]["profiles"]
+    assert sorted(row["year"] for row in stored) == [2026, 2027]
+
+    # A file written before the prune existed loses the old year on load.
+    stored.append({**stored[0], "year": 2025})
+    hass.data.pop(const.DOMAIN, None)
+    await cp._load_profile_cache(hass)
+    assert sorted(cp._profile_cache(hass)) == [("spp", 2026, ""), ("spp", 2027, "")]
+
+
 async def test_an_spp_blob_written_before_the_shared_store_is_adopted(
     hass: HomeAssistant, freezer: Any
 ) -> None:

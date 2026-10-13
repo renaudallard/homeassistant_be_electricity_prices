@@ -399,14 +399,28 @@ async def _load_profile_cache(hass: HomeAssistant) -> None:
             except (KeyError, TypeError, ValueError):
                 continue
             weights = _parse_curve(row.get("weights"))
-            if weights and key not in cache:
+            if weights and key not in cache and _kept_year(key[1]):
                 cache[key] = (weights, fetched)
+
+
+def _kept_year(year: int) -> bool:
+    """Whether a curve for ``year`` is still worth keeping.
+
+    The running year's, and the previous one's for ``_stored_year`` to fall
+    back on while the new year's file is not published. Nothing reads an
+    older one, and each year is about 0,77 MB in the shared file and in
+    memory.
+    """
+    return year >= dt_util.now().year - 1
 
 
 async def _save_profile_cache(hass: HomeAssistant) -> None:
     """Write the cache back. Called after a fetch, so monthly rather than
-    hourly; the rows are national and there is one file for all entries."""
+    hourly; the rows are national and there is one file for all entries.
+    Years no longer kept are dropped first."""
     cache = _profile_cache(hass)
+    for key in [key for key in cache if not _kept_year(key[1])]:
+        del cache[key]
     await _profile_store(hass).async_save(
         {
             "profiles": [

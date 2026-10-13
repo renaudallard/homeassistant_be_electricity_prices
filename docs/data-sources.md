@@ -812,7 +812,10 @@ writing to an SD card. The shared store is written only when a profile is
 actually fetched, and `_load_profile_cache` fills the in-process cache from it
 once per HASS, before the entry's own blob is read, so a new entry or one whose
 blob was discarded finds what another entry downloaded rather than fetching
-again. A blob written before this carries the curves still and
+again. Only the running year's curves and the previous year's are kept
+(`_kept_year`), the previous one for `_stored_year` to fall back on: older rows
+are dropped before each save and skipped on load, so the file no longer grows
+by about 0,77 MB a year. A blob written before this carries the curves still and
 `_seed_profile_cache` adopts both shapes it ever had, one curve under `weights`
 and one per blend under `blends`, writing them through to the shared store so the
 restart after an upgrade still has them. Removing the last entry deletes the
