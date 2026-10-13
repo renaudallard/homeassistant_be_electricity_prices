@@ -183,18 +183,32 @@ async def read_text_capped(resp: aiohttp.ClientResponse, url: str) -> str:
         return payload.decode("utf-8", errors="replace")
 
 
+def _require_https(url: str) -> None:
+    """Refuse to fetch an address that is not https.
+
+    Most links are read off a supplier's page, and only energie.be's reader
+    checks the scheme of the ones it takes. A plain http link would be
+    fetched, and :func:`guard_redirect` could not tell a redirect from it to
+    an address only the Home Assistant host can reach from the supplier's
+    own answer. Every card, listing and API the extractors read is served
+    over https, so this refuses nothing real.
+    """
+    if not url.lower().startswith("https://"):
+        raise ExtractorError(f"refusing {url}: not an https address")
+
+
 def guard_redirect(url: str, resp: aiohttp.ClientResponse) -> None:
     """Refuse an answer a redirect carried off https.
 
-    The extractors check the links they read off a page, but aiohttp
-    follows a redirect wherever it points, plain http included, and from
-    there to an address only the Home Assistant host can reach, whose
-    first bytes would then land in last_error. Over https such a host would
-    also need a certificate the client trusts. The redirect is not held to
-    the requested site: energie.be's document API on azurewebsites.net
-    answers with a redirect to its storage on blob.core.windows.net.
+    :func:`_require_https` holds the address asked for, but aiohttp follows
+    a redirect wherever it points, plain http included, and from there to
+    an address only the Home Assistant host can reach, whose first bytes
+    would then land in last_error. Over https such a host would also need
+    a certificate the client trusts. The redirect is not held to the
+    requested site: energie.be's document API on azurewebsites.net answers
+    with a redirect to its storage on blob.core.windows.net.
     """
-    if not resp.history or not url.startswith("https://"):
+    if not resp.history:
         return
     if any(hop.url.scheme != "https" for hop in (*resp.history, resp)):
         # The target can be a LAN appliance or a captive portal, so it goes
@@ -263,6 +277,7 @@ async def _fetch_validated_pdf_bytes(
     :func:`is_transient_fetch_error` keys on it to decide whether to retry -
     so only this function and :func:`fetch_text` may write it.
     """
+    _require_https(url)
     try:
         async with session.get(
             url,
@@ -778,6 +793,7 @@ async def fetch_text(
     memo_key = url if not params else f"{url}?{sorted(params.items())}"
     if memo is not None and memo_key in memo:
         return memo[memo_key]
+    _require_https(url)
     try:
         async with session.get(
             url,

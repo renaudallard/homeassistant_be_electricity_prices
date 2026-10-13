@@ -634,11 +634,17 @@ Internals worth knowing:
   `UnicodeDecodeError`. The ENTSO-E and energy-charts answers, the Brugel
   sheets, the CREG rate file and Synergrid's download page are read through
   them too.
+- `_require_https` (`_pdf.py`) refuses to fetch a card or page whose address
+  is not https, before any request. Most links are read off a supplier's page
+  and only energie.be checked their scheme, so a plain http link was fetched
+  and nothing could tell a redirect from it to a LAN address from the
+  supplier's own answer. Every card, listing and API the extractors read is
+  served over https.
 - `guard_redirect` (`_pdf.py`) refuses a card or page that a redirect carried
-  off https. The extractors check the links they read off a page, but aiohttp
-  follows a redirect wherever it points, plain http included, and from there to
-  an address only the Home Assistant host can reach, whose first bytes would
-  then land in `last_error`. The redirect is not held to the requested site,
+  off https, whatever scheme the chain started on. aiohttp follows a redirect
+  wherever it points, plain http included, and from there to an address only
+  the Home Assistant host can reach, whose first bytes would then land in
+  `last_error`. The redirect is not held to the requested site,
   since a supplier legitimately leaves it: energie.be's document API on
   azurewebsites.net redirects to its storage on blob.core.windows.net. Every
   redirect the live cards, listings and APIs answered on 2026-10-08 stayed on

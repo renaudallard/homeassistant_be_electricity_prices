@@ -597,6 +597,8 @@ async def test_a_body_past_the_cap_is_refused_as_it_streams(
     from aiohttp.test_utils import TestServer
 
     monkeypatch.setattr(_pdf, "MAX_RESPONSE_BYTES", 1000)
+    # The local test server speaks plain http.
+    monkeypatch.setattr(_pdf, "_require_https", lambda _url: None)
 
     async def chunked(request: web.Request) -> web.StreamResponse:
         resp = web.StreamResponse()
@@ -1032,13 +1034,16 @@ def test_the_vreg_ceiling_is_read_from_either_language() -> None:
 
 
 async def test_a_page_that_is_not_utf8_is_read_not_raised(
-    socket_enabled: None,
+    socket_enabled: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A page in another charset than it declares (a maintenance page in
     Latin-1) decoded strictly raised UnicodeDecodeError, which is no
     ExtractorError and so escaped every caller that handles one."""
     from aiohttp import web
     from aiohttp.test_utils import TestServer
+
+    # The local test server speaks plain http.
+    monkeypatch.setattr(_pdf, "_require_https", lambda _url: None)
 
     async def latin1(_request: web.Request) -> web.Response:
         return web.Response(body=b"Tarif \xe9lectricit\xe9", content_type="text/html")
@@ -1110,3 +1115,35 @@ async def test_a_redirect_off_https_is_refused(
         assert "192.168" not in str(raised.value)
     else:
         assert await fetch
+
+
+class _NoRequestSession:
+    def get(self, *_args: object, **_kwargs: object) -> object:
+        raise AssertionError("an http address was requested")
+
+
+@pytest.mark.parametrize("pdf", [True, False])
+async def test_an_http_link_is_refused_before_it_is_requested(pdf: bool) -> None:
+    """Trevion and Aspiravi take the links their listing prints as they are,
+    and the redirect guard only looked at a chain that started on https, so
+    an http link redirected to a LAN address was read."""
+    url = "http://trevion.be/a.pdf"
+    session = _NoRequestSession()
+    fetch = (
+        _fetch_validated_pdf_bytes(session, url)  # type: ignore[arg-type]
+        if pdf
+        else fetch_text(session, url)  # type: ignore[arg-type]
+    )
+    with pytest.raises(ExtractorError, match="not an https address"):
+        await fetch
+
+
+def test_the_redirect_guard_holds_whatever_scheme_the_chain_starts_on() -> None:
+    from yarl import URL
+
+    resp = SimpleNamespace(
+        history=(SimpleNamespace(url=URL("http://trevion.be/a.pdf")),),
+        url=URL("http://192.168.1.1/admin"),
+    )
+    with pytest.raises(ExtractorError, match="redirected off https"):
+        _pdf.guard_redirect("http://trevion.be/a.pdf", resp)  # type: ignore[arg-type]
