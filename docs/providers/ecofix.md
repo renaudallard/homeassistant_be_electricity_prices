@@ -436,17 +436,23 @@ Walloon keys, ORES among them, are all required, the same rule as in Flanders.
 
 `_extract_federal_taxes` (`ecofix.py`) reads the residential federal excise
 from the 0-3.000 kWh band (`Verbruik tussen 0 & 3.000 kWh`) and the single-rate
-`Energiebijdrage`; both missing rows are fatal. The four bands from that row on
-go to `federal_excise_bands` (`excise_tier_bands`, `_parse.py`) while they fall
-by volume, so a month before August 2026 is blended over the household's volume;
-the August and September cards, pictures of July's, carry the same table and
-give way to the law's one rate. Regional levies are region-gated in
-`parse_snapshot`:
+`Energiebijdrage`. The four bands from that row on go to `federal_excise_bands`
+(`excise_tier_bands`, `_parse.py`) while they fall by volume, so a month before
+August 2026 is blended over the household's volume; the August and September
+cards, pictures of July's, carry the same table and give way to the law's one
+rate. A flat `Bijzondere accijns` (or `Federale accijns`) row followed by its
+figure wins over the band row and carries no bands, the order
+`regional_tax_overlay` (`_parse.py`) holds for the other Flemish cards; only a
+card with neither is refused. The contribution is optional and reads 0 when its
+row is gone: the levy was abolished on 2026-08-01 and the suppliers that
+switched deleted the row. From August `resolve_federal_contribution` and
+`resolve_federal_excise` (`providers/_resolve.py`) replace both figures with
+the law's anyway. Regional levies are region-gated in `parse_snapshot`:
 
 | TaxOverlay field | Flanders | Wallonia |
 | --- | --- | --- |
 | `federal_excise` | parsed | parsed |
-| `energy_contribution` | parsed | parsed |
+| `energy_contribution` | parsed, 0.0 when absent | parsed, 0.0 when absent |
 | `flanders_renewables` | parsed (from Vlaanderen block) | 0.0 |
 | `wallonia_renewables` | 0.0 | `_extract_wallonia_renewables` |
 | `region_connection_fee` | 0.0 | `_extract_wallonia_connection_fee` |

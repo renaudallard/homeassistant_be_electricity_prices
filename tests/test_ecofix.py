@@ -291,6 +291,48 @@ def test_missing_wallonia_connection_fee_is_fatal() -> None:
         parse_snapshot("ecofix_flexy", text, "wallonia", "test://f")
 
 
+@pytest.mark.parametrize("region", ["flanders", "wallonia"])
+def test_a_card_without_the_abolished_contribution_row_parses(region: str) -> None:
+    """The levy was abolished on 2026-08-01 and the suppliers that switched
+    deleted the row; every other Flemish parser reads its absence as zero,
+    while this one refused the card and took all four contracts offline."""
+    text = _layout(_MOTION)
+    dropped = text.replace("Energiebijdrage 0,20417 ", "", 1)
+    assert dropped != text
+    snap = parse_snapshot("ecofix_motion", dropped, region, "x")
+    assert snap.taxes.energy_contribution == 0.0
+    assert snap.taxes.federal_excise == pytest.approx(0.0503288)
+
+
+def test_a_flat_excise_row_wins_over_the_degressive_table() -> None:
+    """The August 2026 measure flattened the household excise into one
+    "Bijzondere accijns" rate; a card printing it in place of the table, or
+    beside it, bills that rate with no bands."""
+    text = _layout(_MOTION)
+    flat = text.replace(
+        "Verbruik tussen 0 & 3.000 kWh 5,03288", "Bijzondere accijns 4,876", 1
+    )
+    assert flat != text
+    snap = parse_snapshot("ecofix_motion", flat, "flanders", "x")
+    assert snap.taxes.federal_excise == pytest.approx(0.04876)
+    assert snap.taxes.federal_excise_bands is None
+    both = text.replace(
+        "Federale toeslagen en heffingen",
+        "Federale toeslagen en heffingen\nBijzondere accijns 4,876",
+        1,
+    )
+    assert both != text
+    snap = parse_snapshot("ecofix_motion", both, "flanders", "x")
+    assert snap.taxes.federal_excise == pytest.approx(0.04876)
+    assert snap.taxes.federal_excise_bands is None
+
+
+def test_the_degressive_table_is_still_read_into_bands() -> None:
+    snap = parse_snapshot("ecofix_motion", _layout(_MOTION), "flanders", "x")
+    assert snap.taxes.federal_excise_bands is not None
+    assert snap.taxes.federal_excise_bands[0][1] == pytest.approx(0.0503288)
+
+
 def test_flexy_injection_carries_the_spp_formula() -> None:
     """The card states "Injectie: (BELPEX-SPP-M * 0,0884) - 0,5000" and says
     the settlement uses "de index die van toepassing is tijdens de periode

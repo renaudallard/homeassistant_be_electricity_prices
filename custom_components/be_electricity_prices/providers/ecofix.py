@@ -582,6 +582,18 @@ def _extract_publication(text: str) -> tuple[str, date | None]:
 # ---- taxes ------------------------------------------------------------------
 
 
+# Tried in order, first match wins, the policy regional_tax_overlay holds for
+# the other Flemish cards. A flat row, which the cards of the suppliers that
+# switched print since August 2026, wins over the 0-3.000 kWh row of the
+# degressive table being phased out. Ecofix's column header "Federale accijns
+# (€cent/kWh)" is followed by its unit, not a figure, so the first pattern
+# cannot read it.
+_EXCISE_ROWS = (
+    re.compile(r"\b(?:Bijzondere|Federale)\s+accijns\s+(\d+,\d+)", re.IGNORECASE),
+    re.compile(r"Verbruik tussen 0\s*&\s*3\.000\s*kWh\s+([\d,]+)"),
+)
+
+
 def _extract_federal_taxes(
     text: str,
 ) -> tuple[float, tuple[tuple[float, float], ...] | None, float]:
@@ -590,20 +602,22 @@ def _extract_federal_taxes(
 
     The card's federal block prints residential excise across four kWh
     bands: the 0-3.000 kWh tier is the excise, and the table from it is read
-    into bands while it falls by volume (until July 2026). Energy
-    contribution (Energiebijdrage) is single-rate.
+    into bands while it falls by volume (until July 2026). A flat excise row
+    is read ahead of it. Energy contribution (Energiebijdrage) is
+    single-rate and optional: the levy was abolished on 2026-08-01 and the
+    suppliers that switched deleted the row, so a card without it is the
+    abolished levy, not a layout drift. From August 2026 the law's own
+    figures replace both (resolve_federal_excise, resolve_federal_contribution).
     """
-    excise = re.search(r"Verbruik tussen 0\s*&\s*3\.000\s*kWh\s+([\d,]+)", text)
-    contribution = re.search(r"Energiebijdrage\s+([\d,]+)", text)
+    excise = next((m for p in _EXCISE_ROWS if (m := p.search(text))), None)
     if excise is None:
-        raise ExtractorError("Ecofix: federal excise (0-3.000 kWh) row not found")
-    if contribution is None:
-        raise ExtractorError("Ecofix: federal energy contribution row not found")
+        raise ExtractorError("Ecofix: federal excise row not found")
+    contribution = re.search(r"Energiebijdrage\s+([\d,]+)", text)
     rate = to_float(excise.group(1)) / 100.0
     return (
         rate,
         excise_tier_bands(text, rate, start=excise.start(), within=excise.end()),
-        to_float(contribution.group(1)) / 100.0,
+        to_float(contribution.group(1)) / 100.0 if contribution else 0.0,
     )
 
 
