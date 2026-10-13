@@ -3624,7 +3624,7 @@ def test_impact_stays_on_offer_for_a_mono_meter() -> None:
     assert default == DSO_MODE_IMPACT
 
     # An ordinary Walloon card still opens on the standard configuration.
-    options, default = _mode({CONF_CONTRACT: "eneco_power_flex", CONF_METER: "mono"})
+    options, default = _mode({CONF_CONTRACT: "power_flex", CONF_METER: "mono"})
     assert DSO_MODE_IMPACT in options
     assert default == DSO_MODE_BI_HORAIRE
 

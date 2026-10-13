@@ -210,7 +210,7 @@ def test_every_call_that_passes_a_region_passes_the_schedule() -> None:
 def test_the_meter_step_asks_a_flemish_entry_only() -> None:
     def _field(region: str, **defaults: Any) -> Any:
         schema = _meter_schema(
-            "eneco", "eneco_power_flex", {const.CONF_REGION: region, **defaults}
+            "eneco", "power_flex", {const.CONF_REGION: region, **defaults}
         )
         for key, value in schema.schema.items():
             if str(key) == const.CONF_DAY_HOURS:
@@ -253,7 +253,7 @@ async def test_the_answer_is_dropped_outside_flanders(
     flow.hass = hass
     flow._data = {
         const.CONF_SUPPLIER: "eneco",
-        const.CONF_CONTRACT: "eneco_power_flex",
+        const.CONF_CONTRACT: "power_flex",
         const.CONF_REGION: region,
         const.CONF_DSO: DSO_CHOICES[region][0][0],
         const.CONF_DAY_HOURS: const.DAY_HOURS_EARLY,
