@@ -182,8 +182,18 @@ def parse(page: str) -> dict[str, tuple[tuple[date, float], ...]]:
     """The two household rates article 419 sets, with their steps.
 
     Raises :class:`ExciseLawError` on anything that is not the article as
-    expected, rather than reading half of it.
+    expected, rather than reading half of it. That includes a date the
+    calendar does not have or a number that does not convert, which the
+    readers below raise as ValueError: let through, it escaped the backoff in
+    ``ensure_excise_law`` and failed every tick.
     """
+    try:
+        return _parse(page)
+    except (ValueError, OverflowError) as err:
+        raise ExciseLawError(f"unreadable article: {err}") from err
+
+
+def _parse(page: str) -> dict[str, tuple[tuple[date, float], ...]]:
     match = _ARTICLE_RE.search(page)
     if match is None:
         raise ExciseLawError("article 419 not found")

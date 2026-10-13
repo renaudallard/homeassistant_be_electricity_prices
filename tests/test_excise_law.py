@@ -186,6 +186,24 @@ async def test_a_failed_read_keeps_what_is_held_and_backs_off(
     assert excise_law.held_table() == held
 
 
+async def test_an_impossible_date_backs_off_like_any_unreadable_page(
+    fresh_fetch: None, page: str
+) -> None:
+    """A step dated 31 April raised a bare ValueError out of date(), which
+    is neither of the errors ensure_excise_law catches: it escaped into the
+    coordinator tick, and with no backoff recorded it did so on every one."""
+    assert "1er janvier 2028" in page
+    bad = page.replace("1er janvier 2028", "31 avril 2028")
+    with pytest.raises(excise_law.ExciseLawError):
+        excise_law.parse(bad)
+    fetch = AsyncMock(return_value=bad)
+    with patch.object(excise_law, "fetch_text", fetch):
+        await excise_law.ensure_excise_law(AsyncMock())
+        await excise_law.ensure_excise_law(AsyncMock())
+    assert fetch.await_count == 1
+    assert excise_law._failed_at is not None
+
+
 async def test_an_unread_law_is_a_warning_and_a_held_one_is_not(
     fresh_fetch: None, caplog: pytest.LogCaptureFixture
 ) -> None:

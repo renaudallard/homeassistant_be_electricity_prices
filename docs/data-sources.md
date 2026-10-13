@@ -1016,7 +1016,9 @@ around a rate dates it.
 Anything that is not the article as expected raises rather than reading half
 of it: no article, no electricity paragraph, a rate banded by volume (which
 the household rate was before August 2026), two rates where one is expected,
-steps out of order, or a rate outside the plausible range.
+steps out of order, a rate outside the plausible range, or a date or number
+that does not convert (31 April), all as `ExciseLawError` so the backoff below
+applies.
 
 ### Caching and failure
 
