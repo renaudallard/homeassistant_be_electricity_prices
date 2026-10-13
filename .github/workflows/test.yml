@@ -9,6 +9,11 @@ on:
   # instead of keeping a hand-copy of it that can drift.
   workflow_call:
 
+# Checking out and running the suite needs nothing more, and autorelease
+# grants this workflow no more than that either.
+permissions:
+  contents: read
+
 # Cancel a stale push/PR run when a new commit lands so we never queue
 # multiple parallel runs for the same ref. github.workflow is the CALLER's
 # name, so the standalone run and the one autorelease calls land in different

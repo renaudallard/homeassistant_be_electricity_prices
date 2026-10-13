@@ -212,3 +212,16 @@ def test_a_rerun_publishes_over_a_draft_an_earlier_run_left(tmp_path: Path) -> N
     (tmp_path / "releases" / TAG).write_text(_RELEASE % "true")
     assert _run_job(tmp_path, env) == 0
     assert json.loads((tmp_path / "releases" / TAG).read_text())["isDraft"] is False
+
+
+def test_every_workflow_declares_its_token_permissions() -> None:
+    """A workflow without a permissions block runs with the repository's
+    default token, which may be read-write. The Tests workflow also runs
+    under autorelease, where it may ask for no more than the job grants."""
+    import yaml  # type: ignore[import-untyped]
+
+    for path in sorted(WORKFLOW.parent.glob("*.yml")):
+        assert "permissions" in yaml.safe_load(path.read_text()), path.name
+    tests = yaml.safe_load((WORKFLOW.parent / "test.yml").read_text())
+    granted = yaml.safe_load(WORKFLOW.read_text())["jobs"]["verify"]["permissions"]
+    assert tests["permissions"] == granted
