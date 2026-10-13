@@ -700,6 +700,10 @@ _DUTCH_LABELS: tuple[tuple[str, str], ...] = (
     (r"Aansluitingsvergoeding", "Redevance de raccordement"),
     (r"Ter beschikking gesteld vermogen", "Terme de puissance"),
     (
+        r"Hoofdverblijfplaats zonder sociaal tarief",
+        "Résidence principale sans tarif social",
+    ),
+    (
         r"Bijdrage voor openbaredienstverplichtingen",
         "Droit pour le financement des Obligations de Service Public",
     ),

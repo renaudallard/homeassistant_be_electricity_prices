@@ -40,6 +40,10 @@ from custom_components.be_electricity_prices.providers._rates import (
 )
 from custom_components.be_electricity_prices.providers._totalenergies_cards import (
     _extract_injection,
+    in_french,
+)
+from custom_components.be_electricity_prices.providers._totalenergies_overlays import (
+    _extract_energy_fund,
 )
 from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers.totalenergies import (
@@ -809,6 +813,20 @@ def test_a_dutch_card_reads_as_its_french_edition() -> None:
     assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
     assert snap.dsos["ores"].distribution_single == pytest.approx(0.1198)
     assert snap.dsos["ores"].data_management_per_year == pytest.approx(14.10)
+
+
+def test_a_dutch_card_reads_the_flemish_energy_fund() -> None:
+    """The Dutch myEssential card stands in for the French one in Flanders
+    since October 2026 and prints the energy fund under its own label. The
+    card says 0,00 today, so the figure below is not the card's: it is there
+    to show a non-zero amount is read rather than dropped."""
+    text = in_french(
+        "Bijdragen energiefonds (Vlaamse Gewest)* €/maand\n"
+        "Hoofdverblijfplaats met sociaal tarief 0,00\n"
+        "Hoofdverblijfplaats zonder sociaal tarief 1,23\n"
+        "Tweede verblijfplaats 10,07\n"
+    )
+    assert _extract_energy_fund(text) == pytest.approx(1.23)
 
 
 @pytest.mark.parametrize(

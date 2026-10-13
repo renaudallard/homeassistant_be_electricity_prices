@@ -512,7 +512,9 @@ Region specifics:
 - `region_connection_fee`: Wallonia only ("Redevance de raccordement"), mandatory
   there, raises on a miss (`_totalenergies_cards.py`). Illustrative 0.0007 EUR/kWh.
 - `energy_fund_eur_per_month`: Flanders only ("Résidence principale sans tarif
-  social" line, `_extract_energy_fund`, `_totalenergies_overlays.py`).
+  social" line, "Hoofdverblijfplaats zonder sociaal tarief" on a Dutch card,
+  `_extract_energy_fund`, `_totalenergies_overlays.py`). A card without the line
+  reads 0.
 - `vat_rate` is set to `0.0`, meaning the snapshot's consumption prices are already
   VAT-incl and must not be rescaled by the pricing engine (`providers/base.py`).
   The dynamic path applies VAT during parsing (see above); the fixed/variable table
