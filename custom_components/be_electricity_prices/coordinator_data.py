@@ -212,15 +212,30 @@ class CoordinatorData:
     year_end_diagnostics: dict[str, Any] | None = None
 
 
+def ytd_billed_from(entry: ConfigEntry, day: date) -> date:
+    """The first day any contract bills in ``day``'s year.
+
+    :func:`cohort.ytd_window_start`, unless a recorded switch left a contract
+    that billed its year from its own start date: the switch unticks that box
+    on the entry, whose window then opens on 1 January, while the year still
+    begins on the old contract's start date. Recording or removing a switch
+    therefore leaves this where it was, as it leaves the bill.
+    """
+    from .contract_periods import billed_from
+
+    return billed_from(entry.data, ytd_window_start(entry, day), day)
+
+
 def ytd_window_reset(entry: ConfigEntry, when: datetime | None = None) -> datetime:
     """Local midnight of the day ``current_year_cost`` accumulates from.
 
-    The datetime form of :func:`cohort.ytd_window_start`, and a cross-file
-    invariant rather than a convenience: ``_seed_short_term_sum`` must hand
-    the recorder the SAME instant the sensor publishes as ``last_reset``, or
-    the cost compiler takes the meter-reset branch and adds the whole window's
-    reading on top of the resumed sum. Both sides call this, which is what
-    keeps them from drifting apart.
+    The datetime form of :func:`ytd_billed_from`, and a cross-file invariant
+    rather than a convenience: ``_seed_short_term_sum`` must hand the recorder
+    the SAME instant the sensor publishes as ``last_reset``, or the cost
+    compiler takes the meter-reset branch and adds the whole window's reading
+    on top of the resumed sum. Both sides call this, which is what keeps them
+    from drifting apart. The same goes for a reset that moves while the bill
+    does not, which is why a recorded switch must not move it.
 
     Local 1 January 00:00 for every entry that has not opted into billing from
     its contract start date, which is all of them by default. Deliberately a
@@ -229,7 +244,7 @@ def ytd_window_reset(entry: ConfigEntry, when: datetime | None = None) -> dateti
     last year's anchor.
     """
     now = when or dt_util.now()
-    start = ytd_window_start(entry, now.date())
+    start = ytd_billed_from(entry, now.date())
     return now.replace(
         month=start.month, day=start.day, hour=0, minute=0, second=0, microsecond=0
     )
@@ -244,10 +259,11 @@ def month_window_start(entry: ConfigEntry, today: date | None = None) -> date:
     the days before the contract existed, which on a 15 March signing is a
     fortnight of energy and standing charge the household never owed. The
     yearly window already refuses those days; the monthly one has to agree with
-    it, or the month is not a slice of the year it sits in.
+    it, or the month is not a slice of the year it sits in. So does a switch
+    recorded since, which leaves the year starting on that date.
     """
     day = today or dt_util.now().date()
-    return max(day.replace(day=1), ytd_window_start(entry, day))
+    return max(day.replace(day=1), ytd_billed_from(entry, day))
 
 
 def month_window_reset(entry: ConfigEntry, when: datetime | None = None) -> datetime:

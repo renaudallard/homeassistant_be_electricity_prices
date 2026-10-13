@@ -416,10 +416,11 @@ statistics setup, documented in its source comment:
   heavy-injection day can lower the running total day-over-day, which
   `TOTAL_INCREASING` forbids.
 - `last_reset` (`sensor.py`) is pinned via `last_reset_fn` to local midnight
-  of the year-to-date window start, `ytd_window_reset` (`coordinator_data.py`):
+  of the first day the year bills, `ytd_window_reset` (`coordinator_data.py`):
   1 January, or the contract start date during the contract's first calendar
-  year on an entry that bills from it. Long-term statistics bucket each
-  calendar year separately.
+  year on an entry that bills from it, kept by a recorded switch that unticks
+  the box (`ytd_billed_from`, the first earlier contract's start). Long-term
+  statistics bucket each calendar year separately.
 
 Missing meter inputs collapse to the fees-only floor rather than to
 `unknown`. The value is `unknown` in two cases. The first is the minutes after
@@ -440,15 +441,17 @@ registry no longer knows or a card that does not cover the DSO, keeps the year
 unknown and logs a warning naming it each hour. A contract priced on the
 entry's current card because no archive kept its cards is settled for the day;
 only one priced so because a read failed just now is asked again the next
-hour. `last_reset` stays on 1 January across
-a switch, so the year remains one statistics cycle.
+hour. `last_reset` stays where the year began
+billing across a switch, and across removing one, so the year remains one
+statistics cycle.
 
 ### `current_month_cost`: the same bill over a shorter window
 
 `current_month_cost` is `current_year_cost` accumulated from the 1st instead of
 from 1 January, which is the period a household budgets in and the one an
 invoice covers. It carries the same `MONETARY` / `TOTAL` pair and for the same
-reasons, with `last_reset` on the 1st via `month_window_reset`.
+reasons, with `last_reset` on the 1st via `month_window_reset`, or on the day
+the year began billing in that month.
 
 It is a SECOND pass of `_compute_current_year_cost` with
 `window_start_override`, not a slice of the first. The engine prices a window

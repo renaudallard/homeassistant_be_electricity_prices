@@ -148,8 +148,9 @@ def ytd_window_start(entry: ConfigEntry, today: date) -> date:
     earlier year is billed from 1 January exactly as it is today, and the
     option only changes the contract's first calendar year.
 
-    Its datetime form, which the sensor publishes as ``last_reset``, is
-    ``coordinator_data.ytd_window_reset``.
+    The sensor's ``last_reset`` is ``coordinator_data.ytd_window_reset``,
+    which starts here but stays on an earlier contract's start date once a
+    recorded switch unticks the box.
     """
     jan1 = date(today.year, 1, 1)
     if not entry.data.get(CONF_YTD_FROM_CONTRACT_START):

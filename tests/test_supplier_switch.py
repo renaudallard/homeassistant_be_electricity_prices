@@ -63,6 +63,10 @@ from custom_components.be_electricity_prices.contract_periods import (
     with_previous_contracts,
 )
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+from custom_components.be_electricity_prices.coordinator_data import (
+    month_window_reset,
+    ytd_window_reset,
+)
 from custom_components.be_electricity_prices.flow_switch import (
     _record_switch,
     _removable_switch,
@@ -499,6 +503,38 @@ def test_removing_a_switch_keeps_an_answer_its_copy_could_not_hold() -> None:
     )
     answered[CONF_DOUBLE_FLOW_METER] = True
     assert _remove_last_switch(answered)[CONF_DOUBLE_FLOW_METER] is False
+
+
+def test_recording_or_removing_a_switch_leaves_the_published_reset() -> None:
+    """A contract signed on 15 March billed its year from then. Recording a
+    switch unticks the box, but the year still begins on 15 March, the old
+    contract's days in it. A last_reset moved back to 1 January while the
+    value did not reset makes the statistics compiler add the whole year to
+    date to the long-term sum, and removing the switch would add it again.
+    The month has the same reset when the start and the switch share it."""
+
+    def _resets(
+        start: str, until: date, when: datetime
+    ) -> set[tuple[datetime, datetime]]:
+        data = dict(
+            make_entry(contract_start_date=start, ytd_from_contract_start=True).data
+        )
+        recorded = _record_switch(data, until)
+        out = set()
+        for settings in (data, recorded, _remove_last_switch(recorded)):
+            entry = MockConfigEntry(domain=DOMAIN, data=settings)
+            out.add((ytd_window_reset(entry, when), month_window_reset(entry, when)))
+        return out
+
+    tz = dt_util.get_default_time_zone()
+    when = datetime(2026, 10, 5, 12, tzinfo=tz)
+    assert _resets("2026-03-15", date(2026, 10, 1), when) == {
+        (datetime(2026, 3, 15, tzinfo=tz), datetime(2026, 10, 1, tzinfo=tz))
+    }
+    when = datetime(2026, 10, 12, 12, tzinfo=tz)
+    assert _resets("2026-10-03", date(2026, 10, 10), when) == {
+        (datetime(2026, 10, 3, tzinfo=tz), datetime(2026, 10, 3, tzinfo=tz))
+    }
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

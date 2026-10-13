@@ -843,8 +843,9 @@ def _seed_short_term_sum(
     whole live reading on top of the resumed sum instead of the delta.
     ``last_reset`` is passed in rather than computed here so it can only ever
     be what the caller resolved through ``ytd_window_reset``, which is the same
-    function the sensor's ``last_reset_fn`` is: local Jan 1, or the contract
-    start date on an entry that bills its year-to-date from there.
+    function the sensor's ``last_reset_fn`` is: local Jan 1, or the start
+    date of a contract that bills its year-to-date from there, the entry's own
+    or the first one it recorded a switch from.
 
     Best effort: a recorder that refuses the write leaves the seam, which is
     no worse than not trying, so it must never take the backfill down with it.
