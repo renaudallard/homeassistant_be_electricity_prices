@@ -519,6 +519,7 @@ EXTRACTORS: dict[str, SupplierExtractor] = {
     _ENECO.id: _ENECO,
     _ENGIE.id: _ENGIE,
     _TOTALENERGIES.id: _TOTALENERGIES,
+    _TREVION.id: _TREVION,
     _LUMINUS.id: _LUMINUS,
     _MEGA.id: _MEGA,
     _BOLT.id: _BOLT,
@@ -528,7 +529,15 @@ EXTRACTORS: dict[str, SupplierExtractor] = {
     _ECOFIX.id: _ECOFIX,
     _ECOPOWER.id: _ECOPOWER,
     _FRANK.id: _FRANK,
+    _ENERGIEBE.id: _ENERGIEBE,
+    _ENERGYVISION.id: _ENERGYVISION,
+    _ENERGYKNIGHTS.id: _ENERGYKNIGHTS,
     _OCTAPLUS.id: _OCTAPLUS,
+    _ASPIRAVI.id: _ASPIRAVI,
+    _SOCIAL.id: _SOCIAL,
+    # Expert escape hatch, listed last so it sorts to the bottom of the
+    # supplier dropdown.
+    _CUSTOM.id: _CUSTOM,
 }
 ```
 
@@ -568,11 +577,11 @@ consistent.
 | `USER_AGENT` | module constant | `Home Assistant be_electricity_prices/<version>`, read from `manifest.json` (`_pdf.py`). Sent on every request. |
 | `fetch_text` | `fetch_text(session, url, *, timeout=20) -> str` | GET an HTML listing / index / plain-text source. Raises `ExtractorError` on non-2xx or network error (`_pdf.py`). |
 | `fetch_pdf_text` | `fetch_pdf_text(session, url, *, timeout=30) -> str` | Download a PDF and return concatenated pypdf text; parsing runs in a worker thread so a multi-page card never stalls the HA event loop (`_pdf.py`). |
-| `fetch_pdf_text_layout` | `fetch_pdf_text_layout(session, url, *, timeout=30) -> str` | Layout-preserving pdfplumber variant (`_pdf.py`). |
+| `fetch_pdf_text_layout` | `fetch_pdf_text_layout(session, url, *, timeout=30) -> str` | The same download read through `extract_pdf_text_layout` (`_pdf.py`). |
 | `fetch_pdf_text_aligned` | `fetch_pdf_text_aligned(session, url, x_join_threshold=0.0, *, timeout=30) -> str` | Word-coordinate aligned pdfplumber variant (`_pdf.py`). |
-| `regional_tax_overlay` | `regional_tax_overlay(text, *, supplier, region, excise, renewables, contribution=None, fund=None) -> TaxOverlay` | The tax block of a single-region, VAT-inclusive card. `region` picks which of the three regional renewables fields the levy lands in and the other two stay zero, which is what such a card actually says; an unknown region raises rather than zeroing all three. Callers pass their own compiled anchors; this holds the POLICY, which is what drifted: excise mandatory (patterns tried in order, so a flat row wins over the tiered one being phased out), renewables mandatory and all summed, contribution optional (absent = the levy abolished on 2026-08-01, not a layout drift), fund optional and in EUR/month so unscaled. Used by energie.be, Energy Knights, EnergyVision (for Flanders and for Brussels) and Frank. |
+| `regional_tax_overlay` | `regional_tax_overlay(text, *, supplier, region, excise, renewables, contribution=None, fund=None) -> TaxOverlay` | The tax block of a single-region, VAT-inclusive card. `region` picks which of the three regional renewables fields the levy lands in and the other two stay zero, which is what such a card actually says; an unknown region raises rather than zeroing all three. Callers pass their own compiled anchors; this holds the POLICY, which is what drifted: excise mandatory (patterns tried in order, so a flat row wins over the tiered one being phased out), renewables mandatory and all summed, contribution optional (absent = the levy abolished on 2026-08-01, not a layout drift), fund optional and in EUR/month so unscaled. Used by Aspiravi, energie.be, Energy Knights, EnergyVision (for Flanders and for Brussels) and Frank. |
 | `head_freshness_key` | `head_freshness_key(session, url, *, prefer=("Last-Modified", "ETag")) -> str \| None` | Cheap `SnapshotProbe` implementation: HEAD the card and return the first present preferred header, else `None`. EnergyVision prefers `ETag` first on its listing pages; everyone else prefers `Last-Modified` (`_pdf.py`). |
-| `head_or_raise` | `head_or_raise(session, url, *, timeout=10) -> None` | HEAD the URL and raise `ExtractorError` the way the fetch helpers do (`HTTP <status>` at 400 and above, `network error fetching` on a client error or timeout), so `is_transient_fetch_error` can tell a card that is not there from a supplier that is down. For a lookup that probes before it downloads (Eneco's five volumes a month). `head_ok` is the `bool` form of it for `discover()` paths (`_pdf.py`). |
+| `head_or_raise` | `head_or_raise(session, url, *, timeout=10) -> str \| None` | HEAD the URL and raise `ExtractorError` the way the fetch helpers do (`HTTP <status>` at 400 and above, `network error fetching` on a client error or timeout), so `is_transient_fetch_error` can tell a card that is not there from a supplier that is down. Returns the answer's `Last-Modified`, or `None` when it sends none, for a lookup that has to tell one upload of a file from a later one. For a lookup that probes before it downloads (Eneco's five volumes a month). `head_ok` is the `bool` form of it for `discover()` paths (`_pdf.py`). |
 
 Internals worth knowing:
 
@@ -682,7 +691,7 @@ downstream regex would miss silently.
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
 | `extract_pdf_text` | `extract_pdf_text(payload: bytes) -> str` | Default pypdf extraction. Logs and skips pages pypdf returns `None` for (undecodable fonts); raises only if every page fails (`_pdf.py`). |
-| `extract_pdf_text_layout` | `extract_pdf_text_layout(payload: bytes) -> str` | pdfplumber layout mode for cards with rotated DSO/tax columns that pypdf drops (TotalEnergies). Runs `dedupe_chars()` first to drop stacked duplicate glyphs (for example `55,,09` rendered instead of `5,09`) (`_pdf.py`). |
+| `extract_pdf_text_layout` | `extract_pdf_text_layout(payload: bytes) -> str` | pdfplumber's default `extract_text()`, which rebuilds each row from glyph coordinates (it is not called with `layout=True`), for cards with rotated DSO/tax columns that pypdf drops (TotalEnergies). Runs `dedupe_chars()` first to drop stacked duplicate glyphs (for example `55,,09` rendered instead of `5,09`) (`_pdf.py`). |
 | `extract_pdf_text_aligned` | `extract_pdf_text_aligned(payload, y_tolerance=3, x_join_threshold=0.0) -> str` | Re-groups `extract_words()` output into visual rows by y-coordinate for column-major cards (OCTA+). `x_join_threshold` is opt-in: leave `0.0` to keep words separate; pass ~1.0pt to glue sub-point-gap glyphs (`5 ,0 3 2 9` into `5,0329`). Pages joined with form-feeds (`_pdf.py`). |
 
 ### Number, sign and VAT parsing

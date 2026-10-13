@@ -623,9 +623,8 @@ async def head_freshness_key(
     preferred headers are populated; the coordinator treats ``None`` as
     "no signal" and falls back to its time-based TTL.
 
-    Bolt prefers ETag first because its listing returns a stable ETag
-    while ``Last-Modified`` flips on every CDN edge cache; every other
-    supplier prefers Last-Modified.
+    EnergyVision passes ``prefer=("ETag", "Last-Modified")`` for the
+    listing page it probes; every other supplier keeps the default order.
     """
     try:
         async with session.head(

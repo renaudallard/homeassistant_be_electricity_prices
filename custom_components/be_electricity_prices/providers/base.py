@@ -308,7 +308,7 @@ class SupplierSnapshot:
     # couldn't parse a validity period from the card. Consumers that
     # need to know whether tomorrow's rates are *actually* the right
     # ones (the tomorrow_prices_available binary sensor, in particular)
-    # check ``date.today() <= valid_until``; ``None`` means we don't
+    # check ``date.today() < valid_until``; ``None`` means we don't
     # know, so callers should fall back to "treat as available".
     valid_until: date | None = None
     # True when the extractor knows this ARCHIVED month's figures can still
@@ -555,7 +555,10 @@ class SupplierExtractor:
     # contract is going. Existing entries keep pricing normally until the
     # supplier stops publishing - a withdrawal announcement is not a reason
     # to stop billing someone correctly for the months they are still
-    # supplied. Purely declarative: nothing compares these to the clock.
+    # supplied. Once the date has passed, the coordinator stops asking the
+    # supplier for a card and raises the supply-ended variant of the Repairs
+    # card (coordinator_issues._supply_ended), and the card archive drops the
+    # supplier from its walk (scripts/archive_cards.py).
     deprecated_until: date | None = None
     deprecated_successor: str | None = None
     # Roughly what one card of this supplier costs to fetch and parse, in
