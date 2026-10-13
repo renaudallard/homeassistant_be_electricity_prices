@@ -13858,6 +13858,81 @@ async def test_the_year_to_date_credits_the_feed_in_bonus_to_a_seller_only(
     )
 
 
+async def test_a_compare_proxy_keeps_the_feed_in_bonus_in_the_year_to_date(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The compare page prices a target's year-to-date on a ``_quote_entry``
+    proxy whenever its meter, settlement or direct-debit answer differs from
+    the household's. The proxy carries no coordinator, so the measured export
+    the bonus multiplies read as nothing there, and the target's year-to-date
+    dropped Mega's feed-in bonus while the annual row beside it kept it."""
+    from custom_components.be_electricity_prices.compare_inputs import _quote_entry
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    freezer.move_to("2026-03-31 12:00:00+01:00")
+    plain = _snapshot(prosumer=None, capacity=None)
+    card = replace(
+        plain,
+        welcome_credit_injection_eur_per_kwh=0.0106,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[date, float]:
+        if entity_id == "sensor.cons_total":
+            return {date(2026, 1, 1) + timedelta(days=n): 10.0 for n in range(90)}
+        return {}
+
+    async def _cost(snap: Any, *, proxy: bool) -> float:
+        entry = _entry(
+            region="flanders",
+            solar_regime="injection",
+            meter="mono",
+            contract="test",
+            contract_start_date="2025-03-01",
+            consumption_kwh="sensor.cons_total",
+            direct_debit=False,
+        )
+        entry.runtime_data = SimpleNamespace(_annual_injection_kwh=3000.0)
+        quoted = (
+            _quote_entry(entry, "injection", meter=None, direct_debit=True)
+            if proxy
+            else entry
+        )
+        assert (quoted is not entry) is proxy
+
+        async def _signing(*_a: Any, **_k: Any) -> Any:
+            return snap
+
+        with (
+            patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily),
+            patch(
+                "custom_components.be_electricity_prices.ytd_cost."
+                "signing_month_snapshot",
+                new=_signing,
+            ),
+        ):
+            return cast(
+                float,
+                await _compute_current_year_cost(
+                    hass,
+                    None,  # type: ignore[arg-type]
+                    make_stub_extractor(),
+                    snap,
+                    quoted,
+                ),
+            )
+
+    bonus = await _cost(plain, proxy=True) - await _cost(card, proxy=True)
+    assert bonus == pytest.approx(0.0106 * 3000.0)
+    assert await _cost(card, proxy=True) == pytest.approx(
+        await _cost(card, proxy=False)
+    )
+
+
 def test_the_direct_debit_part_of_a_credit_is_settled_once() -> None:
     """ "une reduction de base de 37.1 EUR + 5.3 EUR supplementaires en cas de
     paiement par domiciliation bancaire": how the household pays is a

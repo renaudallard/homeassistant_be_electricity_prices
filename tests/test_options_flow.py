@@ -8569,6 +8569,67 @@ def test_the_year_to_date_welcome_credit_is_scoped_to_the_window() -> None:
     assert none == 0.0
 
 
+def test_the_simple_compare_column_credits_a_first_year_feed_in_bonus() -> None:
+    """The fallback the compare page prices a year-to-date row with when the
+    archive engine cannot run (a supplier with no archive of its own on
+    either side, no spots) never passed the export, so Mega's first-year
+    feed-in bonus was in the annual row and missing from the year-to-date
+    one beside it. It rides the year's export, like the per-kWh term rides
+    the year's draw, and only where the export is sold.
+    """
+    from datetime import date, datetime
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.compare_quote import (
+        _ytd_welcome_credit,
+    )
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.10, yearly_fixed_fee=60.0),
+        taxes=TaxOverlay(federal_excise=0.0, energy_contribution=0.0),
+    )
+    card = SimpleNamespace(
+        welcome_credit_eur=None,
+        welcome_credit_kind="pro_rata",
+        welcome_credit_eur_per_kwh=None,
+        welcome_credit_cap_eur=None,
+        welcome_credit_pct_of_energy=None,
+        welcome_credit_kwh=None,
+        welcome_credit_after_months=None,
+        welcome_credit_injection_eur_per_kwh=0.0106,
+    )
+    now = datetime(2026, 9, 15, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+    def credited(regime: str) -> float:
+        return _ytd_welcome_credit(
+            snap,
+            card,
+            date(2026, 1, 1),
+            now,
+            "ores",
+            "wallonia",
+            None,
+            "mono",
+            "bi_horaire",
+            None,
+            2500.0,
+            800.0,
+            annual_kwh=3500.0,
+            regime=regime,
+            window_start=date(2026, 1, 1),
+            fee_proration=0.71,
+            annual_injection_kwh=2500.0,
+        )
+
+    # 0,0106 EUR/kWh on the year's 2500 kWh export, 258 of 365 days accrued.
+    assert credited("injection") == pytest.approx(0.0106 * 2500.0 * 258 / 365)
+    assert credited("compensation") == 0.0
+
+
 def test_the_compare_column_credits_a_campaign_stated_as_a_share_or_a_volume() -> None:
     """0.27.2 added a percentage campaign and a kWh cashback, and the gate above
     this helper still tested the two EUR halves, so every Luminus campaign card

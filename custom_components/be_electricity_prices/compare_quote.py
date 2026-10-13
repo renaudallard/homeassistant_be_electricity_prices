@@ -407,6 +407,7 @@ def _ytd_welcome_credit(
     regime: str,
     window_start: date,
     fee_proration: float,
+    annual_injection_kwh: float = 0.0,
     day_start: int = DAY_START,
 ) -> float:
     """The welcome credit the year-to-date window has already accrued.
@@ -424,7 +425,8 @@ def _ytd_welcome_credit(
     The per-kWh term is the exception and rides ``annual_kwh``, because the
     card measures it over the first contract YEAR whatever window is being
     shown. Passing the window's own volume here made this column disagree
-    with the annual one beside it by most of the credit.
+    with the annual one beside it by most of the credit. A first-year
+    feed-in bonus rides ``annual_injection_kwh`` for the same reason.
     """
     if not _grants_a_welcome_credit(credited):
         return 0.0
@@ -463,6 +465,9 @@ def _ytd_welcome_credit(
             compensation=regime == SOLAR_REGIME_COMPENSATION,
         ),
         window_energy_rate(consumption_kwh * energy_per_kwh, consumption_kwh),
+        first_year_injection_kwh=(
+            annual_injection_kwh if regime == SOLAR_REGIME_INJECTION else 0.0
+        ),
     )
 
 

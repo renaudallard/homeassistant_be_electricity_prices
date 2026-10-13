@@ -715,10 +715,11 @@ to add a bonus to. The volume is a full measured year of that export
 (`entry_annual_injection_kwh`, measured daily beside the consumption volume) or nothing,
 the rule the projection already holds feed-in to, because PV is too seasonal for a short
 window scaled by a day count. The compare page's year-to-date columns credit it as the
-sensor does whenever the quote matches the household's own settings, since they then
-price the real entry and its measured year. A real what-if (another regime, DSO mode or
-meter) quotes through a proxy entry that carries no measurement, and there the
-year-to-date columns credit no bonus on either side while the annual columns still do.
+sensor does. A target quoted on another meter, DSO mode, settlement or direct-debit
+answer is priced through a proxy entry (`_quote_entry`), which carries no coordinator, so
+the proxy freezes the year of export its real entry measured beside the consumption
+volume. A what-if into the injection regime from another one gets no bonus in the
+year-to-date columns, since the household has no measured year of SOLD export to credit.
 The annual columns and the projection credit it on the year of export they already
 quote.
 The Smart cards add "et disposez d'une puissance de raccordement inferieure ou egale a

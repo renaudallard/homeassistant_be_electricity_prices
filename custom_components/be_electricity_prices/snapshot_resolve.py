@@ -79,6 +79,11 @@ from .providers._resolve import (
 )
 from .providers.base import SupplierSnapshot
 
+# Where a compare-page proxy (``compare_inputs._quote_entry``) freezes the
+# household's measured yearly export. The proxy carries no coordinator, and no
+# key the user can type holds the figure, so it gets one of its own.
+QUOTED_ANNUAL_INJECTION_KWH = "quoted_annual_injection_kwh"
+
 
 def _include_vat(entry: ConfigEntry) -> bool:
     """Whether this entry wants its prices VAT-inclusive.
@@ -223,12 +228,16 @@ def entry_annual_injection_kwh(entry: ConfigEntry, coordinator: Any = None) -> f
     day count, and no typed figure or default exists for the export, so an
     entry without a year of it is credited no bonus rather than a guess.
     Measured once a day by the coordinator, beside the consumption volume.
+    A compare-page proxy has no coordinator and reads the figure its real
+    entry answered, frozen under :data:`QUOTED_ANNUAL_INJECTION_KWH`.
     """
     if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
         return 0.0
     if coordinator is None:
         coordinator = getattr(entry, "runtime_data", None)
     measured = getattr(coordinator, "_annual_injection_kwh", None)
+    if measured is None:
+        measured = entry.data.get(QUOTED_ANNUAL_INJECTION_KWH)
     return float(measured) if measured else 0.0
 
 

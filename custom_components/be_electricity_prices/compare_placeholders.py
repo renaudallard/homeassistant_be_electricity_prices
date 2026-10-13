@@ -878,6 +878,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     regime=regime,
                     window_start=ytd_from,
                     fee_proration=fee_proration,
+                    annual_injection_kwh=rolling_inj_kwh,
                     day_start=day_start,
                 ),
             )

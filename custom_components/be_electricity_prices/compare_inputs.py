@@ -65,7 +65,11 @@ from .providers import effective_kind
 from .providers import get as get_extractor
 from .providers._rates import SpotMonthlyRates
 from .providers.base import SupplierSnapshot
-from .snapshot_resolve import entry_annual_kwh
+from .snapshot_resolve import (
+    QUOTED_ANNUAL_INJECTION_KWH,
+    entry_annual_injection_kwh,
+    entry_annual_kwh,
+)
 from .spot_stats import (
     _energy_is_rlp_indexed,
     _injection_is_spp_indexed,
@@ -137,8 +141,8 @@ class _QuoteEntry:
     ``runtime_data`` is the one thing a contract the household held earlier in
     the year (``contract_periods.py``) adds: its coordinator, so the card is
     split against the household's measured yearly volume as the live one is.
-    The compare page leaves it ``None`` and quotes against the typed figure or
-    the default, as it always has.
+    The compare page leaves it ``None`` and quotes against the volumes
+    :func:`_quote_entry` freezes into the mapping.
     """
 
     data: Mapping[str, Any]
@@ -435,6 +439,13 @@ def _quote_entry(
     # compare page's household volume, the coordinator's daily measurement and
     # the projection, which only the coordinator's tick runs.
     overrides[CONF_ANNUAL_CONSUMPTION_KWH] = entry_annual_kwh(entry)
+    # The measured export is the other one, and the year-to-date engine
+    # multiplies a first-year feed-in bonus by it. Read off the proxy it was
+    # 0.0, so a target quoted on another meter, settlement or direct-debit
+    # answer lost Mega's bonus in its year-to-date while its annual row kept
+    # it. Frozen as the real entry answers it, so a regime the household is
+    # not on still gets none.
+    overrides[QUOTED_ANNUAL_INJECTION_KWH] = entry_annual_injection_kwh(entry)
     # Only entry.data is ever read through this (audited across the quote,
     # fee, injection and year-to-date helpers), so the mapping is a
     # complete stand-in; the cast is what tells mypy that.
