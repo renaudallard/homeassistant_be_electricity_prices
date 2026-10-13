@@ -1723,9 +1723,7 @@ async def _check_flanders_card(
 
     Frank and energie.be checked exactly this, in two functions that differed
     only in the supplier token. ``cid`` stays a parameter rather than looping
-    ``mod.EXTRACTOR.contracts``: Frank sells six tiers off one card and this
-    deliberately checks the default one, so iterating them would multiply
-    Frank's wallclock and byte draw by six and trip the drift budgets.
+    ``mod.EXTRACTOR.contracts`` here, so each caller picks the cards it walks.
 
     Nothing here is dynamic-specific: the energy leg is validated by shape in
     _validate_energy, so energie.be's spot-monthly variable card reuses it.
@@ -1763,9 +1761,11 @@ async def _check_flanders_card(
 
 
 async def _check_frank(session: aiohttp.ClientSession, frank: types.ModuleType) -> None:
-    # Own coroutine so the per-supplier byte / latency attribution keeps its
-    # own bucket; same for energie.be below.
-    await _check_flanders_card(session, frank, "frank", "frank_dynamic")
+    # One card per tier, each its own PDF with its own fee and coefficients,
+    # so each one is fetched: checking the base tier alone left a suffixed
+    # tier whose card stopped resolving or parsing unseen.
+    for contract in frank.EXTRACTOR.contracts:
+        await _check_flanders_card(session, frank, "frank", contract.id)
 
 
 async def _check_energiebe(
@@ -3630,11 +3630,6 @@ async def _check_card_freshness(
                 '*[_type=="sanity.fileAsset"]{originalFilename,_createdAt}'
                 " | order(_createdAt desc)[0..59]",
             )
-            blob = "\n".join(str(r.get("originalFilename", "")) for r in rows)
-            served = {}
-            for tier_id, _tier_label, _suffix in frank._TIERS:
-                _url, card_label = await frank._resolve_pdf_url(session, tier_id)
-                served[tier_id] = card_label
         except _EXTRACTOR_ERROR as err:
             _record(
                 "frank/freshness: serving the newest advertised dynamic card",
@@ -3642,13 +3637,27 @@ async def _check_card_freshness(
                 f"CMS unreadable: {type(err).__name__}: {err}",
             )
         else:
+            blob = "\n".join(str(r.get("originalFilename", "")) for r in rows)
             # One row PER TIER, not one collapsed row. The break that
             # actually happened hit the four suffixed tiers while the base
             # tier stayed fine, so a family-wide comparison would have gone
             # green on it: the base tier's correct stamp is the newest and
-            # hides the other four.
-            for tier_id, card_label in served.items():
+            # hides the other four. Each tier resolves on its own too: one
+            # whose card was not found used to pass the whole block as an
+            # unreadable CMS and leave every later tier without a row.
+            for tier_id, _tier_label, _suffix in frank._TIERS:
                 label = f"frank/freshness: newest advertised {tier_id} card"
+                try:
+                    _url, card_label = await frank._resolve_pdf_url(session, tier_id)
+                except _EXTRACTOR_ERROR as err:
+                    transient = _is_transient_fetch_error(str(err))
+                    _record(
+                        label,
+                        transient,
+                        f"{'CMS unreadable' if transient else 'no card resolved'}: "
+                        f"{type(err).__name__}: {err}",
+                    )
+                    continue
                 if _frank_month_key(card_label) == _UNREADABLE_STAMP:
                     _expect(label, False, f"cannot read a month out of {card_label!r}")
                     continue
@@ -5500,6 +5509,10 @@ BYTES_WARN_THRESHOLD = 5_000_000
 #   * mega: ~5.3 MB (~342KB listing fetched once via the harness's
 #     listing-cache + 33 region PDFs at ~150KB each). Allow 7 MB so a
 #     slow CI day or a slightly larger PDF batch doesn't fire.
+#   * frank: ~9.9 MB measured on 13 October 2026, one card per tier, six
+#     tiers at 1.45-1.84 MB each, plus a small CMS query per tier. Allow
+#     13 MB. Latency stays on the 90 s default: one card fetched in 0.56 s
+#     from a runner, so six sum to a few seconds.
 #   * octaplus: ~32.7 MB measured on 2 October 2026, 27 cards at ~1.2 MB:
 #     the October Boost range plus the withdrawn products, still checked
 #     while their cards are served (the Impact contracts are Wallonia-only).
@@ -5516,6 +5529,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     "ecofix": 16_000_000,
     "mega": 14_000_000,
     "octaplus": 40_000_000,
+    "frank": 13_000_000,
 }
 
 # Per-supplier latency budgets (override the global). NOTE: elapsed_s

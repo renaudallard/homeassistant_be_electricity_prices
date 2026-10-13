@@ -3352,6 +3352,66 @@ def test_a_dutch_edition_standing_in_is_reported() -> None:
     assert _editions(None, dutch, french_arrives=False) == []
 
 
+def test_every_frank_tier_is_checked_and_gets_its_own_freshness_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Frank prints one card per tier with its own fee and coefficients, but
+    the check fetched the base tier only. The freshness block resolved every
+    tier in one try, so a tier whose card was not found passed the whole
+    block as an unreadable CMS and the tiers after it got no row."""
+    frank = lc._load_providers()["frank"]
+    tiers = [t[0] for t in frank._TIERS]
+    # As the CMS would read if Frank renamed the Plus token.
+    rows = [
+        {
+            "originalFilename": f"Frank Energie Dynamisch {s}Oktober 2026.pdf",
+            "url": f"https://cdn/{i}.pdf",
+            "_createdAt": "2026-10-01T00:00:00Z",
+        }
+        for i, s in enumerate(["", "HV ", "VT ", "JN ", "SL ", "Premium "])
+    ]
+    fetched: list[str] = []
+
+    async def _query(_session: object, _q: str) -> list[dict[str, str]]:
+        return rows
+
+    async def _fetch(_session: object, cid: str, _region: str) -> None:
+        fetched.append(cid)
+        raise frank.ExtractorError("stop here")
+
+    monkeypatch.setattr(frank, "_sanity_query", _query)
+    monkeypatch.setattr(frank, "fetch", _fetch)
+
+    async def _run() -> None:
+        await lc._check_frank(None, frank)
+        await lc._check_card_freshness(None, {"frank": frank})
+
+    asyncio.run(_run())
+    assert fetched == tiers
+    fresh = {c.label: c for c in _rows("frank/freshness")}
+    assert len(fresh) == len(tiers)
+    plus = fresh["frank/freshness: newest advertised frank_dynamic_plus card"]
+    assert not plus.ok and "no card resolved" in plus.detail
+    assert all(c.ok for label, c in fresh.items() if "plus" not in label)
+
+    # A tier the CMS could not answer for passes, and the next still gets a row.
+    resolve = frank._resolve_pdf_url
+
+    async def _flaky(session: object, cid: str) -> tuple[str, str]:
+        if cid == "frank_dynamic_hv":
+            raise frank.ExtractorError("network error fetching https://cdn/: x")
+        return await resolve(session, cid)
+
+    monkeypatch.setattr(frank, "_resolve_pdf_url", _flaky)
+    lc.CHECKS.clear()
+    asyncio.run(lc._check_card_freshness(None, {"frank": frank}))
+    fresh = {c.label: c for c in _rows("frank/freshness")}
+    assert len(fresh) == len(tiers)
+    hv = fresh["frank/freshness: newest advertised frank_dynamic_hv card"]
+    assert hv.ok and "CMS unreadable" in hv.detail
+    assert fresh["frank/freshness: newest advertised frank_dynamic_jn card"].ok
+
+
 # ---- the workflow's retry loop -----------------------------------------------
 
 
