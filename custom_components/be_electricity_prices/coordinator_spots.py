@@ -692,10 +692,19 @@ class _SpotsMixin(_ProfilesMixin):
         local_today = dt_util.now().date()
         now_local = dt_util.now()
         want_tomorrow = now_local.hour >= 11
+        # Keep the native 15-minute slots only for a leg that bills on them
+        # (Engie Dynamic); everyone else gets the hourly aggregate. The leg,
+        # not the card: a cohort can splice one onto a card of another kind.
+        snap = self._billing_snapshot()
+        quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
+        # A curve cached on the other grid is not served: a monthly card can
+        # turn quarter-hourly after the midnight fetch, and the hourly curve
+        # would then price a quarter-hour leg for the rest of the day.
         if (
             self._spot_cache_day == local_today
             and (not want_tomorrow or self._spot_cache_includes_tomorrow)
             and self._spot_cache
+            and any(slot.minute for slot in self._spot_cache) == quarter_hourly
         ):
             return self._spot_cache
 
@@ -711,11 +720,6 @@ class _SpotsMixin(_ProfilesMixin):
         end = dt_util.start_of_local_day(local_today + timedelta(days=days)).astimezone(
             UTC
         )
-        # Keep the native 15-minute slots only for a leg that bills on them
-        # (Engie Dynamic); everyone else gets the hourly aggregate. The leg,
-        # not the card: a cohort can splice one onto a card of another kind.
-        snap = self._billing_snapshot()
-        quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
         previous_source = self._spot_source
         prices, self._spot_source = await fetch_day_ahead_or_fallback(
             api_key, self._session, start, end, quarter_hourly=quarter_hourly
@@ -774,7 +778,9 @@ class _SpotsMixin(_ProfilesMixin):
         contract bills on, and it is the only thing that ever holds tomorrow.
         Falls back to the persisted year-to-date cache, which is hourly. The
         two are never merged: a quarter-hourly entry topped up with hourly
-        means would price its slots off two different day-ahead products.
+        means would price its slots off two different day-ahead products. A
+        quarter-hourly entry served the hourly cache publishes an hourly
+        table, since the tick reads the resolution off the keys it built.
 
         Only today's and tomorrow's slots survive, and a source that cannot
         price today is skipped outright rather than contributing what it has,

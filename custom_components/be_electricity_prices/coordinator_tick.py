@@ -110,9 +110,6 @@ from .providers import (
 )
 from .providers._rates import EnergyRates
 from .snapshot_store import cached_month_card
-from .spot_stats import (
-    _energy_is_quarter_hourly,
-)
 from .vat_rates import ensure_vat_rates
 
 _LOGGER = logging.getLogger(__name__)
@@ -338,7 +335,7 @@ class _TickMixin:
         priced = cohort.splice(self._snapshot)
         # The spot fetch and the historical walk decide their grid off the
         # leg that is priced, so it has to be on the coordinator before either
-        # runs; the resolution below is read off the same leg.
+        # runs.
         self._priced = priced
 
         spot_prices = await self._tick_spot_prices(priced)
@@ -453,9 +450,13 @@ class _TickMixin:
 
         return CoordinatorData(
             hourly=hourly,
+            # Read off the table, not the leg: a quarter-hour leg priced on an
+            # hourly stand-in (the persisted cache during an outage, or a
+            # PT60M answer) carries hourly keys, and slot lookups on the
+            # 15-minute grid over them read unknown or the next hour's price.
             resolution=(
                 RESOLUTION_QUARTER
-                if _energy_is_quarter_hourly(priced.energy)
+                if any(slot.minute for slot in hourly)
                 else RESOLUTION_HOURLY
             ),
             snapshot_publication=self._snapshot.publication_label,

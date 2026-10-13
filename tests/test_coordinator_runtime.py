@@ -1167,6 +1167,90 @@ async def test_the_spot_grid_follows_the_leg_the_tick_prices_on(
     assert len(data.hourly) == 96
 
 
+async def test_a_cached_curve_on_the_other_grid_is_fetched_again(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The day's curve is cached after the first fetch, but the grid it was
+    fetched on can stop matching the leg: a monthly card that turns
+    quarter-hourly after midnight. Serving the hourly curve kept the quarter
+    leg on hourly keys for the rest of the day."""
+    freezer.move_to("2026-10-13 15:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    day0 = dt_util.start_of_local_day().astimezone(UTC)
+    coord._spot_cache = {day0 + timedelta(hours=h): 0.10 for h in range(48)}
+    coord._spot_cache_day = dt_util.now().date()
+    coord._spot_cache_includes_tomorrow = True
+    coord._snapshot = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True)
+    )
+    captured: dict[str, bool] = {}
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        captured["quarter_hourly"] = quarter_hourly
+        return {start + timedelta(minutes=15 * n): 0.20 for n in range(4 * 48)}
+
+    with _patch_spot_fetch(_fake_fetch):
+        got = await coord._fetch_spot_prices()
+
+    assert captured.get("quarter_hourly") is True, "the hourly curve was served"
+    assert {slot.minute for slot in got} == {0, 15, 30, 45}
+
+
+async def test_a_quarter_leg_on_an_hourly_stand_in_publishes_an_hourly_table(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """During an outage with no curve of its own cached, a quarter-hourly
+    entry prices off the persisted hourly cache. Publishing that table as
+    PT15M put the 15-minute slot lookup over hourly keys: current_price was
+    unknown at half past and showed the next hour's price at a quarter to."""
+    from custom_components.be_electricity_prices.const import RESOLUTION_HOURLY
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.sensor_values import (
+        _current_field,
+    )
+
+    freezer.move_to("2026-10-13 10:30:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="cociter",
+        contract="cociter_dynamic",
+        energy=DynamicRates(factor=1.0, base=0.0, quarter_hourly=True),
+        dsos={"ores": DsoOverlay(distribution_single=0.05, transport=0.0)},
+    )
+    day0 = dt_util.start_of_local_day().astimezone(UTC)
+    coord._historical_spots = {
+        day0 + timedelta(hours=h): 0.10 + h / 1000 for h in range(24)
+    }
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+
+    async def _down(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        raise EntsoeError("ENTSO-E HTTP 503")
+
+    with (
+        _patch_spot_fetch(_down),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._update_body()
+
+    assert data.resolution == RESOLUTION_HOURLY
+    ten = data.hourly[day0 + timedelta(hours=10)].all_in
+    assert _current_field("all_in")(data) == ten
+
+
 async def test_force_refresh_drops_caches_and_requests_update(
     hass: HomeAssistant,
 ) -> None:

@@ -378,7 +378,8 @@ constructs a fresh `EntsoeClient` per call (`api.py`,
   cache on the other grid (hourly against quarter-hour) is dropped instead. `quarter_hourly` is derived from
   the energy leg the tick prices on (`_billing_snapshot`, `coordinator_spots.py`):
   the cohort-spliced one once a tick has built it, since a cohort can put a
-  quarter-hourly leg on a card of another kind, and the loaded snapshot's before. The curve is
+  quarter-hourly leg on a card of another kind, and the loaded snapshot's before. A
+  cached curve on the other grid from that leg is fetched again rather than served. The curve is
   persisted under the `spot_cache` payload key and restored with
   `_spot_cache_day` left `None`, so the first tick still fetches and merges its
   answer over it as above, and slots that no longer cover today or tomorrow are
