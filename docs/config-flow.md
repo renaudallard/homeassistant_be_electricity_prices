@@ -528,7 +528,7 @@ wirings per side, both feeding the `current_year_cost` computation:
 | Wiring | Keys | Behaviour |
 | --- | --- | --- |
 | Day/night registers | `CONF_DAY_CONSUMPTION_KWH`, `CONF_NIGHT_CONSUMPTION_KWH`, `CONF_DAY_INJECTION_KWH`, `CONF_NIGHT_INJECTION_KWH` | Used as-is; exact from the start, no warm-up |
-| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | Coordinator splits deltas into day/night via `is_offpeak(now)` and persists them (`const.py` docstring; `const.py`) |
+| Single cumulative totals | `CONF_CONSUMPTION_KWH`, `CONF_INJECTION_KWH` | On a bi-hourly or dynamic meter each day's total is split into day and night by binning the recorder's hourly statistics on the entry's day start (`_recorder_daily_band_ratio`, `meter_daily.py`); a day those statistics cannot split takes the share of hours the entry's day/night schedule puts in each band (`_default_band_ratio_for`). Nothing is persisted, the split is read back from the recorder on every walk; a mono meter puts the whole day in the day band |
 
 When both are filled for the same side, the day/night registers win (more accurate;
 `flow_schemas.py`) while they report whole: the total stands in for a pair that cannot be billed whole, a dead, frozen or late half or halves reporting different periods (`_total_stands_in`, `meter_faults.py`). Each side (consumption, injection) is resolved independently,

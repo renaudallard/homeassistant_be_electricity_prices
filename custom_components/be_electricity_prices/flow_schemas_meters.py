@@ -197,12 +197,16 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
 
       * Direct day/night registers off the meter (4 fields). Used as-is
         when populated.
-      * Single cumulative totals (2 fields). The coordinator splits
-        deltas into day/night buckets via is_offpeak(now) and persists
-        them, so the running current_year_cost survives restarts.
+      * Single cumulative totals (2 fields). On a bi-hourly or dynamic
+        meter each day's total is split into day and night by binning the
+        recorder's hourly statistics on the entry's day_start
+        (meter_daily._recorder_daily_band_ratio); a day those statistics
+        cannot split takes the region's schedule share. Nothing is
+        persisted: the split is read back from the recorder every time.
 
-    When both are filled, the day/night registers win (more accurate;
-    no warm-up period).
+    When both are filled, the day/night registers win while they report
+    whole, since they are the meter's own split rather than one rebuilt
+    from hourly statistics.
     """
     # Restrict to energy-class (cumulative kWh) sensors so the user
     # cannot land on a power / temperature / unitless sensor and have
