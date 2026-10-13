@@ -3443,6 +3443,48 @@ def test_the_retry_loop_keeps_a_failure_an_attempt_could_not_judge(
     )
     assert _run_retry_loop(tmp_path / "timeout", timeout) == "rc=1"
 
+    # The blip on the first attempt: the list was seeded from attempt 1
+    # alone, so the parse failure never entered it and the run ended green.
+    first = blip.replace('"$n" -eq 2', '"$n" -eq 1')
+    assert _run_retry_loop(tmp_path / "first", first) == "rc=1"
+    work = tmp_path / "first" / "work"
+    assert (work / "persistent_failures.txt").read_text() == f"{persistent}\n"
+    assert (work / "count").read_text().strip() == "7"
+
+    # The supplier timed out on attempt 1 and the card did not fetch on
+    # attempt 2: the card is still unjudged when attempt 3 fails it.
+    nested = (
+        "n=$(cat count 2>/dev/null || echo 0); n=$((n + 1)); echo $n > count\n"
+        'if [ "$n" -eq 1 ]; then\n'
+        "  printf 'eneco: hard timeout\\n' > extractor_failures.txt\n"
+        "  printf 'eneco\\n' > unevaluated.txt\n"
+        'elif [ "$n" -eq 2 ]; then\n'
+        "  printf 'eneco/power_fix: fetch\\n' > extractor_failures.txt\n"
+        "  printf 'eneco/power_fix\\n' > unevaluated.txt\n"
+        "else\n"
+        f"  printf '{persistent}\\n' > extractor_failures.txt\n"
+        "  : > unevaluated.txt\n"
+        "fi\n"
+        "exit 1"
+    )
+    assert _run_retry_loop(tmp_path / "nested", nested) == "rc=1"
+    work = tmp_path / "nested" / "work"
+    assert (work / "persistent_failures.txt").read_text() == f"{persistent}\n"
+
+    # A failure first seen once its scope was judged clean still clears.
+    late = (
+        "n=$(cat count 2>/dev/null || echo 0); n=$((n + 1)); echo $n > count\n"
+        'if [ "$n" -eq 1 ]; then\n'
+        "  printf 'bolt/fix: rate\\n' > extractor_failures.txt\n"
+        "else\n"
+        f"  printf '{persistent}\\n' > extractor_failures.txt\n"
+        "fi\n"
+        ": > unevaluated.txt\n"
+        "exit 1"
+    )
+    assert _run_retry_loop(tmp_path / "late", late) == "rc=0"
+    assert (tmp_path / "late" / "work" / "count").read_text().strip() == "2"
+
     rotating = (
         "n=$(cat count 2>/dev/null || echo 0); n=$((n + 1)); echo $n > count\n"
         'printf "host$n/card: fetch\\n" > extractor_failures.txt\n'

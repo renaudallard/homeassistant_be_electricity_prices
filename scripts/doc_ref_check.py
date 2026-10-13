@@ -97,6 +97,7 @@ NOT_OURS = frozenset(
         "tax_failures.txt",
         "tax_report.md",
         "unevaluated.txt",
+        "unjudged.txt",
         "unparsed.json",
         "vat.json",
     }

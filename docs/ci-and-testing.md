@@ -1342,7 +1342,10 @@ the seven attempts dropped a real parse regression on that card and ended the ru
 `<prefix>: fetch` covers that prefix, a `<supplier>: hard timeout` or `unexpected error` the
 supplier, a crashed freshness phase every `<supplier>/freshness`), and the loop keeps a label it
 holds when the attempt failed it again or left its scope unjudged
-(`test_the_retry_loop_keeps_a_failure_an_attempt_could_not_judge`). The fetch and timeout labels
+(`test_the_retry_loop_keeps_a_failure_an_attempt_could_not_judge`). The loop also carries the
+scopes no attempt has judged so far (`unjudged.txt`), and a label failing for the first time joins
+the list when its scope is still among them: seeded from attempt 1 alone, a card that did not fetch
+there and failed its parse on every later attempt was never filed. The fetch and timeout labels
 are held to the same rule, so a card that 404s on every attempt still files, and timeouts that
 rotate between hosts still clear. Two trade-offs remain. A genuinely intermittent
 regression, say a CDN serving two card layouts round-robin, is suppressed until it becomes

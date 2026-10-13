@@ -168,25 +168,47 @@ jobs:
             # order reads the same on every runner, and so does its
             # fingerprint.
             LC_ALL=C sort -u extractor_failures.txt > attempt_failures.txt
+            touch unevaluated.txt
             if [ "$seeded" -eq 0 ]; then
               cp attempt_failures.txt persistent_failures.txt
+              # The scopes no attempt has judged yet.
+              LC_ALL=C sort -u unevaluated.txt > unjudged.txt
               seeded=1
             else
               # A label stays if it failed again, or if its scope (the
-              # label up to a ':' or '/') went unjudged this attempt. Kept
-              # in order, so the file stays sorted.
-              touch unevaluated.txt
-              awk 'FILENAME == ARGV[1] { scope[$0] = 1; next }
-                   FILENAME == ARGV[2] { failed[$0] = 1; next }
+              # label up to a ':' or '/') went unjudged this attempt. A
+              # label failing for the first time is admitted when no
+              # earlier attempt judged its scope: seeding from attempt 1
+              # alone dropped a card that did not fetch there and then
+              # failed its parse on every later attempt.
+              awk 'function within(l, s) {
+                     return index(l, s ":") == 1 || index(l, s "/") == 1
+                   }
+                   FILENAME == ARGV[1] { unjudged[$0] = 1; next }
+                   FILENAME == ARGV[2] { scope[$0] = 1; next }
+                   FILENAME == ARGV[3] {
+                     failed[$0] = 1
+                     for (s in unjudged)
+                       if (within($0, s)) { print; break }
+                     next
+                   }
                    ($0 in failed) { print; next }
-                   {
-                     for (s in scope)
-                       if (index($0, s ":") == 1 || index($0, s "/") == 1) {
-                         print; next
-                       }
-                   }' unevaluated.txt attempt_failures.txt persistent_failures.txt \
-                > persistent_failures.tmp
+                   { for (s in scope) if (within($0, s)) { print; next } }' \
+                unjudged.txt unevaluated.txt attempt_failures.txt persistent_failures.txt |
+                LC_ALL=C sort -u > persistent_failures.tmp
               mv persistent_failures.tmp persistent_failures.txt
+              # A scope stays unjudged while this attempt left it unjudged
+              # too. One attempt may name a supplier and another a card of
+              # it, so the narrower of two nested scopes is what remains.
+              awk 'function within(l, s) { return l == s || index(l, s "/") == 1 }
+                   FILENAME == ARGV[1] { old[$0] = 1; next }
+                   { now[$0] = 1 }
+                   END {
+                     for (u in now) for (s in old) if (within(u, s)) { print u; break }
+                     for (s in old) for (u in now) if (within(s, u)) { print s; break }
+                   }' unjudged.txt unevaluated.txt |
+                LC_ALL=C sort -u > unjudged.tmp
+              mv unjudged.tmp unjudged.txt
             fi
             if [ ! -s persistent_failures.txt ]; then
               echo "no check failed in every attempt; transient, not filing" >&2
