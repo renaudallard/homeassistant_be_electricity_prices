@@ -54,7 +54,7 @@ From `manifest.json`:
 | `integration_type` | `service` | It provides derived data (prices), not a physical device. |
 | `iot_class` | `cloud_polling` | It polls remote cards and ENTSO-E on a timer, no push. |
 | `config_flow` | `true` | Set up entirely through the UI wizard (`config_flow.py`). |
-| `requirements` | `pypdf>=5.1.0`, `pdfplumber>=0.11`, `defusedxml>=0.7`, `pyxlsb>=1.0` | PDF parsing (pypdf, pdfplumber) for tariff cards; defusedxml to parse the ENTSO-E XML and the Synergrid SPP workbook safely; pyxlsb to read the Synergrid RLP `.xlsb` workbook (`synergrid.py`). |
+| `requirements` | `pypdf>=6.0.0`, `pdfplumber>=0.11`, `defusedxml>=0.7`, `pyxlsb>=1.0` | PDF parsing (pypdf, pdfplumber) for tariff cards; pypdf 6.0.0 is the first to limit what a FlateDecode stream inflates to, which the check ahead of pdfplumber relies on. defusedxml to parse the ENTSO-E XML and the Synergrid SPP workbook safely; pyxlsb to read the Synergrid RLP `.xlsb` workbook (`synergrid.py`). |
 | `after_dependencies` | `energy`, `recorder` | The integration writes cost statistics into the recorder and plugs into the Energy dashboard, but must not hard-require them, so they load first when present. |
 | `version` | `0.37.2` | Manifest version. CI auto-tags and publishes a release when this bumps on `main`. |
 

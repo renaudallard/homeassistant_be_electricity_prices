@@ -646,6 +646,91 @@ def test_pdfplumber_extractors_fail_loud_on_textless_pdf() -> None:
     assert issubclass(CardNotReadableError, ExtractorError)
 
 
+def _inflating_pdf(size: int, *extra: bytes) -> bytes:
+    """A one-page PDF whose content stream, a comment, inflates to ``size``
+    bytes from a few kB, followed by the ``extra`` objects, which nothing
+    refers to."""
+    import zlib
+
+    stream = zlib.compress(b"%" + b"A" * size + b"\n", 9)
+    objects = (
+        b"<</Type/Catalog/Pages 2 0 R>>",
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>",
+        b"<</Length %d/Filter/FlateDecode>>\nstream\n" % len(stream)
+        + stream
+        + b"\nendstream",
+        *extra,
+    )
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % offset for offset in offsets)
+    out += b"trailer<</Size %d/Root 1 0 R>>\nstartxref\n%d\n%%%%EOF\n" % (
+        len(objects) + 1,
+        xref,
+    )
+    return bytes(out)
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_streams_that_inflate_past_the_cap_are_refused_before_pdfplumber(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer decompresses a stream with no limit, in a worker thread the
+    fetch timeout cannot cancel: a 20 kB file inflating to 20 MB took 26 s
+    of CPU on a Raspberry Pi, and the download cap does not see it."""
+    monkeypatch.setattr(_pdf, "_MAX_DECODED_STREAM_BYTES", 1 << 20, raising=False)
+    payload = _inflating_pdf(2 << 20)
+    assert len(payload) < 10_000
+    with pytest.raises(ExtractorError, match="decode to more than 1048576 bytes"):
+        extract(payload)
+    # Under the cap the same document goes on to pdfplumber as before.
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_inflating_pdf(1000))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_pypdf_reaching_its_own_limit_is_refused(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    import pypdf.filters
+    from pypdf.errors import LimitReachedError
+
+    def limited(_data: bytes) -> bytes:
+        raise LimitReachedError("Limit reached while decompressing.")
+
+    monkeypatch.setattr(pypdf.filters, "decompress", limited)
+    with pytest.raises(ExtractorError, match="refusing to read them"):
+        extract(_inflating_pdf(1000))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_what_pypdf_cannot_read_is_left_to_pdfplumber(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """The bound is the only reason to refuse. A stream pypdf has no filter
+    for, or a file it cannot open at all, used to be refused as a parse error
+    before pdfplumber, which read such cards before the check, saw them."""
+    from pypdf.errors import PdfReadError
+
+    unknown_filter = b"<</Length 4/Filter/NoSuchDecode>>\nstream\nabcd\nendstream"
+    # pdfplumber reads the page, which carries no text: the card reached it.
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_inflating_pdf(1000, unknown_filter))
+
+    def unreadable(_stream: object) -> None:
+        raise PdfReadError("pypdf cannot open this")
+
+    monkeypatch.setattr(_pdf.pypdf, "PdfReader", unreadable)
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_inflating_pdf(1000))
+
+
 def test_text_mentions_month_tolerates_split_whitespace() -> None:
     months = (
         "januari",

@@ -634,6 +634,19 @@ Internals worth knowing:
   `UnicodeDecodeError`. The ENTSO-E and energy-charts answers, the Brugel
   sheets, the CREG rate file and Synergrid's download page are read through
   them too.
+- `_require_bounded_streams` (`_pdf.py`) runs before pdfplumber reads a card,
+  in the layout and aligned readers. `read_capped` bounds the download, not
+  what it inflates to, and pdfminer decompresses a stream with no limit, in a
+  worker thread the fetch timeout cannot cancel: a 20 kB file inflating to
+  20 MB took 26 s on a Raspberry Pi, and one of 200 kB ran away. Every stream
+  pdfminer may read (all but images) is decoded through pypdf, which applies
+  limits of its own from 6.0.0, and their total is held to
+  `_MAX_DECODED_STREAM_BYTES` (32 MiB, four times the 7,5 MB the largest
+  shipped card decodes to). It only reads, so a card under the cap renders to
+  the same text as before, and only the bound refuses: a file pypdf cannot
+  open is left to pdfplumber as it was, and a stream it cannot decode is
+  skipped. The manifest asks for pypdf 6.0.0 or later, the first release
+  that limits what a FlateDecode stream inflates to.
 - `_require_https` (`_pdf.py`) refuses to fetch a card or page whose address
   is not https, before any request. Most links are read off a supplier's page
   and only energie.be checked their scheme, so a plain http link was fetched
