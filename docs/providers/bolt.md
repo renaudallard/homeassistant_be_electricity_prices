@@ -601,6 +601,15 @@ the general case, but Bolt still exposes a prosumer column, which is read into
 (`tests/test_bolt.py`) checks Antwerpen: transport 0.0, distribution 0.0535, exclusive-night
 0.0481 (< distribution), capacity 52.37 (all illustrative).
 
+**A Flemish card defect, billed as printed.** The professional cards of October to December 2025
+(`bolt_pro_fix` and `bolt_pro_plenty_fix`) print the exclusive-night column of `Fluvius Limburg` and
+`Fluvius Midden-Vl` the wrong way round: Limburg 4,46 and Midden-Vl 5,31 c€/kWh excluding VAT,
+where Engie, Mega and Ecopower print 5,3147 for Limburg and 4,4581 for Intergem the same months.
+Midden-Vl's night rate then sits above its own normal rate (5,29), which no other row does. A night
+circuit is billed about 0,85 c€/kWh low in Limburg and as much too high in Midden-Vlaanderen for
+those three months. Both rows are billed as printed, like the Walloon figures below. The residential
+cards of those months and the professional cards from January 2026 print the right columns.
+
 **Wallonia (`_extract_wallonia_dsos`, `_bolt_overlays.py`).** Five DSOs via `_WALLONIA_LABELS`
 (`_bolt_overlays.py`). Ten numbers per row: mono, jour, nuit, excl_nuit, PIC, MEDIUM, ECO, transport,
 terme_fixe (EUR/an), prosumer (EUR/kVA/an). PIC/MEDIUM/ECO populate the CWaPE Tarif Impact band
