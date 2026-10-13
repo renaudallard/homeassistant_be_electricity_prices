@@ -44,6 +44,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .snapshot_codec import _MigratingStore
 from .spot_stats import _rlp_weighted_month_mean, _spp_weighted_month_mean
 from .synergrid import RLP_BLENDS, RlpWeights, fetch_rlp_blends, fetch_spp_weights
 
@@ -369,7 +370,7 @@ def _profile_store(hass: HomeAssistant) -> Store[dict[str, Any]]:
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     store = bucket.get(_PROFILE_STORE_KEY)
     if store is None:
-        store = Store(hass, _PROFILE_STORE_VERSION, f"{DOMAIN}_profiles")
+        store = _MigratingStore(hass, _PROFILE_STORE_VERSION, f"{DOMAIN}_profiles")
         bucket[_PROFILE_STORE_KEY] = store
     return store
 
@@ -512,6 +513,7 @@ _PROFILE_CACHE_KEY = "synergrid_profile_cache"
 _PROFILE_LOCKS_KEY = "synergrid_profile_locks"
 _PROFILE_STORE_KEY = "synergrid_profile_store"
 _PROFILE_LOADED_KEY = "synergrid_profile_loaded"
-# Bumped only if the row shape below changes; a blob from another version is
-# dropped and the profiles are downloaded again, which costs one file.
+# Bumped only if the row shape below changes; a blob from an older version is
+# dropped (_MigratingStore) and the profiles are downloaded again, which costs
+# one file.
 _PROFILE_STORE_VERSION = 1

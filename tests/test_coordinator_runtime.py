@@ -4509,6 +4509,31 @@ async def test_async_remove_entry_clears_stale_issue(hass: HomeAssistant) -> Non
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_a_store_written_under_an_older_version_is_dropped(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """The profiles and the held costs are both rebuilt by the next refresh,
+    so a blob from an older store version is dropped. A plain Store raises
+    NotImplementedError out of async_load instead, which fails setup."""
+    from custom_components.be_electricity_prices.coordinator_profiles import (
+        _profile_cache,
+    )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    for key, data in (
+        (f"{DOMAIN}_profiles", {"profiles": []}),
+        (f"{DOMAIN}_costs_{entry.entry_id}", {"inputs": "old"}),
+    ):
+        hass_storage[key] = {"version": 0, "key": key, "data": data}
+    coord = BePricesCoordinator(hass, entry)
+
+    await coord.async_load_persistent()
+
+    assert not coord._held_costs
+    assert _profile_cache(hass) == {}
+
+
 async def test_the_shared_profile_store_goes_with_the_last_entry(
     hass: HomeAssistant, hass_storage: dict[str, Any]
 ) -> None:

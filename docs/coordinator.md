@@ -180,7 +180,7 @@ Two config entries on the same `(supplier, contract, region)` share one fetched 
 
 ### 2.3 The on-disk Store and cache invalidation
 
-The Store is `_MigratingStore` (`snapshot_codec.py`), a `Store[dict]` subclass whose `_async_migrate_func` returns `{}` for any blob written under an older `STORAGE_VERSION` (`snapshot_codec.py`). Every persisted field is re-derivable from a fresh fetch, so dropping the cache on a major-version mismatch is safe and avoids HA's "missing migration function" warning. `STORAGE_VERSION` is `2` (`const.py`).
+The Store is `_MigratingStore` (`snapshot_codec.py`), a `Store[dict]` subclass whose `_async_migrate_func` returns `{}` for any blob written under an older version than the store's own (`snapshot_codec.py`). Every persisted field is re-derivable from a fresh fetch, so dropping the cache on a major-version mismatch is safe, where a plain `Store` raises `NotImplementedError` out of `async_load` and fails the entry's setup. `STORAGE_VERSION` is `2` (`const.py`). The held costs (`_costs_store`, `COSTS_STORAGE_VERSION`) and the shared Synergrid profiles (`_profile_store`, `_PROFILE_STORE_VERSION`) use the same class, since the next refresh rebuilds both.
 
 There is a **second**, finer version inside the serialized snapshot: `_SNAPSHOT_SCHEMA_VERSION`, currently `78` (`snapshot_codec.py`). `_snapshot_to_dict` stamps it (`snapshot_codec.py`); `_snapshot_from_dict` raises `ValueError` when a loaded blob's `_schema_version` is below the `min_schema_version` it is asked for (`snapshot_codec.py`), which `async_load_persistent` catches and treats as "discard and re-fetch", keeping the rejected dict in `_stale_snapshot`.
 

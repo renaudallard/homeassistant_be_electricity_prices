@@ -182,7 +182,10 @@ class BePricesCoordinator(
         )
         # The costs the last refresh published (_held_costs below), apart
         # from the blob above: they move every tick and it should not.
-        self._costs_store: Store[dict[str, Any]] = Store(
+        # Migrating for the same reason: an older blob is dropped rather
+        # than failing setup, and the next refresh that reads the meters
+        # writes it again.
+        self._costs_store: Store[dict[str, Any]] = _MigratingStore(
             hass, COSTS_STORAGE_VERSION, f"{DOMAIN}_costs_{entry.entry_id}"
         )
         self._saved_costs: dict[str, Any] | None = None

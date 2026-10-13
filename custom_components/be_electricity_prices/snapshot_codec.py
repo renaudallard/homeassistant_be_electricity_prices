@@ -41,7 +41,7 @@ from typing import Any
 
 from homeassistant.helpers.storage import Store
 
-from .const import STORAGE_VERSION, WELCOME_CREDIT_PRO_RATA
+from .const import WELCOME_CREDIT_PRO_RATA
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -62,14 +62,15 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class _MigratingStore(Store[dict[str, Any]]):
-    """Store subclass that drops blobs from a previous STORAGE_VERSION.
+    """Store subclass that drops blobs written under an older version.
 
     Every field in the persisted snapshot is re-derivable from a fresh
     extractor fetch, so wiping the cache on a major-version mismatch is
-    safe and avoids HA logging the default migrator's "missing migration
-    function" warning. Returning an empty dict from
-    ``_async_migrate_func`` makes ``async_load`` return ``{}`` and the
-    coordinator re-fetches on its first refresh.
+    safe, and without a migrator HA's Store raises NotImplementedError out of
+    ``async_load``, which fails the entry's setup. Returning an empty dict
+    from ``_async_migrate_func`` makes ``async_load`` return ``{}`` and the
+    coordinator re-fetches on its first refresh. The held costs and the
+    Synergrid profiles use it too: both are rebuilt by the next refresh.
     """
 
     async def _async_migrate_func(
@@ -78,7 +79,7 @@ class _MigratingStore(Store[dict[str, Any]]):
         old_minor_version: int,  # HA signature.
         old_data: dict[str, Any],  # dropped wholesale.
     ) -> dict[str, Any]:
-        if old_major_version < STORAGE_VERSION:
+        if old_major_version < self.version:
             return {}
         return old_data
 
