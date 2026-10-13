@@ -609,9 +609,17 @@ def parse_snapshot(
         # month's card with last month's, whose prices differ, and the card
         # would keep the formula it prints. A refused pair costs one tick; a
         # mispriced one stands until either card's probe key moves, which is
-        # usually the next month.
+        # usually the next month. A header that cannot be read is a layout
+        # change rather than a pair out of step, so it is not reported as a
+        # failure the next fetch heals.
         month = _extract_publication_month(text).casefold()
-        if not month or month != _extract_publication_month(index_text).casefold():
+        index_month = _extract_publication_month(index_text).casefold()
+        for label, card in ((month, contract_id), (index_month, contract.index_slug)):
+            if not label:
+                raise ExtractorError(
+                    f"Bolt: no <Month> <Year> header on the {card} card"
+                )
+        if month != index_month:
             raise ExtractorError(
                 f"{OUT_OF_STEP}: Bolt: {contract_id} and the "
                 f"{contract.index_slug} card it is priced on are not the same "

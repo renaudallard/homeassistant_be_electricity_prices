@@ -1565,6 +1565,31 @@ def test_plenty_online_will_not_bill_on_another_months_index() -> None:
         parse_snapshot("bolt_plenty_online", plenty, "flanders", index_text=september)
 
 
+def test_a_pair_out_of_step_is_transient_and_a_blank_header_is_not() -> None:
+    """A pair from two months heals on the next fetch, so it is reported as
+    one. A header that no longer reads is a layout change: reported as out of
+    step, it read as "could not reach the supplier" for as long as it lasted."""
+    plenty = fixture_text("bolt_plenty_online_oct_reissue.pdf", layout=True)
+    online = fixture_text("bolt_online_oct_reissue.pdf", layout=True)
+    september = online.replace("Octobre 2026", "Septembre 2026")
+    with pytest.raises(ExtractorError) as caught:
+        parse_snapshot("bolt_plenty_online", plenty, "flanders", index_text=september)
+    assert is_transient_fetch_error(str(caught.value))
+
+    def blank(text: str) -> str:
+        return re.sub(r"^Octobre 2026\s*/", "Octobre 2026 -", text, flags=re.M)
+
+    for own, index, card in (
+        (blank(plenty), online, "bolt_plenty_online"),
+        (plenty, blank(online), "online"),
+    ):
+        with pytest.raises(
+            ExtractorError, match=f"header on the {card} card"
+        ) as caught:
+            parse_snapshot("bolt_plenty_online", own, "flanders", index_text=index)
+        assert not is_transient_fetch_error(str(caught.value))
+
+
 def test_only_a_card_printing_the_online_prices_takes_its_formula() -> None:
     """Only Plenty Online is read with another card, and only while it prints
     that card's monthly prices: a card with a price of its own keeps the

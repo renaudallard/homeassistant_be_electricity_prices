@@ -127,7 +127,9 @@ two, which would pair October's card with September's, whose prices differ, and 
 either card next changes. The refusal's message
 opens with `OUT_OF_STEP` (`_pdf.py`), which `is_transient_fetch_error` counts as transient: the
 next fetch pairs the cards again, so it is held to the softer "could not reach the supplier"
-card rather than the layout-change one.
+card rather than the layout-change one. A card whose header cannot be read at all is refused with
+a plain `ExtractorError` naming that card: it is a layout change, and reporting it as a pair out of
+step would show the softer card for as long as the layout lasted.
 
 ### Plenty offers
 
