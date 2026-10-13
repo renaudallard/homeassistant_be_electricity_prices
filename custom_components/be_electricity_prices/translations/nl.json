@@ -794,7 +794,8 @@
           }
         },
         "abort": {
-          "still_stale": "De kaart kon nog steeds niet vernieuwd worden. Laatste fout: {last_error}. Ze wordt elk uur opnieuw geprobeerd, en deze reparatie blijft staan tot dat lukt."
+          "still_stale": "De kaart kon nog steeds niet vernieuwd worden. Laatste fout: {last_error}. Ze wordt elk uur opnieuw geprobeerd, en deze reparatie blijft staan tot dat lukt.",
+          "not_loaded": "Deze invoer is niet geladen, dus de kaart kan nu niet opgehaald worden. Probeer opnieuw zodra de invoer geladen is; deze reparatie blijft staan tot de kaart vernieuwd is."
         }
       }
     },

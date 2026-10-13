@@ -98,6 +98,27 @@ async def test_fetching_again_closes_the_card_only_when_it_is_cleared(
         assert left is not None
 
 
+async def test_an_entry_that_is_not_loaded_keeps_its_card(
+    hass: HomeAssistant,
+) -> None:
+    """While setup is being retried the entry holds no coordinator, so there
+    is nothing to fetch with. Finishing the flow anyway deleted the Repairs
+    card with the tariff card still out of date."""
+    assert await async_setup_component(hass, "repairs", {})
+    assert await async_setup_component(hass, DOMAIN, {})
+    coord = _stale_entry(hass)
+    issue_id = f"snapshot_stale_{coord.entry.entry_id}"
+    manager = hass.data["repairs"]["flow_manager"]
+    form = await manager.async_init(DOMAIN, data={"issue_id": issue_id})
+    del coord.entry.runtime_data
+
+    done = await manager.async_configure(form["flow_id"], {})
+
+    assert done["type"] is FlowResultType.ABORT
+    assert done["reason"] == "not_loaded"
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+
 async def test_the_fix_flow_runs_the_real_refresh(hass: HomeAssistant) -> None:
     """End to end with only the update body stubbed, so the refresh the flow
     asks for goes through Home Assistant's own coordinator and debouncer."""

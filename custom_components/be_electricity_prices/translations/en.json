@@ -794,7 +794,8 @@
           }
         },
         "abort": {
-          "still_stale": "The card still could not be refreshed. Last fetch error: {last_error}. It is tried again every hour, and this repair stays until it is."
+          "still_stale": "The card still could not be refreshed. Last fetch error: {last_error}. It is tried again every hour, and this repair stays until it is.",
+          "not_loaded": "This entry is not loaded, so the card cannot be fetched now. Try again once the entry is loaded; this repair stays until the card is refreshed."
         }
       }
     },

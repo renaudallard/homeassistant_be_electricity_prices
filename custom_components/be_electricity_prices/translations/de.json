@@ -794,7 +794,8 @@
           }
         },
         "abort": {
-          "still_stale": "Die Karte konnte weiterhin nicht aktualisiert werden. Letzter Fehler: {last_error}. Sie wird stündlich erneut abgerufen, und diese Reparatur bleibt bis dahin bestehen."
+          "still_stale": "Die Karte konnte weiterhin nicht aktualisiert werden. Letzter Fehler: {last_error}. Sie wird stündlich erneut abgerufen, und diese Reparatur bleibt bis dahin bestehen.",
+          "not_loaded": "Dieser Eintrag ist nicht geladen, daher kann die Tarifkarte jetzt nicht abgerufen werden. Versuchen Sie es erneut, sobald der Eintrag geladen ist; diese Reparatur bleibt bestehen, bis die Tarifkarte aktualisiert ist."
         }
       }
     },

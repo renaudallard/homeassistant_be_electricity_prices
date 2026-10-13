@@ -794,7 +794,8 @@
           }
         },
         "abort": {
-          "still_stale": "La carte n'a toujours pas pu être rafraîchie. Dernière erreur : {last_error}. Elle est réessayée toutes les heures, et cette réparation reste affichée jusque-là."
+          "still_stale": "La carte n'a toujours pas pu être rafraîchie. Dernière erreur : {last_error}. Elle est réessayée toutes les heures, et cette réparation reste affichée jusque-là.",
+          "not_loaded": "Cette entrée n'est pas chargée, la carte ne peut donc pas être récupérée maintenant. Réessayez une fois l'entrée chargée ; cette réparation reste affichée jusqu'à ce que la carte soit rafraîchie."
         }
       }
     },

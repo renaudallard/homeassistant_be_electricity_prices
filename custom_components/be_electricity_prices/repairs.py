@@ -64,17 +64,21 @@ class RetryFetchFlow(RepairsFlow):
             )
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
         coordinator = getattr(entry, "runtime_data", None)
-        if isinstance(coordinator, BePricesCoordinator):
-            await coordinator.async_force_refresh(wait=True)
-            if coordinator._snapshot is None or coordinator._snapshot_overdue():
-                # Finishing the flow would delete the Repairs card although
-                # nothing was fixed; aborted, it stays.
-                return self.async_abort(
-                    reason="still_stale",
-                    description_placeholders={
-                        "last_error": coordinator._last_error or "unknown"
-                    },
-                )
+        if not isinstance(coordinator, BePricesCoordinator):
+            # The entry is not loaded (its setup is being retried, or it was
+            # disabled), so there is nothing to fetch with. Finishing would
+            # delete the Repairs card with the tariff card still out of date.
+            return self.async_abort(reason="not_loaded")
+        await coordinator.async_force_refresh(wait=True)
+        if coordinator._snapshot is None or coordinator._snapshot_overdue():
+            # Finishing the flow would delete the Repairs card although
+            # nothing was fixed; aborted, it stays.
+            return self.async_abort(
+                reason="still_stale",
+                description_placeholders={
+                    "last_error": coordinator._last_error or "unknown"
+                },
+            )
         return self.async_create_entry(data={})
 
 
