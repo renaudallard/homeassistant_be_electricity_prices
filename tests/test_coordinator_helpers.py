@@ -7952,7 +7952,7 @@ def test_the_sensor_and_the_backfill_seed_resolve_the_same_reset() -> None:
     assert desc.last_reset_fn is not None
     assert desc.last_reset_fn(CoordinatorData(current_year_cost_reset=baked)) == baked
     seed_call = inspect.getsource(backfill._backfill_cost_sensor)
-    assert "ytd_window_reset(entry)" in seed_call, (
+    assert "ytd_window_reset(entry," in seed_call, (
         "the backfill seed must resolve the reset through the same helper"
     )
 

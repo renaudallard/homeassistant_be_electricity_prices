@@ -837,6 +837,42 @@ async def test_cost_backfill_multiyear_stays_in_end_year_without_sum_drop(
     assert all(sums[i] <= sums[i + 1] for i in range(len(sums) - 1))
 
 
+async def test_cost_rows_priced_before_new_year_import_on_their_own_cycle(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Pricing a year takes minutes on a small host. A run that started on 31
+    December and finished after midnight read the reset off the clock, 1
+    January of the new year, and the short-term rows the live sensor wrote
+    on the old cycle were chained onto it: minus a year's bill on 1 January.
+    The reset is the one of the hours the rows were priced for."""
+    from custom_components.be_electricity_prices import backfill_cost
+
+    freezer.move_to("2026-12-31 22:30:00+01:00")
+    entry = _entry()
+    hour = datetime(2026, 12, 31, 20, tzinfo=UTC)
+
+    async def _slow_accrual(*_a: Any, rows: list[Any], **_k: Any) -> float:
+        rows.append({"start": hour, "state": 1001.0, "sum": 1001.0})
+        freezer.move_to("2027-01-01 00:12:00+01:00")
+        return 1001.0
+
+    imported = AsyncMock()
+    with (
+        patch.object(backfill_cost, "_stat_id", return_value="sensor.x_cost"),
+        patch.object(
+            backfill_cost,
+            "_contract_segments",
+            AsyncMock(return_value=[(entry, None, [hour])]),
+        ),
+        patch.object(backfill_cost, "_accrue_cost", _slow_accrual),
+        patch.object(backfill_cost, "_import_cost_rows", imported),
+    ):
+        await bf._backfill_cost_sensor(hass, entry, SimpleNamespace(), [hour], {}, {})  # type: ignore[arg-type]
+
+    assert imported.await_args is not None
+    assert imported.await_args.args[3] == datetime(2026, 1, 1, tzinfo=BRUSSELS)
+
+
 async def test_cost_backfill_injection_uses_spp_not_flat_mean(
     hass: HomeAssistant, freezer: Any
 ) -> None:

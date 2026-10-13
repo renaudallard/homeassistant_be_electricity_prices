@@ -298,9 +298,11 @@ async def _backfill_cost_sensor(
         unit_class=None,
         unit_of_measurement="EUR",
     )
-    await _import_cost_rows(
-        hass, metadata, rows, ytd_window_reset(entry), async_import_statistics
-    )
+    # The cycle the rows were priced in, never the clock's: pricing a year
+    # takes minutes on a small host, and a run that ends past New Year's
+    # midnight would otherwise chain last year's rows onto this year's cycle.
+    reset = ytd_window_reset(entry, dt_util.as_local(rows[-1]["start"]))
+    await _import_cost_rows(hass, metadata, rows, reset, async_import_statistics)
     return {sid: len(rows)}
 
 
