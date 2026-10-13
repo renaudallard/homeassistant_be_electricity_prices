@@ -120,10 +120,13 @@ from .ytd_legs import (
 
 # Which hour stands for each meter register when a card prints one feed-in rate
 # per register. The walk is per DAY and the register split is the DSO's day and
-# night schedule, so the rate is asked for one hour inside each block: 10:00 is
-# always a weekday day register and 03:00 always night. On a weekend or a
-# holiday the whole day is the night register, both questions answer the night
-# rate, and the day kWh a meter did not record there is zero anyway.
+# night schedule, so the rate is asked for one hour inside each block, on the
+# day itself: 10:00 is the day register on every weekday and 03:00 always
+# night. Where is_offpeak puts the whole day on the night register, a weekend
+# in Flanders or Brussels and a weekday holiday in Brussels, both questions
+# answer the night rate, and the day kWh a meter did not record there is zero
+# anyway. Wallonia has had one schedule every day since 2026, and a Flemish
+# weekday holiday bills at the day rate, so 10:00 is the day register there.
 _DAY_REGISTER_HOUR = 10
 _NIGHT_REGISTER_HOUR = 3
 
