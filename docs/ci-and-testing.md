@@ -61,6 +61,7 @@ machinery.
 | `tests/test_aspiravi.py` | Aspiravi Energy extractor |
 | `tests/test_bolt.py` | Bolt extractor (`providers/bolt.py`) |
 | `tests/test_cociter.py` | Cociter extractor |
+| `tests/test_custom.py` | Expert custom-formula supplier: its config flow, snapshot build and pricing |
 | `tests/test_dats24.py` | DATS 24 extractor |
 | `tests/test_ebem.py` | EBEM extractor |
 | `tests/test_ecofix.py` | Ecofix extractor |
@@ -71,6 +72,13 @@ machinery.
 | `tests/test_energyvision.py` | EnergyVision extractor |
 | `tests/test_engie.py` | Engie extractor |
 | `tests/test_excise_law.py` | The federal excise read from article 419 on Justel (`excise_law.py`), its store round trip, and `resolve_federal_excise` billing it |
+| `tests/test_brugel.py` | Brugel's published Sibelga power term (`brugel.py`) and the card it completes |
+| `tests/test_creg_ev.py` | The CREG home charging reimbursement rate and the sensor that carries it |
+| `tests/test_synergrid_rlp.py` | Synergrid RLP profile fetch and parse (the `.xlsb` workbook) and the RLP-weighted month mean |
+| `tests/test_synergrid_spp.py` | Synergrid SPP profile fetch and parse and the SPP-weighted custom injection |
+| `tests/test_vat_rates.py` | The VAT rate of the month billed (`vat_rates.py`) and where it reaches a card |
+| `tests/test_vat_table.py` | The archive's VAT table: the consensus `scripts/archive_cards.py` writes from the cards and `vat_rates.py` reading it |
+| `tests/test_card_vat.py` | The VAT basis each card records: the rate it states, or the one its parser grossed a formula by |
 | `tests/test_frank.py` | Frank Energie extractor |
 | `tests/test_luminus.py` | Luminus extractor |
 | `tests/test_mega.py` | Mega extractor |
@@ -81,10 +89,25 @@ machinery.
 | `tests/test_pricing.py` | `pricing.compute_breakdown` and its helpers (energy, network, taxes, TOU/offpeak, holidays, impact bands, meter fixed fee) |
 | `tests/test_coordinator_runtime.py` | `BePricesCoordinator` force-refresh, stale-snapshot Repairs issue, shared caches |
 | `tests/test_coordinator_helpers.py` | Coordinator helper functions in isolation |
+| `tests/test_init.py` | Entry setup: the current-year-cost unique_id migration and the time listeners `async_setup_entry` registers |
+| `tests/test_setup_meter_reads.py` | What setup reads from the recorder (issue #107) |
+| `tests/test_snapshot_codec.py` | The snapshot codec against rows other versions wrote or will write |
+| `tests/test_month_indexed_registry.py` | The registry's `month_indexed_energy` flag against what the parsers read |
+| `tests/test_supplier_switch.py` | A recorded supplier switch: the earlier contracts, their days and cost (`contract_periods.py`), the options step and the backfill split |
+| `tests/test_projected_volume.py` | Rolling-year and projected calendar-year consumption and injection |
+| `tests/test_year_end_cost.py` | The year's bill as it will stand on 31 December (`year_end_cost.py`, `year_ahead.py`) |
 | `tests/test_config_flow_energy_defaults.py` | Config-flow wizard defaults |
 | `tests/test_options_flow.py` | Options-flow reconfiguration |
+| `tests/test_config_flow_unique_id.py` | The uniqueness key a new config entry claims |
+| `tests/test_gt_flow.py` | Where the setup flow lands for every offered contract, and the unreachable ENTSO-E key choice |
+| `tests/test_day_hours.py` | The Flemish day hours option (issue #131): the 06:00 to 21:00 schedule, the bill on both legs and the meter step that asks it |
+| `tests/test_compare_direct_debit.py` | Direct debit on the comparison pages |
+| `tests/test_compare_own_contract.py` | Quoting the household's own contract on the comparison page |
+| `tests/test_daily_compare.py` | The opt-in daily supplier ranking and the sensor it feeds |
 | `tests/test_sensor_helpers.py` | Sensor value/attribute helpers |
 | `tests/test_binary_sensor.py` | The `tomorrow_prices_available` binary sensor |
+| `tests/test_bi_hourly_sensors.py` | The static peak and off-peak price sensors (pull request #98) |
+| `tests/test_reminder_sensor.py` | The contract end date renewal reminder sensor |
 | `tests/test_button.py` | The Flemish `reset_monthly_peak` button |
 | `tests/test_api.py` | ENTSO-E spot client (`api.py`) |
 | `tests/test_backfill.py` | Recorder cost-statistics backfill |
@@ -92,10 +115,17 @@ machinery.
 | `tests/test_icons.py` | `icons.json` names only real entities and services, and gives every entity without a device class an icon |
 | `tests/test_repairs.py` | The stale-card Repairs fix flow (`repairs.py`) |
 | `tests/test_discover.py` | Every supplier's `discover()` against a frozen listing snippet |
+| `tests/test_archive_errors.py` | Every provider's archive lookup (`fetch_for_month`) raises on a transient failure |
 | `tests/test_window_service.py` | The window search behind the `cheapest_window` and `most_expensive_window` services |
 | `tests/test_pdf_helpers.py` | Shared PDF text extraction (`providers/_pdf.py`) |
 | `tests/test_module_size.py` | Every module of the integration stays under a thousand lines |
 | `tests/test_manifest.py` | The Home Assistant floor `hacs.json` declares, and the README and `docs/architecture.md` repeat, is the release `requirements-dev.txt` pins for the suite |
+| `tests/test_live_check_harness.py` | The live check (`scripts/live_check.py`): its failure containment, the expectations it holds cards to, and the workflow's retry loop |
+| `tests/test_archive_cards.py` | `scripts/archive_cards.py`, the daily writer behind the card archive |
+| `tests/test_card_texts.py` | `scripts/card_texts.py`, the card archive's texts as a render cache |
+| `tests/test_file_ci_issue.py` | `scripts/file_ci_issue.sh`: one issue per problem, one comment per cooldown |
+| `tests/test_autorelease.py` | The release job of `autorelease.yml` against a scratch origin and a fake `gh`, and every workflow's token permissions |
+| `tests/test_doc_ref_check.py` | The doc reference checker (`scripts/doc_ref_check.py`) on a docs tree of its own |
 
 Shared helpers live in `tests/__init__.py`:
 

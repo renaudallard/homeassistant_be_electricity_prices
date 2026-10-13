@@ -347,3 +347,16 @@ def test_a_private_name_the_tree_does_not_define_fails(
     out = capsys.readouterr().out
     assert "MISSING NAME   guide.md:5 `_renamed`" in out
     assert out.count("MISSING NAME") == 1
+
+
+def test_the_test_module_table_lists_every_module() -> None:
+    """The table in docs/ci-and-testing.md is written by hand, and modules
+    added after it were never listed."""
+    root = Path(__file__).resolve().parents[1]
+    table = (root / "docs" / "ci-and-testing.md").read_text(encoding="utf-8")
+    missing = [
+        path.name
+        for path in sorted((root / "tests").glob("test_*.py"))
+        if f"| `tests/{path.name}` |" not in table
+    ]
+    assert missing == []
