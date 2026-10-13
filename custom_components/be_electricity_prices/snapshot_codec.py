@@ -457,7 +457,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # index table is not its price's quarter; DATS 24 keeps its register formulas
 # on the delivery month's RLP; Engie's social card reads its older feed-in
 # spelling and its day and night feed-in formulas.
-_SNAPSHOT_SCHEMA_VERSION = 78
+# v79: Bolt's late 2025 professional cards read their tax rows whole where the
+# text layer split a decimal; an Engie month whose next card names a later
+# month stays provisional instead of settling on the estimate; TotalEnergies'
+# RLP index resolves on the column-weighted profile.
+_SNAPSHOT_SCHEMA_VERSION = 79
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
