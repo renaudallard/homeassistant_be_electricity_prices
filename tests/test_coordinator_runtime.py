@@ -6579,12 +6579,10 @@ async def test_a_tick_that_changed_nothing_writes_nothing(
             "meter": "mono",
         },
     )
-    from types import SimpleNamespace as _namespace
-
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     saved = AsyncMock()
-    coord._store = _namespace(async_save=saved)  # type: ignore[assignment]
+    coord._store.async_save = saved  # type: ignore[method-assign]
 
     await coord._save_persistent()
     assert saved.await_count == 1, "the first tick has to write"
@@ -6608,6 +6606,35 @@ async def test_a_tick_that_changed_nothing_writes_nothing(
     saved.side_effect = None
     await coord._save_persistent()
     assert saved.await_count == 4
+
+
+async def test_a_write_the_store_swallowed_is_tried_again(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """HA's Store logs a failed write and returns as if it had succeeded. The
+    blob and the held costs were then remembered as written, and an unchanged
+    payload was never written again, so a disk that filled up for one tick
+    kept the state from before it until something else moved."""
+    from homeassistant.util.file import WriteError
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._held_costs = {"inputs": "x"}
+    blob = f"{DOMAIN}_cache_{entry.entry_id}"
+    costs = f"{DOMAIN}_costs_{entry.entry_id}"
+
+    with patch(
+        "homeassistant.helpers.storage.Store._async_write_data",
+        side_effect=WriteError("disk full"),
+    ):
+        await coord._save_persistent()
+    assert blob not in hass_storage
+    assert costs not in hass_storage
+
+    await coord._save_persistent()
+    assert blob in hass_storage
+    assert hass_storage[costs]["data"] == {"inputs": "x"}
 
 
 async def test_a_probe_restamp_alone_does_not_rewrite_the_blob(

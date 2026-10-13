@@ -37,7 +37,7 @@ from __future__ import annotations
 import logging
 from dataclasses import fields
 from datetime import date, datetime
-from typing import Any
+from typing import Any, override
 
 from homeassistant.helpers.storage import Store
 
@@ -82,6 +82,29 @@ class _MigratingStore(Store[dict[str, Any]]):
         if old_major_version < self.version:
             return {}
         return old_data
+
+    # Whether the last async_save_checked failed to reach the disk.
+    _write_failed: bool
+
+    async def async_save_checked(self, data: dict[str, Any]) -> bool:
+        """``async_save``, saying whether the data was written.
+
+        HA's Store logs a failed write (a full or read-only disk, a value the
+        encoder refuses) and returns as if it had succeeded. A caller that
+        remembers what it wrote so it can skip an identical save would then
+        never try that write again.
+        """
+        self._write_failed = False
+        await self.async_save(data)
+        return not self._write_failed
+
+    @override
+    async def _async_write_data(self, data: dict[str, Any]) -> None:
+        try:
+            await super()._async_write_data(data)
+        except Exception:
+            self._write_failed = True
+            raise
 
 
 # Bump when a new field is added to the serialized snapshot so old caches

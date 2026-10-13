@@ -49,7 +49,6 @@ from homeassistant.core import (
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
@@ -177,7 +176,7 @@ class BePricesCoordinator(
         # discarded rather than migrated: every field they hold is
         # re-derivable from a fresh extractor fetch on the next tick,
         # so silencing the auto-migrator's warning is the goal here.
-        self._store: Store[dict[str, Any]] = _MigratingStore(
+        self._store = _MigratingStore(
             hass, STORAGE_VERSION, f"{DOMAIN}_cache_{entry.entry_id}"
         )
         # The costs the last refresh published (_held_costs below), apart
@@ -185,7 +184,7 @@ class BePricesCoordinator(
         # Migrating for the same reason: an older blob is dropped rather
         # than failing setup, and the next refresh that reads the meters
         # writes it again.
-        self._costs_store: Store[dict[str, Any]] = _MigratingStore(
+        self._costs_store = _MigratingStore(
             hass, COSTS_STORAGE_VERSION, f"{DOMAIN}_costs_{entry.entry_id}"
         )
         self._saved_costs: dict[str, Any] | None = None

@@ -44,7 +44,6 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .cohort import _tariff_card_month, ytd_window_start
@@ -59,7 +58,7 @@ from .coordinator_spots import _spot_is_sane, _spots_for_local_days
 from .excise_law import held_table as held_excise_table
 from .excise_law import restore as restore_excise_law
 from .providers.base import SupplierSnapshot
-from .snapshot_codec import _snapshot_from_dict, _snapshot_to_dict
+from .snapshot_codec import _MigratingStore, _snapshot_from_dict, _snapshot_to_dict
 from .snapshot_months import monthly_rows_to_store, restore_monthly_rows
 from .vat_rates import held_table as held_vat_table
 from .vat_rates import restore as restore_vat_rates
@@ -129,8 +128,8 @@ class _PersistMixin:
     _snapshot_raw: SupplierSnapshot | None
     _spot_cache: dict[datetime, float]
     _stale_snapshot: dict[str, Any] | None
-    _store: Store[dict[str, Any]]
-    _costs_store: Store[dict[str, Any]]
+    _store: _MigratingStore
+    _costs_store: _MigratingStore
     _saved_costs: dict[str, Any] | None
     _supplier_tuple: tuple[str, str, str]
     daily_compare: Any
@@ -526,10 +525,13 @@ class _PersistMixin:
                 live_tuple,
             )
             return
-        if self._held_costs is not None and self._held_costs != self._saved_costs:
-            # A few hundred bytes an hour, in a store of their own so the
-            # entry's blob is still written only when something in it moved.
-            await self._costs_store.async_save(self._held_costs)
+        # A few hundred bytes an hour, in a store of their own so the entry's
+        # blob is still written only when something in it moved.
+        if (
+            self._held_costs is not None
+            and self._held_costs != self._saved_costs
+            and await self._costs_store.async_save_checked(self._held_costs)
+        ):
             self._saved_costs = self._held_costs
         payload: dict[str, Any] = {
             # Stamp the snapshot's actual provenance (the tuple this
@@ -624,11 +626,12 @@ class _PersistMixin:
         # Compared as the object, before ``async_save`` serialises it, so the
         # skip costs a dict comparison and saves the encode as well as the
         # write. The copy kept here is the payload itself, which nothing
-        # mutates afterwards: it is rebuilt from scratch each time.
+        # mutates afterwards: it is rebuilt from scratch each time. Kept only
+        # once it is on disk, so a write the Store failed is tried again.
         if payload == self._saved_payload:
             return
-        await self._store.async_save(payload)
-        self._saved_payload = payload
+        if await self._store.async_save_checked(payload):
+            self._saved_payload = payload
 
     def _meter_day_to_store(self) -> dict[str, Any] | None:
         """The day's meter results, as ``_restore_meter_day`` reads them back.
