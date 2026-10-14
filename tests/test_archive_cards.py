@@ -657,6 +657,59 @@ async def test_a_supplier_settling_in_place_keeps_the_card_it_caught(
     assert replayed["publication_label"] == "augustus 2026"
 
 
+async def test_a_month_the_supplier_settles_nothing_for_is_not_counted_settled(
+    tmp_path: Path,
+) -> None:
+    """TotalEnergies hands a held row back as it is once its next card is no
+    longer the live one, and Luminus does on a next card naming another
+    month. The row still waits, so it is asked every day, and every day the
+    run reported it settled."""
+    asked: list[str] = []
+    serving = ["augustus 2026"]
+
+    async def fetch(_session: Any, contract: str, _region: str) -> SupplierSnapshot:
+        await fetch_text(_Session({CARD_URL: "card"}), CARD_URL)  # type: ignore[arg-type]
+        return _indexed_card(contract, serving[0], 0.1761)
+
+    async def settle_month(
+        _session: Any, _contract: str, _region: str, month: date, held: SupplierSnapshot
+    ) -> SupplierSnapshot:
+        asked.append(f"settle {month:%Y-%m}")
+        return held
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_flex",
+                label="Flex",
+                kind="variable",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=fetch,
+        settles_on_next_card=True,
+        settle_month=settle_month,
+    )
+    await ac.archive(
+        tmp_path,
+        extractors=[extractor],
+        now=datetime(2026, 8, 20, 6, 0, tzinfo=UTC),
+        sleep=_no_sleep,
+    )
+    row = tmp_path / "cards/acme/acme_flex/wallonia/2026-08.json"
+    caught = row.read_bytes()
+    serving[0] = "september 2026"
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert asked == ["settle 2026-08"]
+    assert summary.settled == 0
+    assert summary.unchanged == 1
+    assert row.read_bytes() == caught
+
+
 async def test_a_backfill_stops_at_the_retention(tmp_path: Path) -> None:
     """A month past --keep-months would be stored only to be pruned at the
     end of the run, and its PDFs uploaded only for the workflow to delete

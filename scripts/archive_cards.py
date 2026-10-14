@@ -2117,6 +2117,18 @@ async def archive(
                         if held is None:
                             summary.absent += 1
                         continue
+                    if (
+                        settle is not None
+                        and held is not None
+                        and past == _snapshot_from_dict(held, min_schema_version=0)
+                    ):
+                        # The supplier settled nothing and handed the row back
+                        # as it is: TotalEnergies once its next card is no
+                        # longer the live one, Luminus on a next card naming
+                        # another month. The run reported it settled every
+                        # day.
+                        summary.unchanged += 1
+                        continue
                     sources = _sources_of(memo, cards, out, seen_month)
                     via, seen = "archive", None
                     if settle is not None and held is not None:

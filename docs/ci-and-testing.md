@@ -1253,7 +1253,9 @@ to the replacement: every row of its, live or archive, is settled in place (`_se
 row keeping its sources, capture day and every field but the re-priced month-indexed rates, and
 a replay of such a row puts the stored index back on the re-parsed card (`settled_as`).
 TotalEnergies keeps no archive of its own, so it is walked for its held rows alone: nothing is
-backfilled or offered again, and a row settles only while the next card is the live one.
+backfilled or offered again, and a row settles only while the next card is the live one. A row
+the supplier hands back as it was (TotalEnergies once that card has moved on, Luminus on a next
+card naming another month) is left alone and counted `unchanged`, not `settled`.
 September 2026 was the first month the archive held live
 for every supplier, and Eneco, EBEM, Mega and Trevion were billed on those rows until this. The branch thus mirrors the supplier
 archives: insurance against a supplier dropping its own, and a cheap read for
