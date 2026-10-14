@@ -57,8 +57,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
+from datetime import date
 
 import aiohttp
+from homeassistant.util import dt as dt_util
 
 from ..const import (
     REGION_BRUSSELS,
@@ -77,11 +79,13 @@ from ._pdf import (
 from ._rates import (
     ALL_REGIONS,
     Contract,
+    EnergyRates,
     FixedRates,
     InjectionRates,
     TariffKind,
     VariableRates,
 )
+from ._settle import settled_energy, settled_injection
 from ._totalenergies_cards import (
     _IMPACT_BANDS,
     _VAT_RE,
@@ -106,7 +110,7 @@ from ._totalenergies_overlays import (
     _extract_wallonia_dsos,
     cev_included,
 )
-from ._validity import parse_valid_until
+from ._validity import card_valid_until, end_of_month, parse_valid_until
 from .base import (
     ExtractorError,
     SupplierExtractor,
@@ -589,6 +593,91 @@ _MONTH_INDEXED_ENERGY: frozenset[str] = frozenset(
 )
 
 
+def _printed_energy_index(energy: EnergyRates) -> float | None:
+    """The index a card's month-indexed rate is printed at, solved off its
+    own formula, or ``None`` for a leg without one."""
+    if not (isinstance(energy, VariableRates) and energy.month_indexed):
+        return None
+    factor, base = energy.formula_factor, energy.formula_base
+    if not factor or base is None or energy.current is None:
+        return None
+    return (energy.current - base) / factor
+
+
+def _printed_injection_index(injection: InjectionRates | None) -> float | None:
+    """The Belpex_M a card's feed-in rate is printed at, or ``None``."""
+    if injection is None or not injection.month_indexed:
+        return None
+    factor, base, rate = injection.factor, injection.base, injection.current
+    if not factor or base is None or rate is None:
+        return None
+    return (rate - base) / factor
+
+
+async def settle_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    year_month: date,
+    held: SupplierSnapshot,
+) -> SupplierSnapshot:
+    """``held``, the card of a closed month, re-priced on the indices the next
+    card prints its rates at.
+
+    A variable card prints its rates "sur base de la derniere valeur connue
+    du BELPEXM_RLP (du mois precedent)", and its feed-in on the last
+    Belpex_M, without ever naming either figure. So the next card's rates
+    are its own formulas at this month's indices, and solving them gives
+    those: every October 2026 card solves to 164,63 to 164,74 EUR/MWh in
+    all three regions. The engine's own mean of that index runs about
+    0,3 EUR/MWh low, being hourly where TotalEnergies has weighed quarter
+    hours since 2026, and a keyless entry billed each closed month at the
+    one before it.
+
+    In place: the held card keeps every field and only its month-indexed
+    legs move. TotalEnergies keeps no archive, so the next card is only ever
+    the live one. Not out yet, or a live card titled for another month, and
+    the month is ``provisional`` so it is asked again; once the live card is
+    a later one, the card archive's row settled while it ran is what holds
+    the month, and ``held`` comes back as it is.
+    """
+    first = date(year_month.year, year_month.month, 1)
+    following = date(first.year + (first.month == 12), first.month % 12 + 1, 1)
+    running = dt_util.now().date().replace(day=1)
+    if following > running:
+        return replace(held, provisional=True)
+    if following < running:
+        return held
+    try:
+        card = await fetch(session, contract_id, region)
+    except ExtractorError as err:
+        if is_transient_fetch_error(str(err)):
+            raise
+        return replace(held, provisional=True)
+    titled = card_valid_until(None, card.publication_label)
+    if titled != end_of_month(following.year, following.month):
+        return replace(held, provisional=True)
+    energy, injection = held.energy, held.injection
+    energy_index = injection_index = None
+    if getattr(energy, "month_indexed", False):
+        energy_index = _printed_energy_index(card.energy)
+        if energy_index is None:
+            return replace(held, provisional=True)
+    if injection is not None and injection.month_indexed:
+        injection_index = _printed_injection_index(card.injection)
+        if injection_index is None:
+            return replace(held, provisional=True)
+    return replace(
+        held,
+        energy=energy if energy_index is None else settled_energy(energy, energy_index),
+        injection=(
+            injection
+            if injection is None or injection_index is None
+            else settled_injection(injection, injection_index)
+        ),
+    )
+
+
 EXTRACTOR = SupplierExtractor(
     sweep_cost_s=12.8,
     id="totalenergies",
@@ -610,4 +699,6 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     probe=probe,
+    settles_on_next_card=True,
+    settle_month=settle_month,
 )

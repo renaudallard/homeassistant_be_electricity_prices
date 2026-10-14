@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import pytest
 
@@ -1447,3 +1448,114 @@ def test_the_impact_statement_is_left_out_of_rows_that_do_not_carry_it() -> None
     row = _snapshot_to_dict(wallonia, now)
     assert row["energy"]["single_under_impact"] is True
     assert _snapshot_from_dict(row).energy == wallonia.energy
+
+
+async def test_a_closed_month_settles_on_the_rates_the_next_card_prints(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A variable card prints its rates at the previous month's index and
+    never names it, so the next card's rates are its formulas at the month's
+    own: the October 2026 myComfort card in Wallonia solves to 164,7 EUR/MWh,
+    and the feed-in card beside it prints 2,74 c/kWh, the formula at a
+    Belpex_M of 156,4. The engine's hourly reading of the index runs about
+    0,3 EUR/MWh low. The month held is re-priced on its own formulas at those
+    indices, and keeps every other field."""
+    from dataclasses import replace
+    from datetime import date
+
+    from custom_components.be_electricity_prices.providers import totalenergies
+    from custom_components.be_electricity_prices.providers._settle import (
+        is_settled,
+    )
+
+    held = parse_snapshot(
+        "totalenergies_mycomfort",
+        fixture_text("totalenergies_mycomfort_v.pdf", layout=True),
+        "flanders",
+    )
+    energy0, inj0 = held.energy, held.injection
+    assert isinstance(energy0, VariableRates) and inj0 is not None
+    assert energy0.month_indexed and inj0.month_indexed
+    october = parse_snapshot(
+        "totalenergies_mycomfort",
+        fixture_text("totalenergies_mycomfort_w_2026-10_nl.pdf", layout=True),
+        "wallonia",
+    )
+    # Belpex_M is one figure for the whole country.
+    october = replace(
+        october,
+        injection=_feed_in(
+            "totalenergies_injection_mycomfort_v_2026-10.pdf",
+            "totalenergies_mycomfort",
+            "flanders",
+        ),
+    )
+    asked: list[str] = []
+
+    async def live(_session: object, contract: str, region: str) -> Any:
+        asked.append(contract)
+        return october
+
+    monkeypatch.setattr(totalenergies, "fetch", live)
+    freezer.move_to("2026-10-10 12:00:00+02:00")
+    out = await totalenergies.settle_month(
+        None,  # type: ignore[arg-type]
+        "totalenergies_mycomfort",
+        "flanders",
+        date(2026, 9, 1),
+        held,
+    )
+    energy, inj = out.energy, out.injection
+    assert isinstance(energy, VariableRates) and inj is not None
+    index, belpex = energy.index_realised, inj.index_realised
+    assert index is not None and belpex is not None
+    assert index == pytest.approx(0.1647, abs=0.0001)
+    assert belpex == pytest.approx(0.1564, abs=0.0001)
+    assert energy0.formula_factor is not None and energy0.formula_base is not None
+    assert energy.current == pytest.approx(
+        energy0.formula_factor * index + energy0.formula_base
+    )
+    assert inj0.factor is not None and inj0.base is not None
+    assert inj.current == pytest.approx(inj0.factor * belpex + inj0.base)
+    assert is_settled(out) and not out.provisional
+    assert replace(out, energy=energy0, injection=inj0) == held
+
+    # While October runs a card still titled September is not the next one.
+    monkeypatch.setattr(
+        totalenergies,
+        "fetch",
+        lambda *_a: _ready(replace(october, publication_label="septembre 2026")),
+    )
+    freezer.move_to("2026-10-01 08:00:00+02:00")
+    waiting = await totalenergies.settle_month(
+        None,  # type: ignore[arg-type]
+        "totalenergies_mycomfort",
+        "flanders",
+        date(2026, 9, 1),
+        held,
+    )
+    assert waiting == replace(held, provisional=True)
+
+    # The running month has no next card yet, and once the live card has
+    # moved past the next one the archive's settled row holds the month.
+    asked.clear()
+    monkeypatch.setattr(totalenergies, "fetch", live)
+    for month, today in (
+        (date(2026, 10, 1), "2026-10-20 12:00:00+02:00"),
+        (date(2026, 9, 1), "2026-11-20 12:00:00+01:00"),
+    ):
+        freezer.move_to(today)
+        kept = await totalenergies.settle_month(
+            None,  # type: ignore[arg-type]
+            "totalenergies_mycomfort",
+            "flanders",
+            month,
+            held,
+        )
+        assert kept.energy == energy0 and kept.injection == inj0
+    assert asked == []
+    assert EXTRACTORS["totalenergies"].settle_month is totalenergies.settle_month
+
+
+async def _ready(value: Any) -> Any:
+    return value

@@ -1427,7 +1427,7 @@ def _ocr_failure(cards: _Cards, memo: _RecordingMemo, err: BaseException) -> boo
 
 async def _settle_held(
     settle: MonthSettler,
-    fetch_for_month: ArchivedSnapshotFetcher,
+    fetch_for_month: ArchivedSnapshotFetcher | None,
     session: Any,
     contract: str,
     region: str,
@@ -1437,11 +1437,13 @@ async def _settle_held(
     """A month settled in place: the row held for it, or what the supplier's
     archive answers where none is held, re-priced on the index its next card
     names."""
-    snap = (
-        await fetch_for_month(session, contract, region, first)
-        if held is None
-        else _snapshot_from_dict(held, min_schema_version=0)
-    )
+    snap: SupplierSnapshot | None
+    if held is not None:
+        snap = _snapshot_from_dict(held, min_schema_version=0)
+    elif fetch_for_month is not None:
+        snap = await fetch_for_month(session, contract, region, first)
+    else:
+        return None
     if snap is None or not _settles_after_its_month(snap):
         return snap
     return await settle(session, contract, region, first, snap)
@@ -2030,7 +2032,9 @@ async def archive(
                 cards.file(month_id, (s["pdf"] for s in sources if "pdf" in s))
             for ex, contract, region in targets:
                 fetch_for_month = ex.fetch_for_month
-                if fetch_for_month is None or ex.id in patience.given_up:
+                if fetch_for_month is None and ex.settle_month is None:
+                    continue
+                if ex.id in patience.given_up:
                     continue
                 # Past the retention a month would be stored only to be
                 # pruned, and its PDFs uploaded only to be deleted.
@@ -2057,33 +2061,36 @@ async def archive(
                     else:
                         reoffer = []
                     first = date(int(month_id[:4]), int(month_id[5:]), 1)
+                    fetch: Callable[[], Awaitable[SupplierSnapshot | None]]
+                    if settle is not None and (
+                        held is not None or fetch_for_month is not None
+                    ):
+                        # Settled in place, the card held kept whole.
+                        fetch = functools.partial(
+                            _settle_held,
+                            settle,
+                            fetch_for_month,
+                            session,
+                            contract,
+                            region,
+                            first,
+                            held,
+                        )
+                    elif settle is None and fetch_for_month is not None:
+                        fetch = functools.partial(
+                            fetch_for_month, session, contract, region, first
+                        )
+                    else:
+                        # A supplier without an archive of its own
+                        # (TotalEnergies) has no month to fetch, only a held
+                        # row to settle in place on the live next card.
+                        continue
                     label = f"{ex.id}/{contract}/{region}/{month_id}"
                     memo.touched.clear()
                     cards.calls.clear()
                     cards.seen.clear()
                     try:
-                        if settle is not None:
-                            # Settled in place, the card held kept whole.
-                            past = await _fetch_card(
-                                functools.partial(
-                                    _settle_held,
-                                    settle,
-                                    fetch_for_month,
-                                    session,
-                                    contract,
-                                    region,
-                                    first,
-                                    held,
-                                ),
-                                sleep,
-                            )
-                        else:
-                            past = await _fetch_card(
-                                functools.partial(
-                                    fetch_for_month, session, contract, region, first
-                                ),
-                                sleep,
-                            )
+                        past = await _fetch_card(fetch, sleep)
                     except Exception as err:  # one month must not stop the walk
                         line = f"{label}: {type(err).__name__}: {err}"
                         summary.failed.append(line)

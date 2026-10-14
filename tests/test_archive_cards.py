@@ -551,8 +551,9 @@ async def test_a_live_row_on_a_month_indexed_card_is_settled_once_closed(
     assert json.loads(row.read_text())["energy"]["current"] == 0.2079
 
 
+@pytest.mark.parametrize("own_archive", [True, False])
 async def test_a_supplier_settling_in_place_keeps_the_card_it_caught(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, own_archive: bool
 ) -> None:
     """Luminus's own archive serves a month without its new-customer campaign
     and kept serving a first edition after the live card was corrected, so
@@ -560,7 +561,8 @@ async def test_a_supplier_settling_in_place_keeps_the_card_it_caught(
     the row it holds: only the month-indexed rates move, to the index the
     next card names, and the campaign, the sources and the capture day stay.
     A settled row is not asked again, and a replay after a parser change puts
-    the index back on the re-parsed card."""
+    the index back on the re-parsed card. TotalEnergies keeps no archive of
+    its own and settles the rows the walk caught the same way."""
     from homeassistant.util import dt as dt_util
 
     from custom_components.be_electricity_prices.providers._settle import (
@@ -610,7 +612,7 @@ async def test_a_supplier_settling_in_place_keeps_the_card_it_caught(
             ),
         ),
         fetch=fetch,
-        fetch_for_month=fetch_for_month,
+        fetch_for_month=fetch_for_month if own_archive else None,
         settles_on_next_card=True,
         settle_month=settle_month,
     )

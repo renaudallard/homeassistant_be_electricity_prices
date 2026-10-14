@@ -462,6 +462,22 @@ contribution into the formula base but print a monthly rate with the
 contribution outside the VAT, and solve to the September columns mean once it
 is taken out that way, which is how `_without_renewables` takes it out.
 
+A closed month settles on the next card (`settle_month`, `totalenergies.py`). The
+cards never name the index their rates are printed at, but the next card's rates
+are its own formulas at this month's, so solving them gives it: every October 2026
+card solves to 164,63 to 164,74 EUR/MWh, where the engine's hourly reading of the
+columns blend gives 164,42, TotalEnergies having weighed quarter hours since
+January 2026. The feed-in settles the same way on the Belpex_M the injection card
+prints its rate at (2,74 c/kWh at `0.2151 * BELPEXM -0.625` is 156,4). The card held
+for the month keeps every field; only its month-indexed legs move, each rebuilt on
+its own formula with `index_realised` recorded (`providers/_settle.py`), so a keyed
+entry bills the settled figure too. TotalEnergies keeps no archive, so the next card
+is only ever the live one: while it is not out, or the live card is titled for
+another month, the month stays provisional and is asked again. Once the live card
+has moved past it, the card archive's row, which the daily run settled while the
+next card was served, holds the month; there are no rows before September 2026,
+and those months keep the hourly estimate.
+
 The four carry the registry twin `month_indexed_energy` (`_MONTH_INDEXED_ENERGY`,
 `totalenergies.py`), without which the config flow never offers the optional
 ENTSO-E key on the no-solar and compensation regimes and the re-price has no

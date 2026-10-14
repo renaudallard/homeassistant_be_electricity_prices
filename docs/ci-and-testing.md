@@ -1246,10 +1246,12 @@ index, and the supplier settles the month on the card after it. At a supplier fl
 (`_awaits_settlement`, counted as `settled` in the summary); while the answer is still
 provisional or None the live row stays. The live walk never writes a card back over a closed
 month already filed under `archive`, which keeps a supplier still serving last month's card on
-the 1st from undoing the settlement. A supplier with `settle_month` (Luminus) is the exception
+the 1st from undoing the settlement. A supplier with `settle_month` (Luminus, TotalEnergies) is the exception
 to the replacement: every row of its, live or archive, is settled in place (`_settle_held`), the
 row keeping its sources, capture day and every field but the re-priced month-indexed rates, and
 a replay of such a row puts the stored index back on the re-parsed card (`settled_as`).
+TotalEnergies keeps no archive of its own, so it is walked for its held rows alone: nothing is
+backfilled or offered again, and a row settles only while the next card is the live one.
 September 2026 was the first month the archive held live
 for every supplier, and Eneco, EBEM, Mega and Trevion were billed on those rows until this. The branch thus mirrors the supplier
 archives: insurance against a supplier dropping its own, and a cheap read for
