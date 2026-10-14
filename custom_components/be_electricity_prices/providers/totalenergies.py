@@ -98,6 +98,7 @@ from ._totalenergies_cards import (
     _without_renewables,
     in_french,
     is_dutch_card,
+    monthly_rates_printed,
 )
 from ._totalenergies_overlays import (
     _energy_contribution_from_table,
@@ -306,10 +307,10 @@ async def fetch(
     """Fetch the configured region's PDF for ``contract_id``, and its
     feed-in card when the product card prints no feed-in block."""
     contract = _contract_in(contract_id, region)
-    snapshot = await _fetch_card(session, contract, region)
+    snapshot, _text = await _fetch_card(session, contract, region)
     if snapshot.injection is not None:
         return snapshot
-    injection = await _fetch_injection(
+    injection, _text = await _fetch_injection(
         session, contract, region, snapshot.publication_label
     )
     return snapshot if injection is None else replace(snapshot, injection=injection)
@@ -329,14 +330,14 @@ def _contract_in(contract_id: str, region: str) -> _ContractDef:
 
 async def _fetch_card(
     session: aiohttp.ClientSession, contract: _ContractDef, region: str
-) -> SupplierSnapshot:
+) -> tuple[SupplierSnapshot, str]:
     """The product card, French first and Dutch when the French one is
-    wrong."""
+    wrong, and the text it was read off."""
     contract_id = contract.contract_id
     url = _document_url(contract.slug, region)
     text = await fetch_pdf_text_layout(session, url)
     try:
-        return parse_snapshot(contract_id, text, region, url)
+        return parse_snapshot(contract_id, text, region, url), text
     except ExtractorError as err:
         # The French address can serve the wrong document: in October 2026
         # myComfort Fixe in Brussels served the injection card and myEssential
@@ -349,7 +350,7 @@ async def _fetch_card(
         dutch = _document_url(contract.slug, region, "NL")
         try:
             text = await fetch_pdf_text_layout(session, dutch)
-            return parse_snapshot(contract_id, text, region, dutch)
+            return parse_snapshot(contract_id, text, region, dutch), text
         except ExtractorError as dutch_err:
             if is_transient_fetch_error(str(dutch_err)):
                 raise
@@ -363,9 +364,10 @@ async def _fetch_injection(
     month: str,
     *,
     of_month: bool = False,
-) -> InjectionRates | None:
-    """The feed-in leg off the product's feed-in card, or ``None`` where
-    neither edition of it is published.
+) -> tuple[InjectionRates | None, str]:
+    """The feed-in leg off the product's feed-in card and the text it was
+    read off, or ``None`` and no text where neither edition of it is
+    published.
 
     The French card first and the Dutch one when the French one is not the
     right card or not of ``month``, the tariff card's: on 5 October 2026 the
@@ -380,7 +382,7 @@ async def _fetch_injection(
     error.
     """
     error: ExtractorError | None = None
-    stale: InjectionRates | None = None
+    stale: tuple[InjectionRates | None, str] = (None, "")
     read = False
     for language in ("FR", "NL"):
         url = _injection_url(contract.slug, region, language)
@@ -396,14 +398,14 @@ async def _fetch_injection(
             error = error or err
             continue
         if printed.casefold() == month.casefold():
-            return leg
+            return leg, text
         if not read:
-            stale, read = leg, True
+            stale, read = (leg, text), True
     if read:
-        return None if of_month else stale
+        return (None, "") if of_month else stale
     if error is not None:
         raise error
-    return None
+    return None, ""
 
 
 def parse_injection_card(
@@ -688,30 +690,32 @@ async def settle_month(
         return held
     try:
         contract = _contract_in(contract_id, region)
-        card = await _fetch_card(session, contract, region)
+        card, text = await _fetch_card(session, contract, region)
         titled = card_valid_until(None, card.publication_label)
         if titled != end_of_month(following.year, following.month):
             return replace(held, provisional=True)
-        if card.injection is None:
-            card = replace(
-                card,
-                injection=await _fetch_injection(
-                    session, contract, region, card.publication_label, of_month=True
-                ),
+        feed_in, feed_in_text = card.injection, text
+        if feed_in is None:
+            feed_in, feed_in_text = await _fetch_injection(
+                session, contract, region, card.publication_label, of_month=True
             )
     except ExtractorError as err:
         if is_transient_fetch_error(str(err)):
             raise
         return replace(held, provisional=True)
+    # A rate the card prints as the regulator's annual estimate, its monthly
+    # block unread, is at no index the month closed at.
+    monthly_energy = monthly_rates_printed(text)[0]
+    monthly_feed_in = monthly_rates_printed(feed_in_text)[1]
     energy, injection = held.energy, held.injection
     pending = False
     if getattr(energy, "month_indexed", False):
-        index = _printed_energy_index(card.energy)
+        index = _printed_energy_index(card.energy) if monthly_energy else None
         pending = index is None
         if index is not None:
             energy = settled_energy(energy, index)
     if injection is not None and injection.month_indexed:
-        index = _printed_injection_index(card.injection)
+        index = _printed_injection_index(feed_in) if monthly_feed_in else None
         pending = pending or index is None
         if index is not None:
             injection = settled_injection(injection, index)

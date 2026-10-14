@@ -149,8 +149,8 @@ def _extract_energy(text: str, kind: TariffKind, columns: int = 4) -> EnergyRate
             # Every card stating the contribution in its footnote prints the
             # formula too, and without it no figure can be checked below.
             raise ExtractorError("TotalEnergies: variable formula not found")
-        realized = _realized_monthly_consumption(text)
-        if realized is not None and _priced_on_formula(realized, pairs, text):
+        realized = _indicative_consumption(text, pairs)
+        if realized is not None:
             # The realized row is that indicative, so it is what a keyless
             # entry keeps; the formula beside it is what re-prices the
             # delivery month for one carrying an ENTSO-E key.
@@ -524,6 +524,36 @@ def _realized_monthly_consumption(
     if pic is not None:
         return pic, None, None, None
     return None
+
+
+def _indicative_consumption(
+    text: str, pairs: list[tuple[float, float]] | None
+) -> tuple[float, float | None, float | None, float | None] | None:
+    """The block's consumption rates where they are the card's formula at an
+    index, else ``None`` and the card bills its table row."""
+    realized = _realized_monthly_consumption(text)
+    if realized is None or not _priced_on_formula(realized, pairs, text):
+        return None
+    return realized
+
+
+def monthly_rates_printed(text: str) -> tuple[bool, bool]:
+    """Whether the card's consumption and feed-in rates are the "prix
+    mensuels" block's, the formula at the last known index.
+
+    Where the block is not read the parser falls back to the table row, the
+    regulator's annual estimate: on the October 2026 Electricité Variable
+    card in Wallonia that row solves to about 151 EUR/MWh where the block
+    solves to September's 164,7, so only the block's figures say what index
+    the card is printed at.
+    """
+    if is_dutch_card(text):
+        text = in_french(text)
+    pairs = _consumption_month_formula(text)
+    return (
+        _indicative_consumption(text, pairs) is not None,
+        _realized_monthly_injection(text) is not None,
+    )
 
 
 # The lowest index a printed figure may solve to, in EUR/MWh. A figure is a

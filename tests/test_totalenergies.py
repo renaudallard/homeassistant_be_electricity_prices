@@ -1476,27 +1476,30 @@ async def test_a_closed_month_settles_on_the_rates_the_next_card_prints(
     energy0, inj0 = held.energy, held.injection
     assert isinstance(energy0, VariableRates) and inj0 is not None
     assert energy0.month_indexed and inj0.month_indexed
-    october = parse_snapshot(
-        "totalenergies_mycomfort",
-        fixture_text("totalenergies_mycomfort_w_2026-10_nl.pdf", layout=True),
-        "wallonia",
-    )
+    text = fixture_text("totalenergies_mycomfort_w_2026-10_nl.pdf", layout=True)
+    october = parse_snapshot("totalenergies_mycomfort", text, "wallonia")
+    assert october.injection is None
     # Belpex_M is one figure for the whole country.
-    october = replace(
-        october,
-        injection=_feed_in(
-            "totalenergies_injection_mycomfort_v_2026-10.pdf",
-            "totalenergies_mycomfort",
-            "flanders",
-        ),
+    feed_in_text = fixture_text(
+        "totalenergies_injection_mycomfort_v_2026-10.pdf", layout=True
+    )
+    feed_in: Any = _feed_in(
+        "totalenergies_injection_mycomfort_v_2026-10.pdf",
+        "totalenergies_mycomfort",
+        "flanders",
     )
     asked: list[str] = []
 
     async def live(_session: object, contract: Any, region: str) -> Any:
         asked.append(contract.contract_id)
-        return october
+        return october, text
+
+    async def beside(*_a: Any, of_month: bool = False) -> Any:
+        assert of_month
+        return (feed_in, feed_in_text) if feed_in is not None else (None, "")
 
     monkeypatch.setattr(totalenergies, "_fetch_card", live)
+    monkeypatch.setattr(totalenergies, "_fetch_injection", beside)
     freezer.move_to("2026-10-10 12:00:00+02:00")
     out = await totalenergies.settle_month(
         None,  # type: ignore[arg-type]
@@ -1522,13 +1525,7 @@ async def test_a_closed_month_settles_on_the_rates_the_next_card_prints(
 
     # No feed-in card of October beside it: the energy settles, the feed-in
     # waits and the month stays provisional.
-    async def no_feed_in(*_a: Any, of_month: bool = False) -> Any:
-        assert of_month
-        return None
-
-    monkeypatch.setattr(totalenergies, "_fetch_injection", no_feed_in)
-    october_card = october
-    october = replace(october, injection=None)
+    feed_in = None
     half = await totalenergies.settle_month(
         None,  # type: ignore[arg-type]
         "totalenergies_mycomfort",
@@ -1538,13 +1535,14 @@ async def test_a_closed_month_settles_on_the_rates_the_next_card_prints(
     )
     assert half.energy == out.energy and half.injection == inj0
     assert half.provisional and not is_settled(half)
-    october = october_card
 
     # While October runs a card still titled September is not the next one.
     monkeypatch.setattr(
         totalenergies,
         "_fetch_card",
-        lambda *_a: _ready(replace(october, publication_label="septembre 2026")),
+        lambda *_a: _ready(
+            (replace(october, publication_label="septembre 2026"), text)
+        ),
     )
     freezer.move_to("2026-10-01 08:00:00+02:00")
     waiting = await totalenergies.settle_month(
@@ -1654,6 +1652,82 @@ async def test_a_lagging_feed_in_card_does_not_settle_the_month(
         assert out.injection.index_realised is not None
     else:
         assert out == replace(held, provisional=True)
+
+
+async def test_a_card_billing_its_table_row_does_not_settle_the_energy(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """An October 2026 edition of the Electricité Variable card in Flanders
+    printed its monthly block as the formula's bases, 3,87 c/kWh, so the
+    parser bills the table row, the regulator's annual estimate. It solves to
+    161,9 EUR/MWh where September closed at about 164,7 (the Walloon card's
+    row to about 151), and settled on it the month would keep that for good.
+    The feed-in card beside it settles; the energy waits for a card printing
+    its block."""
+    from dataclasses import replace
+    from datetime import date
+
+    from custom_components.be_electricity_prices.providers import totalenergies
+    from custom_components.be_electricity_prices.providers._totalenergies_cards import (
+        monthly_rates_printed,
+    )
+
+    card = "totalenergies_electricite_variable_v_2026-10.pdf"
+    assert "Compteur Simple : 3.87" in fixture_text(card, layout=True)
+    assert monthly_rates_printed(fixture_text(card, layout=True)) == (False, False)
+    held = parse_snapshot(
+        "totalenergies_mycomfort",
+        fixture_text("totalenergies_mycomfort_v.pdf", layout=True),
+        "flanders",
+    )
+    monkeypatch.setattr(
+        totalenergies,
+        "fetch_pdf_text_layout",
+        _serve(
+            {
+                "ELECTRICITE-VARIABLE_ELECTRICITY_VL_FR.pdf": card,
+                "INJECTION_ELECTRICITE-VARIABLE_ELECTRICITY_VL_FR.pdf": (
+                    "totalenergies_injection_mycomfort_v_2026-10.pdf"
+                ),
+            }
+        ),
+    )
+    freezer.move_to("2026-10-14 12:00:00+02:00")
+    out = await totalenergies.settle_month(
+        None,  # type: ignore[arg-type]
+        "totalenergies_electricite_variable",
+        "flanders",
+        date(2026, 9, 1),
+        held,
+    )
+    assert out.energy == held.energy and out.provisional
+    assert out.injection is not None and out.injection.index_realised is not None
+    assert replace(out, injection=held.injection, provisional=False) == held
+
+    # The same of a feed-in card whose block is not read: its rate is then
+    # the table's estimate.
+    serve = _serve(
+        {
+            "ELECTRICITE-VARIABLE_ELECTRICITY_VL_FR.pdf": card,
+            "INJECTION_ELECTRICITE-VARIABLE_ELECTRICITY_VL_FR.pdf": (
+                "totalenergies_injection_mycomfort_v_2026-10.pdf"
+            ),
+        }
+    )
+
+    async def unread(session: object, url: str) -> str:
+        text: str = await serve(session, url)  # type: ignore[operator]
+        return text.replace("prix mensuels", "prix  mensuels")
+
+    monkeypatch.setattr(totalenergies, "fetch_pdf_text_layout", unread)
+    out = await totalenergies.settle_month(
+        None,  # type: ignore[arg-type]
+        "totalenergies_electricite_variable",
+        "flanders",
+        date(2026, 9, 1),
+        held,
+    )
+    assert out == replace(held, provisional=True)
 
 
 def test_the_printed_index_is_the_median_of_the_columns() -> None:
