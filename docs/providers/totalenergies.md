@@ -463,30 +463,34 @@ contribution outside the VAT, and solve to the September columns mean once it
 is taken out that way, which is how `_without_renewables` takes it out.
 
 A closed month settles on the next card (`settle_month`, `totalenergies.py`). The
-cards never name the index their rates are printed at, but the next card's rates
-are its own formulas at this month's, so solving them gives it: every October 2026
-card solves to 164,41 to 164,74 EUR/MWh, the median of its columns (each figure is
+cards never name the index their rates are printed at, but the next card's rates are
+its own formulas at this month's, so solving them gives it: every October 2026 card
+solves to 164,41 to 164,74 EUR/MWh, the median of its columns (each figure is
 rounded to a hundredth of a cent, and on myDrive and myEssential in Wallonia the
-columns spread from 164,26 to 164,72, the mono one at about 164,4), where the engine's hourly reading of the
-columns blend gives 164,42, TotalEnergies having weighed quarter hours since
-January 2026. The feed-in settles the same way on the Belpex_M the injection card
-prints its rate at (2,74 c/kWh at `0.2151 * BELPEXM -0.625` is 156,4). The card held
-for the month keeps every field; only its month-indexed legs move, each rebuilt on
-its own formula with `index_realised` recorded (`providers/_settle.py`), so a keyed
-entry bills the settled figure too. TotalEnergies keeps no archive, so the next card
-is only ever the live one: while it is not out, or the live card is titled for
-another month, the month stays provisional and is asked again. The feed-in card
-is uploaded on its own and can lag (Electricité Fixe in Flanders still said
-September on 5 and 14 October 2026); the live fetch reads it all the same, but
-only a feed-in card titled like the tariff card settles the feed-in, and until it
-is out the energy settles and the month stays provisional. Only a rate read off a card's
-"prix mensuels" block settles anything (`monthly_rates_printed`,
-`_totalenergies_cards.py`): where the block is not read the parser bills the table
-row, the regulator's annual estimate, which on the October 2026 Electricité Variable
-edition in Flanders that printed its block as the bases solves to 161,9 EUR/MWh. Once the live card
-has moved past it, the card archive's row, which the daily run settled while the
-next card was served, holds the month; there are no rows before September 2026,
-and those months keep the hourly estimate.
+columns spread from 164,26 to 164,72, the mono one at about 164,4), where the
+engine's hourly reading of the columns blend gives 164,42, TotalEnergies having
+weighed quarter hours since January 2026. The feed-in settles the same way on the
+Belpex_M the injection card prints its rate at (2,74 c/kWh at
+`0.2151 * BELPEXM -0.625` is 156,4). The card held for the month keeps every field;
+only its month-indexed legs move, each rebuilt on its own formula with
+`index_realised` recorded (`providers/_settle.py`), so a keyed entry bills the
+settled figure too. TotalEnergies keeps no archive, so the next card is only ever
+the live one: while it is not out, or the live card is titled for another month, the
+month stays provisional and is asked again. Home Assistant does not download it to
+learn that while the live card it already holds is dated before the next month
+(`next_card_not_out`, `snapshot_store.py`): the layout read costs 10 to 13 s of CPU
+on a Raspberry Pi. The feed-in card is uploaded on its own and can lag (Electricité
+Fixe in Flanders still said September on 5 and 14 October 2026); the live fetch
+reads it all the same, but only a feed-in card titled like the tariff card settles
+the feed-in, and until it is out the energy settles and the month stays provisional.
+Only a rate read off a card's "prix mensuels" block settles anything
+(`monthly_rates_printed`, `_totalenergies_cards.py`): where the block is not read
+the parser bills the table row, the regulator's annual estimate, which on the
+October 2026 Electricité Variable edition in Flanders that printed its block as the
+bases solves to 161,9 EUR/MWh. Once the live card has moved past the next one, the card
+archive's row, which the daily run settled while the next card was served, holds the
+month; there are no rows before September 2026, and those months keep the hourly
+estimate.
 
 The four carry the registry twin `month_indexed_energy` (`_MONTH_INDEXED_ENERGY`,
 `totalenergies.py`), without which the config flow never offers the optional

@@ -5439,6 +5439,30 @@ async def test_a_supplier_settling_in_place_keeps_the_card_the_archive_holds(
     failed = await _september(_extractor(_down), caught)
     assert failed.energy == caught.energy and failed.provisional
 
+    # The live card the coordinator holds is still September's: the next
+    # card is not out, and nothing is downloaded to learn it. TotalEnergies'
+    # layout read costs 10 to 13 s of CPU on a Raspberry Pi per ask.
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _shared_snapshots,
+        _SharedSnapshot,
+    )
+
+    shared = _shared_snapshots(hass)
+    shared[("test", "test", "flanders")] = _SharedSnapshot(
+        snapshot=_month_indexed_card(0.1761, "septembre 2026"),
+        fetched_at=dt_util.utcnow(),
+    )
+    settled_at.clear()
+    waiting = await _september(_extractor(settle_month), caught)
+    assert waiting == replace(caught, provisional=True) and settled_at == []
+    shared[("test", "test", "flanders")] = _SharedSnapshot(
+        snapshot=_month_indexed_card(0.2079, "octobre 2026"),
+        fetched_at=dt_util.utcnow(),
+    )
+    out = await _september(_extractor(settle_month), caught)
+    assert not out.provisional and settled_at == [caught]
+    shared.clear()
+
 
 async def test_a_live_row_of_a_month_indexed_card_is_settled_by_the_supplier(
     hass: HomeAssistant, freezer: Any

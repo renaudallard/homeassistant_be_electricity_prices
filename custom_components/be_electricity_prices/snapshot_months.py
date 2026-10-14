@@ -85,6 +85,7 @@ from .snapshot_store import (
     _monthly_lock,
     _monthly_snapshots,
     _tuple_generation,
+    next_card_not_out,
 )
 from .spot_stats import _injection_on_month_mean
 
@@ -792,22 +793,21 @@ async def month_card(
     at, or that the archive could not re-read and never settled
     (``_awaits_settlement``); a supplier that settles in place (``settle_month``,
     Luminus, TotalEnergies) re-prices the row it holds instead, whichever tier
-    gave it. None when neither has the month: the current card is then
-    the proxy, and it is the running month's card by definition, so that
-    month never reaches the repository.
+    gave it, unless the live card held is older (``next_card_not_out``). None
+    when neither has the month: the current card is then the proxy, and it is
+    the running month's card by definition, so that month never reaches the
+    repository.
     A blip reading the archive is not "no card": the supplier is still
     asked, and a month neither could give is retried on the failure marker
     rather than cached. Both answer None, so a caller that keeps what it
     priced asks ``month_card_failed`` which it got.
 
-    Caches the result per (supplier, contract, region, YYYY-MM): a hit
-    skips the network round-trip on subsequent refreshes. ``None`` is
-    cached too: "no archive has this month" is a stable signal we
-    shouldn't keep re-asking.
+    Caches the result per (supplier, contract, region, YYYY-MM): a hit skips the network
+    round-trip on subsequent refreshes. ``None`` is cached too: "no archive has this
+    month" is a stable signal we shouldn't keep re-asking.
 
-    The cache is shared across entries, so it holds archived cards exactly
-    as parsed and each caller's own VAT / consumption facts are applied on
-    the way out.
+    The cache is shared across entries, so it holds archived cards exactly as parsed and
+    each caller's own VAT / consumption facts are applied on the way out.
 
     ``cached_only`` answers from the cache and never reaches the network: a
     month with no row answers None, the same proxy a supplier without an
@@ -864,17 +864,16 @@ async def month_card(
                 and not _asked_while_it_ran(stamped, year_month, today)
             )
         ):
-            # A caller that cannot fetch keeps the row it has, expired or not:
-            # dropping it here would forfeit a month it is already holding and
-            # hand back the current card in its place.
+            # A caller that cannot fetch keeps the row it has, expired or not: dropping
+            # it here would forfeit a month it is already holding and hand back the
+            # current card in its place.
             return resolved(row)
-        # Provisional and past its TTL: drop the row and re-ask. Without this
-        # a supplier correcting the running month's card moved current_price
-        # within a day while the year-to-date and every backfilled row kept
-        # billing the vintage first cached at startup, and a month whose card
-        # had not published yet stayed "no archive" for the life of the HA
-        # process even after the card appeared. One asked while its month was
-        # still running is re-asked once that month has closed, whatever its
+        # Provisional and past its TTL: drop the row and re-ask. Without this a supplier
+        # correcting the running month's card moved current_price within a day while the
+        # year-to-date and every backfilled row kept billing the vintage first cached at
+        # startup, and a month whose card had not published yet stayed "no archive" for
+        # the life of the HA process even after the card appeared. One asked while its
+        # month was still running is re-asked once that month has closed, whatever its
         # age.
         cache.pop(cache_key, None)
         fetched_at.pop(cache_key, None)
@@ -888,12 +887,11 @@ async def month_card(
         # Uncached and no fetch allowed: the documented fallback. Nothing is
         # written to the cache, so the warm-up still asks the archives.
         return None
-    # Negative cache: a transient archive failure is intentionally NOT
-    # written to ``cache`` (a cached None means "no archive has this
-    # month"); without this secondary marker the hourly YTD walk would
-    # re-attempt every uncached month against a flaky CDN. Skip the retry
-    # while the marker is fresh; the current card is the documented proxy
-    # for non-archive months.
+    # Negative cache: a transient archive failure is intentionally NOT written to
+    # ``cache`` (a cached None means "no archive has this month"); without this
+    # secondary marker the hourly YTD walk would re-attempt every uncached month against
+    # a flaky CDN. Skip the retry while the marker is fresh; the current card is the
+    # documented proxy for non-archive months.
     last_fail = failed.get(cache_key)
     if last_fail is not None and dt_util.utcnow() - last_fail < _MONTHLY_FAILURE_TTL:
         return None
@@ -969,8 +967,12 @@ async def month_card(
             and _settles_after_its_month(snap)
             and not is_settled(snap)
         ):
-            snap = await _settled_in_place(
-                session, extractor.settle_month, contract, region, year_month, snap
+            snap = (
+                replace(snap, provisional=True)
+                if next_card_not_out(hass, (extractor.id, contract, region), year_month)
+                else await _settled_in_place(
+                    session, extractor.settle_month, contract, region, year_month, snap
+                )
             )
         if snap is None and archive_failed:
             # The archive may well hold the month; ask again on the failure
@@ -978,14 +980,12 @@ async def month_card(
             fetch_failed = True
         if fetch_failed:
             failed[cache_key] = dt_util.utcnow()
-        # Skip the cache write if eviction ran during the await: the
-        # tuple is no longer this entry's, and re-creating the row
-        # would orphan it for any future re-add of the same tuple.
-        # Also skip when the fetch raised: a transient error must not
-        # be cached as "supplier doesn't archive this month", which is
-        # the meaning a cached None carries here. Leaving the key
-        # absent lets the next refresh retry instead of locking in
-        # stale "uncredited" output until the entry reloads.
+        # Skip the cache write if eviction ran during the await: the tuple is no longer
+        # this entry's, and re-creating the row would orphan it for any future re-add of
+        # the same tuple. Also skip when the fetch raised: a transient error must not be
+        # cached as "supplier doesn't archive this month", which is the meaning a cached
+        # None carries here. Leaving the key absent lets the next refresh retry instead
+        # of locking in stale "uncredited" output until the entry reloads.
         if not fetch_failed and _tuple_generation(hass, cache_key) == gen_at_entry:
             cache[cache_key] = snap
             fetched_at[cache_key] = dt_util.utcnow()

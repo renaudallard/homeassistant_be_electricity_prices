@@ -616,6 +616,28 @@ def _month_row_is_provisional(
     )
 
 
+def next_card_not_out(
+    hass: HomeAssistant, key: tuple[str, str, str], year_month: date
+) -> bool:
+    """Whether the live card held for ``key`` is dated before the month that
+    follows ``year_month``, while that month runs.
+
+    A supplier settling a month in place reads the next card off its live
+    address (``SupplierExtractor.settle_month``), a download and a parse on
+    every provisional re-ask: 10 to 13 s of CPU on a Raspberry Pi for
+    TotalEnergies' layout read, reachable inside setup through the cohort
+    lookup. The card the coordinator holds already says when that answer
+    would be "not out yet".
+    """
+    row = _shared_snapshots(hass).get(key)
+    month = year_month.month
+    following = date(year_month.year + (month == 12), month % 12 + 1, 1)
+    if row is None or following != dt_util.now().date().replace(day=1):
+        return False
+    ends = card_valid_until(row.snapshot.valid_until, row.snapshot.publication_label)
+    return ends is not None and ends < following
+
+
 def _monthly_archive_skipped(hass: HomeAssistant) -> set[tuple[str, str, str, str]]:
     """Month rows cached as "no card" without asking the project's archive.
 
