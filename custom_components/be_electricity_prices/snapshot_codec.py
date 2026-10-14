@@ -461,7 +461,9 @@ class _MigratingStore(Store[dict[str, Any]]):
 # text layer split a decimal; an Engie month whose next card names a later
 # month stays provisional instead of settling on the estimate; TotalEnergies'
 # RLP index resolves on the column-weighted profile.
-_SNAPSHOT_SCHEMA_VERSION = 79
+# v80: TotalEnergies' formulas lose the green contribution before VAT, and
+# a closed TotalEnergies month settles on the rates the next card prints.
+_SNAPSHOT_SCHEMA_VERSION = 80
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
