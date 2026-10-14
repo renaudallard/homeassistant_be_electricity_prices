@@ -536,9 +536,11 @@ class SupplierExtractor:
     # Whether ``fetch_for_month`` settles a month-indexed month on the card
     # that follows it, and flags it provisional until that card is out
     # (Cociter, Eneco, EBEM, Trevion, Mega and Engie), or on the month's own
-    # card where the live capture is not settled (Ecopower). Only for such a
-    # supplier is a closed month the card archive caught while it ran worth
-    # asking it about again: every other one answers with the same card.
+    # card where the live capture is not settled (Ecopower). Luminus and
+    # TotalEnergies set it too, beside ``settle_month``, which settles the
+    # month in place instead. Only for such a supplier is a closed month the
+    # card archive caught while it ran worth asking it about again: every
+    # other one answers with the same card.
     settles_on_next_card: bool = False
     # Set where a month is settled IN PLACE instead (Luminus, TotalEnergies):
     # the card held for it, live capture or archive answer, keeps every field

@@ -390,8 +390,8 @@ def regional_tax_overlay(
         energy_fund_eur_per_month=(
             to_float(fund_match.group(1)) if fund_match else 0.0
         ),
-        # These cards print every value VAT-inclusive (the federal excise and
-        # the energy fund are VAT-exempt), so the snapshot needs no gross-up.
+        # These cards print every value VAT-inclusive, and the energy fund
+        # carries no VAT at all, so the snapshot needs no gross-up.
         vat_rate=0.0,
     )
 
