@@ -205,12 +205,31 @@ def test_a_network_table_that_does_not_read_is_refused(old: str, new: str) -> No
         aspiravi.parse_snapshot(_CID, text.replace(old, new))
 
 
-def test_an_area_the_card_does_not_print_is_left_out() -> None:
+def test_an_area_a_2024_card_does_not_print_is_left_out() -> None:
     """The 2024 cards name the ten areas of that year, five of which read as
     one of today's, and those cards still price their months."""
     text = fixture_text(_SEPTEMBER).replace("Fluvius (Zenne-Dijle)", "Fluvius (PBE)")
-    snap = aspiravi.parse_snapshot(_CID, text)
+    assert "Aug/26" in text
+    snap = aspiravi.parse_snapshot(_CID, text.replace("Aug/26", "Aug/24"))
+    assert snap.publication_label == "september 2024"
     assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_zenne_dijle"}
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("Fluvius (Imewo)", "Fluvius (Gent)"),
+        ("Fluvius (West)", "Fluvius (West-Vlaanderen)"),
+    ],
+)
+def test_a_current_card_with_an_area_relabelled_is_refused(old: str, new: str) -> None:
+    """A relabelled row is not in the text under its old name, so the card
+    was adopted with seven areas and the entry on the eighth left with no
+    network overlay."""
+    text = fixture_text(_SEPTEMBER)
+    assert old in text
+    with pytest.raises(ExtractorError, match="network row"):
+        aspiravi.parse_snapshot(_CID, text.replace(old, new))
 
 
 async def test_fetch_reads_the_card_linked_as_current(

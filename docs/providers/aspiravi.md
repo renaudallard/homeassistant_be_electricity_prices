@@ -111,11 +111,15 @@ exclusive-night and capacity rates, then the classic meter's four columns, of
 which only the prosumer rate is used. The figures include VAT: for Imewo they
 match Frank Energie's VAT-inclusive card to the cent.
 
-An area the card does not print is left out, which is how the 2024 cards (see
-Archive) parse. An area it prints whose row does not read, or a table where no
-row reads at all, raises: a partial table would be adopted as the card and an
-entry on the missing area would fail every tick until the next good one
-(`test_a_network_table_that_does_not_read_is_refused`, `test_aspiravi.py`).
+A card from January 2025 on has to yield all eight areas, and every one
+does: a relabelled row is not in the text under its old name, so only that
+rule catches it. A 2024 card leaves out an area it does not print, which is how
+those cards (see Archive) parse. On either, an area the card prints whose row
+does not read, or a table where no row reads at all, raises: a partial table
+would be adopted as the card and an entry on the missing area would fail every
+tick until the next good one
+(`test_a_network_table_that_does_not_read_is_refused`,
+`test_a_current_card_with_an_area_relabelled_is_refused`, `test_aspiravi.py`).
 
 Green power and WKK are Aspiravi's own certificate costs, printed before VAT
 (1,078 and 0,406 c€/kWh on the September 2026 card), so they are grossed by the
@@ -139,7 +143,8 @@ Every card from April 2024 on is in the current layout and parses. The cards
 before it, back to August 2022, print another layout and are left to the proxy.
 The 2024 cards' network tables still name the ten Fluvius areas of that year,
 five of which carry the names used today; those cards only ever price months of
-2024.
+2024. Every card from January 2025 on prints the eight of today
+(`_EIGHT_AREAS_FROM`, `aspiravi.py`), read over the archive on 2026-10-14.
 
 The archive page labels its links "900027 eco plus flex (huishoudelijk) aug 26",
 with the month spelled out or cut short and a two-digit year. Two labels are

@@ -289,7 +289,7 @@ def parse_snapshot(
             contract=contract_id,
             energy=_extract_energy(text, _printed_rates(text), vat),
             injection=_extract_injection(text),
-            dsos=_extract_dsos(text),
+            dsos=_extract_dsos(text, card_month),
             # The card prints its green power and WKK costs before VAT, unlike
             # the rest of the block.
             taxes=replace(taxes, flanders_renewables=taxes.flanders_renewables * vat),
@@ -412,7 +412,14 @@ def _extract_injection(text: str) -> InjectionRates:
     )
 
 
-def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
+# The first card month printing the eight Fluvius areas of today. Every card
+# from January 2025 on does, and every one from April to December 2024 the
+# ten areas of that year instead, five of which read as one of today's: the
+# archive read back to April 2024 on 2026-10-14.
+_EIGHT_AREAS_FROM = date(2025, 1, 1)
+
+
+def _extract_dsos(text: str, card_month: date) -> dict[str, DsoOverlay]:
     """The digital-meter half of the network table.
 
     A row reads "Fluvius (Imewo)" then the data management fee, the digital
@@ -420,19 +427,22 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     the classic meter's four columns, of which only the prosumer rate is
     used.
 
-    An area the card does not print is left out: the 2024 cards still name
-    the ten areas of that year, and only five of them read as one of today's.
-    An area it prints and this cannot read is a layout change, and so is a
-    table nothing could be read from. Both raise, because a partial table is
-    worse than none: the card would be adopted and an entry on the missing
-    area would fail every tick until the next good card.
+    A card from :data:`_EIGHT_AREAS_FROM` on has to yield all eight areas. A
+    2024 card leaves out an area it does not print, since it names the areas
+    of that year. On either, an area it prints and this cannot read is a
+    layout change, and so is a table nothing could be read from. All of
+    these raise, because a partial table is worse than none: the card would
+    be adopted and an entry on the missing area would fail every tick until
+    the next good card. A relabelled row on a current card is missing from
+    the text under its old name, so only the eight-area rule catches it.
     """
+    every_area = card_month >= _EIGHT_AREAS_FROM
     out: dict[str, DsoOverlay] = {}
     for label, key in FLUVIUS_CARD_LABELS.items():
         printed = label.replace("Fluvius ", "Fluvius (", 1) + ")"
         row = numeric_row(text, printed, 8)
         if row is None:
-            if printed in text:
+            if every_area or printed in text:
                 raise ExtractorError(f"Aspiravi: network row {printed!r} not read")
             continue
         data, single, excl_night, capacity, _, _, prosumer, _ = (
