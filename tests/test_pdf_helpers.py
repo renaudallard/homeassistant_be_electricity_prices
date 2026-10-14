@@ -29,14 +29,14 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date
 from types import SimpleNamespace
 
 import aiohttp
 import pytest
 
-from custom_components.be_electricity_prices.providers import _pdf
+from custom_components.be_electricity_prices.providers import _pdf, _pdf_bound
 from custom_components.be_electricity_prices.providers._parse import (
     numeric_row,
     parse_brussels_osp,
@@ -649,57 +649,113 @@ def test_pdfplumber_extractors_fail_loud_on_textless_pdf() -> None:
     assert issubclass(CardNotReadableError, ExtractorError)
 
 
-def _inflating_pdf(size: int, *extra: bytes) -> bytes:
-    """A one-page PDF whose content stream, a comment, inflates to ``size``
-    bytes from a few kB, followed by the ``extra`` objects, which nothing
-    refers to."""
-    import zlib
-
-    stream = zlib.compress(b"%" + b"A" * size + b"\n", 9)
-    objects = (
-        b"<</Type/Catalog/Pages 2 0 R>>",
-        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
-        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>",
-        b"<</Length %d/Filter/FlateDecode>>\nstream\n" % len(stream)
-        + stream
-        + b"\nendstream",
-        *extra,
-    )
+def _pdf_from(objects: Sequence[bytes], *, sections: int = 1) -> bytes:
+    """A PDF of ``objects``, numbered from 1, the first its catalog, with
+    its last object listed again in each of ``sections`` - 1 later
+    cross-reference sections chained by /Prev."""
     out = bytearray(b"%PDF-1.4\n")
     offsets = []
     for number, body in enumerate(objects, 1):
         offsets.append(len(out))
         out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
-    xref = len(out)
-    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
-    out += b"".join(b"%010d 00000 n \n" % offset for offset in offsets)
-    out += b"trailer<</Size %d/Root 1 0 R>>\nstartxref\n%d\n%%%%EOF\n" % (
-        len(objects) + 1,
-        xref,
-    )
+    xref = 0
+    for section in range(sections):
+        previous, xref = xref, len(out)
+        if section == 0:
+            out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+            out += b"".join(b"%010d 00000 n \n" % offset for offset in offsets)
+        else:
+            out += b"xref\n%d 1\n%010d 00000 n \n" % (len(objects), offsets[-1])
+        out += b"trailer<</Size %d/Root 1 0 R" % (len(objects) + 1)
+        if section:
+            out += b"/Prev %d" % previous
+        out += b">>\n"
+    out += b"startxref\n%d\n%%%%EOF\n" % xref
     return bytes(out)
 
 
-@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
-def test_streams_that_inflate_past_the_cap_are_refused_before_pdfplumber(
+def _pdf_of(
+    stream: bytes,
+    *extra: bytes,
+    attrs: bytes = b"/Filter/FlateDecode",
+    pages: int = 1,
+    contents: bytes = b"3 0 R",
+    tree: bool = True,
+) -> bytes:
+    """A PDF of ``pages`` pages that all draw ``stream``, with ``attrs`` in
+    its dictionary, as their content, named ``contents``, followed by the
+    ``extra`` objects, which nothing refers to. Without ``tree`` the catalog
+    names no page tree."""
+    kids = b" ".join(b"%d 0 R" % (4 + page) for page in range(pages))
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>" if tree else b"<</Type/Catalog>>",
+            b"<</Type/Pages/Kids[%s]/Count %d>>" % (kids, pages),
+            b"<<%s/Length %d>>\nstream\n" % (attrs, len(stream))
+            + stream
+            + b"\nendstream",
+            *(
+                b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents %s>>"
+                % contents,
+            )
+            * pages,
+            *extra,
+        )
+    )
+
+
+def _comment(size: int) -> bytes:
+    """A content stream that is one comment ``size`` bytes long, which
+    inflates from a few kB."""
+    return b"%" + b"A" * size + b"\n"
+
+
+def _inflating_pdf(
+    size: int,
+    *extra: bytes,
+    attrs: bytes = b"/Filter/FlateDecode",
+    pages: int = 1,
+    contents: bytes = b"3 0 R",
+    tree: bool = True,
+) -> bytes:
+    """A PDF whose content stream, a comment, inflates to ``size`` bytes."""
+    import zlib
+
+    return _pdf_of(
+        zlib.compress(_comment(size), 9),
+        *extra,
+        attrs=attrs,
+        pages=pages,
+        contents=contents,
+        tree=tree,
+    )
+
+
+_EVERY_READER = [extract_pdf_text, extract_pdf_text_layout, extract_pdf_text_aligned]
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_streams_that_inflate_past_the_cap_are_refused_before_the_readers(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
 ) -> None:
     """pdfminer decompresses a stream with no limit, in a worker thread the
     fetch timeout cannot cancel: a 20 kB file inflating to 20 MB took 26 s
-    of CPU on a Raspberry Pi, and the download cap does not see it."""
-    monkeypatch.setattr(_pdf, "_MAX_DECODED_STREAM_BYTES", 1 << 20, raising=False)
+    of CPU on a Raspberry Pi, and the download cap does not see it. pypdf
+    limits each stream but not their total."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
     payload = _inflating_pdf(2 << 20)
     assert len(payload) < 10_000
-    with pytest.raises(ExtractorError, match="decode to more than 1048576 bytes"):
+    with pytest.raises(
+        ExtractorError, match=r"^PDF streams decode to more than 1048576 bytes"
+    ):
         extract(payload)
-    # Under the cap the same document goes on to pdfplumber as before.
+    # Under the cap the same document goes on to the reader as before.
     with pytest.raises(CardNotReadableError, match="no text layer"):
         extract(_inflating_pdf(1000))
 
 
-@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
 def test_pypdf_reaching_its_own_limit_is_refused(
-    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import pypdf.filters
     from pypdf.errors import LimitReachedError
@@ -709,29 +765,682 @@ def test_pypdf_reaching_its_own_limit_is_refused(
 
     monkeypatch.setattr(pypdf.filters, "decompress", limited)
     with pytest.raises(ExtractorError, match="refusing to read them"):
-        extract(_inflating_pdf(1000))
+        extract_pdf_text(_inflating_pdf(1000))
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_a_content_stream_counts_whatever_its_subtype(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """Images were left out by their /Subtype, and a page's content stream
+    tagged /Image escaped the count while pdfminer inflated it all the
+    same. An image no page draws as its content is still left out."""
+    import zlib
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    image = b"/Subtype/Image/Filter/FlateDecode"
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_inflating_pdf(2 << 20, attrs=image))
+    picture = zlib.compress(b"\0" * (2 << 20), 9)
+    unread = b"<<%s/Length %d>>\nstream\n" % (image, len(picture))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_inflating_pdf(1000, unread + picture + b"\nendstream"))
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_a_content_stream_counts_once_for_each_page_drawing_it(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """Each page interprets its content again: a 2,7 kB file whose one
+    stream served 16 pages kept pdfplumber busy for 100 s, and the stream
+    was counted once."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_inflating_pdf(300_000, pages=4))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_inflating_pdf(300_000, pages=3))
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_a_page_naming_its_content_by_another_generation_counts(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer resolves a reference by its number whatever generation it
+    names. Counted by generation and number, a page naming its content
+    ``3 1 R`` drew nothing: a content stream tagged /Image escaped the
+    count, 200 MiB inflated from a 204 kB file, and a stream four pages
+    shared counted once."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    image = b"/Subtype/Image/Filter/FlateDecode"
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_inflating_pdf(2 << 20, attrs=image, contents=b"3 1 R"))
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_inflating_pdf(300_000, pages=4, contents=b"3 1 R"))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_inflating_pdf(300_000, pages=3, contents=b"3 1 R"))
+
+
+def _orphan_page_pdf(stream: bytes, attrs: bytes) -> bytes:
+    """A tree pypdf walks to one page and pdfminer to none, its nodes being
+    untyped, so pdfminer reads the one object typed as a page instead, which
+    draws ``stream``."""
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Kids[3 0 R]/Count 1>>",
+            b"<</Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>",
+            b"<</Length 22>>\nstream\nBT /F1 12 Tf (hi) Tj ET\nendstream",
+            b"<<%s/Length %d>>\nstream\n" % (attrs, len(stream))
+            + stream
+            + b"\nendstream",
+            b"<</Type/Page/MediaBox[0 0 612 792]/Contents 5 0 R>>",
+        )
+    )
+
+
+def _listed_page_pdf(stream: bytes, sections: int) -> bytes:
+    """No page tree, and the one page, drawing ``stream``, listed in
+    ``sections`` cross-reference sections, each of which pdfminer reads it
+    from."""
+    return _pdf_from(
+        (
+            b"<</Type/Catalog>>",
+            b"<</Filter/FlateDecode/Length %d>>\nstream\n" % len(stream)
+            + stream
+            + b"\nendstream",
+            b"<</Type/Page/MediaBox[0 0 612 792]/Contents 2 0 R>>",
+        ),
+        sections=sections,
+    )
 
 
 @pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
-def test_what_pypdf_cannot_read_is_left_to_pdfplumber(
+def test_pdfplumber_is_bounded_on_the_pages_pdfminer_lists(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
 ) -> None:
-    """The bound is the only reason to refuse. A stream pypdf has no filter
-    for, or a file it cannot open at all, used to be refused as a parse error
-    before pdfplumber, which read such cards before the check, saw them."""
-    from pypdf.errors import PdfReadError
+    """pdfminer finds pages its own way: with no page tree, or none it can
+    walk, every object typed as a page, once for each cross-reference
+    section listing it. Imitated off pypdf's walk, a page pdfminer found
+    and pypdf did not escaped the count: an image-tagged stream it drew
+    inflated 48 MiB, and one page listed in forty sections cost 43 s."""
+    import zlib
 
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    image = b"/Subtype/Image/Filter/FlateDecode"
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_orphan_page_pdf(zlib.compress(_comment(2 << 20), 9), image))
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_inflating_pdf(300_000, pages=4, tree=False))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_inflating_pdf(300_000, pages=3, tree=False))
+    content = zlib.compress(_comment(300_000), 9)
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_listed_page_pdf(content, 4))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_listed_page_pdf(content, 3))
+
+
+def test_a_page_pypdf_cannot_read_leaves_the_others_counted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One page whose content pypdf could not resolve dropped every page's
+    count: sixteen pages sharing one stream counted it once, and the plain
+    reader then spent 212 s on them."""
+    import io
+
+    import pypdf
+    from pypdf import PageObject
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    read = PageObject.raw_get
+
+    def unreadable(page: PageObject, key: object) -> object:
+        ref = page.indirect_reference
+        if ref is not None and ref.idnum == 8:
+            raise ValueError("object stream entry outside an /ObjStm")
+        return read(page, key)
+
+    monkeypatch.setattr(PageObject, "raw_get", unreadable)
+    reader = pypdf.PdfReader(io.BytesIO(_inflating_pdf(300_000, pages=5)))
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        _pdf_bound.require_bounded_reader(reader)
+
+
+def _hidden_stream_pdf(hidden: bytes, shape: str) -> bytes:
+    """A one-page PDF whose content, object 4, pypdf reads as a few bytes of
+    text and pdfminer as ``hidden``, a FlateDecode stream it finds elsewhere:
+    ``rebuilt``, a table header spaced twice that pdfminer rebuilds by
+    scanning the file, the later definition winning; ``fallthrough``, the
+    newest table naming a mislabelled object pypdf takes and pdfminer skips
+    for the older table's entry, which pypdf's own repair cannot find."""
+    text = b"BT /F1 12 Tf 10 50 Td (Hello) Tj ET"
+    out = bytearray(b"%PDF-1.4\n")
+    at = {}
+
+    def put(key: object, head: bytes, body: bytes) -> None:
+        at[key] = len(out)
+        out.extend(head + body + b"\nendobj\n")
+
+    put(1, b"1 0 obj\n", b"<</Type/Catalog/Pages 2 0 R>>")
+    put(2, b"2 0 obj\n", b"<</Type/Pages/Kids[3 0 R]/Count 1>>")
+    put(
+        3,
+        b"3 0 obj\n",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>",
+    )
+    small = b"<</Length %d>>\nstream\n" % len(text) + text + b"\nendstream"
+    big = b"<</Filter/FlateDecode/Length %d>>\nstream\n" % len(hidden) + hidden
+    big += b"\nendstream"
+
+    def rows(*keys: object) -> bytes:
+        return b"".join(b"%010d 00000 n \n" % at[k] for k in keys)
+
+    if shape == "rebuilt":
+        put(4, b"4 0 obj\n", small)
+        put("hidden", b"4 0 obj\n", big)
+        xref = len(out)
+        out += b"xref\n0  5\n0000000000 65535 f \n" + rows(1, 2, 3, 4)
+        out += b"trailer<</Size 5/Root 1 0 R>>\n"
+    else:
+        put("hidden", b"4 0 %c\nobj\n", big)
+        put(4, b"5 0 obj\n", small)
+        older = len(out)
+        out += b"xref\n0 5\n0000000000 65535 f \n" + rows(1, 2, 3, "hidden")
+        out += b"trailer<</Size 5/Root 1 0 R>>\n"
+        xref = len(out)
+        out += b"xref\n4 1\n" + rows(4)
+        out += b"trailer<</Size 5/Root 1 0 R/Prev %d>>\n" % older
+    out += b"startxref\n%d\n%%%%EOF\n" % xref
+    return bytes(out)
+
+
+@pytest.mark.parametrize("shape", ["rebuilt", "fallthrough"])
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_pdfplumber_is_bounded_on_what_pdfminer_decodes(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str], shape: str
+) -> None:
+    """Counted on pypdf's reading of the file, every way of having the two
+    readers find different objects let pdfminer decode what pypdf never
+    counted: two tables, an entry listed twice, a shifted pointer, a table
+    rebuilt by scanning, an entry pdfminer skips for an older one, each 40
+    MiB and more. What pdfminer decodes is measured on pdfminer itself."""
+    import zlib
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    hidden = zlib.compress(_comment(2 << 20), 9)
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_hidden_stream_pdf(hidden, shape))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_hidden_stream_pdf(zlib.compress(_comment(1000), 9), shape))
+
+
+def _object_stream_pdf(padding: int) -> bytes:
+    """A PDF whose catalog, page tree and page sit in an object stream padded
+    with ``padding`` blanks, behind a cross-reference stream, so pdfminer
+    inflates it opening the file."""
+    import struct
+    import zlib
+
+    objects = (
+        b"<</Type/Catalog/Pages 2 0 R>>",
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>",
+    )
+    body = b""
+    offsets = []
+    for obj in objects:
+        offsets.append(len(body))
+        body += obj + b"\n"
+    header = b" ".join(b"%d %d" % (n, o) for n, o in enumerate(offsets, 1))
+    packed = zlib.compress(header + b"\n" + body + b" " * padding, 9)
+    text = b"BT /F1 12 Tf 72 720 Td (Hello) Tj ET"
+    out = bytearray(b"%PDF-1.5\n")
+    at = {4: len(out)}
+    out += b"4 0 obj\n<</Length %d>>\nstream\n%s\nendstream\nendobj\n" % (
+        len(text),
+        text,
+    )
+    at[5] = len(out)
+    out += b"5 0 obj\n<</Type/ObjStm/N 3/First %d/Filter/FlateDecode/Length %d>>" % (
+        len(header) + 1,
+        len(packed),
+    )
+    out += b"\nstream\n" + packed + b"\nendstream\nendobj\n"
+    at[6] = len(out)
+    rows = struct.pack(">BIH", 0, 0, 65535)
+    rows += b"".join(struct.pack(">BIH", 2, 5, i) for i in range(3))
+    rows += b"".join(struct.pack(">BIH", 1, at[n], 0) for n in (4, 5, 6))
+    out += b"6 0 obj\n<</Type/XRef/Size 7/W[1 4 2]/Root 1 0 R/Length %d>>" % len(rows)
+    out += b"\nstream\n" + rows + b"\nendstream\nendobj\n"
+    out += b"startxref\n%d\n%%%%EOF\n" % at[6]
+    return bytes(out)
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_what_pdfminer_inflates_opening_a_file_is_measured(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer inflates the cross-reference and object streams as it opens
+    a file, before anything could be counted: 300 MB from a 306 kB file. Its
+    decoding is measured as it goes, so it stops at the bound."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_object_stream_pdf(2 << 20))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_object_stream_pdf(1000))
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_a_ccitt_stream_outside_an_image_is_refused(
+    extract: Callable[[bytes], str],
+) -> None:
+    """pdfminer decodes CCITT fax in pure Python: 400 bytes took 3,4 s on a
+    Raspberry Pi. No card carries one, and an image may."""
+    ccitt = b"/Filter/CCITTFaxDecode/DecodeParms<</K -1/Columns 100>>"
+    with pytest.raises(ExtractorError, match=r"^PDF carries a CCITT"):
+        extract(_pdf_of(b"\xff" * 20, attrs=ccitt))
+    fax = b"<</Subtype/Image/Width 100/Height 1%s/Length 20>>\nstream\n" % ccitt
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_inflating_pdf(1000, fax + b"\xff" * 20 + b"\nendstream"))
+
+
+def _damaged(size: int, *, how: str) -> bytes:
+    """A PDF whose content stream, ``size`` bytes of comment that compress
+    poorly, is cut short, inside an ASCII85 wrapper too (``wrapped``), or
+    whole but failing its checksum (``checksum``)."""
+    import base64
+    import random
+    import zlib
+
+    letters = random.Random(0).choices(b"abcdefghijklmnopqrstuvwxyz", k=size)
+    whole = zlib.compress(b"%" + bytes(letters) + b"\n", 9)
+    if how == "checksum":
+        return _pdf_of(whole[:-1] + bytes([whole[-1] ^ 1]))
+    if how == "cut":
+        return _pdf_of(whole[:-4])
+    return _pdf_of(
+        base64.a85encode(whole[:-4]) + b"~>",
+        attrs=b"/Filter[/ASCII85Decode/FlateDecode]",
+    )
+
+
+@pytest.mark.parametrize("how", ["cut", "wrapped", "checksum"])
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_a_damaged_flate_stream_counts_many_times_over(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str], how: str
+) -> None:
+    """zlib refuses a FlateDecode stream cut short, and pdfminer then
+    inflates it again a byte at a time, in a time quadratic in its size,
+    while pypdf, which reads it whole, counted it once. A small one, like
+    those on some Bolt and Frank cards, still reads."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    monkeypatch.setattr(_pdf_bound, "_DAMAGED_FLATE_UNIT", 4096)
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_damaged(128 << 10, how=how))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_damaged(1000, how=how))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_the_bound_is_the_only_reason_pdfplumber_is_refused(
+    extract: Callable[[bytes], str],
+) -> None:
+    """A stream with a filter no reader knows used to be refused as a parse
+    error before pdfplumber, which read such cards before the check, saw
+    them, and a file pdfminer cannot open is its own parse error."""
     unknown_filter = b"<</Length 4/Filter/NoSuchDecode>>\nstream\nabcd\nendstream"
     # pdfplumber reads the page, which carries no text: the card reached it.
     with pytest.raises(CardNotReadableError, match="no text layer"):
         extract(_inflating_pdf(1000, unknown_filter))
+    with pytest.raises(ExtractorError, match="parse error") as unreadable:
+        extract(b"%PDF-1.4\nnothing a reader can open\n")
+    assert "refusing" not in str(unreadable.value)
 
-    def unreadable(_stream: object) -> None:
-        raise PdfReadError("pypdf cannot open this")
 
-    monkeypatch.setattr(_pdf.pypdf, "PdfReader", unreadable)
+def _font_pdf(pages: int, to_unicode: bytes, attrs: bytes = b"") -> bytes:
+    """``pages`` pages sharing resources whose font is written into them,
+    with ``to_unicode``, a FlateDecode stream with ``attrs``, as its
+    ToUnicode map, which pdfminer reads again for each page."""
+    kids = b" ".join(b"%d 0 R" % (6 + page) for page in range(pages))
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[%s]/Count %d>>" % (kids, pages),
+            b"<</Length 35>>\nstream\nBT /F1 12 Tf 10 50 Td (Hello) Tj ET\nendstream",
+            b"<</Font<</F1<</Type/Font/Subtype/Type1/BaseFont/Helvetica"
+            b"/ToUnicode 5 0 R>>>>>>",
+            b"<<%s/Filter/FlateDecode/Length %d>>\nstream\n" % (attrs, len(to_unicode))
+            + to_unicode
+            + b"\nendstream",
+            *(
+                b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]"
+                b"/Contents 3 0 R/Resources 4 0 R>>",
+            )
+            * pages,
+        )
+    )
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_pdfminer_is_held_to_the_bound_on_every_stream_it_reads(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """A check made on a reading of the file beforehand missed what pdfminer
+    itself reads: a font's ToUnicode map tagged as an image, a FlateDecode
+    step after DCTDecode, a second inflate behind a predictor, each 256 MiB
+    from a file of a few hundred kB. It is held to the bound as it reads."""
+    import zlib
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    big = zlib.compress(_comment(2 << 20), 9)
+    small = zlib.compress(_comment(1000), 9)
+    for stream in (big, small):
+        refused = stream is big
+        rows = b"".join(
+            b"\0" + stream[i : i + 100].ljust(100, b"\0")
+            for i in range(0, len(stream), 100)
+        )
+        shapes = (
+            _font_pdf(1, stream, b"/Subtype/Image"),
+            _pdf_of(stream, attrs=b"/Filter[/DCTDecode/FlateDecode]"),
+            _pdf_of(
+                zlib.compress(rows, 9),
+                attrs=b"/Filter[/FlateDecode/FlateDecode]"
+                b"/DecodeParms[<</Predictor 10/Columns 100>>null]",
+            ),
+        )
+        for payload in shapes:
+            if refused:
+                with pytest.raises(
+                    ExtractorError, match=r"^PDF streams decode to more than"
+                ):
+                    extract(payload)
+            else:
+                with pytest.raises(CardNotReadableError, match="no text layer"):
+                    extract(payload)
+
+
+def test_pdfminer_stops_inflating_at_the_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Refused once inflated, a stream would already be held: 300 MB from a
+    306 kB file. pdfminer's inflate stops at what is left of the bound."""
+    from pdfminer.pdftypes import PDFStream
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    decode = PDFStream.decode
+    held: list[int] = []
+
+    def decoded(stream: PDFStream) -> None:
+        decode(stream)
+        held.append(len(stream.data or b""))
+
+    monkeypatch.setattr(PDFStream, "decode", decoded)
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract_pdf_text_layout(_object_stream_pdf(8 << 20))
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract_pdf_text_layout(_inflating_pdf(8 << 20))
+    assert max(held, default=0) <= 1 << 20
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_a_font_loaded_on_each_page_counts_for_each(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer keeps a font only when it is referenced, so one written into
+    the resources pages share has its ToUnicode map parsed again on every
+    page: a 1 MiB map on ten pages took 130 s and was counted once."""
+    import zlib
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    to_unicode = zlib.compress(_comment(300_000), 9)
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_font_pdf(4, to_unicode))
     with pytest.raises(CardNotReadableError, match="no text layer"):
-        extract(_inflating_pdf(1000))
+        extract(_font_pdf(3, to_unicode))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_pdfminer_filters_decoded_in_pure_python_are_refused(
+    extract: Callable[[bytes], str],
+) -> None:
+    """pdfminer decodes LZW and run length in pure Python with no limit; no
+    card carries either outside an image, which pdfminer never decodes."""
+    lzw = b"\x80\x0b\x60\x50\x22\x0c\x0c\x85\x01"
+    for name, stream in ((b"LZWDecode", lzw), (b"RunLengthDecode", b"\x00A\x80")):
+        with pytest.raises(
+            ExtractorError, match=r"^PDF carries a [A-Za-z -]* stream outside an image"
+        ):
+            extract(_pdf_of(stream, attrs=b"/Filter/" + name))
+        image = b"<</Subtype/Image/Width 1/Height 1/Filter/%s/Length %d>>\nstream\n" % (
+            name,
+            len(stream),
+        )
+        with pytest.raises(CardNotReadableError, match="no text layer"):
+            extract(_inflating_pdf(1000, image + stream + b"\nendstream"))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_each_inflate_of_a_chain_counts(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """A stream inflated over and over, each step as large as the last,
+    counted only its final output: 51 inflates of 4 MiB from a 7,6 kB file
+    counted 4 MiB."""
+    import zlib
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+
+    def chained(steps: int) -> bytes:
+        stream = _comment(300_000)
+        for _ in range(steps):
+            stream = zlib.compress(stream, 0)
+        return _pdf_of(stream, attrs=b"/Filter[%s]" % (b"/FlateDecode" * steps))
+
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(chained(4))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(chained(3))
+
+
+def test_an_rc4_decryption_counts_before_it_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pdfminer decrypts RC4 a byte at a time, appending each to what it
+    holds: 1 MiB took 365 s, and twenty 64 kB strings 8 s, none counted.
+    Each counts its length times itself, before it runs. Every encrypted
+    card is AES."""
+    from pdfminer.arcfour import Arcfour
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    with _pdf_bound.bounded_pdfminer():
+        for _ in range(3):
+            assert len(Arcfour(b"key").decrypt(b"\0" * (64 << 10))) == 64 << 10
+    with (
+        pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"),
+        _pdf_bound.bounded_pdfminer(),
+    ):
+        for _ in range(5):
+            Arcfour(b"key").decrypt(b"\0" * (64 << 10))
+    big = 2 << 20
+    assert len(Arcfour(b"key").decrypt(b"\0" * (64 << 10))) == 64 << 10
+    with (
+        pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"),
+        _pdf_bound.bounded_pdfminer(),
+    ):
+        Arcfour(b"key").decrypt(b"\0" * big)
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_a_large_ascii85_stream_is_refused(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """Decoding ASCII85 takes about 90 bytes of memory for each: 16 MiB of
+    it peaked at 1,7 GiB, before anything was counted. The largest a card
+    carries is 2,2 kB."""
+    import base64
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_ASCII85_BYTES", 4096)
+    a85 = b"/Filter/ASCII85Decode"
+    with pytest.raises(ExtractorError, match=r"^PDF carries an ASCII85 stream"):
+        extract(_pdf_of(base64.a85encode(_comment(4096)) + b"~>", attrs=a85))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_pdf_of(base64.a85encode(_comment(1000)) + b"~>", attrs=a85))
+
+
+def test_ascii85_behind_another_filter_is_refused_before_pypdf_reads() -> None:
+    """Behind an inflate, an ASCII85 step decodes what the inflate made of a
+    few bytes, which no size of the stream itself bounds."""
+    import base64
+    import zlib
+
+    stream = zlib.compress(base64.a85encode(_comment(1000)) + b"~>")
+    with pytest.raises(ExtractorError, match=r"^PDF carries an ASCII85 stream"):
+        extract_pdf_text(_pdf_of(stream, attrs=b"/Filter[/FlateDecode/ASCII85Decode]"))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_what_a_decode_hands_back_past_its_last_inflate_counts(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """ASCII85 behind an inflate makes four bytes of each ``z``: a 38 kB file
+    had pdfminer handed 125,8 MB with 31,5 MB counted."""
+    import zlib
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    attrs = b"/Filter[/FlateDecode/ASCII85Decode]"
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_pdf_of(zlib.compress(b"z" * 300_000 + b"~>"), attrs=attrs))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_pdf_of(zlib.compress(b"z" * 200_000 + b"~>"), attrs=attrs))
+
+
+def _filter_in_object_stream_pdf(stream: bytes) -> bytes:
+    """A PDF whose one page draws ``stream``, unfiltered, through a /Filter
+    kept in an object stream, which pdfminer inflates in the middle of
+    decoding ``stream``."""
+    import struct
+    import zlib
+
+    head = b"5 0 "
+    packed = zlib.compress(head + b"[]")
+    objects = {
+        1: b"<</Type/Catalog/Pages 2 0 R>>",
+        2: b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        3: b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>",
+        4: b"<</Filter 5 0 R/Length %d>>\nstream\n" % len(stream)
+        + stream
+        + b"\nendstream",
+        6: b"<</Type/ObjStm/N 1/First %d/Filter/FlateDecode/Length %d>>\nstream\n"
+        % (len(head), len(packed))
+        + packed
+        + b"\nendstream",
+    }
+    out = bytearray(b"%PDF-1.5\n")
+    rows = struct.pack(">BIH", 0, 0, 65535)
+    at = {}
+    for number, body in objects.items():
+        at[number] = len(out)
+        out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
+    for number in range(1, 7):
+        if number == 5:
+            rows += struct.pack(">BIH", 2, 6, 0)
+        else:
+            rows += struct.pack(">BIH", 1, at[number], 0)
+    xref = len(out)
+    rows += struct.pack(">BIH", 1, xref, 0)
+    out += b"7 0 obj\n<</Type/XRef/Size 8/W[1 4 2]/Root 1 0 R/Length %d>>" % len(rows)
+    out += b"\nstream\n" + rows + b"\nendstream\nendobj\n"
+    out += b"startxref\n%d\n%%%%EOF\n" % xref
+    return bytes(out)
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_a_stream_counts_whatever_its_filter_inflates_to_resolve(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """A stream whose /Filter sits in an object stream not yet read has
+    pdfminer inflate that one while decoding it: 40 MB of content counted
+    202 bytes."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_filter_in_object_stream_pdf(_comment(1 << 20)))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_filter_in_object_stream_pdf(_comment(1000)))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_a_predictor_row_wider_than_its_stream_is_refused(
+    extract: Callable[[bytes], str],
+) -> None:
+    """pdfminer holds a PNG predictor row of the width named before it reads
+    any: a 468-byte file naming 64 Mi columns took 581 MiB. A row as wide as
+    its stream, or no wider than 16 kB, is read."""
+    import zlib
+
+    def predicted(row: int, columns: int) -> bytes:
+        return _pdf_of(
+            zlib.compress(b"\x00" + b" " * row),
+            attrs=b"/Filter/FlateDecode/DecodeParms<</Predictor 12/Columns %d>>"
+            % columns,
+        )
+
+    with pytest.raises(ExtractorError, match=r"^PDF names a predictor row wider"):
+        extract(predicted(20, 1 << 20))
+    for row, columns in ((20, 1000), (20_000, 20_000)):
+        with pytest.raises(CardNotReadableError, match="no text layer"):
+            extract(predicted(row, columns))
+
+
+def _swallowed_refusal_pdf() -> bytes:
+    """A card whose text reads, with an /Info title in an LZW object stream:
+    pdfplumber reads the metadata and logs what fails there instead of
+    raising it."""
+    import struct
+
+    text = (
+        b"BT /F1 12 Tf 72 720 Td "
+        + b"(Hello world, a card with text) Tj 0 -14 Td " * 30
+    )
+    text += b"ET"
+    lzw = b"\x80\x0b\x60\x50\x22\x0c\x0c\x85\x01"
+    objects = {
+        1: b"<</Type/Catalog/Pages 2 0 R>>",
+        2: b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        3: b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R"
+        b"/Resources<</Font<</F1<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>>>>>>>",
+        4: b"<</Length %d>>\nstream\n%s\nendstream" % (len(text), text),
+        5: b"<</Type/ObjStm/N 1/First 4/Filter/LZWDecode/Length 9>>\nstream\n"
+        + lzw
+        + b"\nendstream",
+        7: b"<</Title 8 0 R>>",
+    }
+    out = bytearray(b"%PDF-1.5\n")
+    at = {}
+    for number, body in objects.items():
+        at[number] = len(out)
+        out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
+    at[6] = len(out)
+    rows = struct.pack(">BIH", 0, 0, 65535)
+    for number in range(1, 9):
+        if number == 8:
+            rows += struct.pack(">BIH", 2, 5, 0)
+        else:
+            rows += struct.pack(">BIH", 1, at.get(number, 0), 0)
+    out += (
+        b"6 0 obj\n<</Type/XRef/Size 9/W[1 4 2]/Root 1 0 R/Info 7 0 R/Length %d>>"
+        % (len(rows))
+    )
+    out += b"\nstream\n" + rows + b"\nendstream\nendobj\n"
+    out += b"startxref\n%d\n%%%%EOF\n" % at[6]
+    return bytes(out)
+
+
+def test_a_refusal_pdfplumber_swallows_still_refuses() -> None:
+    """pdfplumber logs what fails while it reads the metadata and goes on,
+    and the card's text came back as if the refusal had not been made."""
+    with pytest.raises(ExtractorError, match=r"^PDF carries a LZW stream"):
+        extract_pdf_text_layout(_swallowed_refusal_pdf())
 
 
 def test_text_mentions_month_tolerates_split_whitespace() -> None:

@@ -40,12 +40,11 @@ from typing import Any
 
 import aiohttp
 import pypdf
-from pypdf.errors import LimitReachedError
-from pypdf.generic import IndirectObject, StreamObject
 
 from ._parse import (
     to_float,
 )
+from ._pdf_bound import bounded_pdfminer, require_bounded_reader
 from .base import (
     CardNotReadableError,
     ExtractorError,
@@ -393,6 +392,9 @@ def _require_text_layer(text: str, pages: int) -> None:
 def extract_pdf_text(payload: bytes) -> str:
     try:
         reader = pypdf.PdfReader(BytesIO(payload))
+        # The same reader, so the streams the check decoded are not decoded
+        # a second time for the text.
+        require_bounded_reader(reader)
         pages = list(reader.pages)
         chunks: list[str] = []
         failures = 0
@@ -420,56 +422,6 @@ def extract_pdf_text(payload: bytes) -> str:
         raise ExtractorError(f"PDF parse error: {err}") from err
 
 
-# What every stream of a card read through pdfplumber may decode to, together.
-# Across the 179 shipped fixtures the most is 7,5 MB, a 2,7 MB Bolt card, so
-# this leaves four times that.
-_MAX_DECODED_STREAM_BYTES = 32 * 1024 * 1024
-
-
-def _require_bounded_streams(payload: bytes) -> None:
-    """Refuse a PDF whose streams inflate past anything a card decodes to.
-
-    :func:`read_capped` bounds the download, not what it inflates to, and
-    pdfminer, under pdfplumber, decompresses a stream with no limit, in a
-    worker thread the fetch timeout cannot cancel: a 20 kB file inflating
-    to 20 MB took 26 s on a Raspberry Pi, and one of 200 kB ran away. pypdf
-    decodes under limits of its own (from 6.0.0), so every stream pdfminer
-    may read is decoded through it first, and their total is held to
-    :data:`_MAX_DECODED_STREAM_BYTES`. Image streams are left out, since
-    pdfminer does not decode them to read text. Nothing here changes the
-    bytes pdfplumber is then given.
-
-    Only the bound refuses: the total passing it, or pypdf reaching one of
-    its own limits. A file pypdf cannot open is left to pdfplumber as it
-    was, and a stream it cannot decode is skipped, so this never refuses a
-    card pdfplumber reads for any other reason.
-    """
-    refusal = (
-        f"PDF streams decode to more than {_MAX_DECODED_STREAM_BYTES} bytes; "
-        "refusing to read them"
-    )
-    try:
-        reader = pypdf.PdfReader(BytesIO(payload))
-        refs = [(gen, idnum) for gen, ids in reader.xref.items() for idnum in ids]
-    except LimitReachedError as err:
-        raise ExtractorError(refusal) from err
-    except Exception:  # pypdf cannot read it; pdfplumber may
-        return
-    total = 0
-    for generation, idnum in refs:
-        try:
-            obj = reader.get_object(IndirectObject(idnum, generation, reader))
-            if not isinstance(obj, StreamObject) or obj.get("/Subtype") == "/Image":
-                continue
-            total += len(obj.get_data())
-        except LimitReachedError as err:
-            raise ExtractorError(refusal) from err
-        except Exception:  # an object or filter pypdf cannot read
-            continue
-        if total > _MAX_DECODED_STREAM_BYTES:
-            raise ExtractorError(refusal)
-
-
 def _pdfplumber_text(payload: bytes, kind: str, render: Callable[[Any], str]) -> str:
     """Open ``payload`` with pdfplumber, reconstruct text via ``render``,
     and rewrap failures uniformly.
@@ -484,8 +436,7 @@ def _pdfplumber_text(payload: bytes, kind: str, render: Callable[[Any], str]) ->
     try:
         import pdfplumber
 
-        _require_bounded_streams(payload)
-        with pdfplumber.open(BytesIO(payload)) as pdf:
+        with bounded_pdfminer(), pdfplumber.open(BytesIO(payload)) as pdf:
             text = render(pdf)
             # Ecofix reaches this path, not the pypdf one, so the text-layer
             # check has to live on both or the classification would depend on

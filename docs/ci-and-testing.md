@@ -138,7 +138,8 @@ Shared helpers live in `tests/__init__.py`:
   `extract_pdf_text_aligned` with OCTA+'s word joining when `aligned=True` (`tests/__init__.py`).
   Reading the cards is most of what the suite spends, so the text is kept on disk across runs
   under `tmp/fixture_text/`, one directory per extractor: the directory is named by a digest of
-  `providers/_pdf.py` and the pypdf and pdfplumber versions, and each file by the PDF's own
+  `providers/_pdf.py`, the decode bound in `providers/_pdf_bound.py` and the pypdf and pdfplumber
+  versions, and each file by the PDF's own
   digest and the mode, so a changed card, extractor or reader is read afresh rather than served
   stale. `BE_FIXTURE_TEXT_CACHE` moves it; `scripts/gate.sh` points its throwaway worktree at the
   main checkout's, and `test.yml` keeps it between runs with `actions/cache`. Within a process it
