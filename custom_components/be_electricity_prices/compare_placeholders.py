@@ -86,6 +86,7 @@ from .const import (
 from .flow_contracts import _contract_kind
 from .providers import get as get_extractor
 from .providers import settlement_answer
+from .snapshot_resolve import entry_annual_injection_kwh
 
 
 class _PlaceholdersMixin(OptionsFlow):
@@ -850,7 +851,11 @@ class _PlaceholdersMixin(OptionsFlow):
                     regime=regime,
                     window_start=ytd_from,
                     fee_proration=fee_proration,
-                    annual_injection_kwh=rolling_inj_kwh,
+                    # The engine's volume: a measured year of SOLD export or
+                    # none. The page's window of export credited a household
+                    # with ten months of it, or a what-if into the injection
+                    # regime, a bonus the engine beside it refuses.
+                    annual_injection_kwh=entry_annual_injection_kwh(target_entry),
                     day_start=day_start,
                 ),
             )

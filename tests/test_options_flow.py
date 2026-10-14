@@ -10292,6 +10292,99 @@ async def test_compare_ytd_fallback_credits_the_welcome_credit_the_engine_does(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.parametrize("measured", [None, 3000.0])
+async def test_compare_ytd_fallback_credits_the_feed_in_bonus_on_the_engine_volume(
+    hass: HomeAssistant, freezer: Any, measured: float | None
+) -> None:
+    """A first-year feed-in bonus rides a full measured year of export, else
+    nothing, on the engine's year to date. The simple model multiplied it by
+    the page's raw window of export instead, so a household with ten months
+    of it was credited a bonus there that the engine beside it refused, and
+    one with a year measured was credited on a different volume."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    freezer.move_to("2026-10-05 12:00:00+02:00")
+    entry = make_entry(
+        supplier="eneco",
+        contract="power_fix",
+        consumption_kwh="sensor.cons",
+        injection_kwh="sensor.inj",
+        solar_regime="injection",
+        contract_start_date="2026-03-15",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, _stub_snapshot("eneco", "power_fix", 0.18))
+    coord._annual_injection_kwh = measured
+    entry.runtime_data = coord
+    now = dt_util.utcnow()
+
+    async def _fake_deltas(
+        _h: Any, entity_id: str, start: date, end: date, period: str
+    ) -> list[tuple[datetime, float]]:
+        step = timedelta(hours=1 if period == "hour" else 24)
+        per_hour = {"sensor.cons": 0.4, "sensor.inj": 0.3}.get(entity_id)
+        if per_hour is None:
+            return []
+        kwh = per_hour if period == "hour" else per_hour * 24
+        # Ten months of export: short of the year the bonus needs.
+        first = max(start, date(2025, 12, 1)) if entity_id == "sensor.inj" else start
+        slot = dt_util.start_of_local_day(first).astimezone(UTC)
+        stop = dt_util.start_of_local_day(end + timedelta(days=1)).astimezone(UTC)
+        out = []
+        while slot < min(stop, now):
+            out.append((slot, kwh))
+            slot += step
+        return out
+
+    async def _page(other_snap: Any, archive: bool) -> float:
+        fake_own = replace(
+            EXTRACTORS["eneco"],
+            fetch=AsyncMock(return_value=coord._snapshot),
+            probe=None,
+            fetch_for_month=AsyncMock(return_value=None),
+        )
+        fake_other = replace(
+            EXTRACTORS["mega"],
+            fetch=AsyncMock(return_value=other_snap),
+            probe=None,
+            fetch_for_month=AsyncMock(return_value=None) if archive else None,
+        )
+        with patch.dict(EXTRACTORS, {"eneco": fake_own, "mega": fake_other}):
+            placeholders = await _drive_compare(
+                hass,
+                entry,
+                other_snap=other_snap,
+                other_supplier="mega",
+                other_contract="mega_online_fixed",
+            )
+        return float(placeholders["compare_ytd"])
+
+    plain = replace(
+        _stub_snapshot("mega", "mega_online_fixed", 0.15),
+        welcome_credit_kind="pro_rata",
+    )
+    bonus = replace(plain, welcome_credit_injection_eur_per_kwh=0.0106)
+    with (
+        patch(
+            "custom_components.be_electricity_prices.energy_meters._recorder_deltas",
+            new=_fake_deltas,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.energy_meters._live_today_kwh",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        engine = await _page(plain, True) - await _page(bonus, True)
+        fallback = await _page(plain, False) - await _page(bonus, False)
+    # 205 of the first year's 365 days of the bonus on the measured year.
+    expected = 0.0 if measured is None else 0.0106 * measured * 205 / 365
+    assert engine == pytest.approx(expected, abs=0.02)
+    assert fallback == pytest.approx(engine, abs=0.02)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 @pytest.mark.parametrize(
     ("old_sensor", "quoted"), [("sensor.cons", "123.00"), ("sensor.old_cons", "-")]
 )
