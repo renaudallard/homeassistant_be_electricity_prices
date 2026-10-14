@@ -305,13 +305,7 @@ async def fetch(
 ) -> SupplierSnapshot:
     """Fetch the configured region's PDF for ``contract_id``, and its
     feed-in card when the product card prints no feed-in block."""
-    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
-    if region not in _REGION_TO_CODE:
-        raise ExtractorError(f"TotalEnergies: unknown region {region!r}")
-    if region not in contract.regions:
-        raise ExtractorError(
-            f"TotalEnergies {contract_id}: not available in region {region!r}"
-        )
+    contract = _contract_in(contract_id, region)
     snapshot = await _fetch_card(session, contract, region)
     if snapshot.injection is not None:
         return snapshot
@@ -319,6 +313,18 @@ async def fetch(
         session, contract, region, snapshot.publication_label
     )
     return snapshot if injection is None else replace(snapshot, injection=injection)
+
+
+def _contract_in(contract_id: str, region: str) -> _ContractDef:
+    """The contract, refusing a region it is not published in."""
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
+    if region not in _REGION_TO_CODE:
+        raise ExtractorError(f"TotalEnergies: unknown region {region!r}")
+    if region not in contract.regions:
+        raise ExtractorError(
+            f"TotalEnergies {contract_id}: not available in region {region!r}"
+        )
+    return contract
 
 
 async def _fetch_card(
@@ -355,6 +361,8 @@ async def _fetch_injection(
     contract: _ContractDef,
     region: str,
     month: str,
+    *,
+    of_month: bool = False,
 ) -> InjectionRates | None:
     """The feed-in leg off the product's feed-in card, or ``None`` where
     neither edition of it is published.
@@ -365,8 +373,11 @@ async def _fetch_injection(
     and the Dutch one October. Where no edition is of that month, the first
     one that is the right card is read all the same: its formula is the
     offer as last published, and refusing it would hold back the tariff card
-    too. A fetch that failed transiently is raised as itself, and a card
-    that is the wrong one in both editions raises the French card's error.
+    too, unless ``of_month`` asks for that month's card alone: settling a
+    month on an older one would settle it on the index the month before
+    closed at. A fetch that failed transiently is raised as itself, and a
+    card that is the wrong one in both editions raises the French card's
+    error.
     """
     error: ExtractorError | None = None
     stale: InjectionRates | None = None
@@ -389,7 +400,7 @@ async def _fetch_injection(
         if not read:
             stale, read = leg, True
     if read:
-        return stale
+        return None if of_month else stale
     if error is not None:
         raise error
     return None
@@ -661,7 +672,12 @@ async def settle_month(
     the live one. Not out yet, or a live card titled for another month, and
     the month is ``provisional`` so it is asked again; once the live card is
     a later one, the card archive's row settled while it ran is what holds
-    the month, and ``held`` comes back as it is.
+    the month, and ``held`` comes back as it is. The feed-in card is uploaded
+    on its own and can lag the tariff card (Electricité Fixe in Flanders
+    still said September on 5 and 14 October 2026), so only the one titled
+    like it settles the feed-in. A leg the next card gives no index for is
+    left as held, and the month stays ``provisional`` while the other leg
+    settles.
     """
     first = date(year_month.year, year_month.month, 1)
     following = date(first.year + (first.month == 12), first.month % 12 + 1, 1)
@@ -671,32 +687,39 @@ async def settle_month(
     if following < running:
         return held
     try:
-        card = await fetch(session, contract_id, region)
+        contract = _contract_in(contract_id, region)
+        card = await _fetch_card(session, contract, region)
+        titled = card_valid_until(None, card.publication_label)
+        if titled != end_of_month(following.year, following.month):
+            return replace(held, provisional=True)
+        if card.injection is None:
+            card = replace(
+                card,
+                injection=await _fetch_injection(
+                    session, contract, region, card.publication_label, of_month=True
+                ),
+            )
     except ExtractorError as err:
         if is_transient_fetch_error(str(err)):
             raise
         return replace(held, provisional=True)
-    titled = card_valid_until(None, card.publication_label)
-    if titled != end_of_month(following.year, following.month):
-        return replace(held, provisional=True)
     energy, injection = held.energy, held.injection
-    energy_index = injection_index = None
+    pending = False
     if getattr(energy, "month_indexed", False):
-        energy_index = _printed_energy_index(card.energy)
-        if energy_index is None:
-            return replace(held, provisional=True)
+        index = _printed_energy_index(card.energy)
+        pending = index is None
+        if index is not None:
+            energy = settled_energy(energy, index)
     if injection is not None and injection.month_indexed:
-        injection_index = _printed_injection_index(card.injection)
-        if injection_index is None:
-            return replace(held, provisional=True)
+        index = _printed_injection_index(card.injection)
+        pending = pending or index is None
+        if index is not None:
+            injection = settled_injection(injection, index)
     return replace(
         held,
-        energy=energy if energy_index is None else settled_energy(energy, energy_index),
-        injection=(
-            injection
-            if injection is None or injection_index is None
-            else settled_injection(injection, injection_index)
-        ),
+        energy=energy,
+        injection=injection,
+        provisional=held.provisional or pending,
     )
 
 

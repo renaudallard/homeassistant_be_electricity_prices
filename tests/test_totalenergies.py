@@ -1492,11 +1492,11 @@ async def test_a_closed_month_settles_on_the_rates_the_next_card_prints(
     )
     asked: list[str] = []
 
-    async def live(_session: object, contract: str, region: str) -> Any:
-        asked.append(contract)
+    async def live(_session: object, contract: Any, region: str) -> Any:
+        asked.append(contract.contract_id)
         return october
 
-    monkeypatch.setattr(totalenergies, "fetch", live)
+    monkeypatch.setattr(totalenergies, "_fetch_card", live)
     freezer.move_to("2026-10-10 12:00:00+02:00")
     out = await totalenergies.settle_month(
         None,  # type: ignore[arg-type]
@@ -1520,10 +1520,30 @@ async def test_a_closed_month_settles_on_the_rates_the_next_card_prints(
     assert is_settled(out) and not out.provisional
     assert replace(out, energy=energy0, injection=inj0) == held
 
+    # No feed-in card of October beside it: the energy settles, the feed-in
+    # waits and the month stays provisional.
+    async def no_feed_in(*_a: Any, of_month: bool = False) -> Any:
+        assert of_month
+        return None
+
+    monkeypatch.setattr(totalenergies, "_fetch_injection", no_feed_in)
+    october_card = october
+    october = replace(october, injection=None)
+    half = await totalenergies.settle_month(
+        None,  # type: ignore[arg-type]
+        "totalenergies_mycomfort",
+        "flanders",
+        date(2026, 9, 1),
+        held,
+    )
+    assert half.energy == out.energy and half.injection == inj0
+    assert half.provisional and not is_settled(half)
+    october = october_card
+
     # While October runs a card still titled September is not the next one.
     monkeypatch.setattr(
         totalenergies,
-        "fetch",
+        "_fetch_card",
         lambda *_a: _ready(replace(october, publication_label="septembre 2026")),
     )
     freezer.move_to("2026-10-01 08:00:00+02:00")
@@ -1539,7 +1559,7 @@ async def test_a_closed_month_settles_on_the_rates_the_next_card_prints(
     # The running month has no next card yet, and once the live card has
     # moved past the next one the archive's settled row holds the month.
     asked.clear()
-    monkeypatch.setattr(totalenergies, "fetch", live)
+    monkeypatch.setattr(totalenergies, "_fetch_card", live)
     for month, today in (
         (date(2026, 10, 1), "2026-10-20 12:00:00+02:00"),
         (date(2026, 9, 1), "2026-11-20 12:00:00+01:00"),
@@ -1555,6 +1575,85 @@ async def test_a_closed_month_settles_on_the_rates_the_next_card_prints(
         assert kept.energy == energy0 and kept.injection == inj0
     assert asked == []
     assert EXTRACTORS["totalenergies"].settle_month is totalenergies.settle_month
+
+
+@pytest.mark.parametrize(
+    ("feed_in_cards", "settles"),
+    [
+        (
+            {
+                "INJECTION_ELECTRICITE-FIXE_ELECTRICITY_VL_FR.pdf": (
+                    "totalenergies_injection_electricite_fixe_v_2026-09.pdf"
+                ),
+            },
+            False,
+        ),
+        (
+            {
+                "INJECTION_ELECTRICITE-FIXE_ELECTRICITY_VL_FR.pdf": (
+                    "totalenergies_injection_electricite_fixe_v_2026-09.pdf"
+                ),
+                "INJECTION_ELECTRICITE-FIXE_ELECTRICITY_VL_NL.pdf": (
+                    "totalenergies_injection_electricite_fixe_v_2026-10_nl.pdf"
+                ),
+            },
+            True,
+        ),
+    ],
+    ids=["september-s-card-alone", "october-s-dutch-edition"],
+)
+async def test_a_lagging_feed_in_card_does_not_settle_the_month(
+    monkeypatch: pytest.MonkeyPatch,
+    freezer: Any,
+    feed_in_cards: dict[str, str],
+    settles: bool,
+) -> None:
+    """On 5 and 14 October 2026 the feed-in card of Electricité Fixe in
+    Flanders still said September beside an October tariff card. It prints
+    its rate at August's Belpex_M, so settling September on it settles the
+    month a month behind, for good. The live fetch reads it all the same; a
+    month settles only on the feed-in card of the tariff card's month."""
+    from dataclasses import replace
+    from datetime import date
+
+    from custom_components.be_electricity_prices.providers import totalenergies
+    from custom_components.be_electricity_prices.providers._settle import (
+        is_settled,
+    )
+
+    held = parse_snapshot(
+        "totalenergies_electricite_fixe",
+        fixture_text(_FIXE_V, layout=True),
+        "flanders",
+    )
+    held = replace(
+        held,
+        injection=_feed_in(
+            "totalenergies_injection_electricite_fixe_v_2026-09.pdf",
+            "totalenergies_electricite_fixe",
+            "flanders",
+        ),
+    )
+    assert held.injection is not None and held.injection.month_indexed
+    monkeypatch.setattr(
+        totalenergies,
+        "fetch_pdf_text_layout",
+        _serve({"ELECTRICITE-FIXE_ELECTRICITY_VL_FR.pdf": _FIXE_V, **feed_in_cards}),
+    )
+    freezer.move_to("2026-10-14 12:00:00+02:00")
+    out = await totalenergies.settle_month(
+        None,  # type: ignore[arg-type]
+        "totalenergies_electricite_fixe",
+        "flanders",
+        date(2026, 9, 1),
+        held,
+    )
+    assert out.injection is not None
+    if settles:
+        assert is_settled(out) and not out.provisional
+        assert out.injection.index_realised is not None
+    else:
+        assert out == replace(held, provisional=True)
 
 
 def test_the_printed_index_is_the_median_of_the_columns() -> None:

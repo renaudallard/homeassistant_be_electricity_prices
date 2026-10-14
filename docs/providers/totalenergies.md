@@ -475,7 +475,11 @@ for the month keeps every field; only its month-indexed legs move, each rebuilt 
 its own formula with `index_realised` recorded (`providers/_settle.py`), so a keyed
 entry bills the settled figure too. TotalEnergies keeps no archive, so the next card
 is only ever the live one: while it is not out, or the live card is titled for
-another month, the month stays provisional and is asked again. Once the live card
+another month, the month stays provisional and is asked again. The feed-in card
+is uploaded on its own and can lag (Electricité Fixe in Flanders still said
+September on 5 and 14 October 2026); the live fetch reads it all the same, but
+only a feed-in card titled like the tariff card settles the feed-in, and until it
+is out the energy settles and the month stays provisional. Once the live card
 has moved past it, the card archive's row, which the daily run settled while the
 next card was served, holds the month; there are no rows before September 2026,
 and those months keep the hourly estimate.
