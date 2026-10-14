@@ -89,6 +89,7 @@ from ._totalenergies_cards import (
     _extract_energy,
     _extract_injection,
     _extract_publication_month,
+    _vat_multiplier,
     _without_renewables,
     in_french,
     is_dutch_card,
@@ -458,7 +459,7 @@ def parse_snapshot(
         energy = replace(energy, single_under_impact=True)
     included = cev_included(text)
     if included is not None:
-        energy = _without_renewables(energy, included)
+        energy = _without_renewables(energy, included, _vat_multiplier(text))
     injection = _extract_injection(text, contract.kind)
     publication_label = _extract_publication_month(text)
     federal_excise = _extract_federal_excise(text)

@@ -314,6 +314,14 @@ Contribution Énergie Verte (CEV), dont le montant est fixé à : 1,57 € cent/
 `_without_renewables` (`_totalenergies_cards.py`) takes the contribution back out of every
 printed rate and formula base, so it stays in `TaxOverlay` like every other card's
 and the card's 22,74 is billed once, as 21,17 of energy plus 1,57 of contribution.
+The contribution carries no VAT: a printed rate holds the footnote's figure once,
+while a formula holds it in its base before VAT, so the base, grossed up by then,
+loses it grossed up. Taking the bare figure off a base left every October 2026
+formula high by the contribution's VAT, 0,09 c/kWh in Flanders, 0,17 in Brussels and
+0,20 in Wallonia, on every myDynamic hour and on every month an entry with a key
+re-prices. Read that way the printed monthly rates solved to 162,5 to 164,0 EUR/MWh
+by region; read without VAT on the contribution they solve to 164,63 to 164,74 in all
+three, and the Wallonia myDynamic card's 22,62 is its formula at September's 156,41.
 Adding the footnote's figure on top of the printed rate would bill it twice. Keeping
 it in the tax leg is also what the card's footnote 4 asks for, since a change in the
 law reaches a fixed contract. The figure is the one the earlier cards printed in a
@@ -452,7 +460,7 @@ the cards solve to 135,11, columns gives 134,93 hourly and 135,11 by quarter,
 distinct 133,44), about 0,2 c/kWh on that month's rate. The October 2026 cards fold the green energy
 contribution into the formula base but print a monthly rate with the
 contribution outside the VAT, and solve to the September columns mean once it
-is taken out that way.
+is taken out that way, which is how `_without_renewables` takes it out.
 
 The four carry the registry twin `month_indexed_energy` (`_MONTH_INDEXED_ENERGY`,
 `totalenergies.py`), without which the config flow never offers the optional

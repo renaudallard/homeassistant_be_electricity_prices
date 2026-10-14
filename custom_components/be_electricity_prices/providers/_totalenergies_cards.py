@@ -355,8 +355,8 @@ def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
 
 
 # The per-kWh fields of an energy leg that carry the contribution when a card
-# folds it in: every printed rate and every formula's base. A factor scales the
-# index and carries none of it.
+# folds it in: every printed rate, and every formula's base, the dynamic one
+# included. A factor scales the index and carries none of it.
 _RENEWABLES_CARRIERS = frozenset(
     {
         "single",
@@ -364,11 +364,11 @@ _RENEWABLES_CARRIERS = frozenset(
         "peak",
         "offpeak",
         "exclusive_night",
-        "base",
     }
 )
 _FORMULA_CARRIERS = frozenset(
     {
+        "base",
         "formula_base",
         "formula_base_peak",
         "formula_base_offpeak",
@@ -430,29 +430,40 @@ def _formulas_hold_contribution(rates: VariableRates, included: float) -> bool:
     return not (spread(0.0) >= _INDEX_MISFIT and spread(included) <= _INDEX_FIT)
 
 
-def _without_renewables(energy: EnergyRates, included: float) -> EnergyRates:
+def _without_renewables(
+    energy: EnergyRates, included: float, vat: float
+) -> EnergyRates:
     """``energy`` with the green energy contribution taken back out.
 
     A card that says its prices and formulas include the contribution bills
     it inside every kWh, while the snapshot holds it apart in
     ``TaxOverlay`` like every other card. Leaving it in both places would
     bill it twice; taking it out keeps it in the tax leg, where a change in
-    the law reaches a fixed contract the way the card says it does. The
-    figures are all VAT-inclusive EUR/kWh by then, the basis the footnote
-    states it on. A formula printed without it, against its own footnote,
-    is left as printed (:func:`_formulas_hold_contribution`).
+    the law reaches a fixed contract the way the card says it does. A
+    formula printed without it, against its own footnote, is left as
+    printed (:func:`_formulas_hold_contribution`).
+
+    The contribution carries no VAT. A printed rate holds the footnote's
+    figure once, so that comes off it. A formula holds the same figure in
+    its base before VAT, and by now that base has been grossed up, so the
+    figure comes off grossed up too. Taking the bare figure off left every
+    formula of the October 2026 cards high by the contribution's VAT, 0,09
+    to 0,20 c/kWh by region: their printed monthly rates solved to 162,5 to
+    164,0 EUR/MWh by region, against 164,63 to 164,74 in all three when the
+    whole grossed figure comes off, September's index. The dynamic card's
+    indicative price solves the same way to September's 156,41 Belpex.
     """
-    carriers = _RENEWABLES_CARRIERS
+    rates = dict.fromkeys(_RENEWABLES_CARRIERS, included)
     if not isinstance(energy, VariableRates) or _formulas_hold_contribution(
         energy, included
     ):
-        carriers = carriers | _FORMULA_CARRIERS
+        rates |= dict.fromkeys(_FORMULA_CARRIERS, included * vat)
     return replace(
         energy,
         **{
-            f.name: getattr(energy, f.name) - included
+            f.name: getattr(energy, f.name) - rates[f.name]
             for f in fields(energy)
-            if f.name in carriers and getattr(energy, f.name) is not None
+            if f.name in rates and getattr(energy, f.name) is not None
         },
     )
 

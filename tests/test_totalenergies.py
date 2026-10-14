@@ -221,10 +221,10 @@ def test_october_2026_variable_card_bills_its_monthly_rate() -> None:
         assert rate is not None
         assert rate + snap.taxes.flanders_renewables == pytest.approx(printed)
     # The formula keeps re-pricing the delivery month, its base less the
-    # contribution the footnote says it holds.
+    # contribution the footnote says it holds, which carries no VAT.
     assert energy.month_indexed
     assert energy.formula_factor == pytest.approx(0.1098 * 1.06 * 10)
-    assert energy.formula_base == pytest.approx(0.0387 * 1.06 - 0.0157)
+    assert energy.formula_base == pytest.approx((0.0387 - 0.0157) * 1.06)
     assert snap.injection is None
 
 
@@ -309,19 +309,42 @@ def test_october_2026_variable_card_with_the_fee_below_the_rates() -> None:
 
 
 @pytest.mark.parametrize(
-    ("fixture", "region", "base", "contribution", "printed"),
+    ("fixture", "region", "base", "contribution", "printed", "indicative"),
     [
-        ("totalenergies_mydynamic_v_2026-10.pdf", "flanders", 3.41, 0.0157, 0.1937),
-        ("totalenergies_mydynamic_w_2026-10.pdf", "wallonia", 5.40, 0.0336, 0.2137),
+        (
+            "totalenergies_mydynamic_v_2026-10.pdf",
+            "flanders",
+            3.41,
+            0.0157,
+            0.1937,
+            None,
+        ),
+        (
+            "totalenergies_mydynamic_w_2026-10.pdf",
+            "wallonia",
+            5.40,
+            0.0336,
+            0.2137,
+            0.2262,
+        ),
     ],
 )
 def test_october_2026_dynamic_card_prints_three_meter_columns(
-    fixture: str, region: str, base: float, contribution: float, printed: float
+    fixture: str,
+    region: str,
+    base: float,
+    contribution: float,
+    printed: float,
+    indicative: float | None,
 ) -> None:
     """The October 2026 myDynamic cards drop the exclusive-night column and
     print "19,37 19,37 19,37 Tarif mensuel" with the yearly fee on the next
     line, and their formula carries the contribution like the rest of the
-    range. They offer no feed-in, and do not mention injection at all."""
+    range. They offer no feed-in, and do not mention injection at all.
+
+    The contribution in the formula's base carries no VAT. The Wallonia card
+    prints its formula at September's 156,41 EUR/MWh as 22,62 c/kWh, which
+    only that reading gives; with VAT on the contribution it is 22,82."""
     text = fixture_text(fixture, layout=True)
     assert "injection" not in text.lower()
     snap = parse_snapshot("totalenergies_mydynamic", text, region)
@@ -329,14 +352,19 @@ def test_october_2026_dynamic_card_prints_three_meter_columns(
     assert isinstance(energy, DynamicRates)
     assert energy.yearly_fixed_fee == pytest.approx(90.0)
     assert energy.factor == pytest.approx(0.1031 * 1.06 * 10)
-    assert energy.base == pytest.approx(base * 1.06 / 100 - contribution)
+    assert energy.base == pytest.approx((base / 100 - contribution) * 1.06)
     assert snap.injection is None
-    # At a spot of 0,10 EUR/kWh the hour bills the card's formula, VAT and
-    # contribution included, once.
+    # At a spot of 0,10 EUR/kWh the hour bills the card's formula with VAT,
+    # and the contribution once, without.
     assert energy.factor * 0.1 + energy.base + contribution == pytest.approx(
-        (0.1031 * 100 + base) * 1.06 / 100
+        (0.1031 * 100 + base - contribution * 100) * 1.06 / 100 + contribution
     )
     assert f"{printed * 100:.2f}".replace(".", ",") in text
+    if indicative is not None:
+        assert f"Compteur Simple : {indicative * 100:.2f}".replace(".", ",") in text
+        assert energy.factor * 0.15641 + energy.base + contribution == pytest.approx(
+            indicative, abs=0.00005
+        )
 
 
 def test_a_formula_printed_without_the_contribution_keeps_it_out() -> None:
@@ -827,7 +855,22 @@ def test_a_dutch_card_reads_as_its_french_edition() -> None:
     assert energy.offpeak == pytest.approx(0.1992)
     assert energy.exclusive_night == pytest.approx(0.2062)
     assert energy.formula_factor == pytest.approx(0.1096 * 10.6)
-    assert energy.formula_base == pytest.approx((5.88 * 1.06 - 3.36) / 100)
+    assert energy.formula_base == pytest.approx((5.88 - 3.36) * 1.06 / 100)
+    # The contribution carries no VAT, so every column solves to September's
+    # index, 164,7 EUR/MWh. With VAT on it they spread from 162,8 to 163,1.
+    columns = (
+        (energy.current, energy.formula_factor, energy.formula_base),
+        (energy.peak, energy.formula_factor_peak, energy.formula_base_peak),
+        (energy.offpeak, energy.formula_factor_offpeak, energy.formula_base_offpeak),
+        (
+            energy.exclusive_night,
+            energy.formula_factor_exclusive_night,
+            energy.formula_base_exclusive_night,
+        ),
+    )
+    for rate, factor, base in columns:
+        assert rate is not None and factor is not None and base is not None
+        assert (rate - base) / factor == pytest.approx(0.1647, abs=0.0001)
     assert snap.taxes.wallonia_renewables == pytest.approx(0.0336)
     assert snap.taxes.federal_excise == pytest.approx(0.0488)
     assert snap.taxes.energy_contribution == pytest.approx(0.002)
