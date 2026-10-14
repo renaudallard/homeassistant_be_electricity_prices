@@ -463,7 +463,9 @@ class _MigratingStore(Store[dict[str, Any]]):
 # RLP index resolves on the column-weighted profile.
 # v80: TotalEnergies' formulas lose the green contribution before VAT, and
 # a closed TotalEnergies month settles on the rates the next card prints.
-_SNAPSHOT_SCHEMA_VERSION = 80
+# v81: Cociter's trihoraire months carry the BELIX they settled at, and a
+# settled TotalEnergies month solves its index on the median of the columns.
+_SNAPSHOT_SCHEMA_VERSION = 81
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
