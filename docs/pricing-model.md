@@ -471,7 +471,9 @@ strips. TotalEnergies names neither index, so its next card's printed rates are
 solved through their own formulas for the BELPEXM_RLP and Belpex_M they were
 printed at; it keeps no archive, so that card is only ever the live one, and the
 daily card archive run settles the rows it caught while it is served. Until the
-next card is out the month stays `provisional`.
+next card is out the month stays `provisional`, and at TotalEnergies also while
+its feed-in card still names the month before or a card's monthly block is not
+read, the other leg settling meanwhile.
 
 ### Monthly-indexed feed-in credits
 

@@ -544,7 +544,8 @@ class SupplierExtractor:
     settles_on_next_card: bool = False
     # Set where a month is settled IN PLACE instead (Luminus, TotalEnergies):
     # the card held for it, live capture or archive answer, keeps every field
-    # and only its month-indexed rates move to the index the next card names.
+    # and only its month-indexed rates move to the index the next card names,
+    # or at TotalEnergies the one the next card's rates solve to.
     # Luminus's archive serves a month without its campaign and kept serving
     # a first edition after the live card was corrected, so its answer must
     # never replace a captured card. TotalEnergies keeps no archive at all.
