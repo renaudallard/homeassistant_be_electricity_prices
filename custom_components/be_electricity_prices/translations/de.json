@@ -736,7 +736,7 @@
     },
     "backfill_statistics": {
       "name": "Statistiken nachbefüllen",
-      "description": "Befüllt die Long-Term-Statistik des Recorders für die Preissensoren und current_year_cost dieses Eintrags über einen Zeitraum, damit das Energie-Dashboard auch Verläufe vor der ersten Live-Aktualisierung anzeigt. Die Kosten werden nur im Zeitraum dieses Jahres neu aufgebaut (ab dem 1. Januar oder ab Vertragsbeginn, wenn der Eintrag ab dann abrechnet); ein Zeitraum, der spätestens an dessen Beginn endet, baut nur die Preissensoren neu auf.",
+      "description": "Befüllt die Long-Term-Statistik des Recorders für die Preissensoren und current_year_cost dieses Eintrags über einen Zeitraum, damit das Energie-Dashboard auch Verläufe vor der ersten Live-Aktualisierung anzeigt. Die Kosten werden nur im Zeitraum dieses Jahres neu aufgebaut (ab dem 1. Januar oder ab Vertragsbeginn, wenn der Eintrag oder ein bei einem erfassten Lieferantenwechsel behaltener Vertrag ab dann abrechnet); ein Zeitraum, der spätestens an dessen Beginn endet, baut nur die Preissensoren neu auf.",
       "fields": {
         "entry_id": {
           "name": "Entry-ID",
@@ -744,7 +744,7 @@
         },
         "start": {
           "name": "Beginn",
-          "description": "Erste Stunde des Backfills. Standard: der Beginn des Zeitraums dieses Jahres, also der 1. Januar 00:00 des aktuellen Jahres oder der Vertragsbeginn, wenn der Eintrag ab dann abrechnet."
+          "description": "Erste Stunde des Backfills. Standard: der Beginn des Zeitraums dieses Jahres, also der 1. Januar 00:00 des aktuellen Jahres oder der Vertragsbeginn, wenn der Eintrag oder ein bei einem erfassten Lieferantenwechsel behaltener Vertrag ab dann abrechnet."
         },
         "end": {
           "name": "Ende",
@@ -752,7 +752,7 @@
         },
         "clear": {
           "name": "GESAMTE Reihe vor dem Import löschen",
-          "description": "Destruktiv: löscht jede vorhandene Zeile der Zielreihe (nicht nur den angeforderten Bereich); der erneute Import füllt anschließend nur den angeforderten Bereich. NUR verwenden, um den ganzen Zeitraum dieses Jahres neu zu befüllen; ein Fenster, das nach dem Beginn des Zeitraums im Endjahr beginnt (1. Januar, oder der Vertragsbeginn, wenn der Eintrag ab dann abrechnet), wird mit clear abgelehnt, außer das Fenster endet spätestens am Beginn des Zeitraums dieses Jahres (dort bleibt die Kostenreihe sowohl beim Löschen als auch beim erneuten Import außen vor). Für schmalere Fenster: deaktiviert lassen; der Import macht einen Upsert auf (statistic_id, Stunde) und überschreibt die angeforderten Stunden bereits, ohne etwas außerhalb des Bereichs anzurühren."
+          "description": "Destruktiv: löscht jede vorhandene Zeile der Zielreihe (nicht nur den angeforderten Bereich); der erneute Import füllt anschließend nur den angeforderten Bereich. NUR verwenden, um den ganzen Zeitraum dieses Jahres neu zu befüllen; ein Fenster, das nach dem Beginn des Zeitraums im Endjahr beginnt (1. Januar, oder der Vertragsbeginn, wenn der Eintrag oder ein bei einem erfassten Lieferantenwechsel behaltener Vertrag ab dann abrechnet), wird mit clear abgelehnt, außer das Fenster endet spätestens am Beginn des Zeitraums dieses Jahres (dort bleibt die Kostenreihe sowohl beim Löschen als auch beim erneuten Import außen vor). Für schmalere Fenster: deaktiviert lassen; der Import macht einen Upsert auf (statistic_id, Stunde) und überschreibt die angeforderten Stunden bereits, ohne etwas außerhalb des Bereichs anzurühren."
         }
       }
     }

@@ -446,7 +446,8 @@ async def _backfill_range(
         ytd_window_reset(entry, dt_util.as_local(end_utc - timedelta(hours=1)))
     )
     # A window that ends on or before the CURRENT accumulation window's start
-    # (1 January, or the contract start date on an entry that bills from it)
+    # (1 January, or the contract start date on an entry, or a contract a
+    # recorded switch kept, that bills from it)
     # rebuilds cost the sensor never accumulates there, and that series would
     # sit immediately before the current one in the same statistic id. The recorder renders change as
     # (sum - prev_sum) and ignores last_reset on imported rows even when it is

@@ -643,7 +643,7 @@ predating the entry's first live tick. Fields (`services.yaml`):
 | Field | Required | Selector | Default |
 | --- | --- | --- | --- |
 | `entry_id` | no | `config_entry` | first loaded entry |
-| `start` | no | datetime | the year-to-date window start (`ytd_window_reset`): Jan 1 00:00 of the current local year, or the contract start date on an entry that bills from it |
+| `start` | no | datetime | the year-to-date window start (`ytd_window_reset`): Jan 1 00:00 of the current local year, or the contract start date on an entry that bills from it, or of a contract a recorded switch kept that billed from it (`ytd_billed_from`) |
 | `end` | no | datetime (exclusive) | the current hour |
 | `clear` | no | boolean | false |
 
@@ -675,7 +675,8 @@ is about to write itself stays untouched. Re-runs are safe: rows are upserted on
 `(statistic_id, hour)`. `clear=true` is destructive: it deletes the ENTIRE
 target series (not just the requested range) and then repopulates only the
 requested range, so a window starting after the end year's year-to-date start
-(Jan 1, or the contract start date on an entry that bills from it) is rejected
+(Jan 1, or the contract start date on an entry, or a contract a recorded switch
+kept, that bills from it) is rejected
 (unless it ends on or before the current year-to-date start, where the cost
 series is left out of both the
 wipe and the re-import and there is nothing to protect)

@@ -90,8 +90,9 @@ backfill_statistics:
     rows are upserted by (statistic_id, hour). Pass clear=true to
     delete the target series first when the underlying tariff
     changed. A window ending on or before the start of the year-to-date
-    window (1 January, or the contract start date if the entry bills
-    from it) rebuilds the price sensors only: a cost series ending there
+    window (1 January, or the contract start date if the entry, or a
+    contract kept by a recorded supplier switch, bills from it) rebuilds
+    the price sensors only: a cost series ending there
     would sit immediately before the current one and paint a large
     negative cost onto the Energy dashboard at the boundary, because
     the recorder ignores last_reset on imported statistics.
@@ -111,7 +112,8 @@ backfill_statistics:
       description: >-
         First hour to backfill. Default = the start of the year-to-date
         window: Jan 1 00:00 of the current local year, or the contract
-        start date if the entry bills from it.
+        start date if the entry, or a contract kept by a recorded
+        supplier switch, bills from it.
       example: "2026-01-01T00:00:00+01:00"
       selector:
         datetime:
@@ -134,7 +136,8 @@ backfill_statistics:
         re-import only repopulates the requested range. Use ONLY when
         re-running the whole year-to-date window (the default range); a
         window that starts after the end year's year-to-date start (Jan 1,
-        or the contract start date if the entry bills from it) is rejected
+        or the contract start date if the entry, or a contract kept by a
+        recorded supplier switch, bills from it) is rejected
         with clear on, unless the window ends on or before the current
         year-to-date start: the cost
         series is left out of both the wipe and the re-import there, so

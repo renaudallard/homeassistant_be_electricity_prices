@@ -736,7 +736,7 @@
     },
     "backfill_statistics": {
       "name": "Backfill des statistiques",
-      "description": "Reconstitue les statistiques long terme du recorder pour les capteurs de prix et current_year_cost de cette entrée sur une plage de dates, afin que le tableau de bord Énergie affiche un historique antérieur au premier tick de l'intégration. Le coût n'est reconstitué que dans la fenêtre du coût de l'année (depuis le 1er janvier, ou la date de début du contrat si l'entrée facture à partir de celle-ci) ; une plage qui se termine au plus tard à son début ne reconstitue que les capteurs de prix.",
+      "description": "Reconstitue les statistiques long terme du recorder pour les capteurs de prix et current_year_cost de cette entrée sur une plage de dates, afin que le tableau de bord Énergie affiche un historique antérieur au premier tick de l'intégration. Le coût n'est reconstitué que dans la fenêtre du coût de l'année (depuis le 1er janvier, ou la date de début du contrat si l'entrée, ou un contrat conservé lors d'un changement de fournisseur enregistré, facture à partir de celle-ci) ; une plage qui se termine au plus tard à son début ne reconstitue que les capteurs de prix.",
       "fields": {
         "entry_id": {
           "name": "ID de l'entrée",
@@ -744,7 +744,7 @@
         },
         "start": {
           "name": "Début",
-          "description": "Première heure à reconstituer. Par défaut: le début de la fenêtre du coût de l'année, soit le 1er janvier 00:00 de l'année locale en cours, soit la date de début du contrat si l'entrée facture à partir de celle-ci."
+          "description": "Première heure à reconstituer. Par défaut: le début de la fenêtre du coût de l'année, soit le 1er janvier 00:00 de l'année locale en cours, soit la date de début du contrat si l'entrée, ou un contrat conservé lors d'un changement de fournisseur enregistré, facture à partir de celle-ci."
         },
         "end": {
           "name": "Fin",
@@ -752,7 +752,7 @@
         },
         "clear": {
           "name": "Effacer TOUTE la série avant import",
-          "description": "Destructif: supprime toutes les lignes existantes de la série cible (pas seulement la plage demandée), puis le re-import ne repeuple que la plage demandée. À utiliser UNIQUEMENT pour re-exécuter toute la fenêtre du coût de l'année ; une fenêtre qui commence après le début de la fenêtre du coût de l'année pour l'année de fin (le 1er janvier, ou la date de début du contrat si l'entrée facture à partir de celle-ci) est refusée avec clear actif, sauf si la fenêtre se termine au plus tard au début de la fenêtre du coût de l'année (la série de coût est alors exclue de l'effacement comme du re-import). Pour des fenêtres plus étroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et écrase déjà les heures demandées sans toucher au reste."
+          "description": "Destructif: supprime toutes les lignes existantes de la série cible (pas seulement la plage demandée), puis le re-import ne repeuple que la plage demandée. À utiliser UNIQUEMENT pour re-exécuter toute la fenêtre du coût de l'année ; une fenêtre qui commence après le début de la fenêtre du coût de l'année pour l'année de fin (le 1er janvier, ou la date de début du contrat si l'entrée, ou un contrat conservé lors d'un changement de fournisseur enregistré, facture à partir de celle-ci) est refusée avec clear actif, sauf si la fenêtre se termine au plus tard au début de la fenêtre du coût de l'année (la série de coût est alors exclue de l'effacement comme du re-import). Pour des fenêtres plus étroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et écrase déjà les heures demandées sans toucher au reste."
         }
       }
     }

@@ -736,7 +736,7 @@
     },
     "backfill_statistics": {
       "name": "Statistieken aanvullen",
-      "description": "Vult de lange-termijn statistieken van de recorder aan voor de prijssensoren en current_year_cost van deze invoer over een datumbereik, zodat het Energie-dashboard ook geschiedenis toont van voor de eerste live tick. De kost wordt alleen herbouwd binnen het venster van dit jaar (vanaf 1 januari, of de startdatum van het contract als de invoer daarvan uitgaat); een bereik dat op of vóór het begin ervan eindigt, herbouwt alleen de prijssensoren.",
+      "description": "Vult de lange-termijn statistieken van de recorder aan voor de prijssensoren en current_year_cost van deze invoer over een datumbereik, zodat het Energie-dashboard ook geschiedenis toont van voor de eerste live tick. De kost wordt alleen herbouwd binnen het venster van dit jaar (vanaf 1 januari, of de startdatum van het contract als de invoer, of een contract bewaard bij een geregistreerde leverancierswissel, daarvan uitgaat); een bereik dat op of vóór het begin ervan eindigt, herbouwt alleen de prijssensoren.",
       "fields": {
         "entry_id": {
           "name": "Entry-ID",
@@ -744,7 +744,7 @@
         },
         "start": {
           "name": "Start",
-          "description": "Eerste uur om aan te vullen. Standaard: het begin van het venster van dit jaar, 1 januari 00:00 van het huidige lokale jaar, of de startdatum van het contract als de invoer daarvan uitgaat."
+          "description": "Eerste uur om aan te vullen. Standaard: het begin van het venster van dit jaar, 1 januari 00:00 van het huidige lokale jaar, of de startdatum van het contract als de invoer, of een contract bewaard bij een geregistreerde leverancierswissel, daarvan uitgaat."
         },
         "end": {
           "name": "Eind",
@@ -752,7 +752,7 @@
         },
         "clear": {
           "name": "VOLLEDIGE reeks wissen voor herimport",
-          "description": "Destructief: verwijdert elke bestaande rij van de doelreeks (niet alleen het gevraagde bereik), waarna de herimport alleen het gevraagde bereik opnieuw vult. Gebruik dit ALLEEN om het volledige venster van dit jaar opnieuw te draaien; een venster dat begint na het begin van het venster van het eindjaar (1 januari, of de startdatum van het contract als de invoer daarvan uitgaat) wordt met clear aan geweigerd, tenzij het venster eindigt op of vóór het begin van het venster van dit jaar (daar blijft de kostenreeks buiten zowel het wissen als de herimport). Voor smallere vensters: laat dit uit; de import doet upsert op (statistic_id, uur) en overschrijft de gevraagde uren al zonder iets buiten het bereik aan te raken."
+          "description": "Destructief: verwijdert elke bestaande rij van de doelreeks (niet alleen het gevraagde bereik), waarna de herimport alleen het gevraagde bereik opnieuw vult. Gebruik dit ALLEEN om het volledige venster van dit jaar opnieuw te draaien; een venster dat begint na het begin van het venster van het eindjaar (1 januari, of de startdatum van het contract als de invoer, of een contract bewaard bij een geregistreerde leverancierswissel, daarvan uitgaat) wordt met clear aan geweigerd, tenzij het venster eindigt op of vóór het begin van het venster van dit jaar (daar blijft de kostenreeks buiten zowel het wissen als de herimport). Voor smallere vensters: laat dit uit; de import doet upsert op (statistic_id, uur) en overschrijft de gevraagde uren al zonder iets buiten het bereik aan te raken."
         }
       }
     }
