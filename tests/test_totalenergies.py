@@ -1557,5 +1557,43 @@ async def test_a_closed_month_settles_on_the_rates_the_next_card_prints(
     assert EXTRACTORS["totalenergies"].settle_month is totalenergies.settle_month
 
 
+def test_the_printed_index_is_the_median_of_the_columns() -> None:
+    """Each printed figure is rounded to a hundredth of a cent, and on the
+    October 2026 myDrive card in Wallonia the mono column alone solves to
+    164,36 EUR/MWh where the four spread from 164,33 to 164,72. The index is
+    the median of the columns, and a leg with one formula (Impact) solves on
+    that one."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers.totalenergies import (
+        _printed_energy_index,
+    )
+
+    # The card's figures as parsed: 22,85 26,00 20,59 22,31 less the 3,36
+    # c/kWh contribution, on "0.1098 * BELPEXM_RLP + 5.20" and its siblings.
+    leg = VariableRates(
+        current=0.2108,
+        peak=0.2442,
+        offpeak=0.1867,
+        exclusive_night=0.2046,
+        month_indexed=True,
+        formula_factor=0.1098 * 10.6,
+        formula_base=(5.20 - 3.36) * 1.06 / 100,
+        formula_factor_peak=0.1223 * 10.6,
+        formula_base_peak=(6.30 - 3.36) * 1.06 / 100,
+        formula_factor_offpeak=0.0989 * 10.6,
+        formula_base_offpeak=(4.70 - 3.36) * 1.06 / 100,
+        formula_factor_exclusive_night=0.1034 * 10.6,
+        formula_base_exclusive_night=(5.63 - 3.36) * 1.06 / 100,
+    )
+    mono = (0.2108 - (5.20 - 3.36) * 1.06 / 100) / (0.1098 * 10.6)
+    offpeak = (0.1867 - (4.70 - 3.36) * 1.06 / 100) / (0.0989 * 10.6)
+    assert mono == pytest.approx(0.16436, abs=0.00001)
+    assert _printed_energy_index(leg) == pytest.approx((mono + offpeak) / 2)
+    assert _printed_energy_index(leg) == pytest.approx(0.16445, abs=0.00001)
+    one = replace(leg, peak=None, offpeak=None, exclusive_night=None)
+    assert _printed_energy_index(one) == pytest.approx(mono)
+
+
 async def _ready(value: Any) -> Any:
     return value

@@ -58,6 +58,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, replace
 from datetime import date
+from statistics import median
 
 import aiohttp
 from homeassistant.util import dt as dt_util
@@ -594,14 +595,35 @@ _MONTH_INDEXED_ENERGY: frozenset[str] = frozenset(
 
 
 def _printed_energy_index(energy: EnergyRates) -> float | None:
-    """The index a card's month-indexed rate is printed at, solved off its
-    own formula, or ``None`` for a leg without one."""
+    """The index a card's month-indexed rates are printed at, solved off
+    their own formulas, or ``None`` for a leg without one.
+
+    The median of the columns, Impact having one: each figure is rounded to
+    a hundredth of a cent, and the mono column alone solves a few tenths of
+    a EUR/MWh off the others on some cards (myDrive and myEssential in
+    Wallonia, October 2026: 164,26 to 164,72 across the columns).
+    """
     if not (isinstance(energy, VariableRates) and energy.month_indexed):
         return None
-    factor, base = energy.formula_factor, energy.formula_base
-    if not factor or base is None or energy.current is None:
-        return None
-    return (energy.current - base) / factor
+    indices = [
+        (rate - base) / factor
+        for rate, factor, base in (
+            (energy.current, energy.formula_factor, energy.formula_base),
+            (energy.peak, energy.formula_factor_peak, energy.formula_base_peak),
+            (
+                energy.offpeak,
+                energy.formula_factor_offpeak,
+                energy.formula_base_offpeak,
+            ),
+            (
+                energy.exclusive_night,
+                energy.formula_factor_exclusive_night,
+                energy.formula_base_exclusive_night,
+            ),
+        )
+        if rate is not None and factor and base is not None
+    ]
+    return median(indices) if indices else None
 
 
 def _printed_injection_index(injection: InjectionRates | None) -> float | None:
@@ -628,7 +650,7 @@ async def settle_month(
     du BELPEXM_RLP (du mois precedent)", and its feed-in on the last
     Belpex_M, without ever naming either figure. So the next card's rates
     are its own formulas at this month's indices, and solving them gives
-    those: every October 2026 card solves to 164,63 to 164,74 EUR/MWh in
+    those: every October 2026 card solves to 164,41 to 164,74 EUR/MWh in
     all three regions. The engine's own mean of that index runs about
     0,3 EUR/MWh low, being hourly where TotalEnergies has weighed quarter
     hours since 2026, and a keyless entry billed each closed month at the

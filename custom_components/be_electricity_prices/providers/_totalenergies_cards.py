@@ -449,8 +449,9 @@ def _without_renewables(
     figure comes off grossed up too. Taking the bare figure off left every
     formula of the October 2026 cards high by the contribution's VAT, 0,09
     to 0,20 c/kWh by region: their printed monthly rates solved to 162,5 to
-    164,0 EUR/MWh by region, against 164,63 to 164,74 in all three when the
-    whole grossed figure comes off, September's index. The dynamic card's
+    164,0 EUR/MWh by region, against 164,41 to 164,74 in all three when the
+    whole grossed figure comes off, September's index, myDrive and
+    myEssential in Wallonia being the low two. The dynamic card's
     indicative price solves the same way to September's 156,41 Belpex.
     """
     rates = dict.fromkeys(_RENEWABLES_CARRIERS, included)

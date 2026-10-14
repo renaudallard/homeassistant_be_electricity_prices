@@ -320,7 +320,7 @@ loses it grossed up. Taking the bare figure off a base left every October 2026
 formula high by the contribution's VAT, 0,09 c/kWh in Flanders, 0,17 in Brussels and
 0,20 in Wallonia, on every myDynamic hour and on every month an entry with a key
 re-prices. Read that way the printed monthly rates solved to 162,5 to 164,0 EUR/MWh
-by region; read without VAT on the contribution they solve to 164,63 to 164,74 in all
+by region; read without VAT on the contribution they solve to 164,41 to 164,74 in all
 three, and the Wallonia myDynamic card's 22,62 is its formula at September's 156,41.
 Adding the footnote's figure on top of the printed rate would bill it twice. Keeping
 it in the tax leg is also what the card's footnote 4 asks for, since a change in the
@@ -465,7 +465,9 @@ is taken out that way, which is how `_without_renewables` takes it out.
 A closed month settles on the next card (`settle_month`, `totalenergies.py`). The
 cards never name the index their rates are printed at, but the next card's rates
 are its own formulas at this month's, so solving them gives it: every October 2026
-card solves to 164,63 to 164,74 EUR/MWh, where the engine's hourly reading of the
+card solves to 164,41 to 164,74 EUR/MWh, the median of its columns (each figure is
+rounded to a hundredth of a cent, and on myDrive and myEssential in Wallonia the
+columns spread from 164,26 to 164,72, the mono one at about 164,4), where the engine's hourly reading of the
 columns blend gives 164,42, TotalEnergies having weighed quarter hours since
 January 2026. The feed-in settles the same way on the Belpex_M the injection card
 prints its rate at (2,74 c/kWh at `0.2151 * BELPEXM -0.625` is 156,4). The card held
