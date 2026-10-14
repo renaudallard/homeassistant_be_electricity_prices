@@ -625,14 +625,20 @@ async def head_freshness_key(
 
     EnergyVision passes ``prefer=("ETag", "Last-Modified")`` for the
     listing page it probes; every other supplier keeps the default order.
+
+    Held to https like the fetches: an address that is not, or an answer a
+    redirect carried off it, is no signal either. Aspiravi probes the links
+    its listing prints.
     """
     try:
+        _require_https(url)
         async with session.head(
             url,
             headers={"User-Agent": USER_AGENT},
             timeout=aiohttp.ClientTimeout(total=10),
             allow_redirects=True,
         ) as resp:
+            guard_redirect(url, resp)
             if resp.status >= 400:
                 return None
             for key in prefer:
@@ -640,11 +646,12 @@ async def head_freshness_key(
                 if value:
                     return value
             return None
-    except (aiohttp.ClientError, TimeoutError):
+    except (aiohttp.ClientError, TimeoutError, ExtractorError):
         # aiohttp's ClientTimeout fires asyncio.TimeoutError (==
         # builtins.TimeoutError on 3.11+), which is NOT a ClientError;
         # without this a slow HEAD would break the documented
         # None-on-failure contract and bubble out of the probe path.
+        # ExtractorError is the https guards refusing the address.
         return None
 
 
@@ -663,7 +670,11 @@ async def head_or_raise(
     that probes before it downloads: Eneco tries five volumes a month, and
     a probe folding both cases into "not there" had a CDN blip cached as a
     month with no archive.
+
+    Held to https like the fetches, by :func:`_require_https` and
+    :func:`guard_redirect`.
     """
+    _require_https(url)
     try:
         async with session.head(
             url,
@@ -671,6 +682,7 @@ async def head_or_raise(
             timeout=aiohttp.ClientTimeout(total=timeout),
             allow_redirects=True,
         ) as resp:
+            guard_redirect(url, resp)
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             return resp.headers.get("Last-Modified")
@@ -686,8 +698,9 @@ async def head_ok(
     """Whether ``url`` answers a HEAD probe with a non-error status.
 
     A small existence check for ``discover()`` paths that only need to
-    know the card still resolves. ``False`` on any HTTP >= 400 or on a
-    network failure, which is every case :func:`head_or_raise` raises for.
+    know the card still resolves. ``False`` on any HTTP >= 400, on a
+    network failure or off https, which is every case
+    :func:`head_or_raise` raises for.
     """
     try:
         await head_or_raise(session, url, timeout=timeout)

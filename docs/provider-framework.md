@@ -662,7 +662,11 @@ Internals worth knowing:
   and only energie.be checked their scheme, so a plain http link was fetched
   and nothing could tell a redirect from it to a LAN address from the
   supplier's own answer. Every card, listing and API the extractors read is
-  served over https.
+  served over https. The HEAD probes (`head_freshness_key`, `head_or_raise`,
+  `head_ok`) are held to it and to `guard_redirect` too: Aspiravi probes the
+  links its listing prints. `head_freshness_key` answers `None` there, no
+  signal, `head_or_raise` raises an `ExtractorError` and `head_ok` answers
+  `False`.
 - `guard_redirect` (`_pdf.py`) refuses a card or page that a redirect carried
   off https, whatever scheme the chain started on. aiohttp follows a redirect
   wherever it points, plain http included, and from there to an address only

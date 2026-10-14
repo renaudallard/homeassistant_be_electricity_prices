@@ -51,6 +51,9 @@ from custom_components.be_electricity_prices.providers._pdf import (
     extract_pdf_text_layout,
     fetch_pdf_text,
     fetch_text,
+    head_freshness_key,
+    head_ok,
+    head_or_raise,
     is_missing_card_error,
     is_transient_fetch_error,
     vat_multiplier,
@@ -1153,6 +1156,7 @@ class _RedirectedResp:
         self.history = tuple(SimpleNamespace(url=URL(hop)) for hop in hops[:-1])
         self.url = URL(hops[-1])
         self.content = FakeBody(body)
+        self.headers = {"Last-Modified": "Thu, 01 Oct 2026 00:00:00 GMT"}
 
     async def __aenter__(self) -> _RedirectedResp:
         return self
@@ -1167,6 +1171,8 @@ class _RedirectingSession:
 
     def get(self, *_args: object, **_kwargs: object) -> _RedirectedResp:
         return self._resp
+
+    head = get
 
 
 @pytest.mark.parametrize("pdf", [True, False])
@@ -1206,6 +1212,8 @@ class _NoRequestSession:
     def get(self, *_args: object, **_kwargs: object) -> object:
         raise AssertionError("an http address was requested")
 
+    head = get
+
 
 @pytest.mark.parametrize("pdf", [True, False])
 async def test_an_http_link_is_refused_before_it_is_requested(pdf: bool) -> None:
@@ -1221,6 +1229,38 @@ async def test_an_http_link_is_refused_before_it_is_requested(pdf: bool) -> None
     )
     with pytest.raises(ExtractorError, match="not an https address"):
         await fetch
+
+
+@pytest.mark.parametrize(
+    ("hops", "refused"),
+    [
+        (["https://card.test/c.pdf", "http://192.168.1.1/"], True),
+        (["https://card.test/c.pdf", "https://store.blob.core.windows.net/c"], False),
+    ],
+)
+async def test_a_probe_redirected_off_https_is_refused(
+    hops: list[str], refused: bool
+) -> None:
+    """Aspiravi HEADs the links its listing prints, and the probes followed a
+    redirect anywhere."""
+    session = _RedirectingSession(hops, b"")
+    key = await head_freshness_key(session, hops[0])  # type: ignore[arg-type]
+    if refused:
+        assert key is None
+        with pytest.raises(ExtractorError, match="redirected off https"):
+            await head_or_raise(session, hops[0])  # type: ignore[arg-type]
+    else:
+        assert key is not None
+        assert await head_or_raise(session, hops[0])  # type: ignore[arg-type]
+
+
+async def test_an_http_link_is_not_probed() -> None:
+    url = "http://aspiravi.be/a.pdf"
+    session = _NoRequestSession()
+    assert await head_freshness_key(session, url) is None  # type: ignore[arg-type]
+    with pytest.raises(ExtractorError, match="not an https address"):
+        await head_or_raise(session, url)  # type: ignore[arg-type]
+    assert not await head_ok(session, url)  # type: ignore[arg-type]
 
 
 def test_the_redirect_guard_holds_whatever_scheme_the_chain_starts_on() -> None:

@@ -515,6 +515,8 @@ def test_flexy_online_reads_the_flexy_card_unchanged() -> None:
 
 
 class _HeadResponse:
+    history = ()
+
     def __init__(self, status: int) -> None:
         self.status = status
         self.headers: dict[str, str] = {}
