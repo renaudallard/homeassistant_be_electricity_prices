@@ -839,8 +839,8 @@ opens a menu of four options, five once a supplier switch has been recorded this
   pair at a time and has room to say why.
   **Each row is priced on the index its own card names.** Several Flemish cards
   settle on a monthly Belpex weighted by the residential load profile, and they
-  do not all weight it the same way: Eneco and TotalEnergies average the
-  three regional curves, energie.be, Ecopower, Mega and Luminus weight every
+  do not all weight it the same way: Eneco averages the three regional
+  curves, energie.be, Ecopower, Mega, Luminus and TotalEnergies weight every
   DSO column, Energy Knights, Trevion, EBEM and EnergyVision read the Flemish
   curve alone, and Bolt's variable cards read the Walloon curve in every
   region. Those are four different indices, about 2 €/MWh apart, and all four
