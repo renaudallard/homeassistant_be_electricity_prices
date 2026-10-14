@@ -719,8 +719,8 @@ def _spp_injection_spot(
     ``index_realised`` is the supplier's own published value of the index for
     this month, spliced onto the leg from the following month's card. It
     settles the month exactly, so it short-circuits everything else, the same
-    way ``_month_spot_for`` treats the energy leg's field of that name. Only a
-    month-indexed credit ever carries one.
+    way ``_energy_month_spot`` treats the energy leg's field of that name.
+    Only a month-indexed credit ever carries one.
     """
     if index_realised is not None:
         return float(index_realised)
