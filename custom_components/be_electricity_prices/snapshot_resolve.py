@@ -256,11 +256,14 @@ def _resolve_snapshot(
     its first tick the entry cannot lead to the coordinator yet (see
     :func:`entry_annual_kwh`); every other caller leaves it to the entry.
 
-    All four steps are identity on a card that carries none of them, so this
-    is free for every existing entry. Order is irrelevant: the excise band and
-    the volume tier are both per-kWh rates, ``apply_vat`` never touches those
-    (it grosses the fees and the feed-in leg), and the settlement grid moves
-    no rate at all.
+    Every step is identity on a card that carries none of them, so this is
+    free for every existing entry. Order matters only around ``apply_vat``,
+    which settles the card's VAT basis for the entry: what has to be put onto
+    the basis the card printed on goes before it, and a step after it that
+    needs that basis reads ``published_vat_rate``, which ``apply_vat`` keeps
+    when it zeroes ``vat_rate``. The excise band and the volume tier are both
+    per-kWh rates, which ``apply_vat`` never touches (it grosses the fees and
+    the feed-in leg), and the settlement grid moves no rate at all.
 
     ``delivery_month`` is the month being billed, which decides both federal
     levies: whether the energy contribution is owed at all, and what the

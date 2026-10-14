@@ -34,6 +34,7 @@ from custom_components.be_electricity_prices.providers import (
     trevion,
 )
 from custom_components.be_electricity_prices.providers._resolve import (
+    apply_vat,
     resolve_federal_excise,
 )
 from custom_components.be_electricity_prices.providers.base import (
@@ -533,6 +534,15 @@ def test_a_stale_table_gives_way_to_the_law() -> None:
 
 def test_an_ex_vat_card_takes_the_law_as_it_is() -> None:
     card = _card(0.0475, vat_rate=0.06)
+    got = resolve_federal_excise(card, date(2026, 10, 1), professional=False)
+    assert got.taxes.federal_excise == pytest.approx(0.046)
+
+
+def test_an_ex_vat_card_billed_without_vat_takes_the_law_as_it_is() -> None:
+    """apply_vat runs first and zeroes vat_rate for an entry that deducts
+    VAT. The card still printed ex-VAT, so the law's rate is not grossed."""
+    card = apply_vat(_card(0.0475, vat_rate=0.06), include_vat=False)
+    assert card.taxes.vat_rate == 0.0
     got = resolve_federal_excise(card, date(2026, 10, 1), professional=False)
     assert got.taxes.federal_excise == pytest.approx(0.046)
 

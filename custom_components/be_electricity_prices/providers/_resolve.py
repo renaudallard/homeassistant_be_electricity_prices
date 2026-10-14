@@ -426,10 +426,12 @@ def resolve_federal_excise(
         return snapshot
     # The law's rate excludes VAT. A VAT-inclusive card takes it at the rate
     # the card states or else the month's; an ex-VAT one takes it as it is,
-    # since the engine grosses it up later.
+    # since the engine grosses it up later. The basis is the one the card
+    # printed on: apply_vat runs first and zeroes vat_rate for an entry that
+    # deducts VAT, which leaves the card ex-VAT all the same.
     rate = (
         law
-        if taxes.vat_rate > 0.0
+        if (taxes.published_vat_rate or taxes.vat_rate) > 0.0
         else law * (1.0 + card_residential_vat(snapshot, delivery_month))
     )
     if (

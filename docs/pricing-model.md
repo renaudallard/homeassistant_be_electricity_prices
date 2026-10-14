@@ -247,7 +247,10 @@ delivery month, applied beside the contribution in `_resolve_snapshot`
 (`snapshot_resolve.py`), and it is identity for a card that already prints it.
 On the card's OWN VAT basis: most print the levy including VAT and Ecopower
 prints it excluding, the engine grossing it later, so writing one number into
-both would be 6% wrong for one of them. The ex-VAT figure is the law's amount
+both would be 6% wrong for one of them. The basis is read from
+`published_vat_rate` where `apply_vat` set it, since that step runs first and
+zeroes `vat_rate` for an entry that deducts VAT, whose card still printed the
+levy excluding it. The ex-VAT figure is the law's amount
 whatever rate the card is on, so the bill follows the month's rate there as it
 does on a VAT-inclusive card. A professional card is left alone: that scheme
 bands the levy by annual volume and is a different rate entirely. A residential
