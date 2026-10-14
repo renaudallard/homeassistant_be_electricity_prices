@@ -611,10 +611,10 @@ def _printed_energy_index(energy: EnergyRates) -> float | None:
     """The index a card's month-indexed rates are printed at, solved off
     their own formulas, or ``None`` for a leg without one.
 
-    The median of the columns, Impact having one: each figure is rounded to
-    a hundredth of a cent, and the mono column alone solves a few tenths of
-    a EUR/MWh off the others on some cards (myDrive and myEssential in
-    Wallonia, October 2026: 164,26 to 164,72 across the columns).
+    The median of the columns, Impact having one: on some cards they solve a
+    few tenths of a EUR/MWh apart, far more than the hundredth of a cent each
+    rate is rounded to (myDrive and myEssential in Wallonia, October 2026:
+    164,26 to 164,72 across the columns), so no single one sets the month.
     """
     if not (isinstance(energy, VariableRates) and energy.month_indexed):
         return None

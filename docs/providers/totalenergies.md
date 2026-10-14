@@ -465,9 +465,9 @@ is taken out that way, which is how `_without_renewables` takes it out.
 A closed month settles on the next card (`settle_month`, `totalenergies.py`). The
 cards never name the index their rates are printed at, but the next card's rates are
 its own formulas at this month's, so solving them gives it: every October 2026 card
-solves to 164,41 to 164,74 EUR/MWh, the median of its columns (each figure is
-rounded to a hundredth of a cent, and on myDrive and myEssential in Wallonia the
-columns spread from 164,26 to 164,72, the mono one at about 164,4), where the
+solves to 164,41 to 164,74 EUR/MWh, the median of its columns (on myDrive and
+myEssential in Wallonia the columns spread from 164,26 to 164,72, far more than the
+hundredth of a cent each rate is rounded to, the mono one at about 164,4), where the
 engine's hourly reading of the columns blend gives 164,42, TotalEnergies having
 weighed quarter hours since January 2026. The feed-in settles the same way on the
 Belpex_M the injection card prints its rate at (2,74 c/kWh at
