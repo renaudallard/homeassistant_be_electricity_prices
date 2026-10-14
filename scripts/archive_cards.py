@@ -1641,15 +1641,14 @@ async def _replay_row(
         return
     memo = _RecordingMemo()
     own = list(row.get("_sources", []))
-    # Every key the row's own cards answer, seeded or not. One left out to be
-    # read afresh after a reader upgrade is still the row's own: a sibling's
-    # or the follower's text there replayed September's TotalEnergies rows
-    # on October's card on 9 October 2026.
+    # Every address the row's own cards were read at, seeded or not, under
+    # any reader variant. One left out to be read afresh after a reader
+    # upgrade is still the row's own: a sibling's or the follower's text
+    # there replayed September's TotalEnergies rows on October's card on 9
+    # October 2026. So is one a parser now reads with another variant, which
+    # asks a key the row never held: the kept copy answers it.
     owned = {
-        _memo_key(s if url == s["url"] else {**s, "url": url})
-        for s in own
-        for url in (s["url"], _moved_url(s["url"]))
-        if url is not None
+        url for s in own for url in (s["url"], _moved_url(s["url"])) if url is not None
     }
     readers, engine = readers_line(), engine_version()
     # A row that settles on the FOLLOWING month's card reads a text this row
@@ -1712,7 +1711,7 @@ async def _replay_row(
     for source in related:
         text_path = out / source["text"]
         key = _memo_key(source)
-        if key in memo or key in owned or not text_path.exists():
+        if key in memo or source["url"] in owned or not text_path.exists():
             continue
         # Another row's card, whose kept copy this replay does not hold: its
         # text is seeded whatever readers made it, and that row renders it

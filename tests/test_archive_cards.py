@@ -726,9 +726,12 @@ class _PdfSession:
 PDF_URL = "https://acme.test/card.pdf"
 
 
-def _pdf_fetch(session: _PdfSession, renders: list[bytes]) -> Fetch:
+def _pdf_fetch(
+    session: _PdfSession, renders: list[bytes], variant: list[str] | None = None
+) -> Fetch:
     """A fetch that reads its card through the PDF reader seam, the way the
-    real extractors do, with a renderer that counts what it rendered."""
+    real extractors do, with a renderer that counts what it rendered. The
+    reader variant is ``variant[0]`` at call time, plain if none is given."""
 
     def render(payload: bytes) -> str:
         renders.append(payload)
@@ -742,7 +745,7 @@ def _pdf_fetch(session: _PdfSession, renders: list[bytes]) -> Fetch:
         text = await _pdf._pdf_text(
             reader,  # type: ignore[arg-type]
             PDF_URL,
-            variant="plain",
+            variant=variant[0] if variant else "plain",
             timeout=5,
             render=render,
         )
@@ -3010,6 +3013,64 @@ async def test_a_reader_upgrade_reads_a_rows_own_card_not_the_next_months(
     )
     after = json.loads(august.read_text())
     assert after["energy"] == before["energy"], "August replayed as another month"
+    assert ac.read_text(out / after["_sources"][0]["text"]) == "card text for %PDF v1"
+
+
+async def test_a_parser_reading_another_variant_reads_a_rows_own_card(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A parser change that reads a card with another reader variant asks
+    a key the row's own text is not seeded under. At one unchanging address
+    the next month's row holds that key, and its text must not answer it:
+    the closed month would replay on the next card while still naming its
+    own PDF. The kept copy answers it, read afresh.
+    """
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _PdfSession({PDF_URL: b"%PDF v1"})
+    renders: list[bytes] = []
+    variant = ["plain"]
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        if month.month != 8:
+            return None
+        return await _pdf_fetch(session, renders, variant)(_session, contract, region)
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=_pdf_fetch(session, renders, variant),
+        fetch_for_month=fetch_for_month,
+    )
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        backfill_months=1,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    august = out / "cards/acme/acme_fix/wallonia/2026-08.json"
+    before = json.loads(august.read_text())
+    session.pdfs[PDF_URL] = b"%PDF v2"
+    variant[0] = "layout"
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    await ac.archive(
+        out, extractors=[extractor], pdf_dir=pdfs, now=NOW, sleep=_no_sleep
+    )
+    after = json.loads(august.read_text())
+    assert after["energy"] == before["energy"], "August replayed as another month"
+    assert after["_sources"][0]["variant"] == "layout"
     assert ac.read_text(out / after["_sources"][0]["text"]) == "card text for %PDF v1"
 
 
