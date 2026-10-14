@@ -622,13 +622,20 @@ missing `last_reset` looks like a fresh cycle against the sensor's Jan-1
 top of the resumed sum (observed: `sum` 1000.4 instead of 500.3). The compiler
 resumes from the NEWEST short-term row, so the seed alone only holds while nothing
 newer exists, and a setup's first compile can land before the backfill finishes
-(a service call always runs on a live entry). `_rechain_short_term` therefore
-moves the live short-term rows written after the last backfilled hour onto the
-imported chain: each keeps its state and takes the imported total plus what the
-bill moved since (`_short_term_after` reads them before anything is written).
-Both are best effort and swallow recorder errors, since failing is no worse than
-not trying. `tests/recorder/test_backfill_seam.py` pins the three seed states
-and the race against a real recorder.
+(a service call always runs on a live entry). `_rechained` therefore moves the
+live rows written after the last backfilled hour onto the imported chain: each
+keeps its state and takes the imported total plus what the live compile added
+since, the bill's move within a cycle and the new cycle's whole state across a
+reset (`_rows_after` reads them before anything is written). That covers the
+long-term hourly rows as well as the short-term ones: the window ends where the
+run began, so a run that takes past the next hour finds that hour compiled on
+the old chain, which read as minus the shift in that hour and plus it in the
+next, and a run crossing New Year's midnight finds the new year's first rows
+there too. The seed and the short-term move are best effort and swallow
+recorder errors, since failing is no worse than not trying.
+`tests/recorder/test_backfill_seam.py` pins the three seed states and the race
+against a real recorder, `tests/recorder/test_backfill_slow_run.py` a run that
+crosses an hour and New Year's midnight.
 
 `_backfill_cost_sensor` runs one running total per hour (`backfill_cost.py`)
 rather than one end-of-day number, so the recorder draws a smoothly growing YTD

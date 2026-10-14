@@ -325,25 +325,36 @@ async def _import_cost_rows(
     recorded chain first: shifted by what the chain held before the window,
     less the part of this cycle already in it. A first backfill, with nothing
     recorded before it, shifts by nothing and imports what it always did.
+
+    The rows the live compile wrote after the window, short-term and hourly,
+    are read before anything is written and moved onto the imported chain
+    with them (``_rechained``): the window ends where the run began, and a
+    run that takes past the next hour finds that hour compiled on the old
+    chain, which read as minus the shift that hour and plus it the next.
     """
-    base = await _chain_before(hass, metadata["statistic_id"], rows[0]["start"], reset)
+    sid = metadata["statistic_id"]
+    base = await _chain_before(hass, sid, rows[0]["start"], reset)
     if base:
         rows = [{**row, "sum": round(base + row["state"], 4)} for row in rows]
-    later = await _short_term_after(hass, metadata["statistic_id"], rows[-1]["start"])
-    import_statistics(hass, metadata, rows)
-    _seed_short_term_sum(hass, metadata, rows[-1], reset)
-    _rechain_short_term(hass, metadata, rows[-1], reset, later)
+    last = rows[-1]
+    later = await _rows_after(
+        hass, sid, last["start"] + timedelta(minutes=5), "5minute"
+    )
+    hours = await _rows_after(hass, sid, last["start"] + timedelta(hours=1), "hour")
+    import_statistics(hass, metadata, [*rows, *_rechained(last, reset, hours)])
+    _seed_short_term_sum(hass, metadata, last, reset)
+    _import_short_term(hass, metadata, _rechained(last, reset, later))
 
 
-async def _short_term_after(
-    hass: HomeAssistant, statistic_id: str, last: datetime
+async def _rows_after(
+    hass: HomeAssistant, statistic_id: str, start: datetime, period: str
 ) -> list[Any]:
-    """The short-term rows the live compile has written after ``last``.
+    """The rows of ``period`` the live compile has written from ``start`` on.
 
-    The compiler resumes from the newest short-term row, so a seed at ``last``
-    only holds while nothing newer exists. A setup's first compile can land
-    before the backfill finishes, and a service call always runs on a live
-    entry, so those rows are read before anything is written.
+    The compiler resumes from the newest short-term row, so a seed at the last
+    backfilled hour only holds while nothing newer exists. A setup's first
+    compile can land before the backfill finishes, and a service call always
+    runs on a live entry, so those rows are read before anything is written.
     """
     try:
         from homeassistant.components.recorder import (  # type: ignore[attr-defined]
@@ -356,10 +367,10 @@ async def _short_term_after(
         got = await get_instance(hass).async_add_executor_job(
             statistics_during_period,
             hass,
-            last + timedelta(minutes=5),
+            start,
             None,
             {statistic_id},
-            "5minute",
+            period,
             None,
             {"sum", "state", "last_reset"},
         )
@@ -368,44 +379,56 @@ async def _short_term_after(
     return list(got.get(statistic_id, []))
 
 
-def _rechain_short_term(
-    hass: HomeAssistant,
-    metadata: StatisticMetaData,
-    last: StatisticData,
-    reset: datetime,
-    later: list[Any],
-) -> None:
-    """Put the live short-term rows after the backfill onto its chain.
+def _rechained(
+    last: StatisticData, reset: datetime, later: list[Any]
+) -> list[StatisticData]:
+    """The live rows after the backfill, put onto its chain.
 
-    Each keeps the state it compiled and takes the imported total plus what
-    the bill moved since the last backfilled hour, so the newest short-term
-    row, which the compiler resumes from, continues the imported series. Only
-    rows of the same cycle are moved. Best effort, like the seed.
+    Each keeps the state it compiled, and its total moves from the last
+    backfilled one by what the live compile added: the bill's move within a
+    cycle, and a new cycle's whole state across its reset (``old_state =
+    0.0``), so a run that crosses New Year's midnight moves the new year's
+    first rows as well. The newest short-term row, which the compiler resumes
+    from, then continues the imported series. A row of an earlier cycle is
+    left where it is.
     """
+    cycle = reset.timestamp()
+    total = float(last.get("sum") or 0.0)
+    before = float(last.get("state") or 0.0)
+    opened = cycle
+    moved: list[StatisticData] = []
+    for row in later:
+        state, row_reset = row.get("state"), row.get("last_reset")
+        if state is None or row_reset is None or row_reset < cycle:
+            continue
+        if row_reset != opened:
+            before, opened = 0.0, row_reset
+        total += state - before
+        before = state
+        moved.append(
+            {
+                "start": datetime.fromtimestamp(row["start"], tz=UTC),
+                "state": state,
+                "sum": round(total, 4),
+                "last_reset": datetime.fromtimestamp(row_reset, tz=UTC),
+            }
+        )
+    return moved
+
+
+def _import_short_term(
+    hass: HomeAssistant, metadata: StatisticMetaData, moved: list[StatisticData]
+) -> None:
+    """Write ``moved`` over the live short-term rows. Best effort, like the
+    seed."""
+    if not moved:
+        return
     try:
         from homeassistant.components.recorder import (  # type: ignore[attr-defined]
             get_instance,
         )
         from homeassistant.components.recorder.db_schema import StatisticsShortTerm
     except ImportError:  # pragma: no cover - recorder always ships with HA
-        return
-    cycle = reset.timestamp()
-    total = float(last.get("sum") or 0.0)
-    bill = float(last.get("state") or 0.0)
-    moved: list[StatisticData] = []
-    for row in later:
-        state = row.get("state")
-        if state is None or row.get("last_reset") != cycle:
-            continue
-        moved.append(
-            {
-                "start": datetime.fromtimestamp(row["start"], tz=UTC),
-                "state": state,
-                "sum": round(total + state - bill, 4),
-                "last_reset": reset,
-            }
-        )
-    if not moved:
         return
     try:
         get_instance(hass).async_import_statistics(metadata, moved, StatisticsShortTerm)
