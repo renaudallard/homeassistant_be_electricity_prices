@@ -585,6 +585,11 @@ class ImpactRates:
     # trihoraire BELIX is the plain mean and keeps the default.
     rlp_indexed: bool = False
     rlp_blend: RlpBlend = "distinct"
+    # The index this card's own month settled at, once the next card names
+    # it; same meaning as ``VariableRates.index_realised``. The bands above
+    # are then each band's formula at it, and the month splice hands it to
+    # the banded SpotMonthlyRates leg a keyed entry bills through.
+    index_realised: float | None = None
 
 
 EnergyRates = (

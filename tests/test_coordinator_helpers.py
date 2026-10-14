@@ -12277,6 +12277,73 @@ async def test_effective_snapshot_splices_the_months_realised_index_onto_the_leg
     assert july.energy.index_realised is None
 
 
+async def test_a_settled_trihoraire_month_bills_its_belix_with_no_spot_cache(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A keyed Cociter trihoraire entry bills a month through the banded
+    SpotMonthlyRates leg, and the splice hands it the BELIX the month settled
+    at off that month's card. The Impact leg recorded none, so a closed month
+    the day-ahead cache no longer covered had no index at all and lost its
+    commodity leg, where a keyless entry billed the settled bands."""
+    from custom_components.be_electricity_prices.providers._settle import (
+        settled_energy,
+    )
+    from custom_components.be_electricity_prices.spot_stats import (
+        _energy_month_spot,
+    )
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    card = ImpactRates(
+        pic=0.168805,
+        medium=0.14,
+        eco=0.11,
+        pic_factor=1.06,
+        pic_base=0.053,
+        medium_factor=1.06,
+        medium_base=0.03,
+        eco_factor=1.06,
+        eco_base=0.005,
+        month_indexed=True,
+    )
+    current = make_snapshot(energy=card)
+    august_card = settled_energy(card, 0.12932)
+    assert isinstance(august_card, ImpactRates)
+
+    async def _ffm(
+        _session: object, _contract: str, _region: str, year_month: date
+    ) -> SupplierSnapshot:
+        if (year_month.year, year_month.month) == (2026, 8):
+            return make_snapshot(energy=august_card)
+        return current
+
+    _monthly_snapshots(hass).clear()
+    august = await _effective_snapshot_for_month(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "test",
+        "wallonia",
+        date(2026, 8, 1),
+        current,
+        _entry(contract="test", api_key="k"),
+    )
+    leg = august.energy
+    assert isinstance(leg, SpotMonthlyRates)
+    assert leg.index_realised == pytest.approx(0.12932)
+    spot = _energy_month_spot(leg, {}, 2026, 8, date(2026, 9, 15), None, {})
+    assert spot == pytest.approx(0.12932)
+    tz = ZoneInfo("Europe/Brussels")
+    for hour, band in (
+        (18, august_card.pic),
+        (8, august_card.medium),
+        (3, august_card.eco),
+    ):
+        when = datetime(2026, 8, 12, hour, tzinfo=tz)
+        assert energy_eur_per_kwh(
+            leg, when, spot, "mono", "wallonia", "impact"
+        ) == pytest.approx(band)
+
+
 def test_cohort_leg_carries_the_weighting_but_never_the_realised_index() -> None:
     """The coefficients and which mean they resolve against are the contract's
     and travel with the leg; a realised index belongs to one delivery month

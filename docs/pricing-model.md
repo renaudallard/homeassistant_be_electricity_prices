@@ -400,9 +400,9 @@ is better served by a rate a month stale than by no energy leg at all. That
 holds for the running month only: the next card prints the BELIX the month
 settled at and names it ("dans ce cas-ci septembre 2026"), so
 `cociter.fetch_for_month` rebuilds a closed month's printed rates through their
-own formulas at that value (`VariableRates.index_realised` on the variable
-card, the three bands on the trihoraire one) and flags the month
-`SupplierSnapshot.provisional` until that card is out.
+own formulas at that value (every meter row on the variable card, the three
+bands on the trihoraire one, each recording it as `index_realised`) and flags
+the month `SupplierSnapshot.provisional` until that card is out.
 
 Eneco Zon & Wind Flex and Flex One are the same shape on an RLP-weighted index,
 Belpex-RLP-M, and Eneco closes the loop itself: every card footnotes "de
@@ -441,7 +441,10 @@ the same note (7), so `ImpactRates.month_indexed` marks it and the three band
 formulas become a `SpotMonthlyRates` leg carrying `factor_pic` / `factor_medium`
 / `factor_eco` with their ceilings, chosen per hour by `dso_impact_band`. Its
 September 2026 card printed August's BELIX of 129,32 in every band; the month
-to the 7th ran at 136,24, which moves PIC from 19,0079 to 19,7414 c/kWh.
+to the 7th ran at 136,24, which moves PIC from 19,0079 to 19,7414 c/kWh. A
+closed month settles on the next card's BELIX as the variable card's does, and
+the splice hands `ImpactRates.index_realised` to the banded leg, so a keyed
+entry bills it with no day-ahead cache for the month.
 
 Bolt's variable cards index on the QUARTER: the October 2026 card prints its
 rates at "Belpex Q3 2026", the RLP-weighted mean of the Walloon DSOs' curve, one

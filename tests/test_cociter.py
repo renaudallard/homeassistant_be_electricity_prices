@@ -488,7 +488,20 @@ def test_a_closed_month_settles_on_the_belix_the_next_card_prints() -> None:
 def test_a_trihoraire_month_settles_each_band_on_the_next_card() -> None:
     """Each band is rebuilt through its own formula: August's PIC, printed at
     July's 109,25 as (0,1 x 109,25 + 5) x 1,06 = 16,8805, bills at the
-    19,0079 the same formula gives at August's 129,32."""
+    19,0079 the same formula gives at August's 129,32.
+
+    The leg records the BELIX too, as the variable card's does. Without it
+    the month never counted as settled, so a row of it parsed under an older
+    schema was asked of Cociter again, and a keyed entry billing it through
+    the banded monthly leg had no index for it once the spot cache ran thin."""
+    from custom_components.be_electricity_prices.providers._settle import (
+        is_settled,
+    )
+    from custom_components.be_electricity_prices.snapshot_months import (
+        ArchivedCard,
+        _awaits_settlement,
+    )
+
     september = fixture_text("cociter_vai_2609.pdf")
     august = _august_from(september).replace("19,0079", "16,8805")
     snap = _settle(
@@ -503,7 +516,13 @@ def test_a_trihoraire_month_settles_each_band_on_the_next_card() -> None:
     assert energy.pic == pytest.approx(0.190079, abs=1e-6)
     assert energy.medium == pytest.approx(0.162663, abs=1e-6)
     assert energy.eco == pytest.approx(0.135248, abs=1e-6)
+    assert energy.index_realised == pytest.approx(0.12932)
     assert snap.provisional is False
+    assert is_settled(snap)
+    row = ArchivedCard(
+        snapshot=snap, read_by_ocr=False, captured_live=False, parsed_before=True
+    )
+    assert not _awaits_settlement(row)
 
 
 def test_a_month_waits_for_its_next_card_and_ignores_one_naming_another() -> None:

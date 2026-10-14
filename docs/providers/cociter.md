@@ -134,8 +134,8 @@ own BELIX while the card prints its rates on the month before's, and the next
 card prints that BELIX and names the month: "156,41 ... dans ce cas-ci
 septembre 2026". `published_belix` (`_cociter_settle.py`) reads both, and when
 the month matches, `settled_energy` (`_settle.py`) rebuilds every printed row through its own
-formula at that value (`VariableRates.index_realised` records it on the
-variable card); the card's price ceiling stays with the engine. Over January to
+formula at that value (`index_realised` records it on both cards); the
+card's price ceiling stays with the engine. Over January to
 September 2026 the printed mono rate ran between 1,86 c/kWh over and 2,15 c/kWh
 under the settled one. The next card comes out of the listing already fetched.
 While it is not published the month keeps its printed rates and is returned

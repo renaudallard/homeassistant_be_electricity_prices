@@ -91,9 +91,8 @@ def settled_energy(energy: EnergyRates, index: float) -> EnergyRates:
     own pair, one per meter or band: rewriting the mono rate alone would
     settle a mono meter and leave a bi-hourly or time-of-use one on the
     printed estimate. The leg records the index as ``index_realised``, so a
-    keyed entry bills the supplier's figure too; an Impact leg has no such
-    field, and its three bands are the whole settlement. Any other leg, or
-    one with no formula, comes back as it was.
+    keyed entry bills the supplier's figure too. Any other leg, or one with
+    no formula, comes back as it was.
     """
     if not getattr(energy, "month_indexed", False):
         return energy
@@ -132,8 +131,6 @@ def settled_energy(energy: EnergyRates, index: float) -> EnergyRates:
         and base is not None
         and getattr(energy, field) is not None
     }
-    if isinstance(energy, ImpactRates):
-        return replace(energy, **rates)
     return replace(energy, index_realised=index, **rates)
 
 

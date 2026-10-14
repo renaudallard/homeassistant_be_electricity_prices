@@ -224,6 +224,22 @@ def test_a_settled_index_is_written_only_when_the_month_has_one() -> None:
         assert _snapshot_from_dict(row).injection == settled.injection
 
 
+def test_an_impact_leg_keeps_the_index_its_month_settled_at() -> None:
+    """Cociter's trihoraire month settles its three bands on the BELIX the
+    next card names, and the leg records it the way the variable card's does.
+    A row with none leaves the key out, so the Impact rows every installed
+    version reads stay byte-identical until their month is settled."""
+    printed = ImpactRates(pic=0.19, medium=0.16, eco=0.13, month_indexed=True)
+    row = _snapshot_to_dict(make_snapshot(energy=printed), NOW)
+    assert "index_realised" not in row["energy"]
+    assert _snapshot_from_dict(row).energy == printed
+
+    settled = make_snapshot(energy=replace(printed, index_realised=0.12932))
+    row = _snapshot_to_dict(settled, NOW)
+    assert row["energy"]["index_realised"] == 0.12932
+    assert _snapshot_from_dict(row).energy == settled.energy
+
+
 def test_the_codec_writes_every_snapshot_field() -> None:
     """The encoder names the top-level fields by hand, and nothing held the
     list to the dataclass: a field added to SupplierSnapshot without a line

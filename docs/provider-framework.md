@@ -336,6 +336,7 @@ eco    : 01:00-07:00 + 11:00-17:00      (lowest)
 | `medium_factor` / `medium_base` | `float \| None` | `None` | MEDIUM band's coefficients. |
 | `eco_factor` / `eco_base` | `float \| None` | `None` | ECO band's coefficients. |
 | `rlp_indexed` / `rlp_blend` | `bool` / `RlpBlend` | `False` / `"distinct"` | Same as on `VariableRates`: the bands' index is the RLP-weighted month mean, in that blend (Mega Off-peak Impact, `columns`); Cociter's trihoraire BELIX keeps the plain mean. |
+| `index_realised` | `float \| None` | `None` | Same as on `VariableRates`: the value the card's own month settled at, once the next card names it. Cociter's trihoraire card records the BELIX `settled_energy` rebuilds the three bands at, and the month splice hands it to the banded `SpotMonthlyRates` leg. Mega's realised bands are spliced on without it. |
 
 The six coefficients are the numeric form of `formula`, on the same basis as the
 resolved rates beside them: baked to TVAC EUR/kWh on a residential card, left ex-VAT
