@@ -734,8 +734,9 @@ def _pdf_fetch(session: _PdfSession, renders: list[bytes]) -> Fetch:
 
     async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
         # The canned session while it holds the card; once the test empties
-        # it, the session handed in, which in a replay is the kept copy.
-        reader = session if PDF_URL in session.pdfs else _session
+        # it, or in a replay, the session handed in, which serves the kept copy.
+        replaying = isinstance(_session, ac._ReplaySession)
+        reader = session if PDF_URL in session.pdfs and not replaying else _session
         text = await _pdf._pdf_text(
             reader,  # type: ignore[arg-type]
             PDF_URL,
@@ -2951,6 +2952,63 @@ async def test_the_next_months_text_never_shadows_a_rows_own_card(
     after = json.loads(august.read_text())
     assert after["energy"] == before["energy"], "August replayed as another month"
     assert after["publication_label"] == before["publication_label"]
+
+
+async def test_a_reader_upgrade_reads_a_rows_own_card_not_the_next_months(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After a reader upgrade a row's own text is not seeded, so its card is
+    read afresh from the kept copy. The next month's text at the same URL
+    must not stand in for it: the replay of 9 October 2026 filed October's
+    TotalEnergies cards into the September rows, prices and all, while the
+    rows still named September's PDF.
+    """
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    session = _PdfSession({PDF_URL: b"%PDF v1"})
+    renders: list[bytes] = []
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        if month.month != 8:
+            return None
+        return await _pdf_fetch(session, renders)(_session, contract, region)
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=_pdf_fetch(session, renders),
+        fetch_for_month=fetch_for_month,
+    )
+    _readers(monkeypatch, "pypdf==1 render=a")
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        backfill_months=1,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    august = out / "cards/acme/acme_fix/wallonia/2026-08.json"
+    before = json.loads(august.read_text())
+    session.pdfs[PDF_URL] = b"%PDF v2"
+    _readers(monkeypatch, "pypdf==2 render=a")
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    await ac.archive(
+        out, extractors=[extractor], pdf_dir=pdfs, now=NOW, sleep=_no_sleep
+    )
+    after = json.loads(august.read_text())
+    assert after["energy"] == before["energy"], "August replayed as another month"
+    assert ac.read_text(out / after["_sources"][0]["text"]) == "card text for %PDF v1"
 
 
 async def test_a_next_months_card_other_readers_made_still_settles_a_replay(

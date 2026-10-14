@@ -1073,7 +1073,10 @@ did, and without it the settlement reaches the offline session, is refused as a 
 comes back provisional, which the replay reports as no longer settling: 16 EBEM rows and 9
 Trevion ones. Behind, because the memo is keyed by URL and several suppliers publish every month
 at one unchanging address: seeded first, the follower replayed Ecofix's six August 2026 rows as
-September cards, label, validity and price alike. Between the two come the texts the supplier's
+September cards, label, validity and price alike. Never over them holds for an own text left out
+to be read afresh after a reader upgrade too: no follower or sibling text goes under a key the
+row's own cards hold. Filling that gap, the re-render of 9 October 2026 replayed 72 September rows
+of TotalEnergies, Engie, Luminus and energie.be on October's card. Between the two come the texts the supplier's
 other rows of the same region and month name (`_sibling_sources`), for a card priced on another
 product's card: Bolt Plenty Online reads the Online card for its formula, its rows captured before
 it did named only their own, and all six were unreplayable. A sibling read its card in the row's
