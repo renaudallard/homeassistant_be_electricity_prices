@@ -31,6 +31,7 @@ from custom_components.be_electricity_prices.providers._pdf import fetch_text
 from custom_components.be_electricity_prices.providers._rates import (
     Contract,
     FixedRates,
+    InjectionRates,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.base import (
@@ -715,6 +716,94 @@ async def test_a_month_the_supplier_settles_nothing_for_is_not_counted_settled(
     assert summary.settled == 0
     assert summary.unchanged == 1
     assert row.read_bytes() == caught
+
+
+async def test_a_month_settled_on_one_leg_keeps_that_leg(tmp_path: Path) -> None:
+    """TotalEnergies' feed-in card can lag its tariff card, and the month then
+    settles its energy alone and stays provisional. Dropped as provisional,
+    that settle was lost for good once the next card stopped being the live
+    one, when TotalEnergies hands the held row back as it is."""
+    from custom_components.be_electricity_prices.providers._settle import (
+        settled_energy,
+    )
+
+    serving = ["augustus 2026"]
+    feed_in = ["lagging"]
+
+    async def fetch(_session: Any, contract: str, _region: str) -> SupplierSnapshot:
+        await fetch_text(_Session({CARD_URL: "card"}), CARD_URL)  # type: ignore[arg-type]
+        return replace(
+            _indexed_card(contract, serving[0], 0.1761),
+            injection=InjectionRates(current=0.05, month_indexed=True),
+        )
+
+    async def settle_month(
+        _session: Any, _contract: str, _region: str, month: date, held: SupplierSnapshot
+    ) -> SupplierSnapshot:
+        if feed_in[0] == "gone":
+            return held
+        if feed_in[0] == "not out":
+            return replace(held, provisional=True)
+        return replace(
+            held, energy=settled_energy(held.energy, 0.2079), provisional=True
+        )
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_flex",
+                label="Flex",
+                kind="variable",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=fetch,
+        settles_on_next_card=True,
+        settle_month=settle_month,
+    )
+    await ac.archive(
+        tmp_path,
+        extractors=[extractor],
+        now=datetime(2026, 8, 20, 6, 0, tzinfo=UTC),
+        sleep=_no_sleep,
+    )
+    row = tmp_path / "cards/acme/acme_flex/wallonia/2026-08.json"
+    serving[0] = "september 2026"
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert summary.settled == 1
+    partial = json.loads(row.read_text())
+    assert partial["energy"]["index_realised"] == pytest.approx(0.2079)
+    assert partial["injection"].get("index_realised") is None
+    assert "_provisional" not in partial
+
+    # The address serving the closed month's card again must not write the
+    # estimate it prints back over the leg that settled.
+    serving[0] = "augustus 2026"
+    await ac.archive(tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep)
+    assert json.loads(row.read_text()) == partial
+    serving[0] = "september 2026"
+
+    # Still waiting on its feed-in, the row is asked again; handed back as it
+    # is, it keeps the leg that settled, and handed back provisional, its
+    # next card not out, it is not counted at all.
+    feed_in[0] = "gone"
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert summary.settled == 0
+    assert summary.unchanged == 2
+    assert json.loads(row.read_text()) == partial
+    feed_in[0] = "not out"
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert summary.settled == 0
+    assert summary.unchanged == 1
+    assert json.loads(row.read_text()) == partial
 
 
 async def test_a_backfill_stops_at_the_retention(tmp_path: Path) -> None:

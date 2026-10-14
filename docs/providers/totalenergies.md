@@ -482,7 +482,9 @@ learn that while the live card it already holds is dated before the next month
 on a Raspberry Pi. The feed-in card is uploaded on its own and can lag (Electricité
 Fixe in Flanders still said September on 5 and 14 October 2026); the live fetch
 reads it all the same, but only a feed-in card titled like the tariff card settles
-the feed-in, and until it is out the energy settles and the month stays provisional.
+the feed-in, and until it is out the energy settles and the month stays provisional;
+the card archive writes the row with its energy settled and asks it again daily, so
+the leg that settled outlives the next card being the live one.
 Only a rate read off a card's "prix mensuels" block settles anything
 (`monthly_rates_printed`, `_totalenergies_cards.py`): where the block is not read
 the parser bills the table row, the regulator's annual estimate, which on the

@@ -70,8 +70,9 @@ it still serves for such a month back over it. Any other supplier answers
 with the card the row already holds, so it is not asked. A supplier that
 settles in place (``settle_month``, Luminus, whose archive drops the
 campaign a live card carries) keeps the row it holds and has only its
-month-indexed rates re-priced on the index the next card names; a replay
-puts that index back on the re-parsed card (``settled_as``).
+month-indexed rates re-priced on the index the next card names, written
+even while one leg still waits on its index; a replay puts that index back
+on the re-parsed card (``settled_as``).
 
 Exits 0 when at least one card was stored or confirmed unchanged and 1 when
 none was: that is a runner-wide problem rather than a supplier's, so the
@@ -98,7 +99,7 @@ import re
 import sys
 import tempfile
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -1005,10 +1006,15 @@ def _awaits_settlement(row: dict[str, Any] | None, in_place: bool = False) -> bo
 
 
 def _settled_row(row: dict[str, Any]) -> bool:
-    """Whether a held row carries the index its month settled at. A row that
-    no longer decodes is left to the replay."""
+    """Whether a held row carries an index its month settled at, on any leg:
+    one settled on its energy alone, its feed-in card lagging, is no more the
+    estimate than one settled whole. A row that no longer decodes is left to
+    the replay."""
     snap = _decoded_row(row)
-    return snap is not None and is_settled(snap)
+    return snap is not None and any(
+        getattr(leg, "index_realised", None) is not None
+        for leg in (snap.energy, snap.injection)
+    )
 
 
 def _decoded_row(row: dict[str, Any]) -> SupplierSnapshot | None:
@@ -2125,7 +2131,9 @@ async def archive(
                         cards.file(month_id, reoffer)
                         summary.reoffered += 1
                         continue
-                    if past is None or past.provisional:
+                    if past is None or (
+                        past.provisional and (settle is None or held is None)
+                    ):
                         # Not out yet, past the horizon, or still carrying an
                         # estimate: leave the month for a later backfill. A
                         # live row stays what the archive holds meanwhile.
@@ -2135,15 +2143,22 @@ async def archive(
                     if (
                         settle is not None
                         and held is not None
-                        and past == _snapshot_from_dict(held, min_schema_version=0)
+                        and replace(past, provisional=False)
+                        == _snapshot_from_dict(held, min_schema_version=0)
                     ):
                         # The supplier settled nothing and handed the row back
                         # as it is: TotalEnergies once its next card is no
                         # longer the live one, Luminus on a next card naming
                         # another month. The run reported it settled every
-                        # day.
-                        summary.unchanged += 1
+                        # day. Handed back provisional, its next card is
+                        # simply not out yet.
+                        if not past.provisional:
+                            summary.unchanged += 1
                         continue
+                    # A month settled in place on one leg only, its feed-in
+                    # card lagging the tariff card, is still provisional and
+                    # still asked again; written now, the leg that settled
+                    # outlives the next card being the live one.
                     sources = _sources_of(memo, cards, out, seen_month)
                     via, seen = "archive", None
                     if settle is not None and held is not None:

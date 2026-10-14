@@ -1251,10 +1251,13 @@ provisional or None the live row stays. The live walk never writes a card back o
 month already filed under `archive`, which keeps a supplier still serving last month's card on
 the 1st from undoing the settlement. A supplier with `settle_month` (Luminus, TotalEnergies) is the exception
 to the replacement: every row of its, live or archive, is settled in place (`_settle_held`), the
-row keeping its sources, capture day and every field but the re-priced month-indexed rates, and
-a replay of such a row puts the stored index back on the re-parsed card (`settled_as`). Such a
-row stays `live`, so the live walk also leaves a closed month alone once its row is settled
-(`_settled_row`), should the supplier's address serve that month's card again.
+row keeping its sources, capture day and every field but the re-priced month-indexed rates. A
+settle that moved one leg and left the month provisional (TotalEnergies' feed-in card lagging its
+tariff card) is written all the same and asked again daily; its other leg settles only while the
+next card is still the live one. A replay of such a row puts the stored index back on the
+re-parsed card (`settled_as`). Such a row stays `live`, so the live walk also leaves a closed
+month alone once any leg of its row is settled (`_settled_row`), should the supplier's address
+serve that month's card again.
 TotalEnergies keeps no archive of its own, so it is walked for its held rows alone: nothing is
 backfilled or offered again, and a row settles only while the next card is the live one. A row
 the supplier hands back as it was (TotalEnergies once that card has moved on, Luminus on a next
