@@ -646,6 +646,13 @@ async def test_a_supplier_settling_in_place_keeps_the_card_it_caught(
     )
     assert asked == []
 
+    # The address serving the closed month's card again must not write the
+    # estimate it prints back over the settled row, which is still live.
+    serving[0] = "august"
+    await ac.archive(tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep)
+    assert json.loads(row.read_text()) == settled
+    serving[0] = "september"
+
     monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
     summary = await ac.archive(
         tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep

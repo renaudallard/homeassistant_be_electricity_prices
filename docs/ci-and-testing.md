@@ -1251,7 +1251,9 @@ month already filed under `archive`, which keeps a supplier still serving last m
 the 1st from undoing the settlement. A supplier with `settle_month` (Luminus, TotalEnergies) is the exception
 to the replacement: every row of its, live or archive, is settled in place (`_settle_held`), the
 row keeping its sources, capture day and every field but the re-priced month-indexed rates, and
-a replay of such a row puts the stored index back on the re-parsed card (`settled_as`).
+a replay of such a row puts the stored index back on the re-parsed card (`settled_as`). Such a
+row stays `live`, so the live walk also leaves a closed month alone once its row is settled
+(`_settled_row`), should the supplier's address serve that month's card again.
 TotalEnergies keeps no archive of its own, so it is walked for its held rows alone: nothing is
 backfilled or offered again, and a row settles only while the next card is the live one. A row
 the supplier hands back as it was (TotalEnergies once that card has moved on, Luminus on a next

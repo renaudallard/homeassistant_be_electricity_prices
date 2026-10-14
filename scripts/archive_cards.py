@@ -998,11 +998,25 @@ def _awaits_settlement(row: dict[str, Any] | None, in_place: bool = False) -> bo
     """
     if row is None or (not in_place and row.get("_via", "live") != "live"):
         return False
-    try:
-        snap = _snapshot_from_dict(row, min_schema_version=0)
-    except (KeyError, TypeError, ValueError):
+    snap = _decoded_row(row)
+    if snap is None:
         return False
     return _settles_after_its_month(snap) and not (in_place and is_settled(snap))
+
+
+def _settled_row(row: dict[str, Any]) -> bool:
+    """Whether a held row carries the index its month settled at. A row that
+    no longer decodes is left to the replay."""
+    snap = _decoded_row(row)
+    return snap is not None and is_settled(snap)
+
+
+def _decoded_row(row: dict[str, Any]) -> SupplierSnapshot | None:
+    """A held row as the codec reads it, or None when it no longer does."""
+    try:
+        return _snapshot_from_dict(row, min_schema_version=0)
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _read_row(path: Path) -> dict[str, Any] | None:
@@ -2005,10 +2019,11 @@ async def archive(
                 if (
                     month_id < seen_month
                     and held is not None
-                    and held.get("_via") == "archive"
+                    and (held.get("_via") == "archive" or _settled_row(held))
                 ):
                     # A closed month the supplier's archive has answered for,
-                    # settled where its card settles, while the live card has
+                    # settled where its card settles, or a row settled in
+                    # place (Luminus, TotalEnergies), while the live card has
                     # not moved on yet: the estimate it prints must not go
                     # back over the settled row.
                     summary.unchanged += 1
