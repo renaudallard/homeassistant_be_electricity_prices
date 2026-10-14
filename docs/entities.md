@@ -419,7 +419,8 @@ statistics setup, documented in its source comment:
   of the first day the year bills, `ytd_window_reset` (`coordinator_data.py`):
   1 January, or the contract start date during the contract's first calendar
   year on an entry that bills from it, kept by a recorded switch that unticks
-  the box (`ytd_billed_from`, the first earlier contract's start). Long-term
+  the box (`ytd_billed_from`, the start of the latest earlier contract that
+  billed from it). Long-term
   statistics bucket each calendar year separately.
 
 Missing meter inputs collapse to the fees-only floor rather than to

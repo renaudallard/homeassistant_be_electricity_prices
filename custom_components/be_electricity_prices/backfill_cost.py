@@ -847,7 +847,7 @@ def _seed_short_term_sum(
     be what the caller resolved through ``ytd_window_reset``, which is the same
     function the sensor's ``last_reset_fn`` is: local Jan 1, or the start
     date of a contract that bills its year-to-date from there, the entry's own
-    or the first one it recorded a switch from.
+    or the latest one a recorded switch kept that did.
 
     Best effort: a recorder that refuses the write leaves the seam, which is
     no worse than not trying, so it must never take the backfill down with it.

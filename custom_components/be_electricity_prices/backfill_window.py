@@ -450,8 +450,9 @@ async def _contract_segments(
     total: its price hours were left out before the pass began.
 
     ``billed_only`` leaves out the days inside the window that no contract
-    supplied: before the first earlier contract when it billed the year from
-    its own start date, as ``current_year_cost`` leaves them out. The cost
+    supplied: before the first day ``previous_periods`` bills when an earlier
+    contract billed the year from its own start date, as ``current_year_cost``
+    leaves them out. The cost
     series asks for it; a price row for such a day harms nothing.
     """
     if not hours:

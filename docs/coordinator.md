@@ -485,7 +485,10 @@ records into the days each earlier contract covers inside the year-to-date
 window, and `current_period_start` into the first day of the entry's own. A
 contract left that billed its year from its own start date (its kept copy has
 `CONF_YTD_FROM_CONTRACT_START`) starts its days there rather than on the
-window's first day, and the days before it belong to no contract. The
+window's first day, and the days before it belong to no contract: the year
+opens on the start date of the latest such contract, so the contracts its box
+left out of the year stay out when a later switch unticks the box on the entry,
+and recording or removing that switch moves neither the bill nor its reset. The
 tick prices its own contract from that day (`window_start_override`) and adds
 the earlier contracts' share (`previous_costs`); `current_month_cost` does the
 same for the running month, which only an earlier contract that ended in it
@@ -590,8 +593,8 @@ contracts cost and put it off the sensor even with none, and only the quoted
 side ever falls back to the one-rate model.
 Both sides are measured from the first day the year was billed
 (`billed_from`, `contract_periods.py`): recording a switch unticks "bill from
-contract start" on the entry, whose window then opens on 1 January, while a
-first contract that billed from its own start date keeps its days starting
+contract start" on the entry, whose window then opens on 1 January, while an
+earlier contract that billed from its own start date keeps the year starting
 there. The quoted side, the kWh read, the "since" date and every ranking
 candidate take that day too, or the months before it were priced on the
 quoted side against nothing on the own row.

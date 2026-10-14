@@ -537,6 +537,41 @@ def test_recording_or_removing_a_switch_leaves_the_published_reset() -> None:
     }
 
 
+def test_a_later_switch_keeps_out_the_contracts_a_ticked_box_left_out() -> None:
+    """A household switched on 1 April and ticked the box so the year covers
+    the new contract only. Recording a second switch on 1 September unticks
+    it on the entry: the first contract came back into the year and the
+    reset moved to 1 January while the sensor did not reset, which the
+    statistics compiler counts as the whole year added on top."""
+    first = dict(make_entry(supplier="eneco", contract="power_fix").data)
+    second = {
+        **_record_switch(first, date(2026, 4, 1)),
+        "supplier": "engie",
+        "contract": "engie_easy_fixed",
+        CONF_YTD_FROM_CONTRACT_START: True,
+    }
+    third = {
+        **_record_switch(second, date(2026, 9, 1)),
+        "supplier": "luminus",
+        "contract": "luminus_comfy",
+    }
+    today = date(2026, 9, 24)
+    window = cohort.ytd_window_start(cast(ConfigEntry, _QuoteEntry(third)), today)
+    assert window == date(2026, 1, 1)
+    assert [
+        (p.start, p.end, p.data["supplier"])
+        for p in previous_periods(third, window, today)
+    ] == [(date(2026, 4, 1), date(2026, 8, 31), "engie")]
+
+    tz = dt_util.get_default_time_zone()
+    when = datetime(2026, 9, 24, 12, tzinfo=tz)
+    resets = {
+        ytd_window_reset(MockConfigEntry(domain=DOMAIN, data=settings), when)
+        for settings in (second, third, _remove_last_switch(third))
+    }
+    assert resets == {datetime(2026, 4, 1, tzinfo=tz)}
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_the_options_menu_removes_the_last_switch(
     hass: HomeAssistant, freezer: Any

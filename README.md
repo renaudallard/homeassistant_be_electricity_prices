@@ -940,9 +940,10 @@ which the long-term statistics show as one step on the day you record it. A
 second switch in the same year is recorded the same way. Recording a switch
 unticks **Bill the year-to-date from the contract start date**; ticking it
 again leaves the earlier contracts out of the year. A contract you left that
-billed its year from its own start date keeps doing so, so the days before
-your first contract began stay out of the year, and the comparison pages
-measure both sides from that day too. The new contract's start date
+billed its year from its own start date keeps doing so: the days before it
+began stay out of the year, the contracts it left out included, so a later
+switch moves neither the figure nor its long-term statistics, and the
+comparison pages measure both sides from that day too. The new contract's start date
 cannot be set before the switch.
 
 The switch step keeps your settings *as they stand* as the contract you left.

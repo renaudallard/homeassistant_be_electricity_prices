@@ -318,18 +318,28 @@ def previous_periods(
     ``_ENTRY_FACTS``). A contract that ended before the
     window opens has no days in it: last year's switches, and every switch on
     an entry billing the year from its current contract's start date, which is
-    how that option keeps meaning "this contract only".
+    how that option keeps meaning "this contract only". It keeps meaning that
+    once a later switch unticks the box: the year still opens on the start
+    date of the latest contract that billed from it, so recording or removing
+    a later switch moves neither the bill nor its reset.
     """
-    periods: list[ContractPeriod] = []
-    first = window_start
-    for until, settings in recorded_contracts(data):
-        # A contract that billed its year from its own start date keeps doing
-        # so. Recording the switch unticks the box on the entry, which then
-        # describes the new contract, and the days before the first contract
-        # began belong to no contract at all.
-        begins = max(
-            first, ytd_window_start(cast(ConfigEntry, _QuoteEntry(settings)), today)
+    records = [
+        (
+            until,
+            settings,
+            ytd_window_start(cast(ConfigEntry, _QuoteEntry(settings)), today),
         )
+        for until, settings in recorded_contracts(data)
+    ]
+    # A contract that billed its year from its own start date keeps doing
+    # so. Recording the switch unticks the box on the entry, which then
+    # describes the new contract, and the days before that contract began
+    # stay out of the year: those of no contract at all, and those of the
+    # contracts held before it, which the box left out when it was ticked.
+    first = max([window_start, *(min(own, until) for until, _, own in records)])
+    periods: list[ContractPeriod] = []
+    for until, settings, own in records:
+        begins = max(first, own)
         last = min(until - timedelta(days=1), today)
         if last >= begins:
             periods.append(
@@ -348,12 +358,12 @@ def current_period_start(data: Mapping[str, Any], window_start: date) -> date:
 def billed_from(data: Mapping[str, Any], window_start: date, today: date) -> date:
     """The first day any contract bills inside ``[window_start, today]``.
 
-    ``window_start`` itself, unless the first earlier contract billed its year
-    from its own start date: recording the switch unticks that box on the
-    entry, whose window then opens on 1 January, while the old contract's days
-    still begin on its start date. A comparison measured from 1 January against
-    a year billed from March set the quoted side's months before March against
-    nothing.
+    ``window_start`` itself, unless an earlier contract billed its year from
+    its own start date: recording the switch unticks that box on the entry,
+    whose window then opens on 1 January, while the year still begins on the
+    old contract's start date (``previous_periods``). A comparison measured
+    from 1 January against a year billed from March set the quoted side's
+    months before March against nothing.
     """
     periods = previous_periods(data, window_start, today)
     return periods[0].start if periods else current_period_start(data, window_start)
