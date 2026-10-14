@@ -454,6 +454,19 @@ carries each register's spread from the mono index on its base, and
 `_energy_month_spot` resolves the leg on the quarter's mean, quarter to date
 while it runs. See [providers/bolt.md](providers/bolt.md#quarterly-index).
 
+Luminus and TotalEnergies settle a closed month IN PLACE rather than through
+`fetch_for_month` (`settle_month`, `providers/_settle.py`). The card held for the month, the card
+archive's row or the supplier's own answer, keeps every field, and only its
+month-indexed energy and feed-in legs are re-priced at the index the next card
+gives for the month, with `index_realised` recorded. Luminus's next card names
+it ("Belpex = 156,41 EUR/MWh (valeur de l'indice de septembre 2026)"), and
+replacing the card instead would lose the new-customer campaign the archive
+strips. TotalEnergies names neither index, so its next card's printed rates are
+solved through their own formulas for the BELPEXM_RLP and Belpex_M they were
+printed at; it keeps no archive, so that card is only ever the live one, and the
+daily card archive run settles the rows it caught while it is served. Until the
+next card is out the month stays `provisional`.
+
 ### Monthly-indexed feed-in credits
 
 The same lag applies to a feed-in credit. Eneco Power Fix, Fix One, Flex and Flex One
@@ -1009,7 +1022,13 @@ once, which is how it publishes the same phrase Eneco reads as the distinct
 mean. DATS 24's BE_spotRLP is the column-weighted mean too, at quarter-hour
 resolution: 0,04 EUR/MWh off its six published 2026 values on average, 0,15 on
 the hourly weighting the engine uses. Each blend was settled against the supplier's own published table rather
-than against the wording, which is identical on two of the three cards. A leg
+than against the wording, which is identical on two of the three cards.
+Mega, Ecopower, Luminus BasicFlex and TotalEnergies carry the column-weighted
+blend as well. TotalEnergies prints no index at all, so its cards were solved
+for the one their monthly rates are printed at, which lands on the
+column-weighted mean every month from September 2025 to September 2026 where
+the distinct one runs up to 2,2 EUR/MWh low (see
+[providers/totalenergies.md](providers/totalenergies.md)). A leg
 that names no blend keeps the plain arithmetic monthly mean, a few percent
 below any of them, since households draw in the expensive hours; the note lives
 on `VariableRates.formula_factor` so that is not mistaken for an oversight.
@@ -1289,7 +1308,7 @@ anyone remembering to come back, which is how the third one went unweighted.
 | (a) Monthly indicative | `current` set | No | Ecofix Flexy, the fixed and variable cards that publish a realized rate |
 | (b) Hourly formula | `factor` + `base` set | Yes | Dynamic contracts (Engie, Luminus, Mega, OCTA+, TotalEnergies) |
 | (c) Spot-indexed on a static-energy card | `factor` + `base` set, energy NOT dynamic, and either `current is None` or the card flags `slot_indexed` | Yes | Cociter Variable and Variable Trihoraire, every Bolt fixed and variable card. The compare estimate and the projection, which multiply one rate by a whole year's export, price the formula per hour over the closed days of day-ahead the coordinator holds for the past year, each hour weighted by what the household exported in it (`_credit_year`, `compare_inputs.py`; `_year_weighted_credit`, `compare_weighting.py`). Not the live table's day or two, which moved the recorded projection by a median 76 EUR a day, and not an hour-of-day shape, which counts a winter hour as much as a summer one: on a curve dear in winter that credited about 5 c/kWh too much on six winter months and 0,7 c/kWh even on a full year. Short of a full year of both the day-ahead and the export, the projection, the compare page and the daily ranking all leave the credit out, and the projection's attributes and the page's solar note say so |
-| (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed`; or the per-slot triplet with its three `factor_*` / `base_*` pairs and `month_indexed` | A monthly MEAN, not an hourly spot | Aspiravi Eco Plus Flex, DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex/Flex One, energie.be, Energy Knights Essentia, EnergyVision fixed (both regions), Luminus Comfy/MaxxFix/MaxxFlex/BasicFix/BasicFlex/SmartFlex, Trevion Flex/LifePowr, Engie's EPEXDAM cards; Engie Empower Flextime per slot |
+| (d) Month-indexed formula | `current` + `factor` + `base`, flagged `spp_indexed` or `month_indexed`; or the per-slot triplet with its three `factor_*` / `base_*` pairs and `month_indexed` | A monthly MEAN, not an hourly spot | Aspiravi Eco Plus Flex, DATS 24, EBEM Variabel/B@sic+, Eneco Fix/Flex/Flex One, energie.be, Energy Knights Essentia, EnergyVision fixed (both regions), Luminus Comfy/MaxxFix/MaxxFlex/BasicFix/BasicFlex/SmartFlex, Trevion Flex/LifePowr, TotalEnergies' fixed and variable cards (Belpex_M), Engie's EPEXDAM cards; Engie Empower Flextime per slot |
 | (e) Register pair | `current` + `peak` + `offpeak`, flagged `bi_hourly` | No | Trevion Groene Energie Vast: one feed-in rate per meter register beside the consumption rates. A bi-hourly or digital meter is credited by register on the entry's day/night schedule (`day_start_for`), a single-register meter at `current`; a pair without the flag is shape (a). Every path asks per register, the per-day year-to-date walk included, which takes one hour inside each block; the compare estimate and the projection, which multiply one rate by a whole year's export, average the two registers by the household's export shape on that schedule (`_register_weights`, `compare_weighting.py`) rather than take the register the clock is in |
 
 Shape (d) resolves through `_spp_injection_spot`, which is the one place that
