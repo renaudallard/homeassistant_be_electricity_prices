@@ -311,10 +311,13 @@ longest label `Fluvius Midden-Vlaanderen` across three lines (`Fluvius Midden-` 
 lookup sees one line. Tests assert the stitched row keeps its real rates
 (`test_ecopower.py`).
 
-Both DSO parsers **fail loud** with `ExtractorError("Ecopower: no DSO rows parsed ...")` if the
-section header matches but no DSO row does (`_ecopower_overlays.py`). Returning `{}`
-would let the backfill path silently skip whole months (it swallows the resulting KeyError). The
-`test_empty_dso_overlay_is_fatal` test verifies this by renaming `Fluvius` to `XXX`
+Both DSO parsers **fail loud** with `ExtractorError("Ecopower: DSO rows not found for ...")` unless
+every one of the eight Fluvius areas reads (`_require_every_area`, `_ecopower_overlays.py`). A
+relabelled or reshaped row used to drop its area quietly: the card was adopted with seven, and the
+entry on the missing area was left with no network overlay while the last good card was gone from
+the cache. Returning `{}` would let the backfill path silently skip whole months (it swallows the
+resulting KeyError). `test_empty_dso_overlay_is_fatal` renames `Fluvius` to `XXX` and
+`test_a_card_with_one_area_unread_is_refused` relabels `Fluvius West` on both cards
 (`test_ecopower.py`).
 
 ### Tax parsing
@@ -526,7 +529,7 @@ Ranked by likelihood of breaking when Ecopower re-renders a card:
    so a miss shows as an unavailable injection sensor, not a hard error (watch for silent loss).
 3. **DSO table column shuffle or new sub-area label** -> `_DSO_LABELS` (`_ecopower_overlays.py`),
    the gbs row widths (`_ecopower_overlays.py`), the dbs row widths + `_DBS_WRAPPED_LABEL_RE`
-   (`_ecopower_overlays.py`). Symptom: `Ecopower: no DSO rows parsed` or a missing sub-area.
+   (`_ecopower_overlays.py`). Symptom: `Ecopower: DSO rows not found for [...]`.
 4. **Tax row relabelled** -> `_extract_taxes` regexes (`_ecopower_overlays.py`). Symptom: `could not
    parse Ecopower federal tax block` or `GSC/WKK renewable surcharge`.
 5. **Card filename family or price-page structure changed** -> `_CARD_RE`, `_DBS_CARD_RE`

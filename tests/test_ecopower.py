@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -76,8 +77,25 @@ def test_empty_dso_overlay_is_fatal() -> None:
     # Section header present but no DSO row parses (label drift) -> raise,
     # so the backfill path can't silently skip the month.
     text = _text("ecopower_burgerstroom_apr.pdf").replace("Fluvius", "XXX")
-    with pytest.raises(ExtractorError, match="no DSO rows"):
+    with pytest.raises(ExtractorError, match="DSO rows not found"):
         parse_snapshot(text, "test://ecopower-apr", "april 2026")
+
+
+@pytest.mark.parametrize(
+    ("fixture", "parse"),
+    [
+        ("ecopower_burgerstroom_jul.pdf", parse_snapshot),
+        ("ecopower_dynamische_burgerstroom_jan.pdf", parse_dbs_snapshot),
+    ],
+)
+def test_a_card_with_one_area_unread_is_refused(fixture: str, parse: Any) -> None:
+    """One relabelled row dropped its area, and the card was adopted with
+    seven: the entry on Fluvius West was left with no network overlay."""
+    text = _text(fixture)
+    assert len(parse(text, "test://ecopower", "2026").dsos) == len(FLUVIUS_KEYS)
+    relabelled = text.replace("Fluvius West", "Fluvius West-Vlaanderen")
+    with pytest.raises(ExtractorError, match="fluvius_west"):
+        parse(relabelled, "test://ecopower", "2026")
 
 
 def test_missing_gsc_or_wkk_surcharge_is_fatal() -> None:

@@ -31,8 +31,8 @@ to build the ``DsoOverlay`` map and the ``TaxOverlay``, where
 ``_ecopower_cards`` holds the ones that build the energy and injection legs.
 Both Ecopower cards share the tax reader.
 
-No behaviour change: every function here is byte-identical to the one it
-replaced.
+The split changed no behaviour: every function here was byte-identical to
+the one it replaced.
 """
 
 from __future__ import annotations
@@ -116,12 +116,25 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=databeheer,
             network_ceiling_eur_per_kwh=(to_float(row[4]) if len(row) > 4 else None),
         )
-    if not out:
-        # The section header matched but no DSO row did - a column-layout
-        # drift. Returning {} would let the backfill path silently skip
-        # whole months (it swallows the resulting KeyError); fail loud.
-        raise ExtractorError("Ecopower: no DSO rows parsed from the digital block")
+    _require_every_area(out, "digital")
     return out
+
+
+def _require_every_area(out: dict[str, DsoOverlay], block: str) -> None:
+    """Refuse a network table that lacks one of the eight Fluvius areas.
+
+    A partial table is worse than none: a relabelled or reshaped row would
+    drop its area, and the card would be adopted, persisted and shared with
+    the entry on that area left with no overlay and every tick failing,
+    while the last good card is gone from the cache. An empty one would let
+    the backfill path silently skip whole months (it swallows the resulting
+    KeyError). Refusing keeps the last good card serving.
+    """
+    missing = sorted(key for key in _DSO_LABELS.values() if key not in out)
+    if missing:
+        raise ExtractorError(
+            f"Ecopower: DSO rows not found for {missing} in the {block} block"
+        )
 
 
 def _slice_between(text: str, start: str, end: str) -> str | None:
@@ -177,10 +190,7 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
             capacity_eur_per_kw_year=to_float(row[1]),
             data_management_per_year=to_float(row[0]),
         )
-    if not out:
-        # Section header matched but no DSO row did - fail loud rather than
-        # return an empty overlay set the backfill path silently skips.
-        raise ExtractorError("Ecopower: no DSO rows parsed from the dynamic block")
+    _require_every_area(out, "dynamic")
     return out
 
 
