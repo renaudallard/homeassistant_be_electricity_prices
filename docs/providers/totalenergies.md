@@ -587,18 +587,21 @@ Two shapes, selected on `kind` in `_extract_injection` (`_totalenergies_cards.py
   dynamic card whose injection block is missing the BELPEXH formula raises rather
   than silently pricing feed-in at the flat monthly rate every hour
   (`_totalenergies_cards.py`, `tests/test_totalenergies.py`).
-- **Non-dynamic contracts: monthly-indicative-only.** The table injection value is
+- **Non-dynamic contracts: month-indexed Belpex_M formula.** The table injection value is
   the V-test annual ESTIMATE; the billed value is the realized monthly indicative
   ("prix mensuels de l'injection"), so `_realized_monthly_injection`
   (`_totalenergies_cards.py`) overrides `current`, and the month formula printed under
   the injection heading is surfaced as `factor`/`base` with `month_indexed`, so
-  the delivery month's mean re-prices it (`_totalenergies_cards.py`). Illustrative 0.0112 EUR/kWh for both a variable and
-  a fixed card (`tests/test_totalenergies.py`).
+  the delivery month's mean re-prices it (`_totalenergies_cards.py`), and a closed
+  month settles on the next feed-in card (`settle_month`, `totalenergies.py`), the
+  fixed products included. Illustrative 0.0112 EUR/kWh for both a variable and a
+  fixed card (`tests/test_totalenergies.py`).
 
-This placed TotalEnergies in two of the three injection taxonomy shapes until
-September 2026: shape (b) hourly factor*spot+base for myDynamic, shape (a)
-monthly-indicative-only for every other product. From October 2026 the same two
-shapes come off the separate feed-in cards. Shape (c) spot-indexed-variable is not used, which is a statement
+This places TotalEnergies in two of the injection taxonomy shapes
+(`docs/pricing-model.md`): shape (b) hourly factor*spot+base for myDynamic, shape (d)
+month-indexed formula for every other product. Until September 2026 both came off
+the product cards, and from October 2026 they come off the separate feed-in cards.
+Shape (c) spot-indexed-variable is not used, which is a statement
 about the INDEX and not about the flag: 8 of the 9 contracts set
 `spot_indexed_injection`, because a monthly-mean credit needs spots the energy leg
 never fetches.
