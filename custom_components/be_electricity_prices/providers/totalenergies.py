@@ -778,10 +778,10 @@ async def settle_month(
     then never will be, and stays at its estimate, which is logged. The
     feed-in card is uploaded on its own and can lag the tariff card
     (Electricité Fixe in Flanders still said September on 5 and 14 October
-    2026), so only the one titled like it settles the feed-in. A leg the next card gives no index for is
-    left as held, and the month stays ``provisional`` while the other leg
-    settles, as does the energy of a card no other card of the range is
-    printed like yet (``_range_agrees``).
+    2026), so only the one titled like it settles the feed-in. A leg the next
+    card gives no index for is left as held, and the month stays
+    ``provisional`` while the other leg settles, as does the energy of a card
+    no other card of the range is printed like yet (``_range_agrees``).
     """
     first = date(year_month.year, year_month.month, 1)
     following = date(first.year + (first.month == 12), first.month % 12 + 1, 1)

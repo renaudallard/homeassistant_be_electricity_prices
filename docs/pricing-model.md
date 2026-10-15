@@ -487,14 +487,14 @@ daily card archive run settles the rows it caught while it is served. Until the
 next card is out the month stays `provisional`, and at TotalEnergies also while
 its feed-in card still names the month before, a card's monthly block is not
 read, or no other card of the range is printed at the energy's index or two
-disagree (`_range_agrees`), the other leg settling meanwhile. Bolt's variable cards settle a quarter at
-a time: the next quarter's card prints that quarter's index for each meter
-register and Impact band, each rate is rebuilt on the month's formula at its own
-index (`settled_registers`), and the mono index is recorded; its variable folder
-addresses no card by month either, so the next card is the live one. A signing
-cohort bills such a month on its own formula at each of those indices
-(`_on_settled_quarter`, `cohort_legs.py`), not on the spreads its signing card
-printed.
+disagree (`_range_agrees`), the other leg settling meanwhile. Bolt's variable
+cards settle a quarter at a time: the next quarter's card prints that quarter's
+index for each meter register and Impact band, each rate is rebuilt on the
+month's formula at its own index (`settled_registers`), and the mono index is
+recorded; its variable folder addresses no card by month either, so the next
+card is the live one. A signing cohort bills such a month on its own formula at
+each of those indices (`_on_settled_quarter`, `cohort_legs.py`), not on the
+spreads its signing card printed.
 
 A signing cohort without a key bills a settled month the same way as one with a
 key: `_cohort_legs` keeps the signing card's coefficients whenever the month
