@@ -741,18 +741,18 @@ def _proxy_for_month(
     """``current`` standing in for ``year_month``, with the federal levies
     that month owes.
 
-    ``current`` was resolved for today, so its energy contribution is struck
-    out from August 2026 and its excise is the flat August rate, which a
-    January to July month billed on it did not owe: 4 to 7 EUR a year on
-    the TotalEnergies and Ecofix months no archive holds. Only those two
-    figures are taken from ``raw`` resolved for the month, and only where
-    they differ from ``raw`` resolved for today, so everything else the
-    caller applied to ``current`` stands, and an excise picked from a band
-    by the yearly volume is left alone. Identity for every month whose
-    levies match today's.
+    ``current`` was resolved for today: no energy contribution from August
+    2026 and the flat August excise, which a January to July month did not
+    owe. ``raw`` resolved for that month as a stand-in bills the household
+    schedule and contribution the law then set, once its archived wording is
+    read, the card's own until then. Only those two figures are taken from
+    it, where they differ from ``raw`` resolved for today, so all else the
+    caller applied to ``current`` stands: identity where they match.
     """
     today = _resolve_snapshot(entry, raw).taxes
-    month = _resolve_snapshot(entry, raw, delivery_month=year_month).taxes
+    month = _resolve_snapshot(
+        entry, raw, delivery_month=year_month, stand_in=True
+    ).taxes
     changes = {
         name: getattr(month, name)
         for name in ("energy_contribution", "federal_excise")

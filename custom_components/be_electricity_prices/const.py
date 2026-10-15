@@ -618,6 +618,17 @@ EXCISE_LAW_URL: Final = (
     "?language=fr&la=F&table_name=loi&cn=2004122730"
 )
 
+# The same law as it stood before the amendment of 30 May 2026: Justel's
+# archived version 70, the one whose article 419 was in force until
+# 1 August 2026, as its note says. Archives are numbered in the order they
+# were made, so the number keeps naming this one, and excise_law.py reads
+# the days it was in force off the page, so no other copy would be billed
+# outside its own.
+EXCISE_LAW_ARCHIVE_URL: Final = (
+    "https://www.ejustice.just.fgov.be/cgi_loi/article.pl"
+    "?language=fr&lg_txt=F&cn_search=2004122730&arch=070"
+)
+
 # The VREG maximumtarief: what a Flemish digital-meter connection may be
 # charged in DISTRIBUTION network costs per kWh, the capacity term and the
 # per-kWh network term together and excluding the data-management fee. In

@@ -16,7 +16,11 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import excise_law
-from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.const import (
+    DOMAIN,
+    EXCISE_LAW_ARCHIVE_URL,
+    EXCISE_LAW_URL,
+)
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.providers import (
     aspiravi,
@@ -33,6 +37,7 @@ from custom_components.be_electricity_prices.providers import (
     octaplus,
     trevion,
 )
+from custom_components.be_electricity_prices.providers import get as get_extractor
 from custom_components.be_electricity_prices.providers._resolve import (
     apply_vat,
     resolve_federal_excise,
@@ -41,6 +46,12 @@ from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
     SupplierSnapshot,
     TaxOverlay,
+)
+from custom_components.be_electricity_prices.snapshot_months import (
+    _snapshot_for_month,
+)
+from custom_components.be_electricity_prices.snapshot_resolve import (
+    _resolve_snapshot,
 )
 from tests import fixture_text, make_snapshot
 
@@ -609,3 +620,174 @@ async def test_the_law_travels_through_the_store(hass: HomeAssistant) -> None:
     coord._store.async_load = AsyncMock(return_value=saved[-1])  # type: ignore[method-assign]
     await coord.async_load_persistent()
     assert excise_law.standard_excise(date(2027, 2, 1)) == pytest.approx(0.043)
+
+
+# The household wording before the one in force, from Justel's archive.
+
+_ARCHIVE = (
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "justel_loi_programme_2004_fr_arch070.html"
+)
+
+
+@pytest.fixture(scope="module")
+def archive() -> str:
+    return _ARCHIVE.read_bytes().decode("iso-8859-1")
+
+
+@pytest.fixture
+def schedule_held(archive: str) -> Iterator[None]:
+    excise_law._SCHEDULES[excise_law.SCHEDULE] = excise_law.parse_archive(archive)
+    yield
+    excise_law._SCHEDULES.clear()
+
+
+def test_the_archived_article_sets_the_schedule_before_august_2026(
+    archive: str,
+) -> None:
+    """Article 419 as it stood before the law of 30 May 2026: the household
+    excise by annual volume and the energy contribution beside it, from the
+    entry into force of the law of 19 March 2023 that wrote them (footnote
+    32 dates its bracket) to the day the archive's note says it ended."""
+    schedule = excise_law.parse_archive(archive)
+    assert (schedule.start, schedule.until) == (date(2023, 4, 1), date(2026, 8, 1))
+    assert [upper for upper, _rate in schedule.bands] == [
+        3000.0,
+        20000.0,
+        50000.0,
+        1000000.0,
+        25000000.0,
+        25000000.0,
+    ]
+    assert [rate for _upper, rate in schedule.bands] == pytest.approx(
+        [0.04748, 0.04748, 0.04546, 0.04478, 0.04411, 0.03628]
+    )
+    assert schedule.contribution == pytest.approx(0.0019261)
+
+
+def test_a_page_that_is_not_the_archived_article_is_refused(
+    page: str, archive: str
+) -> None:
+    # The wording in force has no volume bands, and no note saying it ended.
+    with pytest.raises(excise_law.ExciseLawError, match="note"):
+        excise_law.parse_archive(page)
+    at = archive.rindex("cotisation sur l'énergie: 1,9261")
+    banded = f"{archive[:at]}cotisation sur l'énergie: 1,9262{archive[at + 32 :]}"
+    with pytest.raises(excise_law.ExciseLawError, match="banded"):
+        excise_law.parse_archive(banded)
+    ended = archive.replace("01-08-2026", "01-02-2023", 1)
+    with pytest.raises(excise_law.ExciseLawError, match="no day"):
+        excise_law.parse_archive(ended)
+    # Nor is the archived wording read as the one in force.
+    with pytest.raises(excise_law.ExciseLawError, match="banded"):
+        excise_law.parse(archive)
+
+
+@pytest.mark.usefixtures("schedule_held")
+def test_a_month_takes_the_schedule_only_inside_its_days() -> None:
+    assert excise_law.household_schedule(date(2023, 3, 1)) is None
+    assert excise_law.household_schedule(date(2023, 4, 1)) is not None
+    assert excise_law.household_schedule(date(2026, 7, 31)) is not None
+    assert excise_law.household_schedule(date(2026, 8, 1)) is None
+
+
+@pytest.mark.usefixtures("schedule_held")
+def test_the_store_round_trips_the_schedule() -> None:
+    stored = excise_law.held_table()
+    held = excise_law._SCHEDULES[excise_law.SCHEDULE]
+    excise_law._SCHEDULES.clear()
+    excise_law.restore(stored)
+    assert excise_law._SCHEDULES[excise_law.SCHEDULE] == held
+    excise_law.restore({excise_law.SCHEDULE: {**stored[excise_law.SCHEDULE]}})
+    assert excise_law._SCHEDULES[excise_law.SCHEDULE] == held
+    excise_law._SCHEDULES.clear()
+    excise_law.restore({excise_law.SCHEDULE: {"start": "2023-04-01"}})
+    excise_law.restore({excise_law.SCHEDULE: "nonsense"})
+    assert excise_law.household_schedule(date(2026, 3, 1)) is None
+
+
+async def test_the_archived_wording_is_read_once(
+    fresh_fetch: None, page: str, archive: str
+) -> None:
+    """It never changes, so it is asked for with the law until it is held."""
+
+    async def fetch(_session: Any, url: str, **_kwargs: Any) -> str:
+        return archive if url == EXCISE_LAW_ARCHIVE_URL else page
+
+    got = AsyncMock(side_effect=fetch)
+    try:
+        with patch.object(excise_law, "fetch_text", got):
+            await excise_law.ensure_excise_law(AsyncMock())
+            excise_law._fetched_at = None
+            await excise_law.ensure_excise_law(AsyncMock())
+        assert [call.args[1] for call in got.await_args_list] == [
+            EXCISE_LAW_URL,
+            EXCISE_LAW_ARCHIVE_URL,
+            EXCISE_LAW_URL,
+        ]
+        assert excise_law.household_schedule(date(2026, 3, 1)) is not None
+    finally:
+        excise_law._SCHEDULES.clear()
+
+
+@pytest.mark.parametrize("annual_kwh", [3500.0, 30000.0])
+async def test_a_card_standing_in_bills_the_levies_the_law_then_set(
+    hass: HomeAssistant, archive: str, annual_kwh: float
+) -> None:
+    """TotalEnergies keeps no archive and the project's starts in August
+    2026, so its January to July months bill on October's card, which prints
+    0,0488 and a stale 0,002. Those months owed the household schedule and
+    the energy contribution the law then set; the month's own card, where
+    there is one, is billed as printed."""
+    raw = make_snapshot(
+        supplier="totalenergies",
+        contract="totalenergies_myessential",
+        taxes=TaxOverlay(
+            federal_excise=0.0488,
+            energy_contribution=0.002,
+            vat_rate=0.0,
+            card_vat_rate=0.06,
+        ),
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "totalenergies",
+            "contract": "totalenergies_myessential",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "annual_consumption_kwh": annual_kwh,
+        },
+    )
+    march = date(2026, 3, 1)
+    current = _resolve_snapshot(entry, raw)
+
+    async def stand_in() -> TaxOverlay:
+        got = await _snapshot_for_month(
+            hass,
+            None,  # type: ignore[arg-type]
+            get_extractor("totalenergies"),
+            "totalenergies_myessential",
+            "wallonia",
+            march,
+            current,
+            entry,
+            current_raw=raw,
+        )
+        return got.taxes
+
+    before = await stand_in()
+    assert (before.federal_excise, before.energy_contribution) == (0.0488, 0.002)
+    excise_law._SCHEDULES[excise_law.SCHEDULE] = excise_law.parse_archive(archive)
+    try:
+        taxes = await stand_in()
+        own = _resolve_snapshot(entry, raw, delivery_month=march).taxes
+    finally:
+        excise_law._SCHEDULES.clear()
+    first = min(annual_kwh, 20000.0) * 0.04748
+    second = max(annual_kwh - 20000.0, 0.0) * 0.04546
+    assert taxes.federal_excise == pytest.approx((first + second) / annual_kwh * 1.06)
+    assert taxes.energy_contribution == pytest.approx(0.0019261 * 1.06)
+    assert (own.federal_excise, own.energy_contribution) == (0.0488, 0.002)

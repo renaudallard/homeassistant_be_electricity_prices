@@ -34,13 +34,21 @@ a step is billed in its own month without anyone editing a constant.
 
 The rate a step starts from is dated by the law too. Justel brackets every
 passage an amendment wrote and titles the bracket with that amendment's entry
-into force, so the date the current wording took effect is read off the
-innermost bracket around it.
+into force (an archived copy numbers it and dates the number in a footnote),
+so the date a wording took effect is read off the innermost bracket around
+it.
 
-Justel keeps only the wording in force. A household rate the law no longer
-prints is not here, so the card is read for the months before the first step
-this holds. The protected customer has no card that prints it reliably, so
-its two closed rates are typed in beside the law they came from. The table is held for the process, refreshed daily, and kept in every
+The consolidated text is the wording in force. The household rate before
+it, a schedule by annual volume with the energy contribution beside it, is in
+Justel's archived copy of the law as it stood before the amendment, read once
+and held with the days it was in force: the bracket around it and the note
+the archive carries ("En vigueur jusqu'au"). Those are its words alone, not
+the rates a transition fixed in the amending law's own articles or the
+quarterly notices article 420 provides for, so it only stands in for a card
+that does not print its own month (``household_schedule``); a month's own
+card is billed as printed. The protected customer has no card that prints it
+reliably, so its two closed rates are typed in beside the law they came from.
+Both are held for the process, the law read again daily, and kept in every
 entry's store so a restart without the network still knows the last one.
 """
 
@@ -49,6 +57,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import date, datetime
 from html import unescape
 from itertools import pairwise
@@ -57,7 +66,7 @@ from typing import Any, Final
 import aiohttp
 from homeassistant.util import dt as dt_util
 
-from .const import EXCISE_LAW_URL
+from .const import EXCISE_LAW_ARCHIVE_URL, EXCISE_LAW_URL
 from .providers._pdf import FR_MONTHS, fetch_text
 from .providers.base import ExtractorError
 
@@ -71,6 +80,9 @@ _MAX_EUR_PER_KWH: Final = 0.2
 
 STANDARD: Final = "standard"
 PROTECTED: Final = "protected"
+# The household schedule the archived wording sets, under this key in the
+# table an entry stores.
+SCHEDULE: Final = "standard_schedule"
 
 _ARTICLE_RE = re.compile(
     r"NAME='Art\.419'(.*?)(?:NAME='Art\.419bis'|NAME='Art\.420')", re.S
@@ -83,14 +95,26 @@ _OPEN_RE = re.compile(
     re.S,
 )
 _CLOSE_RE = re.compile(r"\]<sup>(?:(?!</sup>).)*</sup>", re.S)
+# An archived copy titles no bracket. It numbers them and dates each number
+# in its footnotes: (32)<L 2023-03-19/02, art. 9, 068; En vigueur : 01-04-2023>.
+# A number no footnote dates is marked with no date, which is refused only
+# when it is the bracket a rate is dated by.
+_NUMBERED_RE = re.compile(r"\[<sup><font color=red>(\d+)</font></sup>")
+_FOOTNOTE_RE = re.compile(
+    r"\(<font color=red>(\d+)</font>\)&lt;(?:(?!\(<font color=red>).)*?"
+    r"En vigueur\s*:\s*(\d{2}-\d{2}-\d{4})",
+    re.S | re.I,
+)
+_UNDATED = "00-00-0000"
 _OPEN = "\x01"
 _CLOSE = "\x02"
 _TAG_RE = re.compile(r"<[^>]+>")
 
 _ELECTRICITY = "électricité du code NC 2716"
 _NON_PROFESSIONAL_RE = re.compile(r"consommation non-professionnelle\s*:")
-_PROTECTED_RE = re.compile(r"a\)\s*client protégé résidentiel")
-_OTHERS_RE = re.compile(r"b\)\s*autres\s*:")
+# "a)" in the wording in force, "a." in the one before it.
+_PROTECTED_RE = re.compile(r"a[.)]\s*client protégé résidentiel")
+_OTHERS_RE = re.compile(r"b[.)]\s*autres\s*:")
 _STEP_RE = re.compile(
     r"A partir du (1er|\d{1,2}) (" + "|".join(FR_MONTHS) + r") (\d{4})\s*:"
 )
@@ -98,9 +122,37 @@ _EXCISE_RE = re.compile(r"droit d['’]accise\s*:\s*([\d.,]+)\s*euros?\s+par\s+M
 _SPECIAL_RE = re.compile(
     r"droit d['’]accise spécial\s*:\s*([\d.,]+)\s*euros?\s+par\s+MWh"
 )
+_CONTRIBUTION_RE = re.compile(
+    r"cotisation sur l['’]énergie\s*:\s*([\d.,]+)\s*euros?\s+par\s+MWh"
+)
+_TRANCHE_RE = re.compile(
+    r"pour la tranche (?:de ([\d.]+) à ([\d.]+)|à partir de ([\d.]+)) MWh\s*:"
+)
+# The archive's note, which says until when each article it lists was in
+# force: "Art. 419 *** 420 *** ... En vigueur jusqu'au 01-08-2026".
+_NOTE_RE = re.compile(r'id="note".*?</div>', re.S)
+_UNTIL_RE = re.compile(
+    r"Art\.\s*(.*?)\s*En vigueur jusqu['’]au\s*(\d{2})-(\d{2})-(\d{4})"
+)
+
+
+@dataclass(frozen=True)
+class Schedule:
+    """A household wording the law no longer prints, in force from ``start``
+    to the day before ``until``: the excise by annual volume as ((upper kWh,
+    EUR/kWh excluding VAT), ...), the last band open above its bound, and the
+    energy contribution beside it, EUR/kWh excluding VAT."""
+
+    start: date
+    until: date
+    bands: tuple[tuple[float, float], ...]
+    contribution: float
+
 
 # (kind) -> ((first day, EUR/kWh excluding VAT), ...), ascending.
 _HELD: dict[str, tuple[tuple[date, float], ...]] = {}
+# SCHEDULE -> the household wording before the one in force.
+_SCHEDULES: dict[str, Schedule] = {}
 _fetched_at: datetime | None = None
 _failed_at: datetime | None = None
 
@@ -135,7 +187,7 @@ def _rate(chunk: str) -> float:
 
 def _in_force(text: str, at: int) -> date:
     """The entry into force of the innermost amendment around ``at``."""
-    stack: list[date] = []
+    stack: list[str] = []
     pos = 0
     while pos < at:
         nxt = min(
@@ -145,14 +197,14 @@ def _in_force(text: str, at: int) -> date:
         if nxt < 0 or nxt >= at:
             break
         if text[nxt] == _OPEN:
-            day, month, year = text[nxt + 1 : nxt + 11].split("-")
-            stack.append(date(int(year), int(month), int(day)))
+            stack.append(text[nxt + 1 : nxt + 11])
         elif stack:
             stack.pop()
         pos = nxt + 1
     if not stack:
         raise ExciseLawError("no entry into force around the rate")
-    return stack[-1]
+    day, month, year = stack[-1].split("-")
+    return date(int(year), int(month), int(day))
 
 
 def _steps(text: str, start: int, end: int) -> tuple[tuple[date, float], ...]:
@@ -193,12 +245,17 @@ def parse(page: str) -> dict[str, tuple[tuple[date, float], ...]]:
         raise ExciseLawError(f"unreadable article: {err}") from err
 
 
-def _parse(page: str) -> dict[str, tuple[tuple[date, float], ...]]:
+def _household(page: str) -> tuple[str, int, int, int, int]:
+    """Article 419 as read, and where its household rates sit: the end of
+    the protected customer's label, the start and the end of the others'
+    label, and the end of the paragraph."""
     match = _ARTICLE_RE.search(page)
     if match is None:
         raise ExciseLawError("article 419 not found")
+    dated = dict(_FOOTNOTE_RE.findall(match.group(1)))
     marked = _CLOSE_RE.sub(_CLOSE, match.group(1))
     marked = _OPEN_RE.sub(lambda m: f"{_OPEN}{m[1]}-{m[2]}-{m[3]}", marked)
+    marked = _NUMBERED_RE.sub(lambda m: f"{_OPEN}{dated.get(m[1], _UNDATED)}", marked)
     text = " ".join(unescape(_TAG_RE.sub(" ", marked)).split())
     start = text.find(_ELECTRICITY)
     if start < 0:
@@ -212,10 +269,82 @@ def _parse(page: str) -> dict[str, tuple[tuple[date, float], ...]]:
     others = _OTHERS_RE.search(text, household.end(), end)
     if protected is None or others is None or others.start() < protected.end():
         raise ExciseLawError("no protected and other household rates")
+    return text, protected.end(), others.start(), others.end(), end
+
+
+def _parse(page: str) -> dict[str, tuple[tuple[date, float], ...]]:
+    text, protected, others_at, others, end = _household(page)
     return {
-        PROTECTED: _steps(text, protected.end(), others.start()),
-        STANDARD: _steps(text, others.end(), end),
+        PROTECTED: _steps(text, protected, others_at),
+        STANDARD: _steps(text, others, end),
     }
+
+
+def _until(page: str) -> date:
+    """The day article 419's archived wording stopped being in force."""
+    note = _NOTE_RE.search(page)
+    if note is None:
+        raise ExciseLawError("no note on the archived article")
+    text = " ".join(unescape(_TAG_RE.sub(" ", note.group())).split())
+    for match in _UNTIL_RE.finditer(text):
+        if "419" in (article.strip() for article in match[1].split("***")):
+            return date(int(match[4]), int(match[3]), int(match[2]))
+    raise ExciseLawError("no end to article 419")
+
+
+def parse_archive(page: str) -> Schedule:
+    """The household schedule an archived copy of article 419 sets, and the
+    days it was in force.
+
+    Raises :class:`ExciseLawError` on anything else, as :func:`parse` does.
+    """
+    try:
+        return _parse_archive(page)
+    except (ValueError, OverflowError) as err:
+        raise ExciseLawError(f"unreadable article: {err}") from err
+
+
+def _parse_archive(page: str) -> Schedule:
+    until = _until(page)
+    text, _protected, _others_at, others, end = _household(page)
+    chunk = text[others:end]
+    heads = list(_TRANCHE_RE.finditer(chunk))
+    if len(heads) < 2:
+        raise ExciseLawError("the rate is not banded by volume")
+    bands: list[tuple[float, float]] = []
+    contributions: set[float] = set()
+    floor = 0.0
+    for i, head in enumerate(heads):
+        last = i == len(heads) - 1
+        lower = _number(head[1] if head[3] is None else head[3]) * 1000.0
+        upper = None if head[2] is None else _number(head[2]) * 1000.0
+        if (
+            lower != floor
+            or (upper is None) != last
+            or (upper is not None and upper <= lower)
+        ):
+            raise ExciseLawError("volume bands out of order")
+        body = chunk[head.end() : len(chunk) if last else heads[i + 1].start()]
+        found = _CONTRIBUTION_RE.findall(body)
+        if len(found) != 1:
+            raise ExciseLawError("no single energy contribution")
+        contributions.add(_number(found[0]) / 1000.0)
+        # The open band is one of no width: blended_excise_rate bills the
+        # volume past the last bound at the last band's rate.
+        bands.append((lower if upper is None else upper, _rate(body)))
+        floor = lower if upper is None else upper
+    if len(contributions) != 1:
+        raise ExciseLawError("the energy contribution is banded by volume")
+    contribution = contributions.pop()
+    if not 0.0 <= contribution < _MAX_EUR_PER_KWH:
+        raise ExciseLawError(f"implausible contribution {contribution} EUR/kWh")
+    special = _SPECIAL_RE.search(chunk, heads[0].end())
+    if special is None:
+        raise ExciseLawError("no special excise")
+    start = _in_force(text, others + special.start())
+    if start >= until:
+        raise ExciseLawError("in force for no day")
+    return Schedule(start, until, tuple(bands), contribution)
 
 
 def _rate_for(kind: str, month: date) -> float | None:
@@ -226,6 +355,16 @@ def _rate_for(kind: str, month: date) -> float | None:
             break
         rate = value
     return rate
+
+
+def household_schedule(month: date) -> Schedule | None:
+    """The household schedule the archived wording set, if it was in force
+    on ``month``'s first day and has been read."""
+    first = month.replace(day=1)
+    schedule = _SCHEDULES.get(SCHEDULE)
+    if schedule is None or not schedule.start <= first < schedule.until:
+        return None
+    return schedule
 
 
 def standard_excise(month: date) -> float | None:
@@ -277,6 +416,28 @@ def _section(rows: Any) -> tuple[tuple[date, float], ...]:
     return tuple(out) if _ascending(out) else ()
 
 
+def _schedule(stored: Any) -> Schedule | None:
+    try:
+        schedule = Schedule(
+            date.fromisoformat(stored["start"]),
+            date.fromisoformat(stored["until"]),
+            tuple((float(upper), float(rate)) for upper, rate in stored["bands"]),
+            float(stored["contribution"]),
+        )
+    except (TypeError, ValueError, KeyError):
+        return None
+    uppers = [upper for upper, _rate in schedule.bands]
+    if (
+        schedule.start >= schedule.until
+        or len(uppers) < 2
+        or uppers != sorted(uppers)
+        or not all(0.0 <= rate < _MAX_EUR_PER_KWH for _upper, rate in schedule.bands)
+        or not 0.0 <= schedule.contribution < _MAX_EUR_PER_KWH
+    ):
+        return None
+    return schedule
+
+
 def hold(table: Mapping[str, Any]) -> None:
     """Hold ``table`` (the shape :func:`held_table` writes), replacing what
     was held for each kind it carries."""
@@ -284,6 +445,9 @@ def hold(table: Mapping[str, Any]) -> None:
         steps = _section(table.get(kind))
         if steps:
             _HELD[kind] = steps
+    schedule = _schedule(table.get(SCHEDULE))
+    if schedule is not None:
+        _SCHEDULES[SCHEDULE] = schedule
 
 
 def restore(table: Mapping[str, Any]) -> None:
@@ -296,21 +460,34 @@ def restore(table: Mapping[str, Any]) -> None:
         steps = _section(table.get(kind))
         if steps and kind not in _HELD:
             _HELD[kind] = steps
+    schedule = _schedule(table.get(SCHEDULE))
+    if schedule is not None and SCHEDULE not in _SCHEDULES:
+        _SCHEDULES[SCHEDULE] = schedule
 
 
-def held_table() -> dict[str, list[list[Any]]]:
+def held_table() -> dict[str, Any]:
     """What is held, in the shape :func:`hold` reads, for an entry's store."""
-    return {
+    table: dict[str, Any] = {
         kind: [[when.isoformat(), rate] for when, rate in steps]
         for kind, steps in _HELD.items()
     }
+    for kind, schedule in _SCHEDULES.items():
+        table[kind] = {
+            "start": schedule.start.isoformat(),
+            "until": schedule.until.isoformat(),
+            "bands": [list(band) for band in schedule.bands],
+            "contribution": schedule.contribution,
+        }
+    return table
 
 
 async def ensure_excise_law(session: aiohttp.ClientSession) -> None:
-    """Read the law once a day.
+    """Read the law once a day, and the wording before it once.
 
     A failure keeps what is held and is retried after ``_FAILURE_RETRY_S``;
-    nothing here raises, since the caller is the coordinator tick.
+    nothing here raises, since the caller is the coordinator tick. The
+    archived wording never changes, so it is asked for only while it is not
+    held, with each daily read of the law until it has been read.
     """
     global _fetched_at, _failed_at
     now = dt_util.utcnow()
@@ -343,3 +520,20 @@ async def ensure_excise_law(session: aiohttp.ClientSession) -> None:
     _HELD.update(table)
     _fetched_at = now
     _failed_at = None
+    if SCHEDULE in _SCHEDULES:
+        return
+    try:
+        schedule = parse_archive(
+            await fetch_text(session, EXCISE_LAW_ARCHIVE_URL, timeout=15)
+        )
+    except ExtractorError as err:
+        # Only a month a card stands in for needs it, which then bills the
+        # levies that card prints, as it did before this was read.
+        _LOGGER.warning(
+            "The household excise in force before the current law could not "
+            "be read from Justel, so a card standing in for one of those "
+            "months is billed the levies it prints: %s",
+            err,
+        )
+        return
+    _SCHEDULES[SCHEDULE] = schedule

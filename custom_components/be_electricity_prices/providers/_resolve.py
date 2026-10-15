@@ -406,7 +406,8 @@ def resolve_federal_excise(
     A residential card printing the degressive table (every supplier that
     prints one, for January to July 2026) is left alone too, simply because
     the law's text in force begins in August 2026: those months have no held
-    rate and keep their bands. A month the law does describe takes its one
+    rate and keep their bands, unless the card stands in for another month's
+    (``_stand_in_levies``). A month the law does describe takes its one
     rate and drops the bands, since the measure flattened the household
     scheme. Aspiravi's September 2026 card still printed the old table, a
     stale block beside the abolished energy contribution, and keeping its
@@ -424,16 +425,7 @@ def resolve_federal_excise(
     )
     if law is None:
         return snapshot
-    # The law's rate excludes VAT. A VAT-inclusive card takes it at the rate
-    # the card states or else the month's; an ex-VAT one takes it as it is,
-    # since the engine grosses it up later. The basis is the one the card
-    # printed on: apply_vat runs first and zeroes vat_rate for an entry that
-    # deducts VAT, which leaves the card ex-VAT all the same.
-    rate = (
-        law
-        if (taxes.published_vat_rate or taxes.vat_rate) > 0.0
-        else law * (1.0 + card_residential_vat(snapshot, delivery_month))
-    )
+    rate = on_card_basis(snapshot, delivery_month, law)
     if (
         abs(rate - taxes.federal_excise) < 5e-7
         and not taxes.protected_excise_unread
@@ -449,6 +441,19 @@ def resolve_federal_excise(
             protected_excise_unread=False,
         ),
     )
+
+
+def on_card_basis(snapshot: SupplierSnapshot, month: date, rate: float) -> float:
+    """``rate``, a levy the law sets excluding VAT, on the basis the card
+    prints its levies on: grossed at the rate the card states or else the
+    month's, or as it is on an ex-VAT card, which the engine grosses later.
+    The basis is the one the card printed on: apply_vat runs first and zeroes
+    vat_rate for an entry that deducts VAT, which leaves the card ex-VAT all
+    the same."""
+    taxes = snapshot.taxes
+    if (taxes.published_vat_rate or taxes.vat_rate) > 0.0:
+        return rate
+    return rate * (1.0 + card_residential_vat(snapshot, month))
 
 
 def resolve_direct_debit(

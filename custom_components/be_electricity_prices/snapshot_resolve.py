@@ -41,6 +41,7 @@ back.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from typing import Any
 
@@ -62,10 +63,13 @@ from .const import (
     METER_MONO,
     SOLAR_REGIME_INJECTION,
     SUPPLIER_CUSTOM,
+    SUPPLIER_SOCIAL,
 )
+from .excise_law import household_schedule
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
 from .providers._resolve import (
     apply_vat,
+    on_card_basis,
     resolve_brussels_power_term,
     resolve_direct_debit,
     resolve_excise_band,
@@ -241,12 +245,36 @@ def entry_annual_injection_kwh(entry: ConfigEntry, coordinator: Any = None) -> f
     return float(measured) if measured else 0.0
 
 
+def _stand_in_levies(snap: SupplierSnapshot, month: date) -> SupplierSnapshot:
+    """The federal levies of a month ``snap`` stands in for, where the law's
+    archived household wording covers it (``household_schedule``): its
+    excise schedule and energy contribution, on the card's basis, since the
+    card prints another month's. Not for a protected customer, whose rates
+    are its own, and not for a month's own card, which is billed as printed:
+    that wording leaves out the rates a transition or a quarterly notice set.
+    """
+    schedule = household_schedule(month)
+    if schedule is None or snap.supplier == SUPPLIER_SOCIAL:
+        return snap
+    bands = tuple(
+        (upper, on_card_basis(snap, month, rate)) for upper, rate in schedule.bands
+    )
+    taxes = replace(
+        snap.taxes,
+        federal_excise=bands[0][1],
+        federal_excise_bands=bands,
+        energy_contribution=on_card_basis(snap, month, schedule.contribution),
+    )
+    return replace(snap, taxes=taxes)
+
+
 def _resolve_snapshot(
     entry: ConfigEntry,
     snap: SupplierSnapshot,
     *,
     annual_kwh: float | None = None,
     delivery_month: date | None = None,
+    stand_in: bool = False,
 ) -> SupplierSnapshot:
     """Resolve a card against the site facts only this entry knows.
 
@@ -268,7 +296,9 @@ def _resolve_snapshot(
     ``delivery_month`` is the month being billed, which decides both federal
     levies: whether the energy contribution is owed at all, and what the
     special excise is. Today's when omitted, since every caller but the month
-    rows prices the running month.
+    rows prices the running month. ``stand_in`` says the card is not that
+    month's own but stands in for it (``_proxy_for_month``), so the levies it
+    prints are another month's (``_stand_in_levies``).
 
     The tranche is dropped rather than folded on an exclusive-night entry: the
     cards that carry one put it on the single register, or split it 900/900
@@ -302,6 +332,8 @@ def _resolve_snapshot(
         resolved, month, professional=levies_professional
     )
     resolved = resolve_federal_excise(resolved, month, professional=levies_professional)
+    if stand_in and not levies_professional:
+        resolved = _stand_in_levies(resolved, month)
     if annual_kwh is None:
         annual_kwh = entry_annual_kwh(entry)
     # Before the tranche, which can turn a spot-monthly leg into a fixed one:

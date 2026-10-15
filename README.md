@@ -366,7 +366,11 @@ rate. And **the correction covers the months the law's current text sets**: the
 same measure steps the excise down each January, to 43, 40 and then 38 € per
 MWh excluding VAT from 2027 to 2029, and each step is billed from its own month
 because the law states it. Your card's own excise is used for the months
-before August 2026, which the correction leaves alone. Where the card prints
+before August 2026, which the correction leaves alone, except where a later
+card stands in for a month whose own card no archive kept (TotalEnergies and
+Ecofix before August 2026): that month is billed the excise table and the
+energy contribution the law set then, read once from Justel's archived copy
+of the same article. Where the card prints
 the degressive table of the time, a household above 20 000 kWh a year is
 billed the blend over its volume; Cociter's card prints only the first tranche
 and energie.be's and Frank's say the excise is degressive without the other

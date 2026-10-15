@@ -1020,6 +1020,21 @@ Justel brackets every passage an amendment wrote and titles the opening
 bracket with the amendment and its entry into force, so the innermost bracket
 around a rate dates it.
 
+The household rate before that wording is in Justel's archived copy of the
+law as it stood before the amendment, `EXCISE_LAW_ARCHIVE_URL` (`const.py`),
+read by `parse_archive` into a `Schedule`: the excise by annual volume ("pour
+la tranche de 0 à 3 MWh", the last band open above its bound), the energy
+contribution beside it, which has to be one figure across the bands, and the
+days it was in force. Its start is its bracket's entry into force (an archived
+copy numbers its brackets and dates each number in a footnote) and its end the
+date the archive's note gives article 419 ("En vigueur jusqu'au 01-08-2026").
+It is read once, after a successful read of the law, and asked for again with
+each daily read until it is held. Only a card standing in for one of its months
+is billed it (`_stand_in_levies`, `snapshot_resolve.py`): the copy leaves out
+the rates a transition fixed in the amending law's own articles (42,5755
+EUR/MWh from April to June 2023) and the quarterly notices article 420
+provides for, which a month's own card carries.
+
 Anything that is not the article as expected raises rather than reading half
 of it: no article, no electricity paragraph, a rate banded by volume (which
 the household rate was before August 2026), two rates where one is expected,
@@ -1041,9 +1056,10 @@ runners instead of the law. Nothing here raises.
 
 `standard_excise` answers for a month with the rate in force on its first day,
 or `None` before the first step held, which is every month before August 2026,
-since Justel serves only the wording in force. `resolve_federal_excise`
-(`providers/_resolve.py`) then bills the card as printed, which is also what
-happens while the law has never been read.
+since the consolidated text is only the wording in force.
+`resolve_federal_excise` (`providers/_resolve.py`) then bills the card as
+printed, which is also what happens while the law has never been read, unless
+the card stands in for the month and `household_schedule` holds its wording.
 
 `protected_excise` answers the protected residential customer's rate the same
 way, for the social tariff (`providers/social.py`). No card prints it reliably,
@@ -1055,4 +1071,5 @@ for it, with the `excise_law_unread` Repairs card, until it is.
 
 The parser is tested on the page as Justel served it on 2026-10-09
 (`tests/fixtures/justel_loi_programme_2004_fr.html`), which every test holds
-in place of the network.
+in place of the network, and the archived copy on the one served on 2026-10-15
+(`tests/fixtures/justel_loi_programme_2004_fr_arch070.html`).

@@ -71,7 +71,7 @@ machinery.
 | `tests/test_energyknights.py` | Energy Knights extractor |
 | `tests/test_energyvision.py` | EnergyVision extractor |
 | `tests/test_engie.py` | Engie extractor |
-| `tests/test_excise_law.py` | The federal excise read from article 419 on Justel (`excise_law.py`), its store round trip, and `resolve_federal_excise` billing it |
+| `tests/test_excise_law.py` | The federal excise read from article 419 on Justel (`excise_law.py`), the household schedule read from its archived copy and billed on a card standing in for one of its months, their store round trip, and `resolve_federal_excise` billing the law |
 | `tests/test_brugel.py` | Brugel's published Sibelga power term (`brugel.py`) and the card it completes |
 | `tests/test_creg_ev.py` | The CREG home charging reimbursement rate and the sensor that carries it |
 | `tests/test_synergrid_rlp.py` | Synergrid RLP profile fetch and parse (the `.xlsb` workbook) and the RLP-weighted month mean |
