@@ -89,7 +89,7 @@ Each of these has a section of its own further down; this is the scan.
 
 - **Cheapest / most-expensive window services** — ask for the best N-hour block of the day from an automation.
 - **Tomorrow-available trigger** — a binary sensor that flips when tomorrow's prices land.
-- **Keyless day-ahead fallback** — ENTSO-E is down: prices keep coming from a keyless source until it recovers. It only steps in for an entry that holds a key; a dynamic contract needs its own, and an optional key you skipped bills a monthly-indexed card's printed figure while a feed-in formula settled per slot stays uncredited and its price unknown.
+- **Keyless day-ahead fallback** — ENTSO-E is down: prices keep coming from a keyless source until it recovers. It only steps in for an entry that holds a key; a dynamic contract needs its own, and an optional key you skipped bills a monthly-indexed card's printed figure until a next card printing the closed month's index settles it, while a feed-in formula settled per slot stays uncredited and its price unknown.
 - **Self-healing** — last-known prices keep serving through an outage, and Repairs cards explain anything that needs you. See [Failure mode](#failure-mode).
 - **Catalog drift detection** — a daily check that tells the maintainer when a supplier changes its lineup.
 - **Expert custom formula** — type a card in by hand when a supplier is not covered.
@@ -586,10 +586,13 @@ dropped rather than billed on the new card.
    on the spot, without asking ENTSO-E, because a dynamic contract has no
    price at all without a key. It is also the one value the keyless fallback
    cannot rescue, since the entry never gets as far as trying it. For the
-   injection case it is optional and skippable: leave it blank to skip it,
-   and a feed-in credit settled per slot stays unavailable, while one
-   indexed on the month keeps the card's printed figure, until you add a key
-   through **Configure → Edit settings**.
+   injection and monthly-indexed cases it is optional and skippable: leave
+   it blank to skip it, and a feed-in credit settled per slot stays
+   unavailable until you add a key through **Configure → Edit settings**,
+   while a leg indexed on the month keeps the card's printed figure, the
+   previous month's (or on Bolt the previous quarter's), until the next card
+   settles the closed month or quarter where the supplier prints the index
+   it closed at.
 9. **Capacity tariff peak source** *(Flanders only)* — a sensor, or a fixed
    kW value (default 2.5 kW, the VREG regulated minimum). Leaving it at that
    default when your real peak is higher understates the bill by the

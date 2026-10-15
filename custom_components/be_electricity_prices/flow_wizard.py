@@ -616,10 +616,11 @@ class _WizardStepsMixin:
 
         Unlike the dynamic-energy ``api_key`` step this one is skippable:
         the card prints a figure to fall back on, so leaving it blank bills
-        that figure (last month's index) until a key is added through
-        Edit settings. A typed key is validated against the live endpoint,
-        except the one already stored, so an edit of some other setting does
-        not fail on it while ENTSO-E is down.
+        that figure (last month's index) until a next card printing the
+        closed month's index settles it or a key is added through Edit
+        settings. A typed key is validated against the live endpoint, except
+        the one already stored, so an edit of some other setting does not
+        fail on it while ENTSO-E is down.
         """
         errors: dict[str, str] = {}
         if user_input is not None:
