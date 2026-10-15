@@ -128,6 +128,7 @@ from card_texts import (  # type: ignore[import-not-found]  # noqa: E402
 from homeassistant.helpers.json import json_dumps  # noqa: E402
 from live_check import (  # type: ignore[import-not-found]  # noqa: E402
     _fetch_with_retry,
+    brussels_clock,
     label_month,
 )
 
@@ -2248,6 +2249,7 @@ async def archive(
 
 
 def main() -> int:
+    brussels_clock()
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--out", type=Path, required=True, help="archive checkout")
     parser.add_argument(

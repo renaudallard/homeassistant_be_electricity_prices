@@ -62,6 +62,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import aiohttp
+from homeassistant.util import dt as dt_util
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # scripts/ is not a package, so it is put on sys.path above rather than
@@ -2803,9 +2804,9 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
     lasts the whole retry loop is filed. As catalog rows they were filed on
     the first failure under "new supplier products detected".
     """
-    # Brussels explicitly, as elsewhere in this script: run standalone, HA's
-    # dt_util default time zone is UTC, and asking it for "local midnight"
-    # would slice 22 hours out of the middle of two Belgian days.
+    # Brussels explicitly, as elsewhere in this script: dt_util's default time
+    # zone is UTC until brussels_clock() sets it, and asking UTC for "local
+    # midnight" would slice 22 hours out of the middle of two Belgian days.
     label = "spot/fallback: energy-charts serves the Belgian day-ahead"
     brussels = ZoneInfo("Europe/Brussels")
     today = datetime.now(brussels).date()
@@ -5811,7 +5812,19 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def brussels_clock() -> None:
+    """Have ``dt_util`` tell the time in Brussels, as it does in Home Assistant.
+
+    Run standalone its default time zone is UTC, and the providers read the
+    running month through ``dt_util.now()``: from 22:00 or 23:00 UTC on a
+    month's last day, a month already closed in Brussels would still be the
+    running one. Called once at the start of each script that runs them.
+    """
+    dt_util.set_default_time_zone(ZoneInfo("Europe/Brussels"))
+
+
 def main() -> int:
+    brussels_clock()
     args = _parse_args(sys.argv[1:])
     try:
         return asyncio.run(_run(args.texts))

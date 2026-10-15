@@ -453,9 +453,16 @@ reason, and because a crash is a bug here that a pull request should fail on.
 
 The window is anchored on `ZoneInfo("Europe/Brussels")` explicitly rather than through
 `dt_util.start_of_local_day()`. Run standalone, this script has no Home Assistant instance and
-`dt_util`'s default time zone is **UTC**, so asking it for local midnight slices 22 hours out of the
-middle of two Belgian days -- which is exactly what the check reported the first time it ran. Every
-other date-sensitive spot in this script pins Brussels the same way, for the same reason.
+`dt_util`'s default time zone is **UTC** until `main()` sets it, so asking it for local midnight
+slices 22 hours out of the middle of two Belgian days, which is exactly what the check reported
+the first time it ran. Every other date-sensitive spot in this script pins Brussels the same way,
+for the same reason.
+
+The providers do not pin it: they read the running month through `dt_util.now()`, which in Home
+Assistant is the user's zone. So `main()` here and in `scripts/archive_cards.py` first calls
+`brussels_clock()`, which sets that default to Brussels.
+Left at UTC, from 22:00 or 23:00 UTC on a month's last day a month already closed in Brussels
+would still count as running, and a card short of an area for it would be left absent.
 
 ### Which suppliers are covered, and which deliberately are not
 

@@ -18,9 +18,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import ANY
+from zoneinfo import ZoneInfo
 
 import aiohttp
 import pytest
+from homeassistant.util import dt as dt_util
 
 from custom_components.be_electricity_prices.const import (
     SUPPLIER_CUSTOM,
@@ -3024,6 +3026,20 @@ def test_index_only_touches_nothing_but_the_listing(
     assert ac.main() == 0
     assert (tmp_path / "coverage.md").exists()
     assert not (tmp_path / "pdfs.md").exists()
+
+
+def test_main_reads_the_clock_in_brussels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The providers read the running month through dt_util.now(), whose zone
+    is UTC in a script until it is set: from 22:00 UTC on a month's last day a
+    month closed in Brussels would still run."""
+    dt_util.set_default_time_zone(UTC)
+    monkeypatch.setattr(
+        sys, "argv", ["archive_cards.py", "--out", str(tmp_path), "--index-only"]
+    )
+    assert ac.main() == 0
+    assert dt_util.get_default_time_zone() == ZoneInfo("Europe/Brussels")
 
 
 def test_a_supplier_that_left_the_branch_loses_its_sheet(tmp_path: Path) -> None:

@@ -45,13 +45,15 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import aiohttp
 import pytest
+from homeassistant.util import dt as dt_util
 
 from custom_components.be_electricity_prices.providers._rates import SpotMonthlyRates
 
@@ -942,6 +944,23 @@ def test_the_texts_option_names_the_archive_checkout() -> None:
     """--texts is the only option; without it every card is rendered."""
     assert lc._parse_args([]).texts is None
     assert lc._parse_args(["--texts", "tmp/archive"]).texts == Path("tmp/archive")
+
+
+def test_the_run_reads_the_clock_in_brussels(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Standalone, dt_util's default zone is UTC, and the providers read the
+    running month through dt_util.now(): late on a month's last day a month
+    closed in Brussels would still run. main() sets Brussels first."""
+    seen: list[Any] = []
+
+    async def run(_texts: Path | None) -> int:
+        seen.append(dt_util.get_default_time_zone())
+        return 0
+
+    dt_util.set_default_time_zone(UTC)
+    monkeypatch.setattr(sys, "argv", ["live_check.py"])
+    monkeypatch.setattr(lc, "_run", run)
+    assert lc.main() == 0
+    assert seen == [ZoneInfo("Europe/Brussels")]
 
 
 def test_a_card_from_a_past_month_fails(monkeypatch: pytest.MonkeyPatch) -> None:
