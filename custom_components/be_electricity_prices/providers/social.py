@@ -64,9 +64,9 @@ from ..const import (
 )
 from ..excise_law import protected_excise
 from ._parse import to_float
-from ._pdf import fetch_pdf_text, fetch_text, is_transient_fetch_error
+from ._pdf import FR_MONTHS, fetch_pdf_text, fetch_text, is_transient_fetch_error
 from ._rates import Contract, InjectionRates, VariableRates
-from ._validity import end_of_month
+from ._validity import end_of_month, text_mentions_month
 from .base import (
     DsoOverlay,
     ExtractorError,
@@ -350,13 +350,24 @@ def _engie_offset(month: date) -> int:
 
 
 async def _engie_card(
-    session: aiohttp.ClientSession, region: str, month: date
+    session: aiohttp.ClientSession, region: str, month: date, *, archived: bool
 ) -> tuple[str, str]:
+    """Engie's social card for ``month``.
+
+    The offset counts back from the newest card Engie serves, which on the
+    1st, before the new month's card is out, is still last month's. So an
+    archived month is checked against the one the card names ("contrats
+    conclus en Octobre 2026"), and a card naming another is refused rather
+    than billed as this month's.
+    """
     offset = _engie_offset(month)
     if offset < 0:
         raise ExtractorError("Engie social card: a month not published yet")
     url = _ENGIE_URL.format(code=_ENGIE_REGION[region], offset=offset)
-    return await fetch_pdf_text(session, url), url
+    text = await fetch_pdf_text(session, url)
+    if archived and not text_mentions_month(text, month, FR_MONTHS):
+        raise ExtractorError(f"Engie social card: not the card for {month:%Y-%m}")
+    return text, url
 
 
 async def _luminus_card(
@@ -459,14 +470,21 @@ def build_snapshot(
             injection=injection,
             source_url=source_url,
             publication_label=f"Q{number} {card.quarter.year}",
-            valid_until=end_of_month(card.quarter.year, card.quarter.month + 2),
+            # The quarter's card, but billed per month: the excise and the
+            # supplier's card both change at a month boundary.
+            valid_until=end_of_month(month.year, month.month),
         ),
         vat,
     )
 
 
 async def _for_month(
-    session: aiohttp.ClientSession, contract_id: str, region: str, month: date
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    month: date,
+    *,
+    archived: bool,
 ) -> SupplierSnapshot:
     if contract_id not in _CONTRACT_IDS:
         raise ExtractorError(f"unknown social tariff contract {contract_id!r}")
@@ -476,7 +494,7 @@ async def _for_month(
     injection: InjectionRates | None = None
     fee: float | None = None
     if contract_id == CONTRACT_ENGIE:
-        text, _ = await _engie_card(session, region, month)
+        text, _ = await _engie_card(session, region, month, archived=archived)
         injection, fee = parse_engie(text, card)
     elif contract_id == CONTRACT_LUMINUS or region == REGION_WALLONIA:
         # Luminus prints the Walloon connection fee too, which is the same for
@@ -508,7 +526,9 @@ async def fetch(
     session: aiohttp.ClientSession, contract_id: str, region: str
 ) -> SupplierSnapshot:
     """This month's social tariff."""
-    return await _for_month(session, contract_id, region, dt_util.now().date())
+    return await _for_month(
+        session, contract_id, region, dt_util.now().date(), archived=False
+    )
 
 
 async def fetch_for_month(
@@ -523,7 +543,7 @@ async def fetch_for_month(
     if first < FIRST_QUARTER or first > dt_util.now().date():
         return None
     try:
-        return await _for_month(session, contract_id, region, first)
+        return await _for_month(session, contract_id, region, first, archived=True)
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise, so
         # the month cache retries it instead of caching it as absent.

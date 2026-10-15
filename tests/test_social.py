@@ -492,7 +492,8 @@ async def test_another_suppliers_household_reads_the_fee_off_the_luminus_card() 
     assert snap.injection is None
     assert snap.taxes.region_connection_fee == pytest.approx(0.00075)
     assert snap.publication_label == "Q4 2026"
-    assert snap.valid_until == date(2026, 12, 31)
+    # The quarter's card, but a snapshot of the month: October's ends with it.
+    assert snap.valid_until == date(2026, 10, 31)
 
     with (
         patch.object(social, "fetch_pdf_text", side_effect=pdf),
@@ -506,6 +507,33 @@ async def test_another_suppliers_household_reads_the_fee_off_the_luminus_card() 
         snap = await social.fetch(AsyncMock(), social.CONTRACT_OTHER, REGION_WALLONIA)
     assert snap.taxes.region_connection_fee == 0.0
     assert snap.taxes.region_connection_fee_unavailable
+
+
+async def test_an_engie_card_naming_another_month_is_not_that_month_s() -> None:
+    """The month offset counts back from the newest card Engie serves, so on
+    the 1st, before December's card is out, the offset for November reaches
+    October's card. It names its month ("contrats conclus en Octobre 2026")
+    and is refused for November rather than billed as November's."""
+    creg = fixture_text("creg_social_2026_q4.pdf")
+    engie = fixture_text("engie_social_w_2026-10.pdf")
+
+    async def pdf(_session: object, url: str, **_kw: object) -> str:
+        return creg if "creg.be" in url else engie
+
+    async def month(today: datetime, first: date) -> SupplierSnapshot | None:
+        with (
+            patch.object(social, "fetch_pdf_text", side_effect=pdf),
+            patch.object(social.dt_util, "now", return_value=today),
+        ):
+            return await social.fetch_for_month(
+                AsyncMock(), social.CONTRACT_ENGIE, REGION_WALLONIA, first
+            )
+
+    first_of_december = datetime(2026, 12, 1, 9, tzinfo=BRUSSELS)
+    assert await month(first_of_december, date(2026, 11, 1)) is None
+    october = await month(first_of_december, date(2026, 10, 1))
+    assert october is not None
+    assert october.valid_until == date(2026, 10, 31)
 
 
 async def test_a_month_before_the_creg_archive_has_no_card() -> None:

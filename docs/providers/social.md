@@ -74,7 +74,8 @@ energy component, and the energy leg is the rest.
 | `taxes.region_connection_fee` | Wallonia only, read off the supplier's social card |
 
 The quarter's own card is fetched for every month, and `valid_until` is the
-quarter's last day.
+month's last day: the excise and the supplier's card both change monthly, so
+the snapshot is the month's, not the quarter's.
 
 Under Wallonia's Impact tariff the day price bills the PIC and MEDIUM bands and
 the night price the ECO band, which is the mapping Engie's social card prints
@@ -155,6 +156,13 @@ in `injection.py`), so every register resolves on the delivery month's mean
 where the entry has an ENTSO-E key, and the printed rates stand in until it is
 known. The card limits its feed-in to a
 digital or bidirectional meter.
+
+Engie's document service counts its month offset back from the newest card it
+serves, which on the 1st, before the new month's card is out, is still last
+month's. So `fetch_for_month` checks the month the card names ("contrats
+conclus en Octobre 2026", `text_mentions_month` in `_validity.py`) and a card
+naming another month leaves that month without a card rather than billing it
+on the wrong one. The live fetch takes the newest card as it is.
 
 `parse_luminus` reads the feed-in row, "Tarif de l'énergie injectée" since
 2026 and "Compensation pour l'énergie injectée" before; the card a change of
