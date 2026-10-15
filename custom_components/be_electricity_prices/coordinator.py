@@ -314,6 +314,10 @@ class BePricesCoordinator(
         # _injection_needs_spot_quarters. Empty for every other entry, which
         # is what keeps the persisted blob the size it always was.
         self._historical_spot_quarters: dict[datetime, list[float]] = {}
+        # Bumped by every change to either cache, so a reader keyed on it (the
+        # year-end memo) sees a refetched or repaired hour that left the
+        # number of hours unchanged.
+        self._spot_generation = 0
         # Serialises the historical spot walk. Two callers reach it from
         # outside the tick: the statistics backfill and the compare page,
         # and on a fresh install the deferred year-fill below runs beside
@@ -532,6 +536,7 @@ class BePricesCoordinator(
             self._complete_spot_days.clear()
             self._spot_day_retry_at.clear()
             self._quarter_grid_days.clear()
+            self._spot_generation += 1
         self._spot_cache = {}
         self._spot_cache_day = None
         self._spot_cache_includes_tomorrow = False

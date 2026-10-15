@@ -3216,6 +3216,7 @@ async def test_a_tick_during_the_backfill_does_not_prune_the_hours_it_reads(
         _quarter_grid_days=set(),
         _complete_spot_days=set(),
         _spot_prune_holds=0,
+        _spot_generation=0,
     )
     entry.runtime_data = coord
 

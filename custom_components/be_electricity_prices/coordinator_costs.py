@@ -162,6 +162,7 @@ class _CostsMixin:
     _held_costs: dict[str, Any] | None
     _historical_spot_quarters: dict[datetime, list[float]]
     _historical_spots: dict[datetime, float]
+    _spot_generation: int
     _previous_priced: PricedPeriods | None
     _previous_pricing: asyncio.Task[None] | None
     _previous_tried: tuple[str, datetime] | None
@@ -405,8 +406,7 @@ class _CostsMixin:
             billed_peak,
             own_start,
             cached_months_only,
-            len(self._historical_spots),
-            len(self._historical_spot_quarters),
+            self._spot_generation,
             (self._rlp_weights_year, self._rlp_blend, self._rlp_fetched_at),
             (self._spp_weights_year, self._spp_fetched_at),
             sorted(

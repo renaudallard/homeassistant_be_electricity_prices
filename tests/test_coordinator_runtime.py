@@ -61,6 +61,7 @@ from custom_components.be_electricity_prices.coordinator_issues import (
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     InjectionRates,
+    SpotMonthlyRates,
 )
 from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
@@ -5011,6 +5012,58 @@ async def test_force_refresh_clears_the_price_history_on_request(
     assert coord._historical_spot_quarters == {}
     assert coord._complete_spot_days == set()
     assert coord._spot_day_retry_at == {}
+
+
+async def test_year_end_walks_again_on_repaired_spots(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The year-end memo was keyed on the number of cached hours.
+
+    clear_history refills the same hours, and a day fetched again on the
+    15-minute product replaces hours already held, so the count did not move
+    and projected_year_end_cost stayed on the wrong prices until the next
+    day. A merge that only repeats what is held must still reuse the walk."""
+    from custom_components.be_electricity_prices import coordinator_costs
+
+    freezer.move_to("2026-09-26 12:30:00+02:00")
+    entry = make_entry(consumption_kwh="sensor.cons")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="eneco",
+        contract="power_fix",
+        energy=SpotMonthlyRates(factor=1.1, base=0.02),
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
+    hour = datetime(2026, 8, 10, 10, 0, tzinfo=UTC)
+    coord._historical_spots = {hour: 1.5}
+
+    async def refill(*_a: Any, **_k: Any) -> None:
+        if not coord._historical_spots:
+            coord._merge_spot_window({hour: 0.08}, False)
+
+    coord._ensure_historical_spots = refill  # type: ignore[method-assign]
+    walk = AsyncMock(return_value=812.5)
+    with (
+        patch.object(
+            coordinator_costs, "_compute_current_year_cost", AsyncMock(return_value=0.0)
+        ),
+        patch.object(coordinator_costs, "_compute_year_end_cost", walk),
+    ):
+        await coord._async_update_data()
+        await coord._async_update_data()
+        assert walk.await_count == 2
+        await coord.async_force_refresh(clear_history=True, wait=True)
+        assert coord._historical_spots == {hour: 0.08}
+        assert walk.await_count == 3
+        coord._merge_spot_window({hour: 0.08}, False)
+        await coord._async_update_data()
+        assert walk.await_count == 3
+        coord._merge_spot_window({hour: 0.09}, False)
+        await coord._async_update_data()
+        assert walk.await_count == 4
 
 
 async def test_load_persistent_drops_an_impossible_cached_spot(

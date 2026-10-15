@@ -195,6 +195,7 @@ class _SpotsMixin(_ProfilesMixin):
     _session: aiohttp.ClientSession
     _historical_spots: dict[datetime, float]
     _historical_spot_quarters: dict[datetime, list[float]]
+    _spot_generation: int
     _spot_cache: dict[datetime, float]
     _spot_cache_day: date | None
     _spot_source: str
@@ -325,7 +326,7 @@ class _SpotsMixin(_ProfilesMixin):
             # replayed off the hourly mean until the next restart.
             self._complete_spot_days.clear()
             self._complete_spot_days_quarters = want_quarters
-        if snap is not None and not want_quarters:
+        if snap is not None and not want_quarters and self._historical_spot_quarters:
             # The entry stopped needing the slots. Unticking the quarter-hourly
             # box or the never-negative one, or leaving the injection regime,
             # changes none of the (supplier, contract, region) tuple the reload
@@ -335,6 +336,7 @@ class _SpotsMixin(_ProfilesMixin):
             # credits the hour. Cleared here, above the key check, because an
             # entry with no key still replays whatever is already cached.
             self._historical_spot_quarters.clear()
+            self._spot_generation += 1
         api_key = api_key or self.entry.data.get(CONF_API_KEY)
         if not api_key:
             return
@@ -518,10 +520,21 @@ class _SpotsMixin(_ProfilesMixin):
         price. An entry whose feed-in formula is floored keeps the hour's own
         slots too, because that formula is not linear and its mean does not
         price it.
+
+        A window that changes a price, on a day fetched again on the other
+        product for instance, bumps ``_spot_generation``. One that only
+        repeats what is held does not, so a day refetched every tick does not
+        make the year-end walk run again each time.
         """
-        self._historical_spots.update(_bucket_spots_by_hour(prices))
-        if want_quarters:
-            self._historical_spot_quarters.update(_group_spot_quarters_by_hour(prices))
+        hours = _bucket_spots_by_hour(prices)
+        slots = _group_spot_quarters_by_hour(prices) if want_quarters else {}
+        if not (
+            hours.items() <= self._historical_spots.items()
+            and slots.items() <= self._historical_spot_quarters.items()
+        ):
+            self._spot_generation += 1
+        self._historical_spots.update(hours)
+        self._historical_spot_quarters.update(slots)
 
     def _remark_spot_days(
         self,
@@ -671,11 +684,16 @@ class _SpotsMixin(_ProfilesMixin):
             )
         gap_days = {day for start, end in short for day in _dates_in(start, end)}
         extra = _spots_for_local_days(prices, gap_days)
+        # Only ever inserted, never overwritten, so a size that moved is an
+        # hour that was added.
+        held = len(self._historical_spots), len(self._historical_spot_quarters)
         for hour, value in _bucket_spots_by_hour(extra).items():
             self._historical_spots.setdefault(hour, value)
         if want_quarters:
             for hour, slots in _group_spot_quarters_by_hour(extra).items():
                 self._historical_spot_quarters.setdefault(hour, slots)
+        if held != (len(self._historical_spots), len(self._historical_spot_quarters)):
+            self._spot_generation += 1
         for chunk_start, chunk_end in short:
             self._remark_spot_days(
                 chunk_start, chunk_end, want_quarters, now, stable_before
@@ -890,6 +908,7 @@ class _SpotsMixin(_ProfilesMixin):
         # holds no hour the hourly cache does not and the two early returns
         # above answer for it too.
         _drop_hours_before(self._historical_spot_quarters, keep_after)
+        self._spot_generation += 1
         # The completeness set follows the same window so it stays bounded.
         self._complete_spot_days = {
             d for d in self._complete_spot_days if d >= first_kept
