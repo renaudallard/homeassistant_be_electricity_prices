@@ -806,6 +806,71 @@ async def test_a_month_settled_on_one_leg_keeps_that_leg(tmp_path: Path) -> None
     assert json.loads(row.read_text()) == partial
 
 
+async def test_a_month_settled_on_its_feed_in_alone_keeps_it(tmp_path: Path) -> None:
+    """TotalEnergies' fixed cards carry a month-indexed feed-in on a fixed
+    tariff, so the month settles its injection leg and nothing else. A row
+    that settled only that leg has to count as settled too, or the address
+    serving the closed month's card again writes its estimate back over it."""
+    from custom_components.be_electricity_prices.providers._settle import (
+        settled_injection,
+    )
+
+    serving = ["augustus 2026"]
+
+    async def fetch(_session: Any, contract: str, _region: str) -> SupplierSnapshot:
+        await fetch_text(_Session({CARD_URL: "card"}), CARD_URL)  # type: ignore[arg-type]
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.25),
+            injection=InjectionRates(
+                current=0.05, month_indexed=True, factor=0.9, base=-0.01
+            ),
+            publication_label=serving[0],
+            source_url=CARD_URL,
+        )
+
+    async def settle_month(
+        _session: Any, _contract: str, _region: str, month: date, held: SupplierSnapshot
+    ) -> SupplierSnapshot:
+        assert held.injection is not None
+        return replace(held, injection=settled_injection(held.injection, 0.1))
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=fetch,
+        settles_on_next_card=True,
+        settle_month=settle_month,
+    )
+    await ac.archive(
+        tmp_path,
+        extractors=[extractor],
+        now=datetime(2026, 8, 20, 6, 0, tzinfo=UTC),
+        sleep=_no_sleep,
+    )
+    row = tmp_path / "cards/acme/acme_fix/wallonia/2026-08.json"
+    serving[0] = "september 2026"
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert summary.settled == 1
+    settled = json.loads(row.read_text())
+    assert settled["injection"]["index_realised"] == pytest.approx(0.1)
+
+    serving[0] = "augustus 2026"
+    await ac.archive(tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep)
+    assert json.loads(row.read_text()) == settled
+
+
 async def test_a_backfill_stops_at_the_retention(tmp_path: Path) -> None:
     """A month past --keep-months would be stored only to be pruned at the
     end of the run, and its PDFs uploaded only for the workflow to delete
