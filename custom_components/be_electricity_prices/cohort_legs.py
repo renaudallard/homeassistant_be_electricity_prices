@@ -333,6 +333,16 @@ def _cohort_energy_from_archived(
     return None
 
 
+def _with_standing_charge(energy: EnergyRates, signed: EnergyRates) -> EnergyRates:
+    """``energy`` billing the standing charge of ``signed``, the leg a cohort
+    signed for, the exclusive-night one included where ``energy`` has one."""
+    names = ("yearly_fixed_fee", "yearly_fixed_fee_exclusive_night")
+    fees: dict[str, Any] = {
+        name: getattr(signed, name, None) for name in names if hasattr(energy, name)
+    }
+    return replace(energy, **fees)
+
+
 def _quarter_leg(energy: VariableRates, factor: float) -> SpotMonthlyRates:
     """The monthly leg of a card indexed on a quarter's per-register indices.
 
@@ -572,9 +582,8 @@ def _cohort_card(
     billed. A keyless variable cohort is that last case while the month
     runs: its signing card is retrieved, but re-pricing it needs spots until
     the month settles, so the entry bills the current card's printed rate
-    exactly as it would with no start date at all, and naming the signing
-    card alone answered "did my start date do anything?" with a yes it had
-    not earned.
+    as it would with no start date at all, and naming the signing card alone
+    answered "did my start date do anything?" with a yes it had not earned.
     """
     label = current.publication_label or "the current card"
     if archived is not None:

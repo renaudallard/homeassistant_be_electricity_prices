@@ -245,8 +245,9 @@ falls through to branch 2's soft path. Only the dynamic and spot-monthly
 *contract kinds* are asked for a mandatory API key; a month-indexed variable
 contract is offered one as an optional step and may have skipped it, and would
 otherwise hard-fail over a key it never held once its leg re-prices to
-`SpotMonthlyRates`. `_cohort_legs` therefore drops the cohort leg when no
-key is configured (`cohort.py`), keeping the current card instead.
+`SpotMonthlyRates`. `_cohort_legs` therefore drops the cohort's formula when no
+key is configured and the month has not settled (`cohort.py`), keeping the
+current card's printed rate with the signing card's standing charge instead.
 
 **Which month the cohort asks for** (`_tariff_card_month`, `cohort.py`): the
 entry's own tariff card month when it sets one, else its contract start date.

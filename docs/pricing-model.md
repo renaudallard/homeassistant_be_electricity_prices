@@ -500,7 +500,10 @@ A signing cohort without a key bills a settled month the same way as one with a
 key: `_cohort_legs` keeps the signing card's coefficients whenever the month
 being billed carries `index_realised`, which the leg bills with no day-ahead
 cache at all, and drops them only for a month that has not settled, which then
-bills its printed rate as an entry with no start date does. Every supplier that
+bills its printed rate as an entry with no start date does. Its rate and nothing
+else: the standing charge does not depend on the index, so such a month, the
+live tick and the projections bill the signing card's
+(`_with_standing_charge`, `cohort_legs.py`), as a keyed cohort does every month. Every supplier that
 settles a month records the index its own formula reads (the RLP-weighted one
 at Eneco, EBEM and TotalEnergies, the quarter's per register at Bolt, one BELIX
 for Cociter's three bands), so the signing card's formula at that index is the

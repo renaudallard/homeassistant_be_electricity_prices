@@ -9861,10 +9861,74 @@ async def test_a_keyless_cohort_bills_a_settled_month_on_its_own_formula(
         await _compute_current_year_cost(
             hass, MagicMock(), extractor, october, entry, breakdown=stats
         )
-    assert live.energy is None
+    assert live.splice(october) == october
     assert stats["energy_component_ytd_eur"] == pytest.approx(
         300.0 * (1.1 * 0.10 + 0.036)
     )
+
+
+async def test_a_keyless_cohort_pays_the_signed_standing_charge_every_month(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The standing charge does not depend on the index, so a keyless cohort
+    pays the signing card's on the running month and on the live tick too,
+    as a keyed one does, and only the energy rate stays printed. It paid the
+    current card's there and the signing card's on its settled months: a
+    Mega Cosy Flex contract signed in January 2026 went from 90,10 to 105,00
+    EUR a year on October."""
+    from custom_components.be_electricity_prices.cohort import (
+        _cohort_legs,
+        _effective_snapshot_for_month,
+    )
+
+    freezer.move_to("2026-10-15 12:00:00+02:00")
+
+    def card(fee: float, **rates: Any) -> SupplierSnapshot:
+        return make_snapshot(
+            energy=VariableRates(
+                month_indexed=True,
+                yearly_fixed_fee=fee,
+                yearly_fixed_fee_exclusive_night=fee + 10.0,
+                **rates,
+            )
+        )
+
+    may = card(90.1, current=0.15, formula_factor=1.1, formula_base=0.036)
+    october = card(105.0, current=0.17, formula_factor=1.2, formula_base=0.04)
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return may
+
+    async def _for_month(*_a: object, **_k: object) -> SupplierSnapshot:
+        return october
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2026-05-10")
+    extractor = _fixed_extractor(_ffm)
+    live = await _cohort_legs(
+        hass, MagicMock(), extractor, "test", "wallonia", entry, october
+    )
+    with patch(
+        "custom_components.be_electricity_prices.cohort._snapshot_for_month",
+        _for_month,
+    ):
+        running = await _effective_snapshot_for_month(
+            hass,
+            MagicMock(),
+            extractor,
+            "test",
+            "wallonia",
+            date(2026, 10, 1),
+            october,
+            entry,
+        )
+    for billed in (live.splice(october).energy, running.energy):
+        assert isinstance(billed, VariableRates)
+        assert billed.current == pytest.approx(0.17)
+        assert yearly_fixed_fee_for_meter(billed, "mono") == pytest.approx(90.1)
+        assert yearly_fixed_fee_for_meter(billed, "exclusive_night") == pytest.approx(
+            100.1
+        )
 
 
 async def test_the_live_cohort_leg_carries_no_signing_month_index(
@@ -10715,7 +10779,7 @@ async def test_cohort_card_says_when_the_signing_card_bills_nothing(
         _entry(contract="test", contract_start_date="2026-05-15"),
         current,
     )
-    assert keyless.energy is None
+    assert keyless.splice(current).energy == current.energy
     assert keyless.card == (
         "octobre 2026 (signing card mai 2026 not re-priced: no ENTSO-E key)"
     )
@@ -11616,8 +11680,9 @@ async def test_cohort_energy_leg_variable_keeps_current_card_without_key(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """A variable contract is never asked for an ENTSO-E key, so its cohort
-    re-price must degrade to the current card rather than hand the coordinator
-    a SpotMonthlyRates leg it can only price by failing the entry."""
+    re-price must degrade to the current card's printed rate rather than hand
+    the coordinator a SpotMonthlyRates leg it can only price by failing the
+    entry. The standing charge stays the one signed."""
     freezer.move_to("2026-07-15 12:00:00+02:00")
     current = make_snapshot(
         energy=VariableRates(current=0.22, formula_factor=1.20, formula_base=0.03)
@@ -11637,7 +11702,7 @@ async def test_cohort_energy_leg_variable_keeps_current_card_without_key(
     leg = await _cohort_energy_leg(
         hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, current
     )
-    assert leg is None
+    assert leg == replace(current.energy, yearly_fixed_fee=53.0)
 
 
 def test_cohort_energy_from_archived_carries_exclusive_night_fee() -> None:

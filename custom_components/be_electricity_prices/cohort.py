@@ -52,6 +52,7 @@ from .cohort_legs import (
     _manual_energy_leg,
     _month_indexed_leg,
     _on_settled_quarter,
+    _with_standing_charge,
 )
 from .const import (
     CONF_API_KEY,
@@ -249,9 +250,10 @@ async def _cohort_legs(
     caller to splice onto the delivery month's DSO / tax overlays
     (:meth:`_CohortLegs.splice`), and names the card they came off. A leg left
     ``None`` means "no cohort override, keep the card's own": nothing to
-    re-price with (no signing rate typed and no archived card, or a variable
+    re-price with (no signing rate typed and no archived card). A variable
     cohort with no ENTSO-E key to resolve its monthly mean, in a month whose
-    card does not carry the index it settled at). With no cohort
+    card does not carry the index it settled at, keeps that card's printed
+    rate with the standing charge it signed. With no cohort
     month there is no lock, so the feed-in leg is ``None`` and the energy leg
     is the delivery month's card re-priced on its monthly mean when that card
     is month indexed and the entry has a key (:func:`_month_indexed_leg`),
@@ -337,6 +339,9 @@ async def _cohort_legs(
     # rolled over and the price jumped under the user.
     archived: EnergyRates | None = None
     archived_snap: SupplierSnapshot | None = None
+    # A signed leg left unbilled for want of an index, whose standing charge
+    # still is the contract's.
+    unindexed: EnergyRates | None = None
     # Why a retrieved signing card prices nothing, for its label.
     unbilled = "no formula on it to re-price"
     if start < this_month and _month_card_retrievable(
@@ -356,9 +361,9 @@ async def _cohort_legs(
             # A SpotMonthlyRates leg bills at the current month's mean spot,
             # which needs an ENTSO-E key. Only the dynamic and spot-monthly
             # contract kinds are asked for one, so a variable cohort can reach
-            # here without a key: keep the current card (priced off its own
-            # resolved rate) instead of tearing the entry down over a key the
-            # user was never prompted for.
+            # here without a key: keep the current card's printed rate instead
+            # of tearing the entry down over a key the user was never prompted
+            # for.
             #
             # Unless the month being billed has settled: its card then carries
             # the index the month closed at (``index_realised``), which the leg
@@ -393,7 +398,7 @@ async def _cohort_legs(
             # through a cold start or an ENTSO-E outage.
             if isinstance(cohort, SpotMonthlyRates):
                 if settled is None and not entry.data.get(CONF_API_KEY):
-                    cohort = None
+                    unindexed, cohort = cohort, None
                     unbilled = "no ENTSO-E key"
                 else:
                     cohort = replace(cohort, index_realised=settled)
@@ -447,10 +452,22 @@ async def _cohort_legs(
         # entry keeps the printed rate, the same answer the gate above
         # reached.
         energy = _month_indexed_leg(month_snapshot or current_snapshot, entry)
+    if energy is None and unindexed is not None:
+        # The rate a keyless cohort cannot re-price stays printed, and only
+        # that: the standing charge does not depend on the index, and a keyed
+        # cohort pays the signing card's every month. The running month and
+        # the projections kept the current card's instead, so a Mega Cosy
+        # Flex contract signed in January 2026 paid 90,10 EUR a year on its
+        # settled months and 105,00 on October.
+        energy = _with_standing_charge(
+            (month_snapshot or current_snapshot).energy, unindexed
+        )
     if manual is not None:
         source = "hand-entered signing rate"
     elif archived is not None:
         source = "archived signing-month card"
+    elif unindexed is not None:
+        source = "card's printed rate, standing charge off the signing-month card"
     elif energy is not None:
         source = "billed month's card, re-priced on its own index"
     else:
