@@ -766,6 +766,8 @@ def test_streams_that_inflate_past_the_cap_are_refused_before_the_readers(
 def test_pypdf_reaching_its_own_limit_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Under pypdf's own words for the limit: every one was reported as the
+    decode bound, whatever pypdf had stopped at."""
     import pypdf.filters
     from pypdf.errors import LimitReachedError
 
@@ -773,7 +775,10 @@ def test_pypdf_reaching_its_own_limit_is_refused(
         raise LimitReachedError("Limit reached while decompressing.")
 
     monkeypatch.setattr(pypdf.filters, "decompress", limited)
-    with pytest.raises(ExtractorError, match="refusing to read them"):
+    with pytest.raises(
+        ExtractorError,
+        match=r"^PDF reaches a limit of pypdf \(Limit reached while decompressing\.\)",
+    ):
         extract_pdf_text(_inflating_pdf(1000))
 
 

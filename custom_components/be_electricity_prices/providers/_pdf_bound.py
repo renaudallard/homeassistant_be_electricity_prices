@@ -614,7 +614,7 @@ def _held_to_the_bound() -> Iterator[None]:
     """Hold the readers to :data:`_MAX_DECODED_STREAM_BYTES` while the card
     is read inside this block, and raise the refusal that ended the read
     whatever a reader made of it. pypdf reaching one of its own limits is
-    refused too."""
+    refused too, under pypdf's own words for it."""
     reading = _Reading(_MAX_DECODED_STREAM_BYTES)
     token = _READING.set(reading)
     try:
@@ -626,7 +626,9 @@ def _held_to_the_bound() -> Iterator[None]:
         if reading.refusal is not None:
             raise reading.refusal from err
         if isinstance(err, LimitReachedError):
-            raise ExtractorError(_over_the_bound()) from err
+            raise ExtractorError(
+                f"PDF reaches a limit of pypdf ({err}); refusing to read it"
+            ) from err
         raise
     finally:
         _READING.reset(token)

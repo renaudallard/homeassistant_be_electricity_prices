@@ -723,15 +723,16 @@ Internals worth knowing:
   the read where it is made, raised as an error no reader catches: pypdf
   catches any error a form raises and goes on to its next draw, logging
   each, 99 984 lines for one file. pypdf reaching one of its own limits is
-  refused too. The readers are wrapped once per process: a second copy of
-  `_pdf_bound.py`, as the live check loads under a package of its own,
-  finds the wrappers in place by a marker they carry and reads through
-  them, held to its own bound, where it wrapped them again and had each
-  read counted once for every copy. The checks only count, and what they
-  change (a font pypdf loads once, the paths pdfminer no longer paints, a
-  page let go of once read, a glyph found at once) leaves the text as it
-  was, so a card under the bound renders to the same text as before, and
-  only these refuse: a file a reader cannot open is left to it to fail on.
+  refused too, under pypdf's own words for it. The readers are wrapped
+  once per process: a second copy of `_pdf_bound.py`, as the live check
+  loads under a package of its own, finds the wrappers in place by a
+  marker they carry and reads through them, held to its own bound, where
+  it wrapped them again and had each read counted once for every copy.
+  The checks only count, and what they change (a font pypdf loads once,
+  the paths pdfminer no longer paints, a page let go of once read, a glyph
+  found at once) leaves the text as it was, so a card under the bound
+  renders to the same text as before, and only these refuse: a file a
+  reader cannot open is left to it to fail on.
   The manifest asks for pypdf 6.6.0 or later, the first release whose text
   extraction loads its fonts through `Font.from_font_resource`, which the
   bound counts.
