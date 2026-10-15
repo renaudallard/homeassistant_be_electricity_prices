@@ -67,10 +67,10 @@ def _extract_taxes(text: str) -> TaxOverlay:
 def _extract_brussels_taxes(text: str) -> TaxOverlay:
     """The Brussels tax block, VAT-inclusive like the Flemish one.
 
-    Two rows only. Brussels levies no energy fund, and the federal energy
-    contribution was abolished on 2026-08-01 and is printed by no current
-    card, so both are left at zero rather than looked for: on this card an
-    absent row is the levy not existing, not a layout drift.
+    Brussels levies no energy fund, so it is left at zero rather than looked
+    for. The federal energy contribution is read like on the Flemish card:
+    the cards up to July 2026 print it, and from August, when it was folded
+    into the excise, the row is gone and it reads zero.
     """
     return regional_tax_overlay(
         text,
@@ -78,6 +78,7 @@ def _extract_brussels_taxes(text: str) -> TaxOverlay:
         region=REGION_BRUSSELS,
         excise=(_FLAT_EXCISE_RE, _EXCISE_RE),
         renewables=(_BRUSSELS_GREEN_RE,),
+        contribution=_CONTRIB_RE,
     )
 
 

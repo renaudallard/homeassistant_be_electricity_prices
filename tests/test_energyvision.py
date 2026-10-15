@@ -965,8 +965,8 @@ def test_brussels_osp_table_is_read_off_the_dutch_block() -> None:
 
 def test_brussels_taxes() -> None:
     """Two rows: the flat federal excise and the Brussels green levy. The
-    energy fund is Flemish and the federal contribution was abolished on
-    2026-08-01, so neither is on the card and both read zero."""
+    energy fund is Flemish and the federal contribution was folded into the
+    excise on 2026-08-01, so neither is on the card and both read zero."""
     taxes = _bxl_1800().taxes
     assert taxes.federal_excise == pytest.approx(0.04876)
     assert taxes.brussels_renewables == pytest.approx(0.02737)
@@ -975,6 +975,18 @@ def test_brussels_taxes() -> None:
     assert taxes.energy_contribution == 0.0
     assert taxes.energy_fund_eur_per_month == 0.0
     assert taxes.vat_rate == 0.0
+
+
+def test_brussels_card_before_august_reads_the_energy_contribution() -> None:
+    """The January Brusol card still prints "Energiebijdrage 0,20417", which
+    was read as zero while the Brussels reader did not look for it."""
+    taxes = _tiered(
+        "energyvision_groene_stroom",
+        "energyvision_groene_stroom_bxl_jan.pdf",
+        region="brussels",
+    ).taxes
+    assert taxes.energy_contribution == pytest.approx(0.0020417)
+    assert taxes.energy_fund_eur_per_month == 0.0
 
 
 def test_brussels_publication_metadata() -> None:

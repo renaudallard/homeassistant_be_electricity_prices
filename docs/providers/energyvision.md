@@ -285,7 +285,7 @@ are VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`
 | --- | --- | --- | --- |
 | `federal_excise` | Federale accijns, Verbruik tussen 0 & 3.000 kWh | `_EXCISE_RE` | yes |
 | `federal_excise_bands` | the four "Verbruik tussen" rows from that one, until July 2026 | `excise_tier_bands` (`_parse.py`) | no (None from August 2026) |
-| `energy_contribution` | Energiebijdrage | `_CONTRIB_RE` | yes |
+| `energy_contribution` | Energiebijdrage, until July 2026 | `_CONTRIB_RE` | no (0.0 from August 2026) |
 | `flanders_renewables` | Kosten GSC en WKC geldig voor | `_GSC_WKC_RE` | yes |
 | `energy_fund_eur_per_month` | Standaard tarief gedomicilieerd (EUR/maand) | `_FUND_RE` | no (0.0 default) |
 
@@ -300,18 +300,20 @@ bills the domiciled one, and its regex anchors on "Standaard tarief gedomiciliee
 
 ### Brussels
 
-`_extract_brussels_taxes` calls the same helper with `region=REGION_BRUSSELS` and two
-anchors only:
+`_extract_brussels_taxes` calls the same helper with `region=REGION_BRUSSELS` and three
+anchors:
 
 | overlay field | card row | regex | required |
 | --- | --- | --- | --- |
 | `federal_excise` | Bijzondere accijns | `_FLAT_EXCISE_RE`, then `_EXCISE_RE` | yes |
 | `federal_excise_bands` | the tier rows from the 0-3.000 kWh one, until July 2026 (the Walloon card's "Consommation entre" rows likewise) | `excise_tier_bands` (`_parse.py`) | no (None on the flat row) |
 | `brussels_renewables` | Kosten Groene stroom | `_BRUSSELS_GREEN_RE` | yes |
+| `energy_contribution` | Energiebijdrage, until July 2026 | `_CONTRIB_RE` | no (0.0 from August 2026) |
 
-Nothing else is looked for. Brussels levies no energy fund, that being Flemish, and the
-federal energy contribution was abolished on 2026-08-01 and is printed by no current card,
-so both read zero because the levy does not exist rather than because a row went missing.
+The energy fund is not looked for: Brussels levies none, that being Flemish, so it reads
+zero because the levy does not exist rather than because a row went missing. The cards up
+to July 2026 print the federal energy contribution (0,20417 c€/kWh) like the Flemish ones;
+from August it is folded into the excise and the row is gone.
 `_BRUSSELS_GREEN_RE` requires the literal "Kosten" in front, which is what keeps it off the
 page-1 energy rows that name the same product without it.
 
