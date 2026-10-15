@@ -1817,7 +1817,8 @@ three ids the integration uses, which are the directory names under
    `_via` (`live` for a card captured while it was current, `archive`
    for one mirrored from the supplier's archive, or replaced by the settled
    copy from that archive once a month-indexed card's month had closed; a
-   row settled in place, at Luminus and TotalEnergies, keeps the one it had)
+   row settled in place, at Luminus, TotalEnergies and Bolt, keeps the one it
+   had)
    and `_sources`: every
    page or document the parse read, each with its text file under
    `texts/` and, for a PDF, the digest of the file.

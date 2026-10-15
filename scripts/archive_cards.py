@@ -2030,9 +2030,9 @@ async def archive(
                 ):
                     # A closed month the supplier's archive has answered for,
                     # settled where its card settles, or a row settled in
-                    # place (Luminus, TotalEnergies), while the live card has
-                    # not moved on yet: the estimate it prints must not go
-                    # back over the settled row.
+                    # place (Luminus, TotalEnergies, Bolt), while the live
+                    # card has not moved on yet: the estimate it prints must
+                    # not go back over the settled row.
                     summary.unchanged += 1
                     cards.file(month_id, (s["pdf"] for s in sources if "pdf" in s))
                     continue

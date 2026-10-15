@@ -792,8 +792,8 @@ async def month_card(
     holds the estimate the card printed rather than what the month settled
     at, or that the archive could not re-read and never settled
     (``_awaits_settlement``); a supplier that settles in place (``settle_month``,
-    Luminus, TotalEnergies) re-prices the row it holds instead, whichever tier
-    gave it, unless the live card held is older (``next_card_not_out``). None
+    Luminus, TotalEnergies, Bolt) re-prices the row it holds instead, whichever
+    tier gave it, unless the live card held is older (``next_card_not_out``). None
     when neither has the month: the current card is then the proxy, and it is
     the running month's card by definition, so that month never reaches the
     repository.
