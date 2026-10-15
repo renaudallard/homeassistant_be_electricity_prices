@@ -122,18 +122,20 @@ _MAX_PATH_SEGMENTS = 450_000
 # streams for each page drawing them and of a form each time it is drawn, of
 # a font's maps and programs, and each font, colour space, form or image and
 # procedure set of a page's or form's resources it walks for each draw, the
-# kinds it reads of them; under pypdf every operand and operator of a
-# content stream each time it is interpreted, and every element of an array
-# or dictionary. What the bytes draw cost even when it built nothing: 78 kB
-# inflating to 32 MB of numbers no operator took held pypdf 238 s and 1,2
-# GB, and 3 MB of paths pdfminer does not paint took 45 s. Measured as
-# above: at most 935 694 under pdfminer and 912 313 under pypdf, both on a
-# Bolt card of 2,8 MB. This is about three times that, since what it lets
-# through is CPU: a token of a Bolt card costs pdfminer about 50 us on a
-# Raspberry Pi, more than any made up to cost more, so 3 million take about
-# 150 s. A comment counts nothing: pdfminer passes over one in a time
-# linear in its length, the decode bound and the download cap holding how
-# many bytes it passes over, and _MAX_TOKEN_BYTES how long one may be.
+# kinds it reads of them, and each reference it resolves; under pypdf every
+# operand and operator of a content stream each time it is interpreted, and
+# every element of an array or dictionary. What the bytes draw cost even
+# when it built nothing: 78 kB inflating to 32 MB of numbers no operator
+# took held pypdf 238 s and 1,2 GB, and 3 MB of paths pdfminer does not
+# paint took 45 s, while a 700-byte card naming an object that refers to
+# itself had pdfminer resolve it for good. Measured as above: at most
+# 935 793 under pdfminer and 912 313 under pypdf, both on a Bolt card of
+# 2,8 MB. This is about three times that, since what it lets through is CPU:
+# a token of a Bolt card costs pdfminer about 50 us on a Raspberry Pi, more
+# than any made up to cost more, so 3 million take about 150 s. A comment
+# counts nothing: pdfminer passes over one in a time linear in its length,
+# the decode bound and the download cap holding how many bytes it passes
+# over, and _MAX_TOKEN_BYTES how long one may be.
 _MAX_PARSED = 3_000_000
 
 # The most a reader may build of a card's fonts, counted as it builds them:
@@ -622,7 +624,8 @@ def _hold_pdfminer_to_the_bound() -> None:
     lists through ``PDFPage.create_pages``, everything it lays out through
     the device pdfplumber gives it, what it holds through its interpreter's
     and content parser's ``push``, every token but a comment it parses
-    through ``PSBaseParser.nexttoken``, the token or inline image it gathers
+    through ``PSBaseParser.nexttoken``, every reference it resolves through
+    ``PDFObjRef.resolve``, the token or inline image it gathers
     through its parsers' ``fillbuf``, a content parser's ``fillfp`` and
     ``get_inline_data``, the resources it walks for a page or a form drawn
     through ``init_resources``, and every loop building a font
@@ -792,6 +795,9 @@ def _hold_pdfminer_to_the_bound() -> None:
         PDFPage.create_pages = staticmethod(paged)  # type: ignore[method-assign]
         PDFPageInterpreter.init_resources = walked  # type: ignore[method-assign]
         PSBaseParser.nexttoken = _parsed(PSBaseParser.nexttoken)  # type: ignore[method-assign]
+        # An object that is a reference to itself, or a ring of them, has
+        # pdfminer resolve it for good, from what it has parsed already.
+        pdftypes.PDFObjRef.resolve = _parsed(pdftypes.PDFObjRef.resolve)  # type: ignore[method-assign]
         # A content parser, which most of a card's tokens go through, looks
         # for its next stream only as it fills its buffer again or seeks,
         # where every parser goes through fillbuf at each step of a token.
@@ -898,8 +904,9 @@ def bounded_pdfminer() -> Iterator[None]:
     and no stack holds more than :data:`_MAX_STACK` at once, arrays and
     dictionaries nest no deeper than :data:`_MAX_NESTING`, and a path not
     yet painted has no more than :data:`_MAX_PATH_SEGMENTS` segments. It
-    parses no more than :data:`_MAX_PARSED` tokens and resources walked, a
-    content stream's for each page drawing it and a form's for each draw,
+    parses no more than :data:`_MAX_PARSED` tokens, references resolved and
+    resources walked, a content stream's for each page drawing it and a
+    form's for each draw,
     gathers no token, comment or inline image longer than
     :data:`_MAX_TOKEN_BYTES`, which it grows a byte at a time, and builds
     no more than :data:`_MAX_FONT_ENTRIES` entries of a card's fonts.

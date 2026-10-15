@@ -1854,6 +1854,37 @@ def test_only_the_resources_pdfminer_walks_are_counted(
     assert "tariff card" in extract(payload)
 
 
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_a_reference_to_itself_is_not_resolved_for_good(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """An object that is a reference to itself had pdfminer resolve it
+    forever, from what it had parsed already, wherever the resources named
+    it: a 700-byte card hung the reader for good. Each reference resolved
+    counts as parsed."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_PARSED", 5000)
+    content = b"BT /F1 12 Tf 72 720 Td (%s) Tj ET" % (b"tariff card text " * 60)
+    for resources in (
+        b"6 0 R",
+        b"<</Font 6 0 R>>",
+        b"<</Font<</F1 6 0 R>>>>",
+        b"<</Font<</F1 3 0 R>>/XObject 6 0 R>>",
+    ):
+        payload = _pdf_from(
+            (
+                b"<</Type/Catalog/Pages 2 0 R>>",
+                b"<</Type/Pages/Kids[5 0 R]/Count 1>>",
+                b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+                b"<</Length %d>>\nstream\n%s\nendstream" % (len(content), content),
+                b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R"
+                b"/Resources %s>>" % resources,
+                b"6 0 R",
+            )
+        )
+        with pytest.raises(ExtractorError, match=r"^PDF has a reader parse more"):
+            extract(payload)
+
+
 def _mapped_pdf(last: int) -> bytes:
     """A font whose ToUnicode map gives the codes 0 to ``last`` in a line."""
     import zlib

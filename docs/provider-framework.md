@@ -728,10 +728,12 @@ Internals worth knowing:
   of the file, of a content stream for each page drawing it and of a form
   for each draw, and of a font's maps and programs, and each font, colour
   space, form or image and procedure set of the resources it walks for a
-  page or a form drawn, the kinds it reads of them; under pypdf each
-  operand and operator of a content stream each time it is interpreted,
-  and each element of an array or dictionary. The most a card reaches is 935 694 under pdfminer
-  and 912 313 under pypdf, both on a Bolt card of 2,8 MB, and this is
+  page or a form drawn, the kinds it reads of them, and each reference it
+  resolves (a 700-byte card naming an object that refers to itself had it
+  resolve that for good); under pypdf each operand and operator of a
+  content stream each time it is interpreted, and each element of an array
+  or dictionary. The most a card reaches is 935 793 under pdfminer and
+  912 313 under pypdf, both on a Bolt card of 2,8 MB, and this is
   about three times that, since what it lets through is CPU: a token of a
   Bolt card costs pdfminer about 50 us on a Raspberry Pi, more than any
   made up to cost more, so the most it lets through takes about 150 s.
