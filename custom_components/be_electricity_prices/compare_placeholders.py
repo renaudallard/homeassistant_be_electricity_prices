@@ -34,6 +34,7 @@ anything, so it lives away from the steps that do.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -204,6 +205,11 @@ class _PlaceholdersMixin(OptionsFlow):
         other_register_rates: Any = None
         other_snap = None
         other_raw = None
+        # The own contract's card before its cohort splice of the energy leg,
+        # which the feed-in credit asks whether it rides a month mean, as the
+        # own side's raw_snapshot. None for any other contract, which is not
+        # spliced.
+        other_card = None
         own_contract = (
             self._compare[CONF_SUPPLIER] == current[CONF_SUPPLIER]
             and self._compare[CONF_CONTRACT] == current[CONF_CONTRACT]
@@ -295,7 +301,9 @@ class _PlaceholdersMixin(OptionsFlow):
                     target_entry,
                     other_snap,
                 )
-                other_snap = legs.splice(other_snap)
+                spliced = legs.splice(other_snap)
+                other_card = replace(other_snap, injection=spliced.injection)
+                other_snap = spliced
             if dso not in other_snap.dsos:
                 placeholders["error"] = (
                     f"{self._compare[CONF_SUPPLIER]} doesn't serve DSO {dso}"
@@ -401,8 +409,9 @@ class _PlaceholdersMixin(OptionsFlow):
                     quote_entry,
                     spot_dict,
                     avg_spot,
-                    await _credit_month_spot_for(other_snap, own=False),
+                    await _credit_month_spot_for(other_snap, own=False, raw=other_card),
                     inj_hour_weights,
+                    raw_snapshot=other_card,
                     meter=meter,
                     credit_year=hh.credit_year,
                 )

@@ -6998,6 +6998,11 @@ async def _compare_placeholders(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"contract": contract}
         )
+        if result["step_id"] == "compare_settlement":
+            result = await hass.config_entries.options.async_configure(
+                result["flow_id"],
+                {"quarter_hourly": bool(entry.data.get("quarter_hourly", False))},
+            )
         result = await _answer_direct_debit(hass, result, direct_debit)
         if result["step_id"] == "compare_meter":
             result = await hass.config_entries.options.async_configure(
