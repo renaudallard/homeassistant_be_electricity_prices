@@ -23,9 +23,10 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""What a card's PDF streams may decode to, what a reader may parse of
-them and what pdfminer may lay out of them, held to while pypdf, or
-pdfminer under pdfplumber, reads it."""
+"""What a card's PDF streams may decode to, how many pages it may have,
+what a reader may parse of it and build of its fonts, and how long a token
+pdfminer may gather and what it may lay out and hold of it, held to while
+pypdf, or pdfminer under pdfplumber, reads it."""
 
 from __future__ import annotations
 
@@ -856,9 +857,11 @@ def bounded_pypdf() -> Iterator[None]:
     since pypdf never decodes an image to read text, and ASCII85 past
     :data:`_MAX_ASCII85_BYTES`. pypdf parses no more than
     :data:`_MAX_PARSED` operands, operators and elements of arrays and
-    dictionaries, a content stream's each time it is interpreted. A refusal
-    ends the read where it is made: pypdf catches any Exception a form
-    raises and goes on to its next draw, and a refusal is not one.
+    dictionaries, a content stream's each time it is interpreted, and
+    builds no more than :data:`_MAX_FONT_ENTRIES` entries of a card's
+    fonts. A refusal ends the read where it is made: pypdf catches any
+    Exception a form raises and goes on to its next draw, and a refusal is
+    not one.
     """
     with _held_to_the_bound():
         yield
@@ -897,10 +900,11 @@ def bounded_pdfminer() -> Iterator[None]:
     yet painted has no more than :data:`_MAX_PATH_SEGMENTS` segments. It
     parses no more than :data:`_MAX_PARSED` tokens and resources walked, a
     content stream's for each page drawing it and a form's for each draw,
-    and gathers no token, comment or inline image longer than
-    :data:`_MAX_TOKEN_BYTES`, which it grows a byte at a time. pdfplumber's
-    ``dedupe_chars`` finds each glyph it keeps at once, where it looked each
-    one up in the page's list.
+    gathers no token, comment or inline image longer than
+    :data:`_MAX_TOKEN_BYTES`, which it grows a byte at a time, and builds
+    no more than :data:`_MAX_FONT_ENTRIES` entries of a card's fonts.
+    pdfplumber's ``dedupe_chars`` finds each glyph it keeps at once, where
+    it looked each one up in the page's list.
     """
     _hold_pdfminer_to_the_bound()
     with _held_to_the_bound():
