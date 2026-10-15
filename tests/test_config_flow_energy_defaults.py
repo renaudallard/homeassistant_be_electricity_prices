@@ -41,6 +41,7 @@ from custom_components.be_electricity_prices.flow_prefill import (
     _apply_energy_manager_defaults,
     _classify_tariff,
 )
+from tests import make_entry
 
 
 def _grid_prefs(
@@ -743,3 +744,89 @@ def test_the_meters_form_and_the_coordinator_share_one_wiring_rule() -> None:
         )
         refused = bool(_incomplete_register_pairs(data))
         assert refused is not billable, data
+
+
+def _shown(result: Any) -> dict[str, Any]:
+    """What a form submits when the user changes nothing on it."""
+    import voluptuous as vol
+
+    shown: dict[str, Any] = {}
+    for marker in result["data_schema"].schema:
+        suggested = (marker.description or {}).get("suggested_value")
+        if suggested not in (None, ""):
+            shown[str(marker)] = suggested
+        elif marker.default is not vol.UNDEFINED:
+            shown[str(marker)] = marker.default()
+    return shown
+
+
+async def _edit(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    answers: dict[str, dict[str, Any]],
+    until: str | None = None,
+) -> Any:
+    """Walk Edit settings submitting every form as shown, but for the fields
+    ``answers`` gives per step, and stop on step ``until`` when given."""
+    from homeassistant.data_entry_flow import FlowResultType
+
+    opts = hass.config_entries.options
+    with patch(
+        "custom_components.be_electricity_prices.async_setup_entry",
+        return_value=True,
+    ):
+        result = await opts.async_init(entry.entry_id)
+        result = await opts.async_configure(result["flow_id"], {"next_step_id": "edit"})
+        while result["type"] == FlowResultType.FORM and result["step_id"] != until:
+            step = result["step_id"]
+            result = await opts.async_configure(
+                result["flow_id"], {**_shown(result), **answers.get(step, {})}
+            )
+    return result
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_an_edit_does_not_wire_back_cleared_meters(
+    hass: HomeAssistant,
+) -> None:
+    """The dashboard's sensors are offered at install. A household that
+    cleared them had them wired back by any later edit submitted as shown."""
+    entry = make_entry(solar_regime="none", dso_tariff_mode="bi_horaire")
+    entry.add_to_hass(hass)
+    prefs = _grid_prefs(
+        consumption="sensor.electricity_meter_total",
+        injection="sensor.electricity_returned_total",
+    )
+    with _patch_manager(prefs):
+        result = await _edit(hass, entry, {}, until="meters")
+        assert not {"consumption_kwh", "injection_kwh"} & set(_shown(result))
+        await _edit(hass, entry, {})
+    assert "consumption_kwh" not in entry.data
+    assert "injection_kwh" not in entry.data
+
+
+@pytest.mark.parametrize(
+    ("stored_region", "offered"), [("flanders", False), ("wallonia", True)]
+)
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_an_edit_offers_the_capacity_sensor_only_where_the_step_is_new(
+    hass: HomeAssistant, stored_region: str, offered: bool
+) -> None:
+    """A Flemish entry that cleared its peak sensor keeps it cleared; one that
+    moves into Flanders meets the step for the first time and is offered the
+    meter's own peak, as at install."""
+    peak_id = _add_dsmr_monthly_peak(hass)
+    dso = "fluvius_antwerpen" if stored_region == "flanders" else "ores"
+    entry = make_entry(region=stored_region, dso=dso, solar_regime="none")
+    entry.add_to_hass(hass)
+    result = await _edit(
+        hass,
+        entry,
+        {
+            "edit": {"region": "flanders"},
+            "dso": {"dso": "fluvius_antwerpen"},
+        },
+        until="capacity",
+    )
+    assert result["step_id"] == "capacity"
+    assert (_shown(result).get("capacity_peak_sensor") == peak_id) is offered

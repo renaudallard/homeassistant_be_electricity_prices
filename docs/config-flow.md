@@ -403,7 +403,10 @@ Fields:
 
 Pre-fill: before rendering, `async_step_capacity` copies `self._data` and calls
 `_apply_energy_manager_capacity_default` (`flow_prefill.py`), which tries two
-sources in order.
+sources in order. Only where the step is new to the entry: at install, or on an
+edit that moves a stored non-Flemish entry into Flanders (`_stored_data`,
+`flow_wizard.py`). A Flemish entry that cleared its sensor had it picked again
+on every later edit submitted as shown.
 
 First `_dsmr_monthly_peak_sensor` looks for the meter's own monthly peak: a
 registry entity on the `dsmr` platform whose `translation_key` is
@@ -542,7 +545,10 @@ drifted apart.
 
 Energy-dashboard defaults: `async_step_meters` copies `self._data` and calls
 `_apply_energy_manager_defaults` (`flow_prefill.py`) before rendering, but only
-when *none* of the six keys is already set (`flow_schemas.py`).
+at install (`_stored_data` is None, `flow_wizard.py`) and only when *none* of
+the six keys is already set (`flow_schemas.py`). On an edit the fields hold what
+the household chose, and one that cleared them all had the dashboard's sensors
+wired back by any later edit submitted as shown.
 `_energy_grid_stats` collects the dashboard's grid import (`stat_energy_from`)
 and export (`stat_energy_to`) statistic ids from both storage shapes: the
 unified one Home Assistant 2026.3 migrated to (one grid source per connection,

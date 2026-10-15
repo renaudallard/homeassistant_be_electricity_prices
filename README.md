@@ -608,7 +608,9 @@ dropped rather than billed on the new card.
    input of any Riemann `integration` helper that feeds the Energy
    dashboard's grid source, so users with the typical P1-power →
    kWh-Riemann → dashboard chain don't have to pick the same sensor
-   twice; the auto-pick refuses non-power sources.
+   twice; the auto-pick refuses non-power sources. It runs at install, or
+   when an edit moves the entry into Flanders; a later edit leaves a field
+   you cleared empty.
 10. **Connection power** *(Brussels only)* — the contractual connection power
    tier (≤ 1.44 / 1.44-6 / 6-9.6 / 9.6-13 / 13-18 / 18-36 / 36-56 / > 56 kVA).
    Brussels bills a Brugel OSP (Obligations de Service Public) annual fee
@@ -699,7 +701,8 @@ dropped rather than billed on the new card.
      a year or month that turned over while Home Assistant was down, or a
      setting edited since) until the background meter read lands.
    - **Auto-fill from the Energy dashboard**: if you've already
-     configured a grid source in HA's Energy dashboard, the cumulative
+     configured a grid source in HA's Energy dashboard when you add the
+     integration, the cumulative
      consumption / injection fields are pre-selected from the
      dashboard's grid meters so you don't pick the same sensor twice.
      A side the dashboard lists as more than one meter (tariff 1 and
@@ -711,7 +714,8 @@ dropped rather than billed on the new card.
      names don't map unambiguously to a day/night slot are left blank
      so a misnamed helper can't silently mis-bill. Whatever is
      pre-filled stays editable; an existing manual pick is never
-     overwritten.
+     overwritten. **Edit settings** fills nothing in, so a sensor you
+     cleared stays cleared.
    - The step ends with three boxes: *Compare every supplier daily* (off
      by default), *Read past cards from the project's archive* (on) and
      *Publish the CREG home charging rate for a company car* (off).

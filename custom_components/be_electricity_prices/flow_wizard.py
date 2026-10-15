@@ -538,7 +538,12 @@ class _WizardStepsMixin:
             self._data.update(user_input)
             return await self.async_step_solar()
         defaults = dict(self._data)
-        await _apply_energy_manager_capacity_default(self.hass, defaults)
+        # Only where the step is new to the entry: at install, or on a move
+        # into Flanders. A household that cleared the sensor had it picked
+        # again on every later edit submitted as shown.
+        stored = self._stored_data()
+        if stored is None or stored.get(CONF_REGION) != REGION_FLANDERS:
+            await _apply_energy_manager_capacity_default(self.hass, defaults)
         return self.async_show_form(
             step_id="capacity", data_schema=_capacity_schema(defaults)
         )
@@ -664,7 +669,11 @@ class _WizardStepsMixin:
                 )
             return self._finalize()
         defaults = dict(self._data)
-        await _apply_energy_manager_defaults(self.hass, defaults)
+        # At install only. On an edit every field already holds what the
+        # household chose, and one with all of them cleared had the dashboard's
+        # sensors wired back by any later edit submitted as shown.
+        if self._stored_data() is None:
+            await _apply_energy_manager_defaults(self.hass, defaults)
         return self.async_show_form(
             step_id="meters", data_schema=_meters_schema(defaults)
         )
