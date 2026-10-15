@@ -127,11 +127,11 @@ _MAX_PATH_SEGMENTS = 450_000
 # inflating to 32 MB of numbers no operator took held pypdf 238 s and 1,2
 # GB, and 3 MB of paths pdfminer does not paint took 45 s. Measured as
 # above: at most 935 694 under pdfminer and 912 313 under pypdf, both on a
-# Bolt card of 2,8 MB. This is about twice that, as the decode bound is,
-# since what it lets through is CPU: a token of a Bolt card costs pdfminer
-# about 50 us on a Raspberry Pi, more than any made up to cost more, so 2
-# million take about 100 s.
-_MAX_PARSED = 2_000_000
+# Bolt card of 2,8 MB. This is about three times that, since what it lets
+# through is CPU: a token of a Bolt card costs pdfminer about 50 us on a
+# Raspberry Pi, more than any made up to cost more, so 3 million take about
+# 150 s.
+_MAX_PARSED = 3_000_000
 
 # The most a reader may build of a card's fonts, counted as it builds them:
 # each code a font's ToUnicode map, encoding or widths give, or its program's

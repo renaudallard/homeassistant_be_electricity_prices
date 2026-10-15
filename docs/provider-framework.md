@@ -724,7 +724,7 @@ Internals worth knowing:
   even when it builds nothing: 78 kB inflating to 32 MB of numbers no
   operator takes held pypdf 238 s and 1,2 GB, and 3 MB of paths pdfminer
   does not paint took 45 s. A reader parses at most `_MAX_PARSED`
-  (2 000 000) objects of a card: under pdfminer each token of the
+  (3 000 000) objects of a card: under pdfminer each token of the
   file, of a content stream for each page drawing it and of a form for each
   draw, and of a font's maps and programs, and each font, colour space,
   form or image and procedure set of the resources it walks for a page or a
@@ -732,10 +732,9 @@ Internals worth knowing:
   of a content stream each time it is interpreted, and each element of an
   array or dictionary. The most a card reaches is 935 694 under pdfminer
   and 912 313 under pypdf, both on a Bolt card of 2,8 MB, and this is
-  about twice that, as the decode bound is, since what it lets through is
-  CPU: a token of a Bolt card costs pdfminer about 50 us on a Raspberry
-  Pi, more than any made up to cost more, so the most it lets through
-  takes about 100 s. A token pdfminer gathers, a comment included, and the
+  about three times that, since what it lets through is CPU: a token of a
+  Bolt card costs pdfminer about 50 us on a Raspberry Pi, more than any
+  made up to cost more, so the most it lets through takes about 150 s. A token pdfminer gathers, a comment included, and the
   data of an inline image are each counted once but grown a byte at a
   time, in a time quadratic in their length (1 MB of inline image data
   took 352 s on a Raspberry Pi), so pdfminer gathers none longer than
