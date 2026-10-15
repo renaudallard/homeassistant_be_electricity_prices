@@ -88,10 +88,11 @@ from .year_ahead import YEAR_AHEAD
 
 _LOGGER = logging.getLogger(__name__)
 
-# The resolution last logged per contract and start date. The legs are
-# resolved once for every month a walk prices, about forty times a tick on a
-# year to date, and the line is only news when its answer changes.
-_LOGGED_SOURCE: dict[tuple[str, date | None], str] = {}
+# The resolution last logged per contract, start date and whether the month
+# billed has settled. The legs are resolved once for every month a walk
+# prices, about forty times a tick on a year to date, and the line is only
+# news when its answer changes.
+_LOGGED_SOURCE: dict[tuple[str, date | None, bool], str] = {}
 
 
 def _parse_iso_date(value: Any) -> date | None:
@@ -344,6 +345,12 @@ async def _cohort_legs(
     unindexed: EnergyRates | None = None
     # Why a retrieved signing card prices nothing, for its label.
     unbilled = "no formula on it to re-price"
+    # The index the month being billed settled at, None on the live tick.
+    settled = (
+        None
+        if month_snapshot is None
+        else getattr(month_snapshot.energy, "index_realised", None)
+    )
     if start < this_month and _month_card_retrievable(
         extractor, start, now.date(), entry
     ):
@@ -385,11 +392,6 @@ async def _cohort_legs(
             # collected a key. Flipping an existing contract's kind in place,
             # or sniffing the shape out of the card, would break that and let
             # a keyless entry reach the spot fetch again.
-            settled = (
-                None
-                if month_snapshot is None
-                else getattr(month_snapshot.energy, "index_realised", None)
-            )
             # The index the leg carries is the month billed's, keyed or not.
             # A spot-monthly signing card carries its own month's, and on the
             # live tick that reached the static day and night sensors, which
@@ -472,15 +474,21 @@ async def _cohort_legs(
         source = "billed month's card, re-priced on its own index"
     else:
         source = "current card (no cohort rate available)"
-    # Which of the three resolutions won is otherwise invisible: the sensors
-    # publish a price, not its provenance, so "my signing rate does nothing"
-    # was unanswerable without reading the source.
-    if _LOGGED_SOURCE.get((contract, start)) != source:
-        _LOGGED_SOURCE[(contract, start)] = source
+    # Which resolution won is otherwise invisible: the sensors publish a
+    # price, not its provenance, so "my signing rate does nothing" was
+    # unanswerable without reading the source.
+    #
+    # Remembered apart for a settled month, since a keyless cohort answers
+    # differently there than on the running month and the live tick, and one
+    # key for both logged the line on every tick, several times.
+    logged = (contract, start, settled is not None)
+    if _LOGGED_SOURCE.get(logged) != source:
+        _LOGGED_SOURCE[logged] = source
         _LOGGER.debug(
-            "%s: contract started %s, energy priced from the %s",
+            "%s: contract started %s, %s energy priced from the %s",
             contract,
             start,
+            "a settled month's" if settled is not None else "the",
             source,
         )
     # The feed-in leg locks with the offtake leg, so it is resolved from the

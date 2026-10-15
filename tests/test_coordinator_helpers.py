@@ -9722,6 +9722,70 @@ async def test_the_cohort_source_is_logged_once_per_answer(
         assert logged() == 2
 
 
+async def test_a_keyless_cohort_logs_its_source_once_across_ticks(
+    hass: HomeAssistant, freezer: Any, caplog: Any
+) -> None:
+    """A keyless cohort bills a settled month on the signing card and the
+    running month and the live tick on the printed rate, so one remembered
+    answer per contract flipped on every month of the walk and the line was
+    logged every tick."""
+    from custom_components.be_electricity_prices import cohort
+    from custom_components.be_electricity_prices.cohort import (
+        _cohort_legs,
+        _effective_snapshot_for_month,
+    )
+
+    freezer.move_to("2026-10-15 12:00:00+02:00")
+
+    def card(**rates: Any) -> SupplierSnapshot:
+        return make_snapshot(energy=VariableRates(month_indexed=True, **rates))
+
+    may = card(current=0.15, formula_factor=1.1, formula_base=0.036)
+    september = card(
+        current=0.16, formula_factor=1.2, formula_base=0.04, index_realised=0.10
+    )
+    october = card(current=0.17, formula_factor=1.2, formula_base=0.04)
+    cards = {date(2026, 9, 1): september, date(2026, 10, 1): october}
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return may
+
+    async def _for_month(*_a: object, **_k: object) -> SupplierSnapshot:
+        return cards[cast(date, _a[5])]
+
+    cohort._LOGGED_SOURCE.clear()
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2026-05-10")
+    extractor = _fixed_extractor(_ffm)
+
+    def logged() -> int:
+        return sum("energy priced from" in r.getMessage() for r in caplog.records)
+
+    with (
+        caplog.at_level(logging.DEBUG, logger=cohort.__name__),
+        patch(
+            "custom_components.be_electricity_prices.cohort._snapshot_for_month",
+            _for_month,
+        ),
+    ):
+        for _ in range(3):
+            await _cohort_legs(
+                hass, MagicMock(), extractor, "test", "wallonia", entry, october
+            )
+            for month in cards:
+                await _effective_snapshot_for_month(
+                    hass,
+                    MagicMock(),
+                    extractor,
+                    "test",
+                    "wallonia",
+                    month,
+                    october,
+                    entry,
+                )
+        assert logged() == 2
+
+
 async def test_the_cohort_credit_keeps_the_delivery_month_index(
     hass: HomeAssistant, freezer: Any
 ) -> None:
