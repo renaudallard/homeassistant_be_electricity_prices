@@ -1913,6 +1913,87 @@ async def test_the_month_cache_bills_a_closed_quarter_on_its_settled_indices(
     assert again is first and fetched.await_count == 1
 
 
+async def test_a_quarter_s_month_is_not_downloaded_for_while_the_live_card_is_older(
+    hass: Any, freezer: Any
+) -> None:
+    """On 1 October 2026 the live card held is still September's, whose table
+    is the second quarter's, so no month of the third can settle on it. The
+    cache knew that for September alone and downloaded the live card for July
+    and August on every re-ask, a day apart, setup's cohort lookup included.
+    Once October's card is held, August is settled on it."""
+    from unittest.mock import MagicMock
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices import snapshot_months
+    from custom_components.be_electricity_prices.snapshot_months import (
+        ArchivedCard,
+        month_card,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
+        _shared_snapshots,
+        _SharedSnapshot,
+    )
+
+    freezer.move_to("2026-10-01 10:00:00+02:00")
+    caught = parse_snapshot(
+        "bolt_variable",
+        fixture_text("bolt_variable_impact_w.pdf", layout=True),
+        "wallonia",
+    )
+    september = replace(caught, publication_label="Septembre 2026")
+    october = parse_snapshot(
+        "bolt_variable",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "wallonia",
+    )
+    github = AsyncMock(
+        return_value=ArchivedCard(
+            snapshot=caught, read_by_ocr=False, captured_live=True
+        )
+    )
+    # What the live address serves while September's card is held: a card on
+    # the second quarter's table.
+    fetched = AsyncMock(
+        return_value=("url", fixture_text("bolt_online_oct.pdf", layout=True))
+    )
+    shared = _shared_snapshots(hass)
+    key = ("bolt", "bolt_variable", "wallonia")
+
+    async def august() -> SupplierSnapshot | None:
+        _monthly_snapshots(hass).clear()
+        return await month_card(
+            hass,
+            MagicMock(),
+            EXTRACTORS["bolt"],
+            "bolt_variable",
+            "wallonia",
+            date(2026, 8, 1),
+        )
+
+    with (
+        patch.object(snapshot_months, "_archived_card_from_github", github),
+        patch.object(bolt_mod, "_fetch_pdf_text", fetched),
+    ):
+        shared[key] = _SharedSnapshot(snapshot=september, fetched_at=dt_util.utcnow())
+        waiting = await august()
+        assert waiting is not None and waiting.provisional
+        assert waiting.energy == caught.energy
+        assert fetched.await_count == 0
+        shared[key] = _SharedSnapshot(snapshot=october, fetched_at=dt_util.utcnow())
+        fetched.return_value = (
+            "url",
+            fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        )
+        out = await august()
+    shared.clear()
+    assert out is not None and not out.provisional
+    assert isinstance(out.energy, VariableRates)
+    assert out.energy.index_realised == pytest.approx(0.13936)
+    assert fetched.await_count == 1
+
+
 async def test_a_cohort_bills_a_settled_quarter_on_that_quarter_s_spreads(
     freezer: Any,
 ) -> None:

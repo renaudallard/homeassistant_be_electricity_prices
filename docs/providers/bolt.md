@@ -888,8 +888,12 @@ It is in place, as at TotalEnergies: the variable folder addresses no card by mo
 quarter's card is only ever the live one, fetched off the listing. Until the quarter has closed,
 and while the live card's table names another quarter (the October 2026 Online edition that
 printed the second quarter's), the month keeps its printed rates and is `provisional`, so it is
-asked again. Once the live card is a later quarter's, the card archive's row, settled by the daily
-run while the next quarter's card was served, holds the month, and an unsettled one is handed back
-as it is. A replay after a parser change puts each register's index back on the re-parsed card
-(`settled_as`, `_settle.py`). The feed-in leg is credited per quarter-hour, or at its printed
-indicative without a key, and is not settled.
+asked again. Home Assistant does not download the live card to learn that while the card it
+already holds is dated before the quarter that follows, whichever month of the quarter is asked
+(`next_card_not_out`, `snapshot_store.py`): a variable card is about 2,4 MB and 38 s of layout
+read on a Raspberry Pi, and the cohort lookup reaches it inside setup. Once the live card is a
+later quarter's, the card archive's row, settled by the daily run while the next quarter's card
+was served, holds the month, and an unsettled one is handed back as it is. A replay after a
+parser change puts each register's index back on the re-parsed card (`settled_as`, `_settle.py`).
+The feed-in leg is credited per quarter-hour, or at its printed indicative without a key, and is
+not settled.

@@ -620,19 +620,26 @@ def next_card_not_out(
     hass: HomeAssistant, key: tuple[str, str, str], year_month: date
 ) -> bool:
     """Whether the live card held for ``key`` is dated before the month that
-    follows ``year_month``, while that month runs.
+    follows ``year_month``, while that month runs. A card indexed on its
+    delivery quarter (Bolt) reads both as quarters: its months settle on the
+    card of the quarter after.
 
     A supplier settling a month in place reads the next card off its live
     address (``SupplierExtractor.settle_month``), a download and a parse on
     every provisional re-ask: 10 to 13 s of CPU on a Raspberry Pi for
-    TotalEnergies' layout read, reachable inside setup through the cohort
-    lookup. The card the coordinator holds already says when that answer
-    would be "not out yet".
+    TotalEnergies' layout read and about 38 s for a Bolt variable card,
+    reachable inside setup through the cohort lookup. The card the
+    coordinator holds already says when that answer would be "not out yet".
     """
     row = _shared_snapshots(hass).get(key)
-    month = year_month.month
-    following = date(year_month.year + (month == 12), month % 12 + 1, 1)
-    if row is None or following != dt_util.now().date().replace(day=1):
+    if row is None:
+        return False
+    span = 3 if getattr(row.snapshot.energy, "quarter_indexed", False) else 1
+    after = (year_month.month - 1) // span * span + span
+    following = date(year_month.year + after // 12, after % 12 + 1, 1)
+    running = dt_util.now().date()
+    ahead = (running.year - following.year) * 12 + running.month - following.month
+    if not 0 <= ahead < span:
         return False
     ends = card_valid_until(row.snapshot.valid_until, row.snapshot.publication_label)
     return ends is not None and ends < following
