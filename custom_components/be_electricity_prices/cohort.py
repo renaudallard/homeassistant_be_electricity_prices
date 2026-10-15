@@ -343,8 +343,8 @@ async def _cohort_legs(
     # A signed leg left unbilled for want of an index, whose standing charge
     # still is the contract's.
     unindexed: EnergyRates | None = None
-    # Why a retrieved signing card prices nothing, for its label.
-    unbilled = "no formula on it to re-price"
+    # What a retrieved signing card does not price and why, for its label.
+    unbilled = "not re-priced: no formula on it to re-price"
     # The index the month being billed settled at, None on the live tick.
     settled = (
         None
@@ -401,7 +401,7 @@ async def _cohort_legs(
             if isinstance(cohort, SpotMonthlyRates):
                 if settled is None and not entry.data.get(CONF_API_KEY):
                     unindexed, cohort = cohort, None
-                    unbilled = "no ENTSO-E key"
+                    unbilled = "not re-priced while the month runs: no ENTSO-E key"
                 else:
                     cohort = replace(cohort, index_realised=settled)
             archived = cohort

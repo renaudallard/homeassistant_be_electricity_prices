@@ -10802,11 +10802,13 @@ async def test_cohort_card_says_which_month_the_archive_could_not_serve(
 async def test_cohort_card_says_when_the_signing_card_bills_nothing(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """A keyless variable cohort retrieves its signing card but cannot use
-    it: the re-priced leg needs spots, so energy and feed-in bill the current
-    card's printed figures, exactly as with no start date. Naming the signing
-    card alone told the user the start date was doing something it was not.
-    With a key the same card is billed and is named."""
+    """A keyless variable cohort retrieves its signing card but cannot
+    re-price the running month on it: the re-priced leg needs spots, so
+    energy and feed-in bill the current card's printed figures, as with no
+    start date. Naming the signing card alone told the user the start date
+    was doing something it was not, and saying it was not re-priced at all
+    hid that the settled months are. With a key the same card is billed and
+    is named."""
     from custom_components.be_electricity_prices.cohort import _cohort_legs
     from custom_components.be_electricity_prices.const import CONF_API_KEY
 
@@ -10845,7 +10847,8 @@ async def test_cohort_card_says_when_the_signing_card_bills_nothing(
     )
     assert keyless.splice(current).energy == current.energy
     assert keyless.card == (
-        "octobre 2026 (signing card mai 2026 not re-priced: no ENTSO-E key)"
+        "octobre 2026 (signing card mai 2026 not re-priced while the month runs:"
+        " no ENTSO-E key)"
     )
     keyed = await _cohort_legs(
         hass,
