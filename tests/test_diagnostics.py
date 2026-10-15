@@ -381,9 +381,11 @@ async def test_diagnostics_counts_the_year_to_date_from_where_the_sensor_does(
     # The rolling year, then the year to date from the contract start, on
     # both sides: the two are read through separate calls, and a test wiring
     # only the consumption side let the injection one go back to 1 January.
+    # The rolling year is the sensors' 365 days with today, where it used to
+    # read 366 and so never matched rolling_year_sensor_kwh beside it.
     for sensor in ("sensor.meter", "sensor.export"):
         assert sorted(start for eid, start in starts if eid == sensor) == [
-            date(2025, 9, 22),
+            date(2025, 9, 23),
             date(2026, 7, 1),
         ], sensor
 

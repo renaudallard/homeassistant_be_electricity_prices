@@ -27,7 +27,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
@@ -42,6 +42,7 @@ from .const import (
     CONF_CONTRACT,
     CONF_REGION,
     CONF_SUPPLIER,
+    MEASURED_FULL_YEAR_DAYS,
     METER_SENSOR_KEYS,
 )
 from .contract_periods import current_period_start
@@ -84,10 +85,11 @@ def _scrub_secret(text: str, secret: str | None) -> str:
 
 
 async def _kwh_window(
-    hass: HomeAssistant, entry: ConfigEntry, days: int, *, side: str
+    hass: HomeAssistant, entry: ConfigEntry, start: date, *, side: str
 ) -> float | None:
-    """Sum of kWh for ``side`` (``consumption`` or ``injection``) over
-    the last ``days`` days from the entry's configured sensors.
+    """Sum of kWh for ``side`` (``consumption`` or ``injection``) from
+    ``start`` through today, both included, from the entry's configured
+    sensors.
 
     Returns ``None`` only when no sensor is wired for ``side`` (rendered
     as a missing field). A wired sensor returns its summed kWh, including
@@ -96,7 +98,6 @@ async def _kwh_window(
     from a wired one that reads zero."""
     day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
     today = dt_util.now().date()
-    start = today - timedelta(days=days)
     if day_id and night_id:
         d = await _recorder_daily_kwh(hass, day_id, start, today)
         n = await _recorder_daily_kwh(hass, night_id, start, today)
@@ -142,11 +143,12 @@ async def async_get_config_entry_diagnostics(
     # the day current_year_cost reads from.
     today = dt_util.now().date()
     ytd_start = ytd_window_start(entry, today)
-    ytd_days = (today - ytd_start).days
-    cons_year = await _kwh_window(hass, entry, 365, side="consumption")
-    cons_ytd = await _kwh_window(hass, entry, ytd_days, side="consumption")
-    inj_year = await _kwh_window(hass, entry, 365, side="injection")
-    inj_ytd = await _kwh_window(hass, entry, ytd_days, side="injection")
+    # The rolling-year sensors' own window, today included.
+    year_start = today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1)
+    cons_year = await _kwh_window(hass, entry, year_start, side="consumption")
+    cons_ytd = await _kwh_window(hass, entry, ytd_start, side="consumption")
+    inj_year = await _kwh_window(hass, entry, year_start, side="injection")
+    inj_ytd = await _kwh_window(hass, entry, ytd_start, side="injection")
     # And what the bill actually reads beside them: the sensors each side is
     # billed off, once a broken pair, a totals sensor standing in for one and
     # a silent side have been accounted for. The raw sums alone hid a year
