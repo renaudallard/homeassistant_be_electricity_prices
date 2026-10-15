@@ -208,8 +208,19 @@ they are empty rather than drawing the extrapolation as tomorrow's prices
 `today`/`tomorrow` arrays whenever the card prices the feed-in, and
 `ev_home_charging_rate` carries the quarter its state is the rate of plus the
 regulator's whole series as `history`, so an automation can settle last
-quarter's kWh at last quarter's rate once the state has moved on (`sensor.py`);
-every other sensor returns `{}`.
+quarter's kWh at last quarter's rate once the state has moved on (`sensor.py`).
+The figures that are worked out carry what they were worked out from:
+`current_year_cost` the year-to-date walk's breakdown (`ytd_diagnostics`, plus
+`previous_contracts` after a recorded switch), `capacity_cost` its
+`billed_peak_kw` and `months_counted`, `projected_year_cost` and
+`projected_year_end_cost` their projection's basis (`projection_diagnostics`,
+`year_end_diagnostics`), and `projected_year_consumption`,
+`projected_year_injection`, `rolling_year_consumption` and
+`rolling_year_injection` their side's volume basis
+(`volume_projection_diagnostics`, `rolling_volume_diagnostics`); all but
+`capacity_cost` read `{}` while their breakdown is empty. Every other
+`BePriceSensor` returns `{}`; `potential_saving` is its own class and carries
+the ranking (see the catalog).
 
 #### `current_price`
 
