@@ -442,7 +442,23 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py`) enforces it.
 > `_apply_realized_for_month` fetches the M+1 card and splices in only its energy
 > and injection legs; the DSO and tax overlays, the yearly fee and the cohort
 > coefficients stay the delivery month's, because those really are properties of
-> its own card. The M+1 card goes through the same `archive_validity_check` as
+> its own card. The stated figures are the M+1 card's own formulas at M's index,
+> not M's, and the base moves between the two: Online Flex Flanders states 0,1864
+> for August 2026, the September card's 2,703 c base at 135,09 EUR/MWh, where
+> August's own 2,438 c gives 0,18375. So `_settled_energy` (`_mega_cards.py`)
+> flags the leg `settled_as_stated`, and `_month_indexed_leg` (`cohort_legs.py`)
+> leaves its stated figures standing for an entry holding an ENTSO-E key too, which
+> rebuilt M on M's pairs at the mean it computed and billed 0,265 c/kWh under it.
+> The index the stating card's pairs solve the figures to is recorded as
+> `index_realised`, and a band the sentence leaves out is priced through the same
+> pairs. `_settled_injection` does the same for the feed-in, which
+> `_historical_injection_rate` (`injection.py`) then credits as stated: July's
+> 3,01 c is the August card's 0,80 x Epex SPP - 2 at the 62,65 EUR/MWh EBEM and
+> Trevion publish, where July's own 0,85 gives 3,33. A contract signed in M is
+> billed M at the stated figures like any other entry (`_effective_snapshot_for_month`,
+> `cohort.py`), keeps M's printed pairs on both legs, and bills each later month
+> on them at that month's `index_realised`. A stating card printing no formula gives no
+> > index. The M+1 card goes through the same `archive_validity_check` as
 > the main path, so a CDN stub cannot shift the rates by a further month. When
 > that card is not out yet (or does not resolve) the month keeps its own
 > figures but comes back `provisional`, as Eneco, EBEM and Trevion do, so the

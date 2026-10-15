@@ -491,7 +491,8 @@ _DEGRADED_MIN_SCHEMA_VERSION = 16
 # ``index_realised`` joined the list when the EBEM and Trevion settlements
 # added it: measured on the 1.686 stored rows, 1.683 carry an injection leg
 # and every one of them would have been rewritten with the field at null.
-_INJECTION_OPTIONAL_KEYS = ("bi_hourly", "index_realised")
+# ``settled_as_stated`` joined both lists for Mega's stated settlements.
+_INJECTION_OPTIONAL_KEYS = ("bi_hourly", "index_realised", "settled_as_stated")
 _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
 # The same rule for the tax overlay, from v73.
 # And on the tax overlay, for the same reason: only a social tariff card the
@@ -523,6 +524,8 @@ _ENERGY_OPTIONAL_KEYS = (
     # And TotalEnergies' statement that its day/night split does not apply
     # under Impact, which only its Walloon cards carry.
     "single_under_impact",
+    # And Mega's settled months, billed at the figures its next card states.
+    "settled_as_stated",
 )
 # The RLP pair is optional on the Impact leg alone: VariableRates and
 # SpotMonthlyRates have carried it since before the archive went live, and

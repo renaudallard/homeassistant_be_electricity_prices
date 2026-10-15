@@ -239,6 +239,14 @@ class VariableRates:
     # printed estimate. None while the month is still running or the next
     # card is not out yet.
     index_realised: float | None = None
+    # True when the rates are the figures the supplier STATES the month
+    # settled at rather than this card's formulas at ``index_realised``. Mega
+    # states them on the next card, where they are the next card's formulas
+    # at the month's index. The month's own billing then takes the rates as
+    # they stand, keyed or not, while the coefficients stay the ones this card
+    # prints, which a cohort signed in its month locks, and ``index_realised``
+    # the index a cohort's later month bills at.
+    settled_as_stated: bool = False
     # True when the index is the RLP-weighted month mean (Eneco's
     # Belpex-RLP-M) rather than the plain one: each hour's Belpex quotation
     # weighted by Synergrid's residential load profile. The coordinator then
@@ -590,6 +598,8 @@ class ImpactRates:
     # are then each band's formula at it, and the month splice hands it to
     # the banded SpotMonthlyRates leg a keyed entry bills through.
     index_realised: float | None = None
+    # Same meaning as ``VariableRates.settled_as_stated``.
+    settled_as_stated: bool = False
 
 
 EnergyRates = (
@@ -773,6 +783,13 @@ class InjectionRates:
     # and are settled independently. None while the month is still running, or
     # while the next card is not out yet.
     index_realised: float | None = None
+    # True when ``current`` is the figure the supplier STATES the month settled
+    # at, rather than ``factor * index_realised + base``. Mega states it on the
+    # next card, where it is the next card's formula at the month's index, not
+    # this card's. The month's own billing then credits ``current``, while the
+    # pair stays the one this card prints, which a cohort signed in its month
+    # locks, and ``index_realised`` the index a cohort's later month bills at.
+    settled_as_stated: bool = False
     # True when the card bills the credit PER SETTLEMENT SLOT whatever the
     # energy leg does, so the printed figure is an illustration rather than the
     # rate. Bolt's fixed and variable cards say it outright: *"Le tableau

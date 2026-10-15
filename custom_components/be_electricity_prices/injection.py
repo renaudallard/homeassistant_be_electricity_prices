@@ -665,6 +665,9 @@ def _historical_injection_rate(
     then nothing here credits it and the per-hour replay does
     (``_injection_replays_hourly_spot``).
 
+    A leg ``settled_as_stated`` is credited its ``current`` whatever the
+    spot: the supplier states that figure for the month.
+
     ``quarters`` are the hour's own slot spots and win over ``spot`` when
     given. Pass them only for an hour that is priced off its own spot, never
     for one billed at a month mean, and only when
@@ -673,6 +676,10 @@ def _historical_injection_rate(
     """
     if injection is None:
         return None
+    if injection.settled_as_stated and injection.current is not None:
+        # The figure the supplier states the month settled at, which is not
+        # this card's formula at any index (Mega's next card states it).
+        return _floor_injection(injection.current, injection)
     if quarters:
         # The hour's rate is the mean of its quarters' rates, not the rate of
         # their mean. The two agree for a formula that is linear in the spot

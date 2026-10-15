@@ -90,6 +90,8 @@ from ._mega_cards import (
     _extract_valid_until,
     _injection_vat_applies,
     _realized_rates,
+    _settled_energy,
+    _settled_injection,
 )
 from ._mega_contracts import (
     _CONTRACTS,
@@ -128,12 +130,7 @@ from ._pdf import (
     is_transient_fetch_error,
     printed_vat_rate,
 )
-from ._rates import (
-    Contract,
-    EnergyRates,
-    ImpactRates,
-    VariableRates,
-)
+from ._rates import Contract
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
@@ -523,8 +520,9 @@ async def _realized_rates_for_month(
     region: str,
     region_code: str,
     year_month: date,
-) -> dict[str, float] | None:
-    """Month ``year_month``'s BILLED rates, read off the NEXT month's card.
+) -> tuple[dict[str, float], SupplierSnapshot] | None:
+    """Month ``year_month``'s BILLED rates, read off the NEXT month's card,
+    and that card as parsed.
 
     A variable or Impact card's headline table is a 12-month simulation, and
     the "derniers prix constates ... pour le mois de <month>" sentence that
@@ -537,7 +535,9 @@ async def _realized_rates_for_month(
     So read the sentence from the M+1 card. Returns None when that card is
     not out yet (M is the current month) or does not resolve, and an empty
     mapping when it is out and states no figure for M: the caller keeps the M
-    card's own figures either way, but only the first can still change. A
+    card's own figures either way, but only the first can still change. The
+    card comes back beside the figures because they are its own formulas at
+    M's index. A
     timeout or a 5xx says nothing about the card and is raised, so the month
     cache retries it rather than file the estimate.
     """
@@ -574,7 +574,7 @@ async def _realized_rates_for_month(
         is None
     ):
         return None
-    return _realized_rates(text)
+    return _realized_rates(text), following_snap
 
 
 async def fetch_for_month(
@@ -668,97 +668,31 @@ async def _apply_realized_for_month(
     and states no figure for M leaves it alone: retrying cannot conjure a
     sentence the card does not print.
 
-    A band the sentence leaves out is re-priced from one it states, through
-    the card's own coefficients (``_with_unstated_bands``), rather than kept:
-    on this path the M card's own figure for it is the month before's.
+    The stated figures are the M+1 card's formulas at M's index, so they are
+    billed as they stand and that index is solved through that card's pairs
+    (``_settled_energy``, ``_settled_injection``). A band the sentence leaves
+    out is re-priced from one it states through the same pairs
+    (``_with_unstated_bands``) rather than kept: on this path the M card's own
+    figure for it is the month before's.
     """
     if contract.kind not in ("variable", "tou_impact"):
         return snap
-    realized = await _realized_rates_for_month(
+    following = await _realized_rates_for_month(
         session, contract, region, region_code, year_month
     )
-    if realized is None:
+    if following is None:
         return replace(snap, provisional=True)
+    realized, card = following
     if not realized:
         return snap
-    energy = snap.energy
-    realized = _with_unstated_bands(realized, energy)
-    if isinstance(energy, VariableRates):
-        energy = replace(
-            energy,
-            current=realized.get("mono", energy.current),
-            peak=realized.get("peak", energy.peak),
-            offpeak=realized.get("offpeak", energy.offpeak),
-            exclusive_night=realized.get("exclusive_night", energy.exclusive_night),
-        )
-    elif isinstance(energy, ImpactRates):
-        energy = replace(
-            energy,
-            pic=realized.get("pic", energy.pic),
-            medium=realized.get("medium", energy.medium),
-            eco=realized.get("eco", energy.eco),
-        )
     injection = snap.injection
     if injection is not None and realized.get("injection") is not None:
-        injection = replace(injection, current=realized["injection"])
-    return replace(snap, energy=energy, injection=injection)
-
-
-# The coefficient pair each settled band is the formula of, per leg kind.
-_BAND_COEFFICIENTS: dict[type, dict[str, tuple[str, str]]] = {
-    VariableRates: {
-        "mono": ("formula_factor", "formula_base"),
-        "peak": ("formula_factor_peak", "formula_base_peak"),
-        "offpeak": ("formula_factor_offpeak", "formula_base_offpeak"),
-        "exclusive_night": (
-            "formula_factor_exclusive_night",
-            "formula_base_exclusive_night",
-        ),
-    },
-    ImpactRates: {
-        "pic": ("pic_factor", "pic_base"),
-        "medium": ("medium_factor", "medium_base"),
-        "eco": ("eco_factor", "eco_base"),
-    },
-}
-
-
-def _with_unstated_bands(
-    realized: dict[str, float], energy: EnergyRates
-) -> dict[str, float]:
-    """``realized`` with every band it leaves out re-priced at the month's
-    index, solved from a band it states through the card's coefficients.
-
-    The June 2026 Flanders Cosy Flex and Smart Flex cards print "Compteur
-    mono- horaire : 16.76.38" for May, which is refused, beside a readable
-    Jour and Nuit. Keeping the May card's own mono billed May at April's
-    settled 13,81 c/kWh where the bands put it at 15,38. All bands solve to
-    one index on every other month, so the missing one is the formula at it.
-    A card printing no coefficients leaves ``realized`` as it is.
-    """
-    pairs = {
-        band: (getattr(energy, factor), getattr(energy, base))
-        for band, (factor, base) in _BAND_COEFFICIENTS.get(type(energy), {}).items()
-    }
-    pairs = {
-        band: pair
-        for band, pair in pairs.items()
-        if pair[0] is not None and pair[1] is not None
-    }
-    index = next(
-        (
-            (realized[band] - base) / factor
-            for band, (factor, base) in pairs.items()
-            if band in realized and factor
-        ),
-        None,
+        injection = _settled_injection(injection, realized["injection"], card.injection)
+    return replace(
+        snap,
+        energy=_settled_energy(snap.energy, realized, card.energy),
+        injection=injection,
     )
-    if index is None:
-        return realized
-    return {
-        **{band: factor * index + base for band, (factor, base) in pairs.items()},
-        **realized,
-    }
 
 
 def _assert_card_region(text: str, region: str) -> None:

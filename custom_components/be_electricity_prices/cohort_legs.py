@@ -461,6 +461,9 @@ def _cohort_injection_from_archived(
         index_realised=(
             leg.index_realised if old.spp_indexed or old.month_indexed else None
         ),
+        # The cohort's own formula at that index, not the month's stated
+        # figure (Mega's, the next card's formula at the index).
+        settled_as_stated=False,
     )
     return None if frozen == leg else frozen
 
@@ -489,6 +492,9 @@ def _month_indexed_leg(
     ``quarter_indexed`` instead, leaving ``month_indexed`` False so a version
     that predates the quarter flag keeps billing their printed rates.
 
+    ``None`` too for a month whose rates are the figures its supplier states
+    it settled at (``settled_as_stated``): they are billed as they stand.
+
     Returns ``None`` without an ENTSO-E key, which keeps the printed
     indicative: the key is offered as optional to every contract flagged
     ``month_indexed_energy`` in the registry, and an entry that skipped it is
@@ -501,6 +507,10 @@ def _month_indexed_leg(
     if not (energy.month_indexed or getattr(energy, "quarter_indexed", False)):
         return None
     if not entry.data.get(CONF_API_KEY):
+        return None
+    if getattr(energy, "settled_as_stated", False):
+        # The month's rates are what the supplier states it settled at, on
+        # formulas other than its own card's (Mega's next card): they stand.
         return None
     return _cohort_energy_from_archived(snapshot)
 

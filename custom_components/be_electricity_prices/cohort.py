@@ -662,8 +662,16 @@ async def _effective_snapshot_for_month(
     )
     if legs.energy is None and legs.injection is None:
         return snap_m
+    # The month the contract was signed in bills what its supplier states the
+    # month settled at (Mega, whose figures are the next card's formulas at
+    # the month's index), keyed or not: the coefficients it locks apply from
+    # the month after. Only a variable card is so settled, and a variable
+    # card takes no typed signing rate.
+    signed = year_month == _tariff_card_month(entry)
     changes: dict[str, object] = {}
     energy = legs.energy_on(snap_m, year_month)
+    if signed and getattr(snap_m.energy, "settled_as_stated", False):
+        energy = None
     if energy is not None:
         if isinstance(energy, SpotMonthlyRates):
             # The month's own archived card may carry the value its index
@@ -688,6 +696,8 @@ async def _effective_snapshot_for_month(
         # carrying today's printed figure back credited every keyless month at
         # September's rate.
         changes["injection"] = legs.injection
+    if signed and snap_m.injection is not None and snap_m.injection.settled_as_stated:
+        changes.pop("injection", None)
     return replace(snap_m, **changes)  # type: ignore[arg-type]
 
 

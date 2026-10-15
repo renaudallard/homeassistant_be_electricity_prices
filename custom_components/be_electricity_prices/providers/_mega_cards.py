@@ -32,14 +32,17 @@ yearly fee, the publication month and the validity date. The grid and levy
 overlays live in ``_mega_overlays.py``; ``mega.py`` keeps the URL resolution,
 the archive and ``parse_snapshot``, which calls into both.
 
-No behaviour change: every function here is byte-identical to the one it
-replaced.
+The split changed no behaviour. The settled legs a closed month takes off
+the card after it (``_settled_energy``, ``_settled_injection``) live here
+too, beside the sentence they read.
 """
 
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from datetime import date
+from typing import Any
 
 from ._parse import SIGN_CHARS, parse_sign, to_float
 from ._pdf import (
@@ -534,7 +537,7 @@ def _realized_rates(text: str) -> dict[str, float]:
         # combination the card cannot print. Refusing the token drops the key.
         # On the live path the caller then falls back to the headline table,
         # and on the archive path it re-prices the band from the ones the
-        # sentence does state (mega._with_unstated_bands); taking a prefix
+        # sentence does state (_with_unstated_bands); taking a prefix
         # that belongs to another row is neither. A trailing
         # sentence period still has to pass ("Injection : 2.32."), so the
         # boundary rejects only a further DIGIT or a decimal group.
@@ -546,6 +549,139 @@ def _realized_rates(text: str) -> dict[str, float]:
         if m is not None:
             out[key] = to_float(m.group(1)) / 100.0
     return out
+
+
+# The coefficient pair each settled band is the formula of, per leg kind.
+_BAND_COEFFICIENTS: dict[type, dict[str, tuple[str, str]]] = {
+    VariableRates: {
+        "mono": ("formula_factor", "formula_base"),
+        "peak": ("formula_factor_peak", "formula_base_peak"),
+        "offpeak": ("formula_factor_offpeak", "formula_base_offpeak"),
+        "exclusive_night": (
+            "formula_factor_exclusive_night",
+            "formula_base_exclusive_night",
+        ),
+    },
+    ImpactRates: {
+        "pic": ("pic_factor", "pic_base"),
+        "medium": ("medium_factor", "medium_base"),
+        "eco": ("eco_factor", "eco_base"),
+    },
+}
+
+
+def _settled_energy(
+    energy: EnergyRates, realized: dict[str, float], stating: EnergyRates
+) -> EnergyRates:
+    """M's energy leg at the figures the M+1 card states for it.
+
+    Those figures are that card's own formulas at M's index, not M's: Online
+    Flex Flanders states 0,1864 for August 2026, the September card's
+    2,703 c base at 135,09 EUR/MWh, where August's own 2,438 c base gives
+    0,18375 at the same index. So the leg is flagged ``settled_as_stated``
+    and bills the stated figures with or without an ENTSO-E key, while its
+    coefficients stay M's, which a contract signed in M keeps, and the index
+    the stating card's coefficients solve the figures to is recorded as
+    ``index_realised``, which such a contract bills M at. A band the sentence
+    leaves out is priced through the stating card's pair, or M's own where
+    that card's text layer lost it. A stating card printing no formula for
+    the leg gives no index.
+    """
+    pairs = _BAND_COEFFICIENTS.get(type(energy), {})
+    basis = energy
+    carried = type(stating) is type(energy) and getattr(stating, "month_indexed", False)
+    if carried:
+        coefficients: dict[str, Any] = {}
+        for band, values in _band_pairs(stating).items():
+            coefficients.update(zip(pairs[band], values, strict=True))
+        basis = replace(energy, **coefficients)
+    rates: dict[str, Any] = {
+        "current" if band == "mono" else band: rate
+        for band, rate in _with_unstated_bands(realized, basis).items()
+        if band in pairs
+    }
+    if not rates:
+        return energy
+    rates["settled_as_stated"] = True
+    rates["index_realised"] = _stated_index(realized, basis) if carried else None
+    return replace(energy, **rates)
+
+
+def _settled_injection(
+    injection: InjectionRates, stated: float, stating: InjectionRates | None
+) -> InjectionRates:
+    """M's feed-in leg at the figure the M+1 card states for it.
+
+    The same shape as the energy leg: July 2026's stated 3,01 c is the August
+    card's "Epex SPP x 0,80 - 2" at the 62,65 EUR/MWh EBEM and Trevion
+    publish for July, where July's own 0,85 gives 3,33. The leg is credited
+    the stated figure, keeps July's pair for a contract signed in July, and
+    records the index the stating card's formula solves it to. A stating
+    card printing no formula gives no index.
+    """
+    index = None
+    if (
+        stating is not None
+        and stating.spp_indexed
+        and stating.factor
+        and stating.base is not None
+    ):
+        index = (stated - stating.base) / stating.factor
+    return replace(
+        injection, current=stated, settled_as_stated=True, index_realised=index
+    )
+
+
+def _band_pairs(energy: EnergyRates) -> dict[str, tuple[float, float]]:
+    """Each band's coefficient pair the leg prints, by band."""
+    pairs = {
+        band: (getattr(energy, factor), getattr(energy, base))
+        for band, (factor, base) in _BAND_COEFFICIENTS.get(type(energy), {}).items()
+    }
+    return {
+        band: pair
+        for band, pair in pairs.items()
+        if pair[0] is not None and pair[1] is not None
+    }
+
+
+def _stated_index(realized: dict[str, float], energy: EnergyRates) -> float | None:
+    """The index the first band ``realized`` states solves to through the
+    leg's coefficients, or ``None``."""
+    return next(
+        (
+            (realized[band] - base) / factor
+            for band, (factor, base) in _band_pairs(energy).items()
+            if band in realized and factor
+        ),
+        None,
+    )
+
+
+def _with_unstated_bands(
+    realized: dict[str, float], energy: EnergyRates
+) -> dict[str, float]:
+    """``realized`` with every band it leaves out re-priced at the month's
+    index, solved from a band it states through the leg's coefficients,
+    which on the archive path are the stating card's.
+
+    The June 2026 Flanders Cosy Flex and Smart Flex cards print "Compteur
+    mono- horaire : 16.76.38" for May, which is refused, beside a readable
+    Jour and Nuit. Keeping the May card's own mono billed May at April's
+    settled 13,81 c/kWh where the bands put it at 15,38. All bands solve to
+    one index on every other month, so the missing one is the formula at it.
+    A card printing no coefficients leaves ``realized`` as it is.
+    """
+    index = _stated_index(realized, energy)
+    if index is None:
+        return realized
+    return {
+        **{
+            band: factor * index + base
+            for band, (factor, base) in _band_pairs(energy).items()
+        },
+        **realized,
+    }
 
 
 def _extract_impact_tier(text: str, tier: str) -> float | None:

@@ -240,6 +240,34 @@ def test_an_impact_leg_keeps_the_index_its_month_settled_at() -> None:
     assert _snapshot_from_dict(row).energy == settled.energy
 
 
+def test_a_stated_settlement_is_written_only_where_a_month_has_one() -> None:
+    """Mega's settled months bill the figures its next card states, on both
+    legs. Every other row leaves the flag out, so the rows every installed
+    version reads stay byte-identical, and a flagged row reads back as one."""
+    for energy in (
+        VariableRates(current=0.19, month_indexed=True),
+        ImpactRates(pic=0.19, medium=0.16, eco=0.13, month_indexed=True),
+    ):
+        plain = make_snapshot(energy=energy, injection=InjectionRates(current=0.05))
+        row = _snapshot_to_dict(plain, NOW)
+        assert "settled_as_stated" not in row["energy"]
+        assert "settled_as_stated" not in row["injection"]
+        assert _snapshot_from_dict(row).energy == plain.energy
+
+        settled = make_snapshot(
+            energy=replace(energy, settled_as_stated=True, index_realised=0.135),
+            injection=InjectionRates(
+                current=0.0433, index_realised=0.0791, settled_as_stated=True
+            ),
+        )
+        row = _snapshot_to_dict(settled, NOW)
+        assert row["energy"]["settled_as_stated"] is True
+        assert row["injection"]["settled_as_stated"] is True
+        rebuilt = _snapshot_from_dict(row)
+        assert rebuilt.energy == settled.energy
+        assert rebuilt.injection == settled.injection
+
+
 def test_the_codec_writes_every_snapshot_field() -> None:
     """The encoder names the top-level fields by hand, and nothing held the
     list to the dataclass: a field added to SupplierSnapshot without a line

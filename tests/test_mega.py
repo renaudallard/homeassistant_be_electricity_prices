@@ -34,6 +34,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime
 from typing import Any
 from unittest.mock import AsyncMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -1445,9 +1446,9 @@ async def test_archive_bills_each_month_at_its_own_realized_rate() -> None:
     Verified on four consecutive real cards: June was billed 14,24 c€/kWh
     (May's) where Mega settled 16,95.
 
-    Only the energy and injection legs move. The DSO and tax overlays, the
-    yearly fee and the cohort coefficients stay the delivery month's, because
-    those really are properties of its own card.
+    Only the energy and injection legs move. The DSO and tax overlays and the
+    yearly fee stay the delivery month's, because those really are properties
+    of its own card.
     """
     from custom_components.be_electricity_prices.providers import mega as mega_mod
 
@@ -1460,14 +1461,16 @@ async def test_archive_bills_each_month_at_its_own_realized_rate() -> None:
     before_dsos = dict(snap.dsos)
     before_taxes = snap.taxes
 
-    async def _realized(*_a: object, **_k: object) -> dict[str, float]:
+    async def _realized(
+        *_a: object, **_k: object
+    ) -> tuple[dict[str, float], SupplierSnapshot]:
         return {
             "mono": 0.1799,
             "peak": 0.198,
             "offpeak": 0.167,
             "exclusive_night": 0.167,
             "injection": 0.0363,
-        }
+        }, snap
 
     with patch.object(mega_mod, "_realized_rates_for_month", new=_realized):
         out = await mega_mod._apply_realized_for_month(
@@ -1497,7 +1500,8 @@ async def test_a_band_the_next_card_leaves_unread_is_priced_from_the_others() ->
     May at April's settled 13,81 c/kWh, because on the archive path a card's
     own figures are the month before's. Jour and Nuit both solve to one index
     through May's coefficients, and the mono formula at it is 15,38, the
-    figure the collided token ends in."""
+    figure the collided token ends in. The June card printed May's pairs
+    unchanged."""
     from custom_components.be_electricity_prices.providers import mega as mega_mod
 
     card = parse_snapshot(
@@ -1533,8 +1537,10 @@ async def test_a_band_the_next_card_leaves_unread_is_priced_from_the_others() ->
     )
     assert "mono" not in june_sentence
 
-    async def _realized(*_a: object, **_k: object) -> dict[str, float]:
-        return june_sentence
+    async def _realized(
+        *_a: object, **_k: object
+    ) -> tuple[dict[str, float], SupplierSnapshot]:
+        return june_sentence, may
 
     with patch.object(mega_mod, "_realized_rates_for_month", new=_realized):
         out = await mega_mod._apply_realized_for_month(
@@ -1553,6 +1559,201 @@ async def test_a_band_the_next_card_leaves_unread_is_priced_from_the_others() ->
     assert out.injection.current == pytest.approx(0.014)
 
 
+async def test_a_settled_month_bills_its_stated_figure_and_a_cohort_its_own_pairs(
+    freezer: Any,
+) -> None:
+    """Mega's figures for a month are the NEXT card's formulas at the month's
+    index, and its base moves between the two: Cosy Flex Flanders states
+    16,94 c/kWh for July 2026, the August card's 3,445 c base at the month's
+    index, where July's own card prints 3,763. Rebuilt on July's pairs, an
+    entry holding an ENTSO-E key was billed above the stated figure; both
+    entries now bill it. The feed-in is the same: the stated 3,01 c is the
+    August card's 0,80 x SPP - 2 at 62,63 EUR/MWh, the 62,65 EBEM and Trevion
+    publish for July, where July's own 0,85 gives 3,33.
+
+    A contract signed in July bills July at the stated figures too, keyed or
+    not, and locks July's printed pairs for the months after: August at them
+    on the index August's stated figures solve to through the September
+    card's. October's card stands in for September's: it kept every
+    pair."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _cohort_energy_from_archived,
+        _cohort_injection_from_archived,
+        _month_indexed_leg,
+    )
+    from custom_components.be_electricity_prices.const import CONF_API_KEY
+    from custom_components.be_electricity_prices.injection import (
+        _historical_injection_rate,
+    )
+    from custom_components.be_electricity_prices.pricing import (
+        MeterType,
+        energy_eur_per_kwh,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+
+    september = parse_snapshot(
+        "mega_cosy_flex", fixture_text("mega_cosy_flex_v_2026-10.pdf"), "flanders"
+    )
+    assert isinstance(september.energy, VariableRates)
+    assert september.injection is not None
+
+    def card(base: float, feed_in_factor: float) -> SupplierSnapshot:
+        """The Cosy Flex card of a month printing ``base`` on every meter."""
+        assert isinstance(september.energy, VariableRates)
+        assert september.injection is not None
+        return replace(
+            september,
+            energy=replace(
+                september.energy,
+                formula_base=base,
+                formula_base_peak=base,
+                formula_base_offpeak=base,
+                formula_base_exclusive_night=base,
+            ),
+            injection=replace(september.injection, factor=feed_in_factor),
+        )
+
+    july, august = card(0.03763, 0.85), card(0.03445, 0.80)
+    stated = {
+        date(2026, 7, 1): (
+            {
+                "mono": 0.1694,
+                "peak": 0.1854,
+                "offpeak": 0.1556,
+                "exclusive_night": 0.1556,
+                "injection": 0.0301,
+            },
+            august,
+        ),
+        date(2026, 8, 1): (
+            {
+                "mono": 0.1948,
+                "peak": 0.2138,
+                "offpeak": 0.1785,
+                "exclusive_night": 0.1785,
+                "injection": 0.0433,
+            },
+            september,
+        ),
+    }
+
+    async def _realized(
+        *args: Any, **_k: object
+    ) -> tuple[dict[str, float], SupplierSnapshot]:
+        return stated[args[-1]]
+
+    settled = {}
+    with patch.object(mega_mod, "_realized_rates_for_month", new=_realized):
+        for month, printed in ((date(2026, 7, 1), july), (date(2026, 8, 1), august)):
+            settled[month] = await mega_mod._apply_realized_for_month(
+                None,  # type: ignore[arg-type]
+                mega_mod._CONTRACTS_BY_ID["mega_cosy_flex"],
+                "flanders",
+                "VL",
+                month,
+                printed,
+            )
+    july, august = settled[date(2026, 7, 1)], settled[date(2026, 8, 1)]
+    keyed = SimpleNamespace(data={CONF_API_KEY: "k"})
+    tz = ZoneInfo("Europe/Brussels")
+    noon, night = (
+        datetime(2026, 7, 14, 12, tzinfo=tz),
+        datetime(2026, 7, 14, 23, tzinfo=tz),
+    )
+    cases: tuple[tuple[datetime, MeterType, float], ...] = (
+        (noon, "mono", 0.1694),
+        (noon, "bi", 0.1854),
+        (night, "bi", 0.1556),
+    )
+
+    # The month bills its stated figures, keyed or not.
+    energy = july.energy
+    assert isinstance(energy, VariableRates) and energy.settled_as_stated
+    assert energy.formula_base == pytest.approx(0.03763)
+    assert energy.index_realised == pytest.approx((0.1694 - 0.03445) / 1.17978)
+    assert _month_indexed_leg(july, keyed) is None  # type: ignore[arg-type]
+    for when, meter, figure in cases:
+        assert energy_eur_per_kwh(energy, when, None, meter) == pytest.approx(figure)
+    feed_in = july.injection
+    assert isinstance(feed_in, InjectionRates) and feed_in.factor == pytest.approx(0.85)
+    assert feed_in.index_realised == pytest.approx(0.06265, abs=5e-5)
+    credit = _historical_injection_rate(feed_in, feed_in.index_realised)
+    assert credit == pytest.approx(0.0301)
+
+    # A contract signed in July bills August on July's printed pairs at the
+    # index August's stated figures solve to.
+    assert isinstance(august.energy, VariableRates)
+    index = august.energy.index_realised
+    assert index is not None
+    assert index == pytest.approx((0.1948 - 0.03551) / 1.17978)
+    leg = _cohort_energy_from_archived(july)
+    assert isinstance(leg, SpotMonthlyRates)
+    leg = replace(leg, index_realised=index)
+    assert energy_eur_per_kwh(
+        leg, datetime(2026, 8, 12, 12, tzinfo=tz), None, "mono"
+    ) == pytest.approx(1.17978 * index + 0.03763)
+    cohort_feed_in = _cohort_injection_from_archived(july, august)
+    assert cohort_feed_in is not None and not cohort_feed_in.settled_as_stated
+    assert cohort_feed_in.factor == pytest.approx(0.85)
+    belpex = cohort_feed_in.index_realised
+    assert belpex is not None
+    assert belpex == pytest.approx((0.0433 + 0.02) / 0.80)
+    assert _historical_injection_rate(cohort_feed_in, belpex) == pytest.approx(
+        0.85 * belpex - 0.02
+    )
+
+    # Through the month splice, for an entry signed in July with a key and
+    # one without: July bills the stated figures, August July's pairs.
+    from custom_components.be_electricity_prices import cohort
+    from custom_components.be_electricity_prices.const import (
+        CONF_CONTRACT,
+        CONF_SUPPLIER,
+        CONF_TARIFF_CARD_DATE,
+    )
+
+    freezer.move_to("2026-10-10 12:00:00+02:00")
+
+    async def _month(*args: Any, **_k: object) -> SupplierSnapshot:
+        return settled[args[5]]
+
+    signed = {
+        CONF_SUPPLIER: "mega",
+        CONF_CONTRACT: "mega_cosy_flex",
+        CONF_TARIFF_CARD_DATE: "2026-07-01",
+    }
+    with (
+        patch.object(cohort, "_snapshot_for_month", new=_month),
+        patch.object(cohort, "month_card", new=_month),
+    ):
+        for data in (signed | {CONF_API_KEY: "k"}, signed):
+            billed = {
+                month: await cohort._effective_snapshot_for_month(
+                    None,  # type: ignore[arg-type]
+                    None,  # type: ignore[arg-type]
+                    EXTRACTORS["mega"],
+                    "mega_cosy_flex",
+                    "flanders",
+                    month,
+                    september,
+                    SimpleNamespace(data=data),  # type: ignore[arg-type]
+                )
+                for month in settled
+            }
+            assert billed[date(2026, 7, 1)] == july
+            for when, meter, figure in cases:
+                assert energy_eur_per_kwh(
+                    billed[date(2026, 7, 1)].energy, when, None, meter
+                ) == pytest.approx(figure)
+            assert billed[date(2026, 8, 1)].injection == cohort_feed_in
+            if CONF_API_KEY in data:
+                assert billed[date(2026, 8, 1)].energy == leg
+
+
 async def test_archive_keeps_its_own_rates_when_the_next_card_is_absent() -> None:
     """The newest month has no following card yet, so it keeps the figures it
     has, the best available, but says they can still move. Unflagged, the
@@ -1566,7 +1767,7 @@ async def test_archive_keeps_its_own_rates_when_the_next_card_is_absent() -> Non
     )
     contract = mega_mod._CONTRACTS_BY_ID["mega_smart_flex"]
 
-    async def _none(*_a: object, **_k: object) -> dict[str, float] | None:
+    async def _none(*_a: object, **_k: object) -> None:
         return None
 
     with patch.object(mega_mod, "_realized_rates_for_month", new=_none):
@@ -1592,8 +1793,10 @@ async def test_archive_keeps_its_own_rates_when_the_next_card_states_none() -> N
     )
     contract = mega_mod._CONTRACTS_BY_ID["mega_smart_flex"]
 
-    async def _empty(*_a: object, **_k: object) -> dict[str, float] | None:
-        return {}
+    async def _empty(
+        *_a: object, **_k: object
+    ) -> tuple[dict[str, float], SupplierSnapshot]:
+        return {}, snap
 
     with patch.object(mega_mod, "_realized_rates_for_month", new=_empty):
         out = await mega_mod._apply_realized_for_month(
