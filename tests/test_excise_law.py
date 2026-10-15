@@ -728,6 +728,22 @@ def test_the_schedule_starts_after_the_transition_its_law_fixed(
     impossible = amending.replace("30 juin 2023 inclus", "31 juin 2023 inclus")
     with pytest.raises(excise_law.ExciseLawError, match="unreadable"):
         excise_law.after_transitions(schedule, dossier, impossible)
+    # Without its article 15, or with it reworded, the schedule would be
+    # billed from April 2023 over the rate that article fixed.
+    for unread in _without_transition(amending):
+        with pytest.raises(excise_law.ExciseLawError, match="no household"):
+            excise_law.after_transitions(schedule, dossier, unread)
+
+
+def _without_transition(amending: str) -> tuple[str, str]:
+    """The law of 19 March 2023 without its article 15, and with its
+    transitions reworded ("periode" unaccented)."""
+    at = amending.index("42,5755")
+    cut = (
+        amending[: amending.index("<A NAME='Art.15'")]
+        + amending[amending.index("Titre 4", at) :]
+    )
+    return cut, amending.replace("pour la période du", "pour la periode du")
 
 
 @pytest.mark.usefixtures("schedule_held")
@@ -783,18 +799,26 @@ async def test_the_archived_wording_is_read_once(
         excise_law._SCHEDULES.clear()
 
 
+@pytest.mark.parametrize("reworded", [False, True])
 async def test_a_schedule_whose_law_cannot_be_read_is_not_held(
-    fresh_fetch: None, page: str, archive: str, caplog: pytest.LogCaptureFixture
+    fresh_fetch: None,
+    page: str,
+    archive: str,
+    amending: str,
+    reworded: bool,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Held without its law, April to June 2023 would bill the schedule over
-    the rate that law fixed, so the card's levies are billed until it is
-    read."""
+    """Held without its law, or without the transition that law fixed,
+    April to June 2023 would bill the schedule over that rate, so the
+    card's levies are billed until it is read."""
 
     async def fetch(_session: Any, url: str, **_kwargs: Any) -> str:
         if url == EXCISE_LAW_URL:
             return page
         if url == EXCISE_LAW_ARCHIVE_URL:
             return archive
+        if reworded:
+            return _without_transition(amending)[1]
         raise ExtractorError("HTTP 503")
 
     with patch.object(excise_law, "fetch_text", AsyncMock(side_effect=fetch)):

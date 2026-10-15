@@ -404,14 +404,19 @@ def after_transitions(schedule: Schedule, dossier: str, page: str) -> Schedule:
     wording, since those days were billed that rate and not the schedule.
 
     Raises :class:`ExciseLawError` on a page that is not the law numbered
-    ``dossier``, as :func:`parse` does.
+    ``dossier``, as :func:`parse` does, and on one where it reads no such
+    rate: a page that dropped or reworded it would otherwise bill the
+    schedule from that law's entry into force, over the days its rate was.
     """
     text = " ".join(unescape(_TAG_RE.sub(" ", page)).split())
     if dossier not in _DOSSIER_RE.findall(text):
         raise ExciseLawError(f"not the law numbered {dossier}")
+    transitions = list(_TRANSITION_RE.finditer(text))
+    if not transitions:
+        raise ExciseLawError("no household transition")
     start = schedule.start
     try:
-        for match in _TRANSITION_RE.finditer(text):
+        for match in transitions:
             start = max(start, _day(*match.groups()[3:]) + timedelta(days=1))
     except (ValueError, OverflowError) as err:
         raise ExciseLawError(f"unreadable transition: {err}") from err

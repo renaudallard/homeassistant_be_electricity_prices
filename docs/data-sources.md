@@ -1044,7 +1044,9 @@ archive but the social tariff from October 2025 to July 2026, where the
 April to June 2023 cards of the first four print the transition's (42,5755
 EUR/MWh, 4,5130 c/kWh with VAT). Both pages are read once, after a
 successful read of the law, and asked for again with each daily read until
-the schedule is held; a failure on either holds nothing. Only a card
+the schedule is held; a failure on either holds nothing, and so does a page
+of that law where no such transition is read (`no household transition`),
+since the schedule would then be billed from April 2023. Only a card
 standing in for one of its months is billed it (`_stand_in_levies`,
 `snapshot_resolve.py`); a month's own card is billed as printed.
 
