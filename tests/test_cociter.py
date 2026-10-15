@@ -105,6 +105,17 @@ def test_variable_extracts_dso_overlay() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.03)
 
 
+def test_a_network_table_missing_an_area_is_refused() -> None:
+    """A card whose table lost a row to a relabel is refused rather than
+    adopted without that area, which left an entry on it failing every tick
+    while the last good card was gone from the cache."""
+    text = fixture_text("cociter_var_2604.pdf")
+    relabelled = text.replace("\nREW ", "\nR.E.W. ")
+    assert relabelled != text, "the fixture stopped printing the REW row"
+    with pytest.raises(ExtractorError, match=r"DSO rows not found for \['rew'\]"):
+        parse_snapshot(relabelled, "cociter_variable", "test://var", "2026-04")
+
+
 def test_variable_extracts_supplier_prosumer_forfait() -> None:
     # The variable card also bills a supplier-side compensation-regime PV
     # forfait (37,10 EUR/kVA/an TVAC) on top of the DSO prosumer tariff.
@@ -196,7 +207,7 @@ def test_trihoraire_layout_is_chosen_by_the_card_title() -> None:
     a bad one. Take the title away and the variable and dynamic lookups both
     refuse the five-figure rows, where the old pattern read the last one by
     running past the end of the line onto the "3." of the taxes heading and
-    landing PIC on the mono rate.
+    landing PIC on the mono rate. With no row read, the card is refused.
     """
     from custom_components.be_electricity_prices.providers.cociter import (
         _extract_dsos,
@@ -206,8 +217,9 @@ def test_trihoraire_layout_is_chosen_by_the_card_title() -> None:
     proper = _extract_dsos(raw)
     assert proper["aieg"].distribution_pic == pytest.approx(0.1508)
 
-    untitled = _extract_dsos(raw.replace("prix variable trihoraire", "prix variable"))
-    assert untitled == {}
+    untitled = raw.replace("prix variable trihoraire", "prix variable")
+    with pytest.raises(ExtractorError, match="DSO rows not found"):
+        _extract_dsos(untitled)
 
 
 def test_trihoraire_injection_is_the_variable_card_formula() -> None:

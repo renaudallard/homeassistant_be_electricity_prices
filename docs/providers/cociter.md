@@ -317,8 +317,10 @@ it landed the PIC rate on `distribution_single` and reported one DSO instead of
 five. Rows are now read on one line at the width the layout prints, so that
 cannot happen; `test_trihoraire_layout_is_chosen_by_the_card_title` takes the
 title away and pins that the rows are refused rather than misread.
-`_extract_impact_dsos` raises when the table yields nothing, since an empty
-overlay bills the whole network leg at zero.
+Both readers refuse a table missing any of the five areas (`require_every_area`,
+`_parse.py`): an empty one bills the whole network leg at zero, and a partial
+one leaves an entry on the missing area failing every tick until the next good
+card (`test_a_network_table_missing_an_area_is_refused`, `tests/test_cociter.py`).
 
 `distribution_single` has no source on the trihoraire card and is filled with
 the PIC rate. Nothing reads it -- the contract is `tou_impact`, so the config

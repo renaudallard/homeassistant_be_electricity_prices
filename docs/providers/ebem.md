@@ -338,8 +338,11 @@ The variable (`elek`) card additionally carries an `ANALOGE METER` table; when
 present, the parser walks it to attach the fifth column as
 `prosumer_eur_per_kva_year` (`ebem.py`). The dynamic card is SMR3-only, so
 it has no analog table and the prosumer column stays `None`
-(`tests/test_ebem.py`). A DSO row that fails to match is skipped, not
-fatal (`ebem.py`).
+(`tests/test_ebem.py`). A table missing any of the eight Fluvius areas is
+refused rather than adopted with a hole in it, since an entry on the missing
+area would fail every tick until the next good card (`require_every_area`,
+`_parse.py`; `test_a_network_table_missing_an_area_is_refused`,
+`tests/test_ebem.py`).
 
 The dynamic card prints Fluvius Antwerpen's `netkosten` as 5,24 c/kWh where
 EBEM's own variable and B@sic+ cards, and every other supplier's, print 5,35:

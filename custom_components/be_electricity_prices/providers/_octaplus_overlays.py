@@ -43,7 +43,7 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_WALLONIA,
 )
-from ._parse import excise_tier_bands, to_float
+from ._parse import excise_tier_bands, require_every_area, to_float
 from ._rates import TariffKind
 from .base import DsoOverlay, ExtractorError, walloon_dso_overlay
 
@@ -235,6 +235,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             terme_fixe=terme_fixe,
             prosumer=prosumer,
         )
+    require_every_area("OCTA+", out, (key for _, key in _WALLONIA_LABELS))
     return out
 
 
@@ -296,6 +297,7 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
             capacity_eur_per_kw_year=capacity,
             prosumer_eur_per_kva_year=prosumer_by_key.get(key),
         )
+    require_every_area("OCTA+", out, _FLANDERS_LABELS.values())
     return out
 
 

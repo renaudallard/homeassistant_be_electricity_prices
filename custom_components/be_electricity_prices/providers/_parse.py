@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from difflib import SequenceMatcher
 from typing import TypeVar
 
@@ -80,6 +80,28 @@ def parse_prosumer_column(
         if row:
             out[key] = to_float(row.group(1))
     return out
+
+
+def require_every_area(
+    supplier: str,
+    out: Mapping[str, DsoOverlay],
+    keys: Iterable[str],
+    *,
+    block: str | None = None,
+) -> None:
+    """Refuse a network table that lacks one of the region's areas.
+
+    A partial table is worse than none: the areas are what every entry picks
+    its network cost from, and a card missing one would be adopted, persisted
+    and shared, leaving the entry on that area with no overlay and every tick
+    failing, while the last good card is gone from the cache. An empty one
+    would let the backfill path silently skip whole months (it swallows the
+    resulting KeyError). Refusing keeps the last good card serving.
+    """
+    missing = sorted(key for key in keys if key not in out)
+    if missing:
+        where = f" in the {block} block" if block else ""
+        raise ExtractorError(f"{supplier}: DSO rows not found for {missing}{where}")
 
 
 def require_contract(by_id: dict[str, _T], contract_id: str, label: str) -> _T:

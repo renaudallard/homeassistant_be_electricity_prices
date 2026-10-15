@@ -313,7 +313,7 @@ lookup sees one line. Tests assert the stitched row keeps its real rates
 (`test_ecopower.py`).
 
 Both DSO parsers **fail loud** with `ExtractorError("Ecopower: DSO rows not found for ...")` unless
-every one of the eight Fluvius areas reads (`_require_every_area`, `_ecopower_overlays.py`). A
+every one of the eight Fluvius areas reads (`require_every_area`, `_parse.py`). A
 relabelled or reshaped row used to drop its area quietly: the card was adopted with seven, and the
 entry on the missing area was left with no network overlay while the last good card was gone from
 the cache. Returning `{}` would let the backfill path silently skip whole months (it swallows the

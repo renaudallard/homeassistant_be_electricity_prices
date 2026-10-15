@@ -43,7 +43,7 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     VAT_RATE_REDUCED,
 )
-from ._parse import excise_tier_bands, numeric_row, to_float
+from ._parse import excise_tier_bands, numeric_row, require_every_area, to_float
 from ._pdf import printed_vat_rate
 from .base import (
     DsoOverlay,
@@ -116,25 +116,8 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=databeheer,
             network_ceiling_eur_per_kwh=(to_float(row[4]) if len(row) > 4 else None),
         )
-    _require_every_area(out, "digital")
+    require_every_area("Ecopower", out, _DSO_LABELS.values(), block="digital")
     return out
-
-
-def _require_every_area(out: dict[str, DsoOverlay], block: str) -> None:
-    """Refuse a network table that lacks one of the eight Fluvius areas.
-
-    A partial table is worse than none: a relabelled or reshaped row would
-    drop its area, and the card would be adopted, persisted and shared with
-    the entry on that area left with no overlay and every tick failing,
-    while the last good card is gone from the cache. An empty one would let
-    the backfill path silently skip whole months (it swallows the resulting
-    KeyError). Refusing keeps the last good card serving.
-    """
-    missing = sorted(key for key in _DSO_LABELS.values() if key not in out)
-    if missing:
-        raise ExtractorError(
-            f"Ecopower: DSO rows not found for {missing} in the {block} block"
-        )
 
 
 def _slice_between(text: str, start: str, end: str) -> str | None:
@@ -190,7 +173,7 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
             capacity_eur_per_kw_year=to_float(row[1]),
             data_management_per_year=to_float(row[0]),
         )
-    _require_every_area(out, "dynamic")
+    require_every_area("Ecopower", out, _DSO_LABELS.values(), block="dynamic")
     return out
 
 

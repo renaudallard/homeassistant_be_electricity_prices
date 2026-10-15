@@ -793,6 +793,26 @@ def test_flanders_dsos_extract_full_set() -> None:
     assert antwerpen.prosumer_eur_per_kva_year == pytest.approx(54.63)
 
 
+@pytest.mark.parametrize(
+    ("fixture", "region", "label"),
+    [
+        ("octaplus_fixed_v.pdf", "flanders", "Fluvius West"),
+        ("octaplus_fixed_w.pdf", "wallonia", "AIESH"),
+    ],
+)
+def test_a_network_table_missing_an_area_is_refused(
+    fixture: str, region: str, label: str
+) -> None:
+    """A table that lost a row to a relabel is refused rather than adopted
+    without that area, which left an entry on it failing every tick while
+    the last good card was gone from the cache."""
+    text = _text(fixture)
+    relabelled = text.replace(label, "X.")
+    assert relabelled != text, f"the fixture stopped printing {label}"
+    with pytest.raises(ExtractorError, match="DSO rows not found"):
+        parse_snapshot("octaplus_fixed", relabelled, region)
+
+
 def test_unknown_contract_raises() -> None:
     async def _run() -> None:
         with pytest.raises(ExtractorError, match="unknown OCTA"):

@@ -403,6 +403,15 @@ illustrative for `aieg`: single 0.1087, peak 0.1205, offpeak 0.0667, transport
 (`test_wallonia_dsos_extract_full_set`, and the 2026-template variant
 `test_wallonia_dsos_new_2026_template`).
 
+Both region readers refuse a table missing any of their areas
+(`require_every_area`, `_parse.py`), since an entry on the missing area would
+fail every tick until the next good card
+(`test_a_network_table_missing_an_area_is_refused`, `tests/test_octaplus.py`).
+The Walloon cards of October to December 2025, before the Impact tariff, print
+a seven-column table this reader does not take, and on several of them the
+aligned text drops digits from it or loses it whole, so they are refused where
+they used to be adopted with an empty table.
+
 ### Flanders (`_extract_flanders_dsos`, `_octaplus_overlays.py`)
 
 Eight Fluvius sub-areas via `_FLANDERS_LABELS`. Note the label-to-

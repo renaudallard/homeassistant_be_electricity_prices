@@ -161,6 +161,19 @@ def test_variable_extracts_flanders_dsos_with_prosumer() -> None:
     assert iveka.prosumer_eur_per_kva_year == pytest.approx(67.79)
 
 
+def test_a_network_table_missing_an_area_is_refused() -> None:
+    """A table that lost a row to a relabel is refused rather than adopted
+    without that area, which left an entry on it failing every tick while
+    the last good card was gone from the cache."""
+    text = _layout(_VARIABLE)
+    relabelled = text.replace("Fluvius West", "Fluvius W.")
+    assert relabelled != text, "the fixture stopped printing Fluvius West"
+    with pytest.raises(
+        ExtractorError, match=r"DSO rows not found for \['fluvius_west'\]"
+    ):
+        parse_snapshot("ebem_variable", relabelled, "test://v", "2026-05")
+
+
 def test_variable_extracts_injection_formula() -> None:
     snap = parse_snapshot("ebem_variable", _layout(_VARIABLE), "test://v", "2026-05")
     inj = snap.injection

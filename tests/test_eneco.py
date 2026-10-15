@@ -116,6 +116,17 @@ def test_fix_extracts_dso_overlay() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.04)
 
 
+def test_a_network_table_missing_an_area_is_refused() -> None:
+    """Every card prints both regions' tables, and one missing an area is
+    refused rather than adopted without it, which left an entry on that
+    area failing every tick while the last good card was gone."""
+    text = fixture_text("eneco_fix.pdf")
+    relabelled = text.replace("FLUVIUS WEST", "FLUVIUS W.")
+    assert relabelled != text, "the fixture stopped printing FLUVIUS WEST"
+    with pytest.raises(eneco_mod.ExtractorError, match="DSO rows not found"):
+        parse_snapshot(relabelled, "power_fix", "test://fix", REGION_WALLONIA)
+
+
 def test_fix_fluvius_has_no_prosumer_rate() -> None:
     # Flemish digital meter rows print "-" for the prosumer column - SMR3
     # connections don't sit under the compensation regime.

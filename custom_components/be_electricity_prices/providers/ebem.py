@@ -69,6 +69,7 @@ from ._parse import (
     numeric_row,
     parse_prosumer_column,
     parse_sign,
+    require_every_area,
     to_float,
 )
 from ._pdf import (
@@ -925,6 +926,7 @@ def _extract_dsos(text: str, contract: _ContractDef) -> dict[str, DsoOverlay]:
             capacity_eur_per_kw_year=capacity,
             prosumer_eur_per_kva_year=prosumer_by_key.get(key),
         )
+    require_every_area("EBEM", out, _FLANDERS_LABELS.values())
     return out
 
 

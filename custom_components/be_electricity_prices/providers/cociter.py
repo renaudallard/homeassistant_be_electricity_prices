@@ -58,7 +58,7 @@ from ..const import (
     WALLONIA_DSO_KEYS,
 )
 from ._cociter_settle import published_belix
-from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
+from ._parse import SIGN_CHARS, numeric_row, parse_sign, require_every_area, to_float
 from ._pdf import (
     FR_MONTHS,
     fetch_pdf_text,
@@ -795,6 +795,7 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=to_float(row[0]),
             prosumer_eur_per_kva_year=prosumer_rate,
         )
+    require_every_area("Cociter", out, _DSO_KEY.values())
     return out
 
 
@@ -829,10 +830,7 @@ def _extract_impact_dsos(text: str, transport: float) -> dict[str, DsoOverlay]:
             transport=transport,
             data_management_per_year=to_float(row[0]),
         )
-    if not out:
-        # An empty overlay is not a soft failure: it bills the whole network
-        # leg at zero, which is a bigger error than the card being offline.
-        raise ExtractorError("Cociter: trihoraire distribution table not found")
+    require_every_area("Cociter", out, _DSO_KEY.values(), block="trihoraire")
     return out
 
 

@@ -63,7 +63,14 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from ._parse import SIGN_CHARS, excise_tier_bands, numeric_row, parse_sign, to_float
+from ._parse import (
+    SIGN_CHARS,
+    excise_tier_bands,
+    numeric_row,
+    parse_sign,
+    require_every_area,
+    to_float,
+)
 from ._pdf import (
     NL_MONTHS,
     fetch_pdf_text,
@@ -637,6 +644,7 @@ def _extract_dynamic(text: str) -> DynamicRates:
 
 
 def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
+    """Both regions' tables, which every card prints whichever it is read for."""
     out: dict[str, DsoOverlay] = {}
     for pdf_label, key in _WALLONIA_LABELS.items():
         if key in out:
@@ -648,6 +656,9 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         row = _find_fluvius_row(text, pdf_label)
         if row is not None:
             out[key] = row
+    require_every_area(
+        "Eneco", out, (*_WALLONIA_LABELS.values(), *_FLUVIUS_LABELS.values())
+    )
     return out
 
 
