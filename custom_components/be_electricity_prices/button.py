@@ -72,7 +72,8 @@ async def async_setup_entry(
 
 
 class ResetMonthlyPeakButton(CoordinatorEntity[BePricesCoordinator], ButtonEntity):
-    """Drops the persisted monthly peak so the next tick rebuilds it."""
+    """Drops the persisted monthly peak and the banked months, so the next tick
+    rebuilds the peak and the twelve-month mean starts over."""
 
     _attr_has_entity_name = True
     entity_description = _RESET_PEAK

@@ -548,16 +548,21 @@ One button, and only in Flanders: `ResetMonthlyPeakButton`
 (`button.py`), key `reset_monthly_peak`, `entity_category=DIAGNOSTIC`,
 unique id `{entry_id}_reset_monthly_peak`.
 
-`async_setup_entry` (`button.py`) returns early unless
+`async_setup_entry` (`button.py`) creates it only when
 `CONF_REGION == REGION_FLANDERS`, because outside Flanders the capacity tariff
 is not billed and `_track_monthly_peak` forces `_peak_kw` to 0 every tick, so a
-reset would do nothing.
+reset would do nothing. Elsewhere it still records an empty
+`intended_unique_ids["button"]`, which is what lets the registry cleanup
+(`_remove_unprovided_entities`) remove the button of an entry that moved out
+of Flanders.
 
 Pressing it calls `await self.coordinator.reset_monthly_peak()`
 (`button.py`), which drops the persisted monthly peak so the next coordinator
-tick rebuilds it from the live peak source. This is the manual escape hatch for
-a spurious peak spike that would otherwise inflate `capacity_cost` for the rest
-of the month.
+tick rebuilds it from the live peak source, and the months banked in
+`_peak_history` with it, so the twelve-month mean `capacity_cost` is billed on
+starts over from the running month. This is the manual escape hatch for a
+spurious peak spike, which would otherwise inflate `capacity_cost` for the rest
+of the month and, once banked, drag the mean for a year.
 
 ## Services
 
