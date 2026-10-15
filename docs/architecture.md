@@ -54,7 +54,7 @@ From `manifest.json`:
 | `integration_type` | `service` | It provides derived data (prices), not a physical device. |
 | `iot_class` | `cloud_polling` | It polls remote cards and ENTSO-E on a timer, no push. |
 | `config_flow` | `true` | Set up entirely through the UI wizard (`config_flow.py`). |
-| `requirements` | `pypdf>=6.0.0`, `pdfplumber>=0.11`, `defusedxml>=0.7`, `pyxlsb>=1.0` | PDF parsing (pypdf, pdfplumber) for tariff cards; pypdf 6.0.0 is the first to limit what a FlateDecode stream inflates to, which the check ahead of both readers relies on. defusedxml to parse the ENTSO-E XML and the Synergrid SPP workbook safely; pyxlsb to read the Synergrid RLP `.xlsb` workbook (`synergrid.py`). |
+| `requirements` | `pypdf>=6.6.0`, `pdfplumber>=0.11`, `defusedxml>=0.7`, `pyxlsb>=1.0` | PDF parsing (pypdf, pdfplumber) for tariff cards; pypdf 6.6.0 is the first whose text extraction loads its fonts through `Font.from_font_resource`, which the decode bound counts. defusedxml to parse the ENTSO-E XML and the Synergrid SPP workbook safely; pyxlsb to read the Synergrid RLP `.xlsb` workbook (`synergrid.py`). |
 | `after_dependencies` | `energy`, `recorder` | The integration writes cost statistics into the recorder and plugs into the Energy dashboard, but must not hard-require them, so they load first when present. |
 | `version` | `0.37.5` | Manifest version. CI auto-tags and publishes a release when this bumps on `main`. |
 
@@ -145,7 +145,7 @@ relative to that package directory.
 | `providers/_settle.py` | Settling a month-indexed card's month on the index the next card names: every rate with a formula behind it rebuilt at that value, energy (`settled_energy`) and feed-in (`settled_injection`). Used by every provider that settles a closed month on a published index. |
 | `providers/__init__.py` | The supplier registry: imports each module's `EXTRACTOR`, exposes the `EXTRACTORS` dict, and the `get()` / `all_extractors()` lookups. |
 | `providers/_pdf.py` | Fetching a card and getting text out of it: the HTTP layer, transient-error classification via `is_transient_fetch_error`, plain and column-aligned extraction, and the per-tick memo. |
-| `providers/_pdf_bound.py` | What a card's streams may decode to, on each reader's own reading of the file: checked before pypdf reads its text (`require_bounded_reader`), and held to while pdfminer, under pdfplumber, reads it (`bounded_pdfminer`). The decode bound, weighted by how the readers spend it. |
+| `providers/_pdf_bound.py` | What a card's streams may decode to, held to while pypdf (`bounded_pypdf`), or pdfminer under pdfplumber (`bounded_pdfminer`), reads it: the decode bound, counted on each reader as it reads. |
 | `providers/_parse.py` | Reading a figure off a line of that text: the number formats Belgian cards print in, the sign words, the DSO table columns and the regional tax overlay. |
 | `providers/_validity.py` | Which month a card is for and until when it is good: the validity sentences, the month-name headings and the archive's date check. |
 

@@ -648,56 +648,65 @@ Internals worth knowing:
   sheets, the CREG rate file and Synergrid's download page are read through
   them too.
 - The decode bound (`_pdf_bound.py`) holds what a card's streams may decode
-  to, on each reader's own reading of the file. `read_capped` bounds the
+  to, counted on each reader as it reads the card. `read_capped` bounds the
   download, not what it inflates to. pypdf limits each stream (from 6.0.0) but
   not what a whole document decodes to, and pdfminer decompresses with no
   limit at all, both in a worker thread the fetch timeout cannot cancel: a
   20 kB file inflating to 20 MB took 26 s on a Raspberry Pi, and one of 200 kB
-  ran away. The total is `_MAX_DECODED_STREAM_BYTES` (32 MiB). Before pypdf
-  reads a card's text, `require_bounded_reader` decodes every stream of the
-  same reader and counts it the way pypdf spends it: a content stream once for
-  each page that draws it, since each page interprets it again (a 2,7 kB file
-  whose one stream served 16 pages kept pdfplumber busy for 100 s), a page
-  pypdf cannot read left out as its text is, an image not at all unless a page
-  draws it as its content, whatever its `/Subtype` says. pdfplumber's
-  pdfminer is held to the bound while it reads the card instead
-  (`bounded_pdfminer`, around the layout and aligned readers): every stream
-  it reads through `PDFStream.get_data` counts, each time it reads it, so a
+  ran away. The total is `_MAX_DECODED_STREAM_BYTES` (32 MiB), and each reader
+  is held to it while it reads the card, `bounded_pypdf` around the plain
+  reader, from opening the file, and `bounded_pdfminer` around the layout and
+  aligned ones: every read of a stream counts, each time it is read, so a
   content stream counts once for each page drawing it, a form once for each
-  time it is drawn and a font written into the resources pages share once for
-  each page loading it; each inflate counts, every step of a stream inflated
-  more than once, and is held to what is left of the bound before it is held,
-  the cross-reference and object streams pdfminer inflates opening the file
-  included, and a stream counts what its decoding hands back past its last
-  inflate. A check made beforehand, on pypdf's reading of
-  the file or on a copy of pdfminer's, missed what pdfminer itself reads (a
-  page tree only one reader walks, two cross-reference tables, a font file
-  tagged as an image, a filter after DCTDecode, a predictor between two
-  inflates), each letting pdfminer decode 40 MiB and more uncounted. A damaged
-  FlateDecode stream, cut short or failing its checksum, counts again once for
-  every `_DAMAGED_FLATE_UNIT` (16 kB) of the stream, since pdfminer inflates
-  one a byte at a time in a time quadratic in its size. The costliest such
-  stream in the archive, on Bolt's professional Plenty fixed card of June
-  2026, takes 12,6 s of CPU on a Raspberry Pi, and under the bound one can cost
-  52 to 105 s, where before it was unbounded. The most counted for any
-  shipped fixture is 9,9 MB, and across the 2468 cards the archive held on
-  2026-10-14 it is 16,6 MB, that Bolt card. CCITT fax, decoded in pure
-  Python with no limit, is refused outside an image on both readers, and LZW
-  and run length under pdfminer, which never decodes an image to read text:
-  400 bytes of CCITT took 3,4 s, and no card carries one. An ASCII85 stream
-  over `_MAX_ASCII85_BYTES` (1 MiB) is refused on both, and on pypdf's one not
-  first among its filters, since decoding it takes about 90 bytes of memory
-  for each (16 MiB of it peaked at 1,7 GiB) and the largest a card carries is
-  2,2 kB. An RC4 decryption, which pdfminer runs a byte at a time (1 MiB took
-  365 s), counts its length times itself over `_RC4_UNIT` (16 kB) before it
-  runs, as a damaged inflate does; every encrypted card is AES. A PNG
-  predictor whose row is wider than both its stream and 16 kB is refused under
-  pdfminer, which holds a row of that width before it reads any (64 Mi columns
-  took 581 MiB). The checks only read and count, so a card under the bound
-  renders to the same text as before, and only these refuse: a file a reader
-  cannot open is left to it to fail on, and a stream it cannot decode is
-  skipped. The manifest asks for pypdf 6.0.0 or later, the first release that
-  limits what a FlateDecode stream inflates to.
+  time it is drawn and a ToUnicode map or font file each time a font is loaded
+  from it, since the readers interpret each again (a 2,7 kB file whose one
+  stream served 16 pages kept pdfplumber busy for 100 s); each inflate counts,
+  every step of a stream inflated more than once, and is held to what is left
+  of the bound before it is held, the cross-reference and object streams the
+  readers inflate opening the file included; and a stream counts what its
+  decoding hands back past its last inflate. A check made beforehand, on a
+  reading of the file, missed what the readers do: pypdf counted nothing for a
+  page's content written into the page (a 175 kB file decoded 60 MB), a form
+  once however often it was drawn (a 934 B file took 77 s) and a ToUnicode map
+  pages share once, and pdfminer finds pages and objects its own way (a page
+  tree only one reader walks, two cross-reference tables, a font file tagged
+  as an image, a filter after DCTDecode, a predictor between two inflates),
+  each letting it decode 40 MiB and more uncounted. pypdf also loads every font
+  a page or form names each time it is drawn, reading widths and encodings no
+  stream holds (a 3 kB file naming one font 200 times in a form drawn 200
+  times took 10,8 s), so a font load counts `_FONT_LOAD_BYTES` (1 kB) and
+  pypdf loads the same dictionary to a font once a read. A damaged FlateDecode
+  stream, cut short or failing its checksum, counts again once for every
+  `_DAMAGED_FLATE_UNIT` (16 kB) of the stream under pdfminer, which inflates
+  one a byte at a time in a time quadratic in its size. pypdf reads one cut
+  short at once, but goes on past a failure, or a gzip header, a byte at a
+  time to the end of the stream, so there such a one counts again, its
+  length as well. The costliest such stream in the archive, on Bolt's
+  professional Plenty fixed card of June 2026, takes 12,6 s of CPU on a
+  Raspberry Pi, and under the bound one can cost 52 to 105 s, where before
+  it was unbounded. Across the shipped fixtures pdfminer counts at most 9,9
+  MB and pypdf 7,4 MB, and across the 2468 cards the archive held on
+  2026-10-14 the most is 16,6 MB, pdfminer reading that Bolt card. LZW, run
+  length and CCITT fax are refused while a card is read, and JBIG2, which
+  pypdf hands to an outside program, under pypdf: no reader decodes an image
+  to read text, pdfminer decodes the first three in pure Python with no
+  limit (400 bytes of CCITT took 3,4 s), and no card carries one. An
+  ASCII85 stream over `_MAX_ASCII85_BYTES` (1 MiB) is refused on both,
+  whatever filter made it, since decoding it takes
+  about 90 bytes of memory for each (16 MiB of it peaked at 1,7 GiB) and the
+  largest a card carries is 2,2 kB. An RC4 decryption, which pdfminer runs a
+  byte at a time (1 MiB took 365 s), counts its length times itself over
+  `_RC4_UNIT` (16 kB) before it runs, as a damaged inflate does; every
+  encrypted card is AES. A PNG predictor whose row is wider than both its
+  stream and 16 kB is refused under pdfminer, which holds a row of that width
+  before it reads any (64 Mi columns took 581 MiB). A refusal a reader wraps
+  in an error of its own, or swallows as pypdf does any error in a form, is
+  refused all the same, and so is pypdf reaching one of its own limits. The
+  checks only count, and a font pypdf loads once comes out as it did each
+  time, so a card under the bound renders to the same text as before, and
+  only these refuse: a file a reader cannot open is left to it to fail on. The manifest asks for pypdf 6.6.0 or later,
+  the first release whose text extraction loads its fonts through
+  `Font.from_font_resource`, which the bound counts.
 - `_require_https` (`_pdf.py`) refuses to fetch a card or page whose address
   is not https, before any request. Most links are read off a supplier's page
   and only energie.be checked their scheme, so a plain http link was fetched

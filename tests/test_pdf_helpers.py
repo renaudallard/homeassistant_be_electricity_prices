@@ -674,6 +674,13 @@ def _pdf_from(objects: Sequence[bytes], *, sections: int = 1) -> bytes:
     return bytes(out)
 
 
+# A font for the page to name: pypdf reads nothing of a page without
+# resources.
+_FONT_RESOURCES = (
+    b"/Resources<</Font<</F1<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>>>>>"
+)
+
+
 def _pdf_of(
     stream: bytes,
     *extra: bytes,
@@ -683,7 +690,8 @@ def _pdf_of(
     tree: bool = True,
 ) -> bytes:
     """A PDF of ``pages`` pages that all draw ``stream``, with ``attrs`` in
-    its dictionary, as their content, named ``contents``, followed by the
+    its dictionary, as their content, named ``contents``, and name a font,
+    followed by the
     ``extra`` objects, which nothing refers to. Without ``tree`` the catalog
     names no page tree."""
     kids = b" ".join(b"%d 0 R" % (4 + page) for page in range(pages))
@@ -695,8 +703,8 @@ def _pdf_of(
             + stream
             + b"\nendstream",
             *(
-                b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents %s>>"
-                % contents,
+                b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents %s%s>>"
+                % (contents, _FONT_RESOURCES),
             )
             * pages,
             *extra,
@@ -801,7 +809,170 @@ def test_a_content_stream_counts_once_for_each_page_drawing_it(
         extract(_inflating_pdf(300_000, pages=3))
 
 
+def _written_into_pages_pdf(stream: bytes, pages: int) -> bytes:
+    """``pages`` pages, each with ``stream``, a FlateDecode stream, written
+    into it as its content rather than referred to."""
+    content = b"<</Filter/FlateDecode/Length %d>>\nstream\n" % len(stream)
+    content += stream + b"\nendstream"
+    kids = b" ".join(b"%d 0 R" % (3 + page) for page in range(pages))
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[%s]/Count %d>>" % (kids, pages),
+            *(
+                b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents %s%s>>"
+                % (content, _FONT_RESOURCES),
+            )
+            * pages,
+        )
+    )
+
+
+def test_a_content_stream_written_into_its_page_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Counted by the objects the cross-reference table lists, a stream
+    written into its page counted nothing: a 175 kB file had pypdf decode
+    60 MB for its text. pdfminer does not read one."""
+    import zlib
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    stream = zlib.compress(_comment(300_000), 9)
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract_pdf_text(_written_into_pages_pdf(stream, 4))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract_pdf_text(_written_into_pages_pdf(stream, 3))
+
+
+def _form_pdf(form: bytes, draws: int, fonts: int = 0) -> bytes:
+    """One page drawing ``draws`` times a form, ``form`` a FlateDecode
+    stream, whose resources name one font ``fonts`` times."""
+    names = b"".join(b"/F%d 5 0 R" % name for name in range(fonts))
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[4 0 R]/Count 1>>",
+            b"<</Length %d>>\nstream\n%s\nendstream"
+            % (len(b"/X0 Do\n" * draws), b"/X0 Do\n" * draws),
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 3 0 R"
+            b"/Resources<</XObject<</X0 6 0 R>>>>>>",
+            b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+            b"<</Type/XObject/Subtype/Form/BBox[0 0 612 792]"
+            b"/Resources<</Font<<%s>>>>/Filter/FlateDecode/Length %d>>\nstream\n"
+            % (names, len(form))
+            + form
+            + b"\nendstream",
+        )
+    )
+
+
 @pytest.mark.parametrize("extract", _EVERY_READER)
+def test_a_form_counts_once_for_each_time_it_is_drawn(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pypdf interprets a form again each time a page draws it, and it was
+    counted once: a 934 B file kept pypdf busy for 77 s. A refusal in a
+    form, which pypdf logs and goes on from, still refuses."""
+    import zlib
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    form = zlib.compress(_comment(300_000), 9)
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_form_pdf(form, 4))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_form_pdf(form, 3))
+
+
+def _fonts_pdf(pages: int, to_unicode: bytes) -> bytes:
+    """``pages`` pages, each with a font of its own, all of them with
+    ``to_unicode``, a FlateDecode stream, as their ToUnicode map."""
+    kids = b" ".join(b"%d 0 R" % (5 + 2 * page) for page in range(pages))
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[%s]/Count %d>>" % (kids, pages),
+            b"<</Length 35>>\nstream\nBT /F1 12 Tf 10 50 Td (Hello) Tj ET\nendstream",
+            b"<</Filter/FlateDecode/Length %d>>\nstream\n" % len(to_unicode)
+            + to_unicode
+            + b"\nendstream",
+            *(
+                part
+                for page in range(pages)
+                for part in (
+                    b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]"
+                    b"/Contents 3 0 R/Resources<</Font<</F1 %d 0 R>>>>>>"
+                    % (6 + 2 * page),
+                    b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica/ToUnicode 4 0 R>>",
+                )
+            ),
+        )
+    )
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_a_tounicode_map_counts_each_time_a_font_is_loaded_from_it(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """A ToUnicode map the fonts of several pages share was counted once and
+    parsed for each of them."""
+    import zlib
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    to_unicode = zlib.compress(_comment(300_000), 9)
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract(_fonts_pdf(4, to_unicode))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_fonts_pdf(3, to_unicode))
+
+
+def test_a_font_counts_each_time_pypdf_loads_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pypdf loads every font a form names each time the form is drawn,
+    which no stream holds: a 3 kB file naming one font 200 times in a form
+    drawn 200 times took 10,8 s, and counted nothing. A load counts, and
+    the same dictionary is read to a font once."""
+    import zlib
+
+    from pypdf import _font
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    form = zlib.compress(b" ")
+    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+        extract_pdf_text(_form_pdf(form, 11, fonts=100))
+    encode = _font.get_encoding
+    loads: list[object] = []
+
+    def counted(font: object) -> object:
+        loads.append(font)
+        return encode(font)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(_font, "get_encoding", counted)
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract_pdf_text(_form_pdf(form, 9, fonts=100))
+    assert len(loads) == 1
+
+
+def test_pypdf_stops_inflating_at_the_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pypdf inflates a stream up to 75 MB before anything could count it.
+    Its inflate stops at what is left of the bound."""
+    import tracemalloc
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    payload = _inflating_pdf(32 << 20)
+    tracemalloc.start()
+    try:
+        with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+            extract_pdf_text(payload)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert peak < 8 << 20
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
 def test_a_page_naming_its_content_by_another_generation_counts(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
 ) -> None:
@@ -878,32 +1049,6 @@ def test_pdfplumber_is_bounded_on_the_pages_pdfminer_lists(
         extract(_listed_page_pdf(content, 4))
     with pytest.raises(CardNotReadableError, match="no text layer"):
         extract(_listed_page_pdf(content, 3))
-
-
-def test_a_page_pypdf_cannot_read_leaves_the_others_counted(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """One page whose content pypdf could not resolve dropped every page's
-    count: sixteen pages sharing one stream counted it once, and the plain
-    reader then spent 212 s on them."""
-    import io
-
-    import pypdf
-    from pypdf import PageObject
-
-    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
-    read = PageObject.raw_get
-
-    def unreadable(page: PageObject, key: object) -> object:
-        ref = page.indirect_reference
-        if ref is not None and ref.idnum == 8:
-            raise ValueError("object stream entry outside an /ObjStm")
-        return read(page, key)
-
-    monkeypatch.setattr(PageObject, "raw_get", unreadable)
-    reader = pypdf.PdfReader(io.BytesIO(_inflating_pdf(300_000, pages=5)))
-    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
-        _pdf_bound.require_bounded_reader(reader)
 
 
 def _hidden_stream_pdf(hidden: bytes, shape: str) -> bytes:
@@ -1046,16 +1191,23 @@ def test_a_ccitt_stream_outside_an_image_is_refused(
 
 def _damaged(size: int, *, how: str) -> bytes:
     """A PDF whose content stream, ``size`` bytes of comment that compress
-    poorly, is cut short, inside an ASCII85 wrapper too (``wrapped``), or
-    whole but failing its checksum (``checksum``)."""
+    poorly, is cut short, inside an ASCII85 wrapper too (``wrapped``),
+    whole but failing its checksum (``checksum``), broken halfway
+    (``broken``), or cut short under a gzip header (``gzip``)."""
     import base64
+    import gzip
     import random
     import zlib
 
     letters = random.Random(0).choices(b"abcdefghijklmnopqrstuvwxyz", k=size)
     whole = zlib.compress(b"%" + bytes(letters) + b"\n", 9)
+    if how == "gzip":
+        return _pdf_of(gzip.compress(b"%" + bytes(letters) + b"\n")[:-4])
     if how == "checksum":
         return _pdf_of(whole[:-1] + bytes([whole[-1] ^ 1]))
+    if how == "broken":
+        half = len(whole) // 2
+        return _pdf_of(whole[:half] + b"\xff" * 8 + whole[half + 8 :])
     if how == "cut":
         return _pdf_of(whole[:-4])
     return _pdf_of(
@@ -1065,20 +1217,37 @@ def _damaged(size: int, *, how: str) -> bytes:
 
 
 @pytest.mark.parametrize("how", ["cut", "wrapped", "checksum"])
-@pytest.mark.parametrize("extract", _EVERY_READER)
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
 def test_a_damaged_flate_stream_counts_many_times_over(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str], how: str
 ) -> None:
     """zlib refuses a FlateDecode stream cut short, and pdfminer then
-    inflates it again a byte at a time, in a time quadratic in its size,
-    while pypdf, which reads it whole, counted it once. A small one, like
-    those on some Bolt and Frank cards, still reads."""
+    inflates it again a byte at a time, in a time quadratic in its size.
+    A small one, like those on some Bolt and Frank cards, still reads."""
     monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
     monkeypatch.setattr(_pdf_bound, "_DAMAGED_FLATE_UNIT", 4096)
     with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
         extract(_damaged(128 << 10, how=how))
     with pytest.raises(CardNotReadableError, match="no text layer"):
         extract(_damaged(1000, how=how))
+
+
+def test_pypdf_counts_again_a_flate_stream_zlib_fails_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pypdf reads a stream cut short as far as it goes, at once, and goes
+    on past a failure, or a gzip header, a byte at a time to the end of the
+    stream. Counted again like pdfminer's, the 216 kB stream Bolt's
+    professional Plenty fixed card of June 2026 cuts short counted 8,8 MB
+    more for nothing."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    monkeypatch.setattr(_pdf_bound, "_DAMAGED_FLATE_UNIT", 4096)
+    for how in ("broken", "checksum", "gzip"):
+        with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
+            extract_pdf_text(_damaged(128 << 10, how=how))
+    for how in ("cut", "wrapped"):
+        with pytest.raises(CardNotReadableError, match="no text layer"):
+            extract_pdf_text(_damaged(128 << 10, how=how))
 
 
 @pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
@@ -1288,15 +1457,24 @@ def test_a_large_ascii85_stream_is_refused(
         extract(_pdf_of(base64.a85encode(_comment(1000)) + b"~>", attrs=a85))
 
 
-def test_ascii85_behind_another_filter_is_refused_before_pypdf_reads() -> None:
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_ascii85_behind_another_filter_is_held_to_what_it_decodes(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
     """Behind an inflate, an ASCII85 step decodes what the inflate made of a
-    few bytes, which no size of the stream itself bounds."""
+    few bytes, which no size of the stream itself bounds: it is held to the
+    ASCII85 it is handed."""
     import base64
     import zlib
 
-    stream = zlib.compress(base64.a85encode(_comment(1000)) + b"~>")
+    monkeypatch.setattr(_pdf_bound, "_MAX_ASCII85_BYTES", 4096)
+    attrs = b"/Filter[/FlateDecode/ASCII85Decode]"
+    big = zlib.compress(base64.a85encode(_comment(4096)) + b"~>")
     with pytest.raises(ExtractorError, match=r"^PDF carries an ASCII85 stream"):
-        extract_pdf_text(_pdf_of(stream, attrs=b"/Filter[/FlateDecode/ASCII85Decode]"))
+        extract(_pdf_of(big, attrs=attrs))
+    small = zlib.compress(base64.a85encode(_comment(1000)) + b"~>")
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_pdf_of(small, attrs=attrs))
 
 
 @pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])

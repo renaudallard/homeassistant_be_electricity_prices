@@ -44,7 +44,7 @@ import pypdf
 from ._parse import (
     to_float,
 )
-from ._pdf_bound import bounded_pdfminer, require_bounded_reader
+from ._pdf_bound import bounded_pdfminer, bounded_pypdf
 from .base import (
     CardNotReadableError,
     ExtractorError,
@@ -391,26 +391,23 @@ def _require_text_layer(text: str, pages: int) -> None:
 
 def extract_pdf_text(payload: bytes) -> str:
     try:
-        reader = pypdf.PdfReader(BytesIO(payload))
-        # The same reader, so the streams the check decoded are not decoded
-        # a second time for the text.
-        require_bounded_reader(reader)
-        pages = list(reader.pages)
         chunks: list[str] = []
         failures = 0
-        for idx, page in enumerate(pages):
-            text = page.extract_text()
-            if text is None:
-                # pypdf returns None when a page cannot be decoded (e.g.
-                # an unsupported font). The caller would otherwise see a
-                # corrupt snapshot with regex misses on whatever was on
-                # that page; log so the failure is visible in HA logs.
-                _LOGGER.warning(
-                    "pypdf returned None for page %d/%d", idx + 1, len(pages)
-                )
-                failures += 1
-                continue
-            chunks.append(text)
+        with bounded_pypdf():
+            pages = list(pypdf.PdfReader(BytesIO(payload)).pages)
+            for idx, page in enumerate(pages):
+                text = page.extract_text()
+                if text is None:
+                    # pypdf returns None when a page cannot be decoded (e.g.
+                    # an unsupported font). The caller would otherwise see a
+                    # corrupt snapshot with regex misses on whatever was on
+                    # that page; log so the failure is visible in HA logs.
+                    _LOGGER.warning(
+                        "pypdf returned None for page %d/%d", idx + 1, len(pages)
+                    )
+                    failures += 1
+                    continue
+                chunks.append(text)
         if pages and failures == len(pages):
             raise ExtractorError("PDF parse error: every page failed to decode")
         text = "\n".join(chunks)

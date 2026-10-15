@@ -23,32 +23,32 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""What a card's PDF streams may decode to: checked before pypdf reads its text,
-and held to while pdfminer, under pdfplumber, reads it."""
+"""What a card's PDF streams may decode to, held to while pypdf, or pdfminer
+under pdfplumber, reads it."""
 
 from __future__ import annotations
 
 import threading
 import zlib
-from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
-import pypdf
+from pypdf import filters as pypdf_filters
+from pypdf._font import Font
 from pypdf.errors import LimitReachedError
-from pypdf.filters import ASCII85Decode, ASCIIHexDecode
-from pypdf.generic import ArrayObject, IndirectObject, StreamObject
+from pypdf.generic import DecodedStreamObject, EncodedStreamObject, StreamObject
 
 from .base import ExtractorError
 
-# What every stream of a card may decode to, together, counted as
-# require_bounded_reader says. Across the 179 shipped fixtures the most
-# counted is 9,9 MB, a 2,4 MB Bolt card. Across the 2468 cards the archive
-# held on 2026-10-14 the most counted is 16,6 MB, Bolt's professional Plenty
-# fixed card of June 2026 with its damaged stream, so this leaves twice that.
+# What every stream of a card may decode to, together, counted as each
+# reader reads it. Across the 179 shipped fixtures pdfminer counts at most
+# 9,9 MB, for a 2,4 MB Bolt card, and pypdf 7,4 MB. Across the 2468 cards
+# the archive held on 2026-10-14 the most counted is 16,6 MB, pdfminer
+# reading Bolt's professional Plenty fixed card of June 2026 with its
+# damaged stream, so this leaves twice that.
 _MAX_DECODED_STREAM_BYTES = 32 * 1024 * 1024
 
 # A damaged FlateDecode stream counts what it decodes to again, once for
@@ -66,14 +66,21 @@ _DAMAGED_FLATE_UNIT = 16384
 # row pdfminer may hold for a stream narrower than that row.
 _PIECE = 16384
 
+# How a gzip stream starts, which pypdf inflates only a byte at a time.
+_GZIP = b"\x1f\x8b"
+
 # The most ASCII85 a stream may carry: decoding it takes about 90 bytes of
 # memory for each, so 16 MiB of it peaked at 1,7 GiB. The largest a card
 # carries is 2,2 kB.
 _MAX_ASCII85_BYTES = 1024 * 1024
 
-_FLATE = ("/FlateDecode", "/Fl")
-_CCITT = ("/CCITTFaxDecode", "/CCF")
-_ASCII85 = ("/ASCII85Decode", "/A85")
+# What a font pypdf loads counts. pypdf loads every font a page or form
+# names each time it is drawn, reading its widths and encoding again, which
+# no stream holds: a 3 kB file naming one font 200 times in a form drawn
+# 200 times took 10,8 s. A load costs about what pypdf spends on a few
+# hundred bytes of content, and the most any fixture loads is 321, an OCTA+
+# card of four pages and six forms.
+_FONT_LOAD_BYTES = 1024
 
 
 def _bound_refusal() -> ExtractorError:
@@ -90,55 +97,17 @@ def _ascii85_refusal() -> ExtractorError:
     )
 
 
-def _filter_names(stream: StreamObject) -> list[str]:
-    """The stream's filters, in the order they are undone."""
-    filters = stream.get("/Filter")
-    if filters is None:
-        return []
-    if isinstance(filters, ArrayObject):
-        return [str(name.get_object()) for name in filters]
-    return [str(filters)]
-
-
-def _content_uses(reader: pypdf.PdfReader) -> Counter[int]:
-    """How many of the pages pypdf walks draw each content stream, by object
-    number. A tree pypdf cannot walk gives none, and pypdf then reads no
-    text either; a page it cannot read is left out, as its text is."""
-    uses: Counter[int] = Counter()
-    try:
-        pages = list(reader.pages)
-    except LimitReachedError as err:
-        raise _bound_refusal() from err
-    except Exception:  # pypdf cannot walk the page tree
-        return uses
-    for page in pages:
-        try:
-            if "/Contents" not in page:
-                continue
-            contents = page.raw_get("/Contents")
-            if isinstance(contents, IndirectObject) and isinstance(
-                contents.get_object(), ArrayObject
-            ):
-                contents = contents.get_object()
-        except LimitReachedError as err:
-            raise _bound_refusal() from err
-        except Exception:  # a page pypdf cannot read
-            continue
-        refs = contents if isinstance(contents, ArrayObject) else [contents]
-        for ref in refs:
-            if isinstance(ref, IndirectObject):
-                uses[ref.idnum] += 1
-    return uses
-
-
-def _inflate(data: bytes, room: int) -> tuple[bytes, bool]:
-    """``data`` inflated, refused past ``room`` bytes, and whether zlib read
-    it to its end, checksum included, the way a one-shot ``zlib.decompress``
-    has to. Fed and drained a :data:`_PIECE` at a time, so no more than
-    ``room`` is ever held, and a stream zlib refuses keeps all it inflated to
-    but the last piece: inflated in one call, one failing its checksum came
-    back empty, and the weight of a damaged stream with it."""
-    inflater = zlib.decompressobj()
+def _inflate(
+    data: bytes, room: int, wbits: int = zlib.MAX_WBITS
+) -> tuple[bytes, bool, bool]:
+    """``data`` inflated, refused past ``room`` bytes, whether zlib read it
+    to its end, checksum included, the way a one-shot ``zlib.decompress``
+    has to, and whether zlib failed on it rather than found it cut short.
+    Fed and drained a :data:`_PIECE` at a time, so no more than ``room`` is
+    ever held, and a stream zlib refuses keeps all it inflated to but the
+    last piece: inflated in one call, one failing its checksum came back
+    empty, and the weight of a damaged stream with it."""
+    inflater = zlib.decompressobj(wbits)
     out = bytearray()
     try:
         for start in range(0, len(data), _PIECE):
@@ -152,117 +121,33 @@ def _inflate(data: bytes, room: int) -> tuple[bytes, bool]:
                 break
         out += inflater.flush()
     except zlib.error:
-        return bytes(out), False
+        return bytes(out), False, True
     if len(out) > room:
         raise _bound_refusal()
-    return bytes(out), inflater.eof
+    return bytes(out), inflater.eof, False
 
 
-def _inflates_whole(data: bytes) -> bool:
-    """Whether zlib reads ``data`` to its end, checksum included."""
-    return _inflate(data, _MAX_DECODED_STREAM_BYTES)[1]
-
-
-def _flate_damaged(stream: StreamObject, filters: list[str]) -> bool:
-    """Whether pdfminer would find a FlateDecode step of ``stream`` damaged.
-
-    The step is checked on what reaches it, so the ASCII85 and ASCIIHex
-    wrappers some cards put around it are undone first. A chain this cannot
-    follow to its FlateDecode step counts as damaged.
-    """
-    data = stream._data
-    for index, name in enumerate(filters):
-        if name in _FLATE:
-            later = filters[index + 1 :]
-            return not _inflates_whole(data) or any(f in _FLATE for f in later)
-        if name in ("/ASCII85Decode", "/A85"):
-            data = ASCII85Decode.decode(data)
-        elif name in ("/ASCIIHexDecode", "/AHx"):
-            data = ASCIIHexDecode.decode(data)
-        else:
-            return any(f in _FLATE for f in filters[index + 1 :])
-    return False
-
-
-def require_bounded_reader(reader: pypdf.PdfReader) -> None:
-    """Refuse a PDF whose streams inflate past anything a card decodes to,
-    ahead of pypdf reading its text.
-
-    :func:`read_capped` bounds the download, not what it inflates to. pypdf
-    decodes under limits of its own (from 6.0.0) but sets none on what a
-    whole document decodes to, in a worker thread the fetch timeout cannot
-    cancel: a 20 kB file inflating to 20 MB took 26 s on a Raspberry Pi. So
-    every stream pypdf may decode is decoded, on the reader the text is then
-    read from, and the total is held to :data:`_MAX_DECODED_STREAM_BYTES`,
-    weighted by what the reader does with it:
-
-    - a content stream counts once for each page that draws it, since each
-      page interprets it again: a 2,7 kB file whose one stream served 16
-      pages kept pdfplumber busy for 100 s;
-    - an image is left out, since no text is read from one, but a stream a
-      page draws as its content counts whatever its ``/Subtype`` says;
-    - a damaged FlateDecode stream counts again, many times over
-      (:data:`_DAMAGED_FLATE_UNIT`).
-
-    A CCITT fax stream outside an image is refused outright, as no card
-    carries one, and so is an ASCII85 stream over
-    :data:`_MAX_ASCII85_BYTES` or behind another filter. Only these refuse,
-    or pypdf reaching one of its own limits. A stream pypdf cannot decode is
-    skipped, so this never refuses a card for any other reason, and it only
-    reads.
-    """
-    uses = _content_uses(reader)
-    total = 0
-    for generation, ids in reader.xref.items():
-        for idnum in ids:
-            try:
-                obj = reader.get_object(IndirectObject(idnum, generation, reader))
-                if not isinstance(obj, StreamObject):
-                    continue
-                drawn = uses[idnum]
-                if not drawn and obj.get("/Subtype") == "/Image":
-                    continue
-                filters = _filter_names(obj)
-                if any(name in _CCITT for name in filters):
-                    raise ExtractorError(
-                        "PDF carries a CCITT fax stream outside an image; "
-                        "refusing to read it"
-                    )
-                if any(name in _ASCII85 for name in filters) and (
-                    filters[0] not in _ASCII85 or len(obj._data) > _MAX_ASCII85_BYTES
-                ):
-                    raise _ascii85_refusal()
-                size = len(obj.get_data())
-                cost = size * max(drawn, 1)
-                if any(name in _FLATE for name in filters) and _flate_damaged(
-                    obj, filters
-                ):
-                    cost += (
-                        size
-                        * max(len(obj._data), _DAMAGED_FLATE_UNIT)
-                        // _DAMAGED_FLATE_UNIT
-                    )
-            except ExtractorError:
-                raise
-            except LimitReachedError as err:
-                raise _bound_refusal() from err
-            except Exception:  # an object or filter pypdf cannot read
-                continue
-            total += cost
-            if total > _MAX_DECODED_STREAM_BYTES:
-                raise _bound_refusal()
+def _damaged(again: int, length: int) -> int:
+    """What a damaged FlateDecode stream ``length`` bytes long counts on top
+    of what it inflated to: ``again`` once more for every
+    :data:`_DAMAGED_FLATE_UNIT` of its length, for a reader inflating it
+    again a byte at a time."""
+    return again * max(length, _DAMAGED_FLATE_UNIT) // _DAMAGED_FLATE_UNIT
 
 
 @dataclass
 class _Reading:
-    """What is left of the bound while pdfplumber reads a card, the
-    refusal that ended it, which pdfminer or pdfplumber may wrap in an
-    error of their own, and for each stream being decoded, innermost last,
-    what its last inflate handed back, counted already."""
+    """What is left of the bound while a card is read, the refusal that
+    ended it, which a reader may wrap in an error of its own or swallow,
+    for each stream being decoded, innermost last, what its last inflate
+    handed back, counted already, and under pypdf which stream that is and
+    the fonts loaded so far, by the dictionary they were loaded from."""
 
     left: int
     refusal: ExtractorError | None = None
     inflated: list[int] = field(default_factory=list)
+    streams: list[EncodedStreamObject] = field(default_factory=list)
+    fonts: dict[int, tuple[Any, Font]] = field(default_factory=dict)
 
     def refuse(self, err: ExtractorError) -> ExtractorError:
         if self.refusal is None:
@@ -274,9 +159,23 @@ class _Reading:
         if self.left < 0:
             raise self.refuse(_bound_refusal())
 
+    def inflate(
+        self, data: bytes, wbits: int = zlib.MAX_WBITS
+    ) -> tuple[bytes, bool, bool]:
+        """``data`` inflated within what is left of the bound and counted,
+        whether zlib read it whole, and whether it failed on it."""
+        try:
+            out, whole, failed = _inflate(data, self.left, wbits)
+        except ExtractorError as err:
+            raise self.refuse(err) from None
+        if self.inflated:
+            self.inflated[-1] = len(out)
+        self.charge(len(out))
+        return out, whole, failed
 
-# The card being read in this thread, or None outside one: pdfminer is only
-# held to the bound then.
+
+# The card being read in this thread, or None outside one: the readers are
+# only held to the bound then.
 _READING: ContextVar[_Reading | None] = ContextVar("_READING", default=None)
 
 # pdfminer decrypts RC4 a byte at a time, appending each to what it holds:
@@ -301,27 +200,17 @@ class _BoundedZlib:
         reading = _READING.get()
         if reading is None:
             return zlib.decompress(data)
-        try:
-            out, whole = _inflate(data, reading.left)
-        except ExtractorError as err:
-            raise reading.refuse(err) from None
-        cost = len(out)
-        if not whole:
-            cost += (
-                len(out) * max(len(data), _DAMAGED_FLATE_UNIT) // _DAMAGED_FLATE_UNIT
-            )
-        if reading.inflated:
-            reading.inflated[-1] = len(out)
-        reading.charge(cost)
+        out, whole, _ = reading.inflate(data)
         if whole:
             return out
+        reading.charge(_damaged(len(out), len(data)))
         raise zlib.error("stream cut short or failing its checksum")
 
 
 def _refused_while_reading(name: str, decode: Any) -> Any:
-    """``decode``, refused while a card is read: pdfminer runs it in pure
-    Python with no limit, never on an image to read text, and no other
-    stream of a card carries it."""
+    """``decode``, refused while a card is read: the readers never decode it
+    on an image to read text, pdfminer runs it in pure Python with no limit,
+    and no other stream of a card carries it."""
 
     def refused(*args: Any, **kwargs: Any) -> Any:
         reading = _READING.get()
@@ -335,6 +224,112 @@ def _refused_while_reading(name: str, decode: Any) -> Any:
 
     return refused
 
+
+def _ascii85_held(decode: Any) -> Any:
+    """``decode``, refused while a card is read on more than
+    :data:`_MAX_ASCII85_BYTES` of ASCII85, whatever filter made them."""
+
+    def held(data: bytes, *args: Any, **kwargs: Any) -> Any:
+        reading = _READING.get()
+        if reading is not None and len(data) > _MAX_ASCII85_BYTES:
+            raise reading.refuse(_ascii85_refusal())
+        return decode(data, *args, **kwargs)
+
+    return held
+
+
+def _hold_pypdf_to_the_bound() -> None:
+    """Have pypdf held to the bound while a card is read, and left as it is
+    otherwise. Every stream it reads goes through ``get_data``, every one it
+    inflates through ``pypdf.filters.decompress``, and every font it loads
+    through ``Font.from_font_resource``."""
+    decompress = pypdf_filters.decompress
+
+    def inflate(data: bytes) -> bytes:
+        reading = _READING.get()
+        if reading is None:
+            return decompress(data)
+        # Either header, as pypdf's recovery reads a gzip one too.
+        out, whole, failed = reading.inflate(data, zlib.MAX_WBITS | 32)
+        if whole:
+            return out
+        # pypdf hands back what a stream cut short inflates to, and goes on
+        # past a failure, or a gzip header, a byte at a time to the end of
+        # the stream, so its length counts too. Either way it hands back no
+        # more than the inflate counted above and the piece zlib dropped
+        # refusing it.
+        if failed or data.startswith(_GZIP):
+            reading.charge(_damaged(len(out) + len(data), len(data)))
+        recovered = bytes(decompress(data))
+        reading.charge(max(len(recovered) - len(out), 0))
+        if reading.inflated:
+            reading.inflated[-1] = len(recovered)
+        return recovered
+
+    get_encoded = EncodedStreamObject.get_data
+    get_decoded = DecodedStreamObject.get_data
+
+    def read_encoded(self: EncodedStreamObject) -> bytes:
+        reading = _READING.get()
+        if reading is None:
+            return get_encoded(self)
+        reading.inflated.append(0)
+        reading.streams.append(self)
+        try:
+            data = get_encoded(self)
+        finally:
+            inflated = reading.inflated.pop()
+            reading.streams.pop()
+        # A read counted its inflates as they ran, and counts what it hands
+        # back past the last of them: all of it for a stream decoded
+        # already.
+        reading.charge(max(len(data) - inflated, 0))
+        return data
+
+    def read_decoded(self: StreamObject) -> bytes:
+        data = get_decoded(self)
+        reading = _READING.get()
+        # Every read counts but the one a stream makes of its own decoding,
+        # counted with it.
+        if reading is not None and not (
+            reading.streams and reading.streams[-1].decoded_self is self
+        ):
+            reading.charge(len(data))
+        return data
+
+    load = Font.from_font_resource.__func__  # type: ignore[attr-defined]
+
+    def loaded(cls: type[Font], pdf_font_dict: Any) -> Font:
+        reading = _READING.get()
+        if reading is None:
+            return load(cls, pdf_font_dict)  # type: ignore[no-any-return]
+        reading.charge(_FONT_LOAD_BYTES)
+        # Loaded once a read: pypdf reads the same dictionary to the same
+        # font each time.
+        key = id(pdf_font_dict)
+        if key not in reading.fonts:
+            reading.fonts[key] = (pdf_font_dict, load(cls, pdf_font_dict))
+        return reading.fonts[key][1]
+
+    for decoder, label in (
+        (pypdf_filters.LZWDecode, "LZW"),
+        (pypdf_filters.RunLengthDecode, "run-length"),
+        (pypdf_filters.CCITTFaxDecode, "CCITT fax"),
+        (pypdf_filters.JBIG2Decode, "JBIG2"),
+    ):
+        decoder.decode = staticmethod(  # type: ignore[method-assign]
+            _refused_while_reading(label, decoder.decode)
+        )
+    pypdf_filters.ASCII85Decode.decode = staticmethod(  # type: ignore[method-assign]
+        _ascii85_held(pypdf_filters.ASCII85Decode.decode)
+    )
+    pypdf_filters.decompress = inflate
+    EncodedStreamObject.get_data = read_encoded  # type: ignore[method-assign]
+    DecodedStreamObject.get_data = read_decoded  # type: ignore[method-assign]
+    Font.from_font_resource = classmethod(loaded)  # type: ignore[assignment]
+
+
+_hold_pypdf_to_the_bound()
 
 _HOLDING = threading.Lock()
 
@@ -392,25 +387,71 @@ def _hold_pdfminer_to_the_bound() -> None:
                 )
             return bytes(png_predictor(pred, colors, columns, bits, data))
 
-        ascii85decode = names["ascii85decode"]
-
-        def held(data: bytes) -> bytes:
-            reading = _READING.get()
-            if reading is not None and len(data) > _MAX_ASCII85_BYTES:
-                raise reading.refuse(_ascii85_refusal())
-            return bytes(ascii85decode(data))
-
         for name, label in (
             ("lzwdecode", "LZW"),
             ("rldecode", "run-length"),
             ("ccittfaxdecode", "CCITT fax"),
         ):
             names[name] = _refused_while_reading(label, names[name])
-        names["ascii85decode"] = held
+        names["ascii85decode"] = _ascii85_held(names["ascii85decode"])
         names["apply_png_predictor"] = predicted
         pdftypes.PDFStream.get_data = measured  # type: ignore[method-assign]
         Arcfour.decrypt = charged
         names["zlib"] = _BoundedZlib()
+
+
+@contextmanager
+def _held_to_the_bound() -> Iterator[None]:
+    """Hold the readers to :data:`_MAX_DECODED_STREAM_BYTES` while the card
+    is read inside this block, and raise the refusal that ended the read
+    whatever a reader made of it. pypdf reaching one of its own limits is
+    refused too."""
+    reading = _Reading(_MAX_DECODED_STREAM_BYTES)
+    token = _READING.set(reading)
+    try:
+        yield
+    except Exception as err:
+        if reading.refusal is not None and err is not reading.refusal:
+            raise reading.refusal from err
+        if isinstance(err, LimitReachedError):
+            raise _bound_refusal() from err
+        raise
+    finally:
+        _READING.reset(token)
+    if reading.refusal is not None:
+        raise reading.refusal
+
+
+@contextmanager
+def bounded_pypdf() -> Iterator[None]:
+    """Hold pypdf to :data:`_MAX_DECODED_STREAM_BYTES` while the card is
+    opened and read inside this block.
+
+    pypdf limits each stream (from 6.0.0) but not what a whole document
+    decodes to, in a worker thread the fetch timeout cannot cancel: a 20 kB
+    file inflating to 20 MB took 26 s on a Raspberry Pi. Counted on what
+    pypdf reads as it reads it, not on a reading of the file made
+    beforehand, which missed what pypdf does again: a page's content
+    written into the page counted nothing (a 175 kB file decoded 60 MB), a
+    form counted once and was interpreted on each of its draws (a 934 B
+    file took 77 s), and a ToUnicode map pages share counted once and was
+    parsed on each page. Every read of a stream counts, so a page's content
+    counts for each page, a form for each draw and a font's ToUnicode map
+    or font file each time a font is loaded from it; each inflate counts,
+    every step of a stream inflated more than once, and is refused past
+    what is left, before it is held, the cross-reference and object streams
+    pypdf inflates opening the file included; a damaged FlateDecode
+    stream, which pypdf recovers a byte at a time to its end, counts again
+    as pdfminer's does, its length too; a stream counts what its decoding
+    hands back past its last inflate; and a font load counts
+    :data:`_FONT_LOAD_BYTES`, pypdf loading the same dictionary to the same
+    font once a read. LZW, run length, CCITT fax and JBIG2 are refused,
+    since pypdf never decodes an image to read text, and ASCII85 past
+    :data:`_MAX_ASCII85_BYTES`. A refusal pypdf swallows, as it does any
+    error in a form, is refused all the same.
+    """
+    with _held_to_the_bound():
+        yield
 
 
 @contextmanager
@@ -436,15 +477,5 @@ def bounded_pdfminer() -> Iterator[None]:
     pdfplumber wrap in an error of their own is refused all the same.
     """
     _hold_pdfminer_to_the_bound()
-    reading = _Reading(_MAX_DECODED_STREAM_BYTES)
-    token = _READING.set(reading)
-    try:
+    with _held_to_the_bound():
         yield
-    except Exception as err:
-        if reading.refusal is not None and err is not reading.refusal:
-            raise reading.refusal from err
-        raise
-    finally:
-        _READING.reset(token)
-    if reading.refusal is not None:
-        raise reading.refusal
