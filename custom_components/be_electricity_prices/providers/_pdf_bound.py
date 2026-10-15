@@ -158,13 +158,20 @@ def _damaged(again: int, length: int) -> int:
     return again * max(length, _DAMAGED_FLATE_UNIT) // _DAMAGED_FLATE_UNIT
 
 
+class _Refused(BaseException):
+    """A refusal on its way out of the readers, which catch any Exception
+    in places: pypdf goes on to a form's next draw past one, logging it
+    each time (99 984 lines for one file), and pdfplumber past one in a
+    file's metadata. :func:`_held_to_the_bound` turns it back into the
+    refusal, and nothing raises it outside one."""
+
+
 @dataclass
 class _Reading:
     """What is left of the bound while a card is read, the refusal that
-    ended it, which a reader may wrap in an error of its own or swallow,
-    for each stream being decoded, innermost last, what its last inflate
-    handed back, counted already, and under pypdf which stream that is and
-    the fonts loaded so far, by the dictionary they were loaded from.
+    ended it, for each stream being decoded, innermost last, what its last
+    inflate handed back, counted already, and under pypdf which stream that
+    is and the fonts loaded so far, by the dictionary they were loaded from.
 
     Every refusal is made here, so it is an error of the copy of this
     module the read was started from, whichever copy put the wrappers in
@@ -178,11 +185,10 @@ class _Reading:
     streams: list[EncodedStreamObject] = field(default_factory=list)
     fonts: dict[int, tuple[Any, Font]] = field(default_factory=dict)
 
-    def refuse(self, message: str) -> ExtractorError:
-        err = ExtractorError(message)
+    def refuse(self, message: str) -> _Refused:
         if self.refusal is None:
-            self.refusal = err
-        return err
+            self.refusal = ExtractorError(message)
+        return _Refused()
 
     def charge(self, cost: int) -> None:
         self.left -= cost
@@ -613,8 +619,11 @@ def _held_to_the_bound() -> Iterator[None]:
     token = _READING.set(reading)
     try:
         yield
+    except _Refused:
+        pass
     except Exception as err:
-        if reading.refusal is not None and err is not reading.refusal:
+        # One the read raised past a refusal, as it let go of what it held.
+        if reading.refusal is not None:
             raise reading.refusal from err
         if isinstance(err, LimitReachedError):
             raise ExtractorError(_over_the_bound()) from err
@@ -650,8 +659,9 @@ def bounded_pypdf() -> Iterator[None]:
     :data:`_FONT_LOAD_BYTES`, pypdf loading the same dictionary to the same
     font once a read. LZW, run length, CCITT fax and JBIG2 are refused,
     since pypdf never decodes an image to read text, and ASCII85 past
-    :data:`_MAX_ASCII85_BYTES`. A refusal pypdf swallows, as it does any
-    error in a form, is refused all the same.
+    :data:`_MAX_ASCII85_BYTES`. A refusal ends the read where it is made:
+    pypdf catches any Exception a form raises and goes on to its next draw,
+    and a refusal is not one.
     """
     with _held_to_the_bound():
         yield
@@ -676,8 +686,8 @@ def bounded_pdfminer() -> Iterator[None]:
     step of a stream inflated more than once, and is refused past what is
     left, before it is held, the cross-reference and object streams pdfminer
     inflates opening the file included; and a stream counts what its
-    decoding hands back past its last inflate. A refusal pdfminer or
-    pdfplumber wrap in an error of their own is refused all the same.
+    decoding hands back past its last inflate. A refusal ends the read
+    where it is made, whatever pdfminer or pdfplumber catch.
 
     What pdfminer lays out and holds is held too, since it grows with what
     the bytes draw, not with the bytes: a 6,5 kB card drawing 488 000 glyphs

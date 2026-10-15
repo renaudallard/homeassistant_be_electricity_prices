@@ -1622,6 +1622,34 @@ def test_a_refusal_pdfplumber_swallows_still_refuses() -> None:
         extract_pdf_text_layout(_swallowed_refusal_pdf())
 
 
+def test_a_refusal_ends_the_read_where_it_is_made(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """pypdf catches any error a form raises, logs it and goes on to the
+    form's next draw: a file drawing a form 100 000 times logged 99 984
+    lines after the refusal, each draw refused again."""
+    import logging
+
+    content = b"/X0 Do\n" * 200
+    payload = _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[5 0 R]/Count 1>>",
+            b"<</Length %d>>\nstream\n%s\nendstream" % (len(content), content),
+            b"<</Type/XObject/Subtype/Form/BBox[0 0 612 792]/Filter/LZWDecode"
+            b"%s/Length 1>>\nstream\n\x80\nendstream" % _FONT_RESOURCES,
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 3 0 R"
+            b"/Resources<</XObject<</X0 4 0 R>>>>>>",
+        )
+    )
+    with (
+        caplog.at_level(logging.WARNING),
+        pytest.raises(ExtractorError, match=r"^PDF carries a LZW stream"),
+    ):
+        extract_pdf_text(payload)
+    assert not [r for r in caplog.records if "XFormObject" in r.getMessage()]
+
+
 def _glyphs_pdf(pages: int, glyphs: int, *, draws: int = 0) -> bytes:
     """``pages`` pages sharing one content stream that shows ``glyphs``
     glyphs, each where no other is, and draws an empty form ``draws``

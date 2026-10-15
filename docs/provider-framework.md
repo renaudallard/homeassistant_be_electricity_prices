@@ -719,10 +719,11 @@ Internals worth knowing:
   is read, its text being read off its glyphs alone (a page of a Bolt card
   held 123 000 segments), pdfplumber lets go of each page once read rather
   than with the document, and its `dedupe_chars` finds each glyph it keeps
-  at once rather than by looking it up in the page's list. A refusal a
-  reader wraps in an error of its own, or swallows as pypdf does any error
-  in a form, is refused all the same, and so is pypdf reaching one of its
-  own limits. The readers are wrapped once per process: a second copy of
+  at once rather than by looking it up in the page's list. A refusal ends
+  the read where it is made, raised as an error no reader catches: pypdf
+  catches any error a form raises and goes on to its next draw, logging
+  each, 99 984 lines for one file. pypdf reaching one of its own limits is
+  refused too. The readers are wrapped once per process: a second copy of
   `_pdf_bound.py`, as the live check loads under a package of its own,
   finds the wrappers in place by a marker they carry and reads through
   them, held to its own bound, where it wrapped them again and had each
