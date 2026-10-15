@@ -187,7 +187,7 @@ Two config entries on the same `(supplier, contract, region)` share one fetched 
 
 `monthly_snapshot_cache` is the one row of that table with an on-disk half: settled months are written to the entry's Store and seeded back into it on load (section 10), because a closed month's card is a historical fact and re-fetching one PDF per elapsed month on every restart is what issue #88 spent its bootstrap budget on. The other rows stay process-local.
 
-`_SharedSnapshot` (`snapshot_store.py`) carries the snapshot, `fetched_at`, and the `probe_key` seen at fetch. `evict_shared_caches` (`snapshot_store.py`) is called from `async_unload_entry` (`__init__.py`) only when no other loaded entry still references the tuple; it bumps the generation counter first so an in-flight fetch that resumes after eviction detects the change and skips its write (`__init__.py`), preventing an orphaned cache row.
+`_SharedSnapshot` (`snapshot_store.py`) carries the snapshot, `fetched_at`, and the `probe_key` seen at fetch. `evict_shared_caches` (`snapshot_store.py`) is called from `async_unload_entry` (`__init__.py`) only when no other loaded entry still references the tuple; it bumps the generation counter first so an in-flight fetch that resumes after eviction detects the change and skips its write (`__init__.py`), preventing an orphaned cache row. A month row's writer (`month_card`, `snapshot_months.py`) compares that tuple-level counter as well as the row's own (`_month_generation`, `snapshot_store.py`), since a month whose first fetch is still running has no row for eviction to find; the refresh service bumps the rows' own.
 
 ### 2.3 The on-disk Store and cache invalidation
 

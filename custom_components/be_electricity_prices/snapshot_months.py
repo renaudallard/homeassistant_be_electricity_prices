@@ -78,13 +78,13 @@ from .snapshot_resolve import _resolve_snapshot
 from .snapshot_store import (
     _MONTHLY_FAILURE_TTL,
     _MONTHLY_PROVISIONAL_TTL,
+    _month_generation,
     _month_row_is_provisional,
     _monthly_archive_skipped,
     _monthly_failed_fetches,
     _monthly_fetched_at,
     _monthly_lock,
     _monthly_snapshots,
-    _tuple_generation,
     next_card_not_out,
 )
 from .spot_stats import _injection_on_month_mean
@@ -895,7 +895,7 @@ async def month_card(
     last_fail = failed.get(cache_key)
     if last_fail is not None and dt_util.utcnow() - last_fail < _MONTHLY_FAILURE_TTL:
         return None
-    gen_at_entry = _tuple_generation(hass, cache_key)
+    gen_at_entry = _month_generation(hass, cache_key)
     async with _monthly_lock(hass, cache_key):
         # Re-check under the lock so the second waiter doesn't repeat
         # what the first just did.
@@ -986,7 +986,7 @@ async def month_card(
         # cached as "supplier doesn't archive this month", which is the meaning a cached
         # None carries here. Leaving the key absent lets the next refresh retry instead
         # of locking in stale "uncredited" output until the entry reloads.
-        if not fetch_failed and _tuple_generation(hass, cache_key) == gen_at_entry:
+        if not fetch_failed and _month_generation(hass, cache_key) == gen_at_entry:
             cache[cache_key] = snap
             fetched_at[cache_key] = dt_util.utcnow()
             if (

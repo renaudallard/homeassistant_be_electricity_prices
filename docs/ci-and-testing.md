@@ -92,6 +92,7 @@ machinery.
 | `tests/test_init.py` | Entry setup: the current-year-cost unique_id migration and the time listeners `async_setup_entry` registers |
 | `tests/test_setup_meter_reads.py` | What setup reads from the recorder (issue #107) |
 | `tests/test_snapshot_codec.py` | The snapshot codec against rows other versions wrote or will write |
+| `tests/test_month_card_eviction.py` | A month row's first fetch against an eviction of its supplier, contract and region (`month_card`, `evict_shared_caches`) |
 | `tests/test_month_indexed_registry.py` | The registry's `month_indexed_energy` flag against what the parsers read |
 | `tests/test_supplier_switch.py` | A recorded supplier switch: the earlier contracts, their days and cost (`contract_periods.py`), the options step and the backfill split |
 | `tests/test_projected_volume.py` | Rolling-year and projected calendar-year consumption and injection |

@@ -495,11 +495,11 @@ def evict_shared_caches(
     # Bump the generation counter first so any in-flight cache
     # writer that resumes after this eviction can detect the change
     # and skip its write (the bucket row is gone, so a write would
-    # re-create an orphaned row pointing at evicted-tuple data).
+    # re-create an orphaned row pointing at evicted-tuple data). A
+    # month row's writer compares this tuple-level counter too, which
+    # also covers a month whose first fetch is in flight and so has no
+    # row to bump yet.
     _bump_tuple_generation(hass, key)
-    for month_key in list(_monthly_snapshots(hass)):
-        if month_key[0] == extractor_id and month_key[1:3] == key[1:3]:
-            _bump_tuple_generation(hass, month_key)
     _shared_snapshots(hass).pop(key, None)
     _shared_failed_fetches(hass).pop(key, None)
     _shared_unreadable(hass).pop(key, None)
@@ -681,6 +681,15 @@ def _bump_tuple_generation(hass: HomeAssistant, key: tuple[str, ...]) -> None:
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     gens: dict[tuple[str, ...], int] = bucket.setdefault(_TUPLE_GENERATIONS_KEY, {})
     gens[key] = gens.get(key, 0) + 1
+
+
+def _month_generation(
+    hass: HomeAssistant, key: tuple[str, str, str, str]
+) -> tuple[int, int]:
+    """What a month row's writer compares across its fetch: the tuple's
+    generation, which eviction bumps whether or not the month has a row
+    yet, and the row's own, which the refresh service bumps."""
+    return _tuple_generation(hass, key[:3]), _tuple_generation(hass, key)
 
 
 def _monthly_lock(hass: HomeAssistant, key: tuple[str, str, str, str]) -> asyncio.Lock:
