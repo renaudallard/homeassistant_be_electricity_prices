@@ -144,6 +144,16 @@ _MAX_PARSED = 2_000_000
 # five times that: pypdf holds about 180 bytes a code.
 _MAX_FONT_ENTRIES = 1_000_000
 
+# The longest token pdfminer may gather, a comment included, and the most
+# data of an inline image: it grows each a byte at a time, copying what it
+# holds each time, so in a time quadratic in its length, and parses each as
+# one object. 1 MB of inline image data took 352 s on a Raspberry Pi, from
+# a file under 2 kB. Measured as above: at most 1815 bytes, on a
+# TotalEnergies card, and no card carries an inline image. This is about
+# nine times that: 8 MB of strings this long take 29 s on a Raspberry Pi,
+# where the same bytes in strings of 1 kB take 22 s.
+_MAX_TOKEN_BYTES = 16 * 1024
+
 
 def _over_the_bound() -> str:
     return (
@@ -215,6 +225,7 @@ class _Reading:
     built: int = 0
     parsed: int = 0
     font_entries: int = 0
+    inline: int | None = None
     inflated: list[int] = field(default_factory=list)
     streams: list[EncodedStreamObject] = field(default_factory=list)
     fonts: dict[int, tuple[Any, Font]] = field(default_factory=dict)
@@ -253,6 +264,25 @@ class _Reading:
             raise self.refuse(
                 f"PDF has a reader parse more than {_MAX_PARSED} objects; "
                 "refusing to read it"
+            )
+
+    def gather(self, parser: Any) -> None:
+        """Refuse the card once the token or inline image pdfminer's
+        ``parser`` gathers is past :data:`_MAX_TOKEN_BYTES`, checked as it
+        has read through its buffer: an inline image is as long as what it
+        read through gathering it. A parser has no buffer until it first
+        seeks."""
+        buf = getattr(parser, "buf", None)
+        if buf is None or parser.charpos < len(buf):
+            return
+        if self.inline is None:
+            length = len(parser._curtoken)
+        else:
+            self.inline = length = self.inline + len(buf)
+        if length > _MAX_TOKEN_BYTES:
+            raise self.refuse(
+                f"PDF has pdfminer gather a token or inline image over "
+                f"{_MAX_TOKEN_BYTES} bytes; refusing to read it"
             )
 
     def make_font(self, entries: int) -> None:
@@ -560,6 +590,20 @@ class _Positions(list[Any]):
         return at
 
 
+def _gathered(fill: Any) -> Any:
+    """``fill``, a method a pdfminer parser runs each time it has read
+    through its buffer, with what the parser gathers checked first while a
+    card is read."""
+
+    def filled(self: Any) -> Any:
+        reading = _READING.get()
+        if reading is not None:
+            reading.gather(self)
+        return fill(self)
+
+    return filled
+
+
 def _held(count: int, most: int) -> None:
     """Refuse the card being read once pdfminer holds ``count`` of
     something, past ``most``."""
@@ -575,8 +619,10 @@ def _hold_pdfminer_to_the_bound() -> None:
     lists through ``PDFPage.create_pages``, everything it lays out through
     the device pdfplumber gives it, what it holds through its interpreter's
     and content parser's ``push``, every token it parses through
-    ``PSBaseParser.nexttoken``, the resources it walks for a page or a
-    form drawn through ``init_resources``, and every loop building a font
+    ``PSBaseParser.nexttoken``, the token or inline image it gathers
+    through its parsers' ``fillbuf``, a content parser's ``fillfp`` and
+    ``get_inline_data``, the resources it walks for a page or a form drawn
+    through ``init_resources``, and every loop building a font
     through its font modules' ``range``. Done once whatever the copy
     of this module."""
     from pdfminer import cmapdb, pdffont, pdftypes
@@ -701,6 +747,20 @@ def _hold_pdfminer_to_the_bound() -> None:
                         reading.parse(len(entries))
             init_resources(self, resources)
 
+        gather = PDFContentParser.get_inline_data
+
+        def inline(self: Any, pos: int, target: bytes = b"EI") -> tuple[int, bytes]:
+            # Measured by the buffers read through gathering it, no other
+            # parser reading meanwhile.
+            reading = _READING.get()
+            if reading is None:
+                return gather(self, pos, target)
+            reading.inline = 0
+            try:
+                return gather(self, pos, target)
+            finally:
+                reading.inline = None
+
         create_pages = PDFPage.create_pages
 
         def paged(document: Any) -> Iterator[PDFPage]:
@@ -729,6 +789,12 @@ def _hold_pdfminer_to_the_bound() -> None:
         PDFPage.create_pages = staticmethod(paged)  # type: ignore[method-assign]
         PDFPageInterpreter.init_resources = walked  # type: ignore[method-assign]
         PSBaseParser.nexttoken = _parsed(PSBaseParser.nexttoken)  # type: ignore[method-assign]
+        # A content parser, which most of a card's tokens go through, looks
+        # for its next stream only as it fills its buffer again or seeks,
+        # where every parser goes through fillbuf at each step of a token.
+        PSBaseParser.fillbuf = _gathered(PSBaseParser.fillbuf)  # type: ignore[method-assign]
+        PDFContentParser.fillfp = _gathered(PDFContentParser.fillfp)  # type: ignore[method-assign]
+        PDFContentParser.get_inline_data = inline  # type: ignore[method-assign]
         for module in (cmapdb, pdffont):
             vars(module)["range"] = _font_range
         names["zlib"] = _BoundedZlib()
@@ -828,9 +894,11 @@ def bounded_pdfminer() -> Iterator[None]:
     dictionaries nest no deeper than :data:`_MAX_NESTING`, and a path not
     yet painted has no more than :data:`_MAX_PATH_SEGMENTS` segments. It
     parses no more than :data:`_MAX_PARSED` tokens and resources walked, a
-    content stream's for each page drawing it and a form's for each draw.
-    pdfplumber's ``dedupe_chars`` finds each glyph it keeps at once, where it
-    looked each one up in the page's list.
+    content stream's for each page drawing it and a form's for each draw,
+    and gathers no token, comment or inline image longer than
+    :data:`_MAX_TOKEN_BYTES`, which it grows a byte at a time. pdfplumber's
+    ``dedupe_chars`` finds each glyph it keeps at once, where it looked each
+    one up in the page's list.
     """
     _hold_pdfminer_to_the_bound()
     with _held_to_the_bound():

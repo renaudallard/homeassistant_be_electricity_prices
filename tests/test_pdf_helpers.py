@@ -714,9 +714,9 @@ def _pdf_of(
 
 
 def _comment(size: int) -> bytes:
-    """A content stream that is one comment ``size`` bytes long, which
-    inflates from a few kB."""
-    return b"%" + b"A" * size + b"\n"
+    """A content stream of comments ``size`` + 2 bytes long, which inflates
+    from a few kB, each line shorter than a token pdfminer may gather."""
+    return ((b"%" + b"A" * 62 + b"\n") * (size // 64 + 1))[: size + 1] + b"\n"
 
 
 def _inflating_pdf(
@@ -727,7 +727,7 @@ def _inflating_pdf(
     contents: bytes = b"3 0 R",
     tree: bool = True,
 ) -> bytes:
-    """A PDF whose content stream, a comment, inflates to ``size`` bytes."""
+    """A PDF whose content stream, of comments, inflates to ``size`` bytes."""
     import zlib
 
     return _pdf_of(
@@ -1746,6 +1746,32 @@ def test_what_pdfminer_holds_at_once_is_held(
         with pytest.raises(ExtractorError, match=r"^PDF has pdfminer hold more"):
             extract(_pdf_of(content, attrs=b""))
     for content in shapes(40, 3):
+        with pytest.raises(CardNotReadableError, match="no text layer"):
+            extract(_pdf_of(content, attrs=b""))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_what_pdfminer_gathers_of_one_token_is_held(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer grows a token, a comment included, and the data of an inline
+    image a byte at a time, copying what it holds each time, and parses each
+    as one object: 1 MB of inline image data took 352 s. The check is made
+    as it reads through each buffer of 4 kB."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_TOKEN_BYTES", 10_000)
+
+    def shapes(n: int) -> tuple[bytes, ...]:
+        return (
+            b"/T " + b"(" * n + b")" * n + b" DP",
+            b"/T (" + b"\\(" * n + b") DP",
+            b"%" + b"A" * 2 * n + b"\n",
+            b"q BI /W 1 /H 1 ID " + b"E" * 2 * n + b" EI Q",
+        )
+
+    for content in shapes(15_000):
+        with pytest.raises(ExtractorError, match=r"^PDF has pdfminer gather a token"):
+            extract(_pdf_of(content, attrs=b""))
+    for content in shapes(4000):
         with pytest.raises(CardNotReadableError, match="no text layer"):
             extract(_pdf_of(content, attrs=b""))
 

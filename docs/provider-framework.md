@@ -735,7 +735,16 @@ Internals worth knowing:
   about twice that, as the decode bound is, since what it lets through is
   CPU: a token of a Bolt card costs pdfminer about 50 us on a Raspberry
   Pi, more than any made up to cost more, so the most it lets through
-  takes about 100 s. A reader builds at most `_MAX_FONT_ENTRIES`
+  takes about 100 s. A token pdfminer gathers, a comment included, and the
+  data of an inline image are each counted once but grown a byte at a
+  time, in a time quadratic in their length (1 MB of inline image data
+  took 352 s on a Raspberry Pi), so pdfminer gathers none longer than
+  `_MAX_TOKEN_BYTES` (16 kB), checked each time it reads through its
+  buffer. The longest any card reaches is 1815 bytes, on a TotalEnergies
+  card, and no card carries an inline image; 8 MB of strings 16 kB long
+  take 29 s on a Raspberry Pi, where the same bytes in strings of 1 kB take
+  22 s. pypdf gathers both into growing buffers, in a time linear in their
+  length. A reader builds at most `_MAX_FONT_ENTRIES`
   (1 000 000) entries of a card's fonts, each code a font's ToUnicode map,
   encoding or widths give, or its program's own tables, a range counting
   each code in it before it is gone through: a range takes a line, and
