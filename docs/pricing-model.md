@@ -510,6 +510,16 @@ signing card. The per-day walk a keyless entry takes bills such a month on the
 recorded index (`static_energy_eur_per_kwh`) rather than dropping it for want
 of a mean.
 
+A month before the signing month, which the year to date counts from 1 January
+unless the entry bills from its start date, is on no signed formula at all.
+`_effective_snapshot_for_month` hands `_cohort_legs` the month it bills, and a
+month before the cohort month gets what an entry with no start date gets: its
+own card, re-priced on its own index with a key (`_month_indexed_leg`), feed-in
+included. Every contract kind alike, a fixed or dynamic cohort's earlier months
+too. Billing them on the signing card put an Engie Direct Online contract signed
+in August 2026 13 EUR under its own cards over January to July at 3500 kWh a
+year, key or not.
+
 ### Monthly-indexed feed-in credits
 
 The same lag applies to a feed-in credit. Eneco Power Fix, Fix One, Flex and Flex One

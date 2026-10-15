@@ -9867,6 +9867,99 @@ async def test_a_keyless_cohort_bills_a_settled_month_on_its_own_formula(
     )
 
 
+@pytest.mark.parametrize("api_key", [None, "k"])
+async def test_a_month_before_the_signing_month_bills_its_own_card(
+    hass: HomeAssistant, freezer: Any, api_key: str | None
+) -> None:
+    """A year to date counted from 1 January takes in months the contract
+    was not signed for yet, and those bill on their own card, as an entry
+    with no start date bills them. They were billed on the signing card's
+    formula at their index, keyed or not: an Engie Direct Online contract
+    signed in August came out 13 EUR under its own cards over January to
+    July. A fixed cohort's earlier months are not on its locked rate either,
+    nor its feed-in formula."""
+    from custom_components.be_electricity_prices.cohort import (
+        _effective_snapshot_for_month,
+    )
+
+    freezer.move_to("2026-10-15 12:00:00+02:00")
+
+    def variable(**rates: Any) -> SupplierSnapshot:
+        return make_snapshot(energy=VariableRates(month_indexed=True, **rates))
+
+    may = variable(current=0.15, formula_factor=1.1, formula_base=0.036)
+    april = variable(
+        current=0.14, formula_factor=1.2, formula_base=0.04, index_realised=0.10
+    )
+    june = variable(
+        current=0.16, formula_factor=1.3, formula_base=0.05, index_realised=0.11
+    )
+    october = variable(current=0.17, formula_factor=1.2, formula_base=0.04)
+    cards = {date(2026, 4, 1): april, date(2026, 5, 1): may, date(2026, 6, 1): june}
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return cards[date(2026, 5, 1)]
+
+    async def _for_month(*_a: object, **_k: object) -> SupplierSnapshot:
+        return cards[cast(date, _a[5])]
+
+    _monthly_snapshots(hass).clear()
+    data: dict[str, object] = {"contract": "test", "contract_start_date": "2026-05-10"}
+    if api_key:
+        data["api_key"] = api_key
+    entry = _entry(**data)
+
+    async def billed(month: date, current: SupplierSnapshot) -> SupplierSnapshot:
+        with patch(
+            "custom_components.be_electricity_prices.cohort._snapshot_for_month",
+            _for_month,
+        ):
+            return await _effective_snapshot_for_month(
+                hass,
+                MagicMock(),
+                _fixed_extractor(_ffm),
+                "test",
+                "wallonia",
+                month,
+                current,
+                entry,
+            )
+
+    def rate(snap: SupplierSnapshot) -> float:
+        energy = snap.energy
+        if isinstance(energy, SpotMonthlyRates):
+            assert energy.index_realised is not None
+            return energy.factor * energy.index_realised + energy.base
+        assert isinstance(energy, VariableRates)
+        return energy.current
+
+    # April on its own card: printed without a key, its own formula with one.
+    assert rate(await billed(date(2026, 4, 1), october)) == pytest.approx(
+        0.14 if api_key is None else 1.2 * 0.10 + 0.04
+    )
+    # From the signing month on, the formula signed.
+    assert rate(await billed(date(2026, 6, 1), october)) == pytest.approx(
+        1.1 * 0.11 + 0.036
+    )
+
+    signing = make_snapshot(
+        energy=FixedRates(single=0.20),
+        injection=InjectionRates(
+            factor=0.80, base=-0.0271, current=0.0412, month_indexed=True
+        ),
+    )
+    march = make_snapshot(
+        energy=FixedRates(single=0.25),
+        injection=InjectionRates(
+            factor=0.84, base=-0.0265, current=0.0398, month_indexed=True
+        ),
+    )
+    cards.clear()
+    cards.update({date(2026, 3, 1): march, date(2026, 5, 1): signing})
+    _monthly_snapshots(hass).clear()
+    assert await billed(date(2026, 3, 1), signing) is march
+
+
 async def test_a_keyless_cohort_credits_each_past_month_its_own_printed_figure(
     hass: HomeAssistant, freezer: Any
 ) -> None:

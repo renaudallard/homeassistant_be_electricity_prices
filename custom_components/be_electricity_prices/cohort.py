@@ -239,6 +239,7 @@ async def _cohort_legs(
     entry: ConfigEntry,
     current_snapshot: SupplierSnapshot,
     month_snapshot: SupplierSnapshot | None = None,
+    year_month: date | None = None,
 ) -> _CohortLegs:
     """Resolve the legs a contract actually bills at.
 
@@ -254,7 +255,9 @@ async def _cohort_legs(
     month there is no lock, so the feed-in leg is ``None`` and the energy leg
     is the delivery month's card re-priced on its monthly mean when that card
     is month indexed and the entry has a key (:func:`_month_indexed_leg`),
-    ``None`` otherwise.
+    ``None`` otherwise. A month before the cohort month (``year_month``, the
+    month ``month_snapshot`` is the card of) is billed the same way: the
+    contract was not signed yet, so nothing on the signing card applies.
 
     Resolution order is a hand-entered signing rate, then the archive, then
     the card of the month being billed (``month_snapshot``, the current card
@@ -297,11 +300,18 @@ async def _cohort_legs(
         # supplier no longer applies, and dropped the day and night pairs.
         return _CohortLegs(None, None)
     start = _tariff_card_month(entry)
-    if start is None:
+    if start is None or (year_month is not None and year_month < start):
         # No signing month named, so there is no cohort lock and every month is
         # billed on its own card. ``month_snapshot`` is the card that was in
         # force for the delivery month; the live path leaves it unset, where
         # the current card IS that card.
+        #
+        # A month before the signing month is in the same position: the year
+        # to date counts it from 1 January unless the entry bills from its
+        # start date, and whatever the household was on then, it was not this
+        # cohort's formula. Billing it on the signing card put an Engie Direct
+        # Online contract signed in August 13 EUR under its own cards over
+        # January to July at 3500 kWh a year, keyed or not.
         #
         # Taking the leg from the current card regardless billed a past month
         # on today's coefficients. They move every month on these products:
@@ -687,6 +697,7 @@ async def _effective_snapshot_for_month(
         entry,
         current_snapshot,
         month_snapshot=snap_m,
+        year_month=year_month,
     )
     if legs.energy is None and legs.injection is None:
         return snap_m
