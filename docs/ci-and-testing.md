@@ -1560,14 +1560,15 @@ a backfill or a re-render gets a six-hour job timeout instead, since either is f
 backfill is one archived card per supplier, contract, region and month, a re-render downloads
 and renders every kept card. The install line adds `freezegun` for the replay's clock.
 
-The run is four jobs, so the `BE_ELECTRICITY_CARDS` token that writes `be_price_cards` never
+The run is seven jobs, so the `BE_ELECTRICITY_CARDS` token that writes `be_price_cards` never
 shares a runner with third-party code. The integration, its PDF readers and the OCR package run
 in `walk` and `index`, and either could leave a git hook, a git config entry or a `GITHUB_ENV`
 line behind for any later step on its runner; withholding the token from the walk's own step
 alone, as the workflow once did, left it to every step after. Neither job is given the token, in
-its env or as a checkout credential (both check out with `persist-credentials: false`). The two
-jobs that hold it, `keep` and `push`, run only gh, git and jq, and take what the others wrote as
-artifacts, plain files and never a `.git` directory
+its env or as a checkout credential (both check out with `persist-credentials: false`). The three
+jobs that hold it, `keep`, `push` and `token`, run only gh, git, jq and the issue script
+(`scripts/file_ci_issue.sh`), and take nothing from the other jobs but artifacts, plain files and
+never a `.git` directory
 (`test_a_token_never_shares_a_job_with_third_party_code`):
 
 | Job | Token | Does |
@@ -1576,8 +1577,9 @@ artifacts, plain files and never a `.git` directory
 | `keep` | yes | uploads the PDFs to the releases and hands the updated `pdfs.json` over |
 | `index` | no | rewrites the sheets with that manifest (`--index-only`), writes the two READMEs, hands the lot over |
 | `push` | yes | clones the repository afresh, lays the handed-over files over it and commits and pushes when the tree changed, the push and its rebase getting the token as an authorization header on their own command line |
+| `token` | yes | asks GitHub when the token expires and files the expiry warning below, after the push so a failure here cannot hold the day's rows back |
 
-The OCR issues, the token-expiry warning and the failure issue run in three small jobs after these.
+The OCR issues and the failure issue run in two small jobs after these, `ocr` and `report`.
 The `ocr` job holds `github.token` alone and takes the walk's list of cards the OCR could not read,
 and of the glyphs its library lacks (`ocr-price-cards unlearnt`, run in the walk without a token),
 as an artifact, so that token does not share a runner with the readers and the engine either; the

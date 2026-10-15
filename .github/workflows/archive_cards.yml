@@ -43,12 +43,13 @@ concurrency:
   group: archive-cards
   cancel-in-progress: false
 
-# Four jobs, so the cards token never shares a runner with third-party code.
+# Seven jobs, so the cards token never shares a runner with third-party code.
 # The walk and the index run the integration and the PDF readers, which
 # could leave a git hook, a git config entry or a GITHUB_ENV line for any
-# later step on their runner; neither is given the token. The two jobs that
-# hold it, keep and push, run only gh, git and jq, and take what the others
-# wrote as artifacts: plain files, never a .git directory.
+# later step on their runner; neither is given the token. The three jobs
+# that hold it, keep, push and token, run only gh, git, jq and the issue
+# script, and take nothing from the other jobs but artifacts: plain files,
+# never a .git directory. ocr and report file issues with github.token alone.
 jobs:
   walk:
     runs-on: ubuntu-latest
