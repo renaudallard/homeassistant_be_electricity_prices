@@ -1730,6 +1730,79 @@ async def test_a_card_billing_its_table_row_does_not_settle_the_energy(
     assert out == replace(held, provisional=True)
 
 
+async def test_a_card_the_range_is_not_printed_like_does_not_settle_the_energy(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """The Electricité Variable card in Brussels of the afternoon of 1
+    October 2026 printed myComfort's block under its own bases, and solves to
+    159,9 EUR/MWh where myEssential beside it and myComfort in Wallonia solve
+    to 164,7. Settled on it, September kept 159,9 for good; the energy now
+    waits for a card the range agrees with. myEssential, a good card heard
+    after that one, still settles on its own index, as it did before. The
+    myComfort card in Brussels was still the morning's, its block unread,
+    and says nothing either way."""
+    from dataclasses import replace
+    from datetime import date
+
+    from custom_components.be_electricity_prices.providers import totalenergies
+    from custom_components.be_electricity_prices.providers._settle import (
+        is_settled,
+        settled_energy,
+    )
+
+    cards = {
+        "ELECTRICITE-VARIABLE_ELECTRICITY_BXL_FR.pdf": (
+            "totalenergies_electricite_variable_b_2026-10_filled.pdf"
+        ),
+        "MYCOMFORT_ELECTRICITY_BXL_FR.pdf": "totalenergies_mycomfort_b_2026-10.pdf",
+        "MYESSENTIAL_ELECTRICITY_BXL_FR.pdf": (
+            "totalenergies_myessential_b_2026-10.pdf"
+        ),
+        # The French address served the Dutch card that October.
+        "MYCOMFORT_ELECTRICITY_WAL_FR.pdf": "totalenergies_mycomfort_w_2026-10_nl.pdf",
+    }
+    monkeypatch.setattr(totalenergies, "fetch_pdf_text_layout", _serve(cards))
+    freezer.move_to("2026-10-01 16:00:00+02:00")
+    held = parse_snapshot(
+        "totalenergies_electricite_variable",
+        fixture_text("totalenergies_electricite_variable_b_2026-10.pdf", layout=True),
+        "brussels",
+    )
+    misprinted = parse_snapshot(
+        "totalenergies_electricite_variable",
+        fixture_text(cards["ELECTRICITE-VARIABLE_ELECTRICITY_BXL_FR.pdf"], layout=True),
+        "brussels",
+    )
+    index = totalenergies._printed_energy_index(misprinted.energy)
+    assert index == pytest.approx(0.15994, abs=0.00001)
+    out = await totalenergies.settle_month(
+        None,  # type: ignore[arg-type]
+        "totalenergies_electricite_variable",
+        "brussels",
+        date(2026, 9, 1),
+        held,
+    )
+    assert out == replace(held, provisional=True)
+
+    held = parse_snapshot(
+        "totalenergies_myessential",
+        fixture_text(cards["MYESSENTIAL_ELECTRICITY_BXL_FR.pdf"], layout=True),
+        "brussels",
+    )
+    index = totalenergies._printed_energy_index(held.energy)
+    assert index is not None
+    assert index == pytest.approx(0.16471, abs=0.00001)
+    out = await totalenergies.settle_month(
+        None,  # type: ignore[arg-type]
+        "totalenergies_myessential",
+        "brussels",
+        date(2026, 9, 1),
+        held,
+    )
+    assert out == replace(held, energy=settled_energy(held.energy, index))
+    assert is_settled(out) and not out.provisional
+
+
 def test_the_printed_index_is_the_median_of_the_columns() -> None:
     """Each printed figure is rounded to a hundredth of a cent, and on the
     October 2026 myDrive card in Wallonia the mono column alone solves to

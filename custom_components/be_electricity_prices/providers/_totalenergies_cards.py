@@ -382,7 +382,8 @@ _FORMULA_CARRIERS = frozenset(
 # the wrong way, with or without the contribution in its bases, the same cards
 # miss by 3,04 EUR/MWh and more. A row the card prints as an estimate rather
 # than at one index (the morning Electricité Variable card in Flanders, 1,77
-# and 3,14) fits neither, and settles nothing.
+# and 3,14) fits neither, and settles nothing. A next card settles a month
+# only when another card of the range solves within the same distance of it.
 _INDEX_FIT = 0.0013
 _INDEX_MISFIT = 0.003
 

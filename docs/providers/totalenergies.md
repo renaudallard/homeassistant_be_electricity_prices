@@ -378,7 +378,8 @@ Brussels block is myComfort's to the cent under Electricité Variable's own
 bases, 7.52 against 7.01, so it solved about 5 EUR/MWh below the rest of the
 range and billed keyless entries 0,54 c/kWh low, as printed, until TotalEnergies
 reprinted the card with myComfort's bases by 5 October. The live check fails on
-such a block (`_expect_indicatives_at_the_range_index`, `scripts/live_check.py`).
+such a block (`_expect_indicatives_at_the_range_index`, `scripts/live_check.py`),
+and a closed month does not settle on it (`_range_agrees`, below).
 A card stating its contribution in a footnote always prints the formula, so one
 that does not is refused rather than billed unchecked. The block also no longer has an injection column, and
 `_realized_monthly_injection` only reads a block headed `Injection`: the last
@@ -485,6 +486,17 @@ reads it all the same, but only a feed-in card titled like the tariff card settl
 the feed-in, and until it is out the energy settles and the month stays provisional;
 the card archive writes the row with its energy settled and asks it again daily, so
 the leg that settled outlives the next card being the live one.
+The energy settles only on an index the rest of the range is printed at
+(`_range_agrees`, `totalenergies.py`): every variable card of a month is printed
+at the same one, and the Brussels Electricité Variable card of the afternoon of
+1 October 2026, myComfort's block under its own bases, solves to 159,9 EUR/MWh,
+which would have settled September 4,8 below the 164,7 of the rest for good. The
+other variable cards titled for the same month are read, the region's first, and
+the index stands once one solves within `_INDEX_FIT` (1,3 EUR/MWh, the fit of a
+card's own columns) of it; once two disagree, or the only one heard does, the
+energy waits and the month stays provisional. With no other card printing its
+block the index cannot be checked and stands. Settling reads at least one card
+more for that, 10 to 13 s of CPU each on a Raspberry Pi.
 Only a rate read off a card's "prix mensuels" block settles anything
 (`monthly_rates_printed`, `_totalenergies_cards.py`): where the block is not read
 the parser bills the table row, the regulator's annual estimate, which on the

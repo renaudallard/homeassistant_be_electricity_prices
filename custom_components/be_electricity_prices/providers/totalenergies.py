@@ -89,6 +89,7 @@ from ._rates import (
 from ._settle import settled_energy, settled_injection
 from ._totalenergies_cards import (
     _IMPACT_BANDS,
+    _INDEX_FIT,
     _VAT_RE,
     _extract_connection_fee,
     _extract_energy,
@@ -649,6 +650,59 @@ def _printed_injection_index(injection: InjectionRates | None) -> float | None:
     return (rate - base) / factor
 
 
+async def _range_agrees(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    region: str,
+    titled: date | None,
+    index: float,
+) -> bool:
+    """Whether the rest of the range prints its rates at ``index`` too.
+
+    Every variable card of a month is printed at the same index, one figure
+    for the country, so a card printed at another is misprinted. The
+    Electricité Variable card in Brussels of the afternoon of 1 October 2026
+    printed myComfort's block under its own bases and solves to 159,9
+    EUR/MWh, where every other card of the range solves to 164,4 to 164,7;
+    settled on it, September would have kept 159,9 for good. So ``index``
+    stands once one other card titled for the same month agrees within the
+    fit of a card's own columns, the region's cards asked first, and falls
+    once two disagree, or the only one heard does. Where no other card
+    prints its block the index cannot be checked and stands.
+    """
+    regions = (region, *(r for r in _REGION_TO_CODE if r != region))
+    disagree = 0
+    for where in regions:
+        for other in _CONTRACTS:
+            if (
+                (other, where) == (contract, region)
+                or other.contract_id not in _MONTH_INDEXED_ENERGY
+                or where not in other.regions
+            ):
+                continue
+            try:
+                card, text = await _fetch_card(session, other, where)
+            except ExtractorError as err:
+                if is_transient_fetch_error(str(err)):
+                    raise
+                continue
+            if card_valid_until(None, card.publication_label) != titled:
+                continue
+            printed = (
+                _printed_energy_index(card.energy)
+                if monthly_rates_printed(text)[0]
+                else None
+            )
+            if printed is None:
+                continue
+            if abs(printed - index) <= _INDEX_FIT:
+                return True
+            disagree += 1
+            if disagree == 2:
+                return False
+    return disagree == 0
+
+
 async def settle_month(
     session: aiohttp.ClientSession,
     contract_id: str,
@@ -679,7 +733,8 @@ async def settle_month(
     still said September on 5 and 14 October 2026), so only the one titled
     like it settles the feed-in. A leg the next card gives no index for is
     left as held, and the month stays ``provisional`` while the other leg
-    settles.
+    settles, as does the energy of a card the rest of the range is not
+    printed like (``_range_agrees``).
     """
     first = date(year_month.year, year_month.month, 1)
     following = date(first.year + (first.month == 12), first.month % 12 + 1, 1)
@@ -711,6 +766,10 @@ async def settle_month(
     pending = False
     if getattr(energy, "month_indexed", False):
         index = _printed_energy_index(card.energy) if monthly_energy else None
+        if index is not None and not await _range_agrees(
+            session, contract, region, titled, index
+        ):
+            index = None
         pending = index is None
         if index is not None:
             energy = settled_energy(energy, index)
