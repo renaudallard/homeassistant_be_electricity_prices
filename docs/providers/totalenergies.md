@@ -514,7 +514,8 @@ estimate. A row no run settled while the next card was served (the range never
 agreed on a misprint that was never corrected, say) stays as it is for good: a
 keyless entry bills the index its own card printed, the month before's, and a keyed
 one the engine's hourly mean, and a warning in the log names the month
-(`settle_month`).
+(`settle_month`). The daily archive run asks only last month's row, so it does not
+log that warning again every day.
 
 The four carry the registry twin `month_indexed_energy` (`_MONTH_INDEXED_ENERGY`,
 `totalenergies.py`), without which the config flow never offers the optional

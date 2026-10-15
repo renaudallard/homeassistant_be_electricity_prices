@@ -779,8 +779,7 @@ async def test_a_quarter_indexed_row_settles_in_place_on_every_register(
 async def test_a_month_the_supplier_settles_nothing_for_is_not_counted_settled(
     tmp_path: Path,
 ) -> None:
-    """TotalEnergies hands a held row back as it is once its next card is no
-    longer the live one, and Luminus does on a next card naming another
+    """Luminus hands a held row back as it is on a next card naming another
     month. The row still waits, so it is asked every day, and every day the
     run reported it settled."""
     asked: list[str] = []
@@ -827,6 +826,64 @@ async def test_a_month_the_supplier_settles_nothing_for_is_not_counted_settled(
     assert summary.settled == 0
     assert summary.unchanged == 1
     assert row.read_bytes() == caught
+
+
+@pytest.mark.parametrize("own_archive", [False, True])
+async def test_only_last_month_settles_on_a_live_next_card(
+    tmp_path: Path, own_archive: bool
+) -> None:
+    """TotalEnergies keeps no archive, so only the live card settles a month,
+    and it is the next card of last month alone. Asked about an older row it
+    hands it back and logs that it never will settle, which the daily run
+    printed again every day. A supplier with an archive of its own (Luminus)
+    can still settle an older month and is still asked."""
+    asked: list[str] = []
+    serving = ["juli 2026"]
+
+    async def fetch(_session: Any, contract: str, _region: str) -> SupplierSnapshot:
+        await fetch_text(_Session({CARD_URL: "card"}), CARD_URL)  # type: ignore[arg-type]
+        return _indexed_card(contract, serving[0], 0.1761)
+
+    async def fetch_for_month(
+        _session: Any, _contract: str, _region: str, _month: date
+    ) -> SupplierSnapshot | None:
+        return None
+
+    async def settle_month(
+        _session: Any, _contract: str, _region: str, month: date, held: SupplierSnapshot
+    ) -> SupplierSnapshot:
+        asked.append(f"{month:%Y-%m}")
+        return held
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_flex",
+                label="Flex",
+                kind="variable",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=fetch,
+        fetch_for_month=fetch_for_month if own_archive else None,
+        settles_on_next_card=True,
+        settle_month=settle_month,
+    )
+    for month, label in ((7, "juli 2026"), (8, "augustus 2026")):
+        serving[0] = label
+        await ac.archive(
+            tmp_path,
+            extractors=[extractor],
+            now=datetime(2026, month, 20, 6, 0, tzinfo=UTC),
+            sleep=_no_sleep,
+        )
+    serving[0] = "september 2026"
+    await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=2, now=NOW, sleep=_no_sleep
+    )
+    assert asked == (["2026-08", "2026-07"] if own_archive else ["2026-08"])
 
 
 async def test_a_month_settled_on_one_leg_keeps_that_leg(tmp_path: Path) -> None:

@@ -2085,7 +2085,7 @@ async def archive(
                     first = date(int(month_id[:4]), int(month_id[5:]), 1)
                     fetch: Callable[[], Awaitable[SupplierSnapshot | None]]
                     if settle is not None and (
-                        held is not None or fetch_for_month is not None
+                        fetch_for_month is not None or (held is not None and back == 1)
                     ):
                         # Settled in place, the card held kept whole.
                         fetch = functools.partial(
@@ -2105,7 +2105,10 @@ async def archive(
                     else:
                         # A supplier without an archive of its own
                         # (TotalEnergies) has no month to fetch, only a held
-                        # row to settle in place on the live next card.
+                        # row to settle in place on the live next card, which
+                        # is the next card of last month alone: an older month
+                        # it did not settle then never will be, and asked
+                        # again it would only log so on every run.
                         continue
                     label = f"{ex.id}/{contract}/{region}/{month_id}"
                     memo.touched.clear()

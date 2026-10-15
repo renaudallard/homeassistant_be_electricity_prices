@@ -1271,9 +1271,11 @@ re-parsed card (`settled_as`). Such a row stays `live`, so the live walk also le
 month alone once any leg of its row is settled (`_settled_row`), should the supplier's address
 serve that month's card again.
 TotalEnergies keeps no archive of its own, so it is walked for its held rows alone: nothing is
-backfilled or offered again, and a row settles only while the next card is the live one. A row
-the supplier hands back as it was (TotalEnergies once that card has moved on, Luminus on a next
-card naming another month) is left alone and counted `unchanged`, not `settled`.
+backfilled or offered again, and a row settles only while the next card is the live one, so only
+last month's row is asked. An older row it did not settle then never will be, and asking it again
+would only repeat the warning `settle_month` logs for it on every run. A row the supplier hands
+back as it was (Luminus on a next card naming another month) is left alone and counted
+`unchanged`, not `settled`.
 September 2026 was the first month the archive held live
 for every supplier, and Eneco, EBEM, Mega and Trevion were billed on those rows until this. The branch thus mirrors the supplier
 archives: insurance against a supplier dropping its own, and a cheap read for
