@@ -61,6 +61,7 @@ from .providers._rates import (
     TimeOfUseRates,
     VariableRates,
 )
+from .providers._settle import _register_indices, settled_registers
 from .providers.base import SupplierSnapshot
 from .snapshot_resolve import _include_vat
 
@@ -342,7 +343,9 @@ def _quarter_leg(energy: VariableRates, factor: float) -> SpotMonthlyRates:
     rides on the register's base. Those spreads are the last closed
     quarter's, which is what the card prints; they moved by 0,6 to 2,4
     EUR/MWh between the second and third quarter of 2026 (0,06 to 0,32
-    c/kWh, the most on the Eco band), against 39 EUR/MWh for the index.
+    c/kWh, the most on the Eco band), against 39 EUR/MWh for the index. A
+    cohort billed on a settled month of a later quarter is handed its signing
+    card rebuilt on that quarter's indices (:func:`_on_settled_quarter`).
     """
     base = energy.formula_base or 0.0
 
@@ -383,6 +386,33 @@ def _quarter_leg(energy: VariableRates, factor: float) -> SpotMonthlyRates:
         yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
         single_under_impact=energy.single_under_impact,
     )
+
+
+def _on_settled_quarter(
+    archived: SupplierSnapshot, delivery: SupplierSnapshot
+) -> SupplierSnapshot:
+    """``archived`` with its register rates rebuilt on the indices the
+    quarter of ``delivery`` settled at, where both are Bolt variable cards
+    and that quarter has settled.
+
+    ``_quarter_leg`` reads each register's spread off the card it is given,
+    and the signing card prints the spreads of the quarter before it. A
+    settled month of a later quarter has its own (``settled_registers``), so
+    a cohort's month billed its formula on that quarter's mono index plus
+    another quarter's spreads: 0,06 to 0,32 c/kWh per register between the
+    second and third quarter of 2026. ``archived`` as it is otherwise.
+    """
+    held, energy = delivery.energy, archived.energy
+    if not (
+        isinstance(held, VariableRates)
+        and held.quarter_indexed
+        and held.index_realised is not None
+        and isinstance(energy, VariableRates)
+        and energy.quarter_indexed
+    ):
+        return archived
+    settled = settled_registers(energy, _register_indices(held))
+    return archived if settled is None else replace(archived, energy=settled)
 
 
 def _cohort_injection_from_archived(

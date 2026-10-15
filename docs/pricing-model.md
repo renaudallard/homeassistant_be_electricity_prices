@@ -490,7 +490,10 @@ read, the other leg settling meanwhile. Bolt's variable cards settle a quarter a
 a time: the next quarter's card prints that quarter's index for each meter
 register and Impact band, each rate is rebuilt on the month's formula at its own
 index (`settled_registers`), and the mono index is recorded; its variable folder
-addresses no card by month either, so the next card is the live one.
+addresses no card by month either, so the next card is the live one. A signing
+cohort bills such a month on its own formula at each of those indices
+(`_on_settled_quarter`, `cohort_legs.py`), not on the spreads its signing card
+printed.
 
 ### Monthly-indexed feed-in credits
 

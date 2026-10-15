@@ -1913,6 +1913,80 @@ async def test_the_month_cache_bills_a_closed_quarter_on_its_settled_indices(
     assert again is first and fetched.await_count == 1
 
 
+async def test_a_cohort_bills_a_settled_quarter_on_that_quarter_s_spreads(
+    freezer: Any,
+) -> None:
+    """A contract signed on a card printing the second quarter's table bills
+    a settled month of the third on the third quarter's index for every
+    register and band, not on the third quarter's mono index plus the spreads
+    its signing card printed. August's own card is the signing card here, so
+    the cohort's formula is the month's and every rate has to come out at the
+    settled one."""
+    from types import SimpleNamespace
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices import cohort
+    from custom_components.be_electricity_prices.const import (
+        CONF_API_KEY,
+        CONF_CONTRACT,
+        CONF_SUPPLIER,
+        CONF_TARIFF_CARD_DATE,
+    )
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+
+    held, settled, _fetched = await _settle_august(
+        date(2026, 10, 15), "bolt_online_oct_reissue.pdf"
+    )
+    freezer.move_to("2026-10-15 10:00:00+02:00")
+
+    async def _month(*args: Any, **_k: object) -> SupplierSnapshot:
+        return held if args[5] == date(2026, 7, 1) else settled
+
+    entry = SimpleNamespace(
+        data={
+            CONF_SUPPLIER: "bolt",
+            CONF_CONTRACT: "bolt_variable",
+            CONF_TARIFF_CARD_DATE: "2026-07-01",
+            CONF_API_KEY: "k",
+        }
+    )
+    with (
+        patch.object(cohort, "_snapshot_for_month", new=_month),
+        patch.object(cohort, "month_card", new=_month),
+    ):
+        billed = await cohort._effective_snapshot_for_month(
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            EXTRACTORS["bolt"],
+            "bolt_variable",
+            "wallonia",
+            date(2026, 8, 1),
+            settled,
+            entry,  # type: ignore[arg-type]
+        )
+    energy = settled.energy
+    assert isinstance(energy, VariableRates)
+    for hour, meter, mode, region, field in (
+        (15, "mono", "simple", "wallonia", "current"),
+        (15, "bi", "bi_horaire", "flanders", "peak"),
+        (3, "bi", "bi_horaire", "flanders", "offpeak"),
+        (15, "exclusive_night", "impact", "wallonia", "exclusive_night"),
+        (13, "dynamic", "impact", "wallonia", "impact_eco"),
+        (9, "dynamic", "impact", "wallonia", "impact_medium"),
+        (19, "dynamic", "impact", "wallonia", "impact_pic"),
+    ):
+        when = datetime(2026, 8, 12, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        assert energy_eur_per_kwh(
+            billed.energy,
+            when,
+            None,
+            meter=meter,  # type: ignore[arg-type]
+            region=region,
+            dso_tariff_mode=mode,  # type: ignore[arg-type]
+        ) == pytest.approx(getattr(energy, field))
+
+
 def test_a_card_whose_index_table_is_another_quarter_is_refused() -> None:
     """The Online card first published for October 2026 printed 19,05 c/kWh,
     the formula at the third quarter's index, beside the second quarter's

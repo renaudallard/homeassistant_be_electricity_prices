@@ -877,7 +877,12 @@ prints the same seven indices for a quarter, the professional and Plenty Online 
 
 A keyed entry bills the same rates: `_energy_month_spot` (`spot_stats.py`) takes
 `index_realised` over its own quarter mean, which the hourly cache leaves 0,22 EUR/MWh short of
-the printed one, and `_quarter_leg` reads each register's spread off the settled rates.
+the printed one, and `_quarter_leg` reads each register's spread off the settled rates. A
+contract signed on an earlier card bills a settled month on its own formula at that quarter's
+index for every register and band: `_on_settled_quarter` (`cohort_legs.py`) rebuilds the signing
+card's rates on the settled month's indices before the leg is built, where the signing card's
+spreads, a quarter or more old, billed the third quarter of 2026 0,06 to 0,32 c/kWh off per
+register.
 
 It is in place, as at TotalEnergies: the variable folder addresses no card by month, so the next
 quarter's card is only ever the live one, fetched off the listing. Until the quarter has closed,

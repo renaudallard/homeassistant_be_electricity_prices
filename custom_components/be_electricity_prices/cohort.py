@@ -51,6 +51,7 @@ from .cohort_legs import (
     _cohort_injection_from_archived,
     _manual_energy_leg,
     _month_indexed_leg,
+    _on_settled_quarter,
 )
 from .const import (
     CONF_API_KEY,
@@ -336,7 +337,11 @@ async def _cohort_legs(
         # None when no archive holds the signing month's card.
         if snap_start is not None:
             archived_snap = snap_start
-            cohort = _cohort_energy_from_archived(snap_start)
+            # A settled month of a later Bolt quarter bills each register on
+            # that quarter's own spread, not the one the signing card prints.
+            cohort = _cohort_energy_from_archived(
+                _on_settled_quarter(snap_start, month_snapshot or current_snapshot)
+            )
             # A SpotMonthlyRates leg bills at the current month's mean spot,
             # which needs an ENTSO-E key. Only the dynamic and spot-monthly
             # contract kinds are asked for one, so a variable cohort can reach
