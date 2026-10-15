@@ -616,8 +616,8 @@ class _WizardStepsMixin:
 
         Unlike the dynamic-energy ``api_key`` step this one is skippable:
         the card prints a figure to fall back on, so leaving it blank bills
-        that figure (last month's index) until a key is added via
-        Reconfigure. A typed key is validated against the live endpoint,
+        that figure (last month's index) until a key is added through
+        Edit settings. A typed key is validated against the live endpoint,
         except the one already stored, so an edit of some other setting does
         not fail on it while ENTSO-E is down.
         """

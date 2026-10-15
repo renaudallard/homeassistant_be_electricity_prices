@@ -504,7 +504,7 @@ priced without a spot but the feed-in credit needs the day-ahead curve, per hour
 as a delivery-month mean. Unlike the required `api_key`
 step, this one is skippable (`flow_schemas.py` docstring): submitting blank pops
 `CONF_API_KEY` and continues to `meters`, leaving the injection price unavailable
-until a key is added via Reconfigure. A typed key is validated by
+until a key is added through Edit settings. A typed key is validated by
 `_validate_entsoe_key` the same way as the dynamic step (`flow_schemas.py`),
 except the one already stored, which is kept without asking ENTSO-E so an edit of
 another setting does not fail while it is down.

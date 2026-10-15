@@ -589,7 +589,7 @@ dropped rather than billed on the new card.
    injection case it is optional and skippable: leave it blank to skip it,
    and a feed-in credit settled per slot stays unavailable, while one
    indexed on the month keeps the card's printed figure, until you add a key
-   via Reconfigure.
+   through **Configure → Edit settings**.
 9. **Capacity tariff peak source** *(Flanders only)* — a sensor, or a fixed
    kW value (default 2.5 kW, the VREG regulated minimum). Leaving it at that
    default when your real peak is higher understates the bill by the
