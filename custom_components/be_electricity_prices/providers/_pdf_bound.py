@@ -119,13 +119,14 @@ _MAX_PATH_SEGMENTS = 450_000
 # The most a reader may parse of a card, counted as it parses, each time it
 # does: under pdfminer every token of the file, of its content streams for
 # each page drawing them and of a form each time it is drawn, of a font's
-# maps and programs, and each entry of a page's or form's resources it
-# walks for each draw; under pypdf every operand and operator of a content
+# maps and programs, and each font, colour space, form or image and
+# procedure set of a page's or form's resources it walks for each draw, the
+# kinds it reads of them; under pypdf every operand and operator of a content
 # stream each time it is interpreted, and every element of an array or
 # dictionary. What the bytes draw cost even when it built nothing: 78 kB
 # inflating to 32 MB of numbers no operator took held pypdf 238 s and 1,2
 # GB, and 3 MB of paths pdfminer does not paint took 45 s. Measured as
-# above: at most 935 707 under pdfminer and 912 313 under pypdf, both on a
+# above: at most 935 694 under pdfminer and 912 313 under pypdf, both on a
 # Bolt card of 2,8 MB. This is about twice that, as the decode bound is,
 # since what it lets through is CPU: a token of a Bolt card costs pdfminer
 # about 50 us on a Raspberry Pi, more than any made up to cost more, so 2
@@ -687,13 +688,15 @@ def _hold_pdfminer_to_the_bound() -> None:
         init_resources = PDFPageInterpreter.init_resources
 
         def walked(self: PDFPageInterpreter, resources: dict[object, object]) -> None:
-            # Walked again for each form drawn, each entry a font looked up
-            # or a colour space made.
+            # Walked again for each form drawn, each entry a font looked up,
+            # a colour space made, a form or image named or a procedure set
+            # listed. Only those kinds count, the ones init_resources reads:
+            # resolving another, which it never does, could fail the card.
             reading = _READING.get()
             listed = pdftypes.resolve1(resources)
             if reading is not None and isinstance(listed, dict):
-                for kind in listed.values():
-                    entries = pdftypes.resolve1(kind)
+                for kind in ("Font", "ColorSpace", "XObject", "ProcSet"):
+                    entries = pdftypes.resolve1(listed.get(kind))
                     if isinstance(entries, (dict, list)):
                         reading.parse(len(entries))
             init_resources(self, resources)

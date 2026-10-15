@@ -1499,44 +1499,61 @@ def test_what_a_decode_hands_back_past_its_last_inflate_counts(
         extract(_pdf_of(zlib.compress(b"z" * 200_000 + b"~>"), attrs=attrs))
 
 
+def _packed_pdf(
+    objects: Sequence[bytes], packed: bytes, *, filter: bytes = b"/FlateDecode"
+) -> bytes:
+    """A PDF of ``objects``, numbered from 1, the first its catalog, and of
+    ``packed``, numbered next and kept in an object stream under ``filter``,
+    behind a cross-reference stream."""
+    import struct
+    import zlib
+
+    number = len(objects) + 1
+    head = b"%d 0 " % number
+    body = head + packed
+    if filter == b"/FlateDecode":
+        body = zlib.compress(body)
+    out = bytearray(b"%PDF-1.5\n")
+    rows = struct.pack(">BIH", 0, 0, 65535)
+    for at, obj in enumerate(objects, 1):
+        rows += struct.pack(">BIH", 1, len(out), 0)
+        out += b"%d 0 obj\n" % at + obj + b"\nendobj\n"
+    rows += struct.pack(">BIH", 2, number + 1, 0)
+    rows += struct.pack(">BIH", 1, len(out), 0)
+    out += b"%d 0 obj\n<</Type/ObjStm/N 1/First %d/Filter%s/Length %d>>" % (
+        number + 1,
+        len(head),
+        filter,
+        len(body),
+    )
+    out += b"\nstream\n" + body + b"\nendstream\nendobj\n"
+    xref = len(out)
+    rows += struct.pack(">BIH", 1, xref, 0)
+    out += b"%d 0 obj\n<</Type/XRef/Size %d/W[1 4 2]/Root 1 0 R/Length %d>>" % (
+        number + 2,
+        number + 3,
+        len(rows),
+    )
+    out += b"\nstream\n" + rows + b"\nendstream\nendobj\n"
+    out += b"startxref\n%d\n%%%%EOF\n" % xref
+    return bytes(out)
+
+
 def _filter_in_object_stream_pdf(stream: bytes) -> bytes:
     """A PDF whose one page draws ``stream``, unfiltered, through a /Filter
     kept in an object stream, which pdfminer inflates in the middle of
     decoding ``stream``."""
-    import struct
-    import zlib
-
-    head = b"5 0 "
-    packed = zlib.compress(head + b"[]")
-    objects = {
-        1: b"<</Type/Catalog/Pages 2 0 R>>",
-        2: b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
-        3: b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>",
-        4: b"<</Filter 5 0 R/Length %d>>\nstream\n" % len(stream)
-        + stream
-        + b"\nendstream",
-        6: b"<</Type/ObjStm/N 1/First %d/Filter/FlateDecode/Length %d>>\nstream\n"
-        % (len(head), len(packed))
-        + packed
-        + b"\nendstream",
-    }
-    out = bytearray(b"%PDF-1.5\n")
-    rows = struct.pack(">BIH", 0, 0, 65535)
-    at = {}
-    for number, body in objects.items():
-        at[number] = len(out)
-        out += b"%d 0 obj\n" % number + body + b"\nendobj\n"
-    for number in range(1, 7):
-        if number == 5:
-            rows += struct.pack(">BIH", 2, 6, 0)
-        else:
-            rows += struct.pack(">BIH", 1, at[number], 0)
-    xref = len(out)
-    rows += struct.pack(">BIH", 1, xref, 0)
-    out += b"7 0 obj\n<</Type/XRef/Size 8/W[1 4 2]/Root 1 0 R/Length %d>>" % len(rows)
-    out += b"\nstream\n" + rows + b"\nendstream\nendobj\n"
-    out += b"startxref\n%d\n%%%%EOF\n" % xref
-    return bytes(out)
+    return _packed_pdf(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R>>",
+            b"<</Filter 5 0 R/Length %d>>\nstream\n" % len(stream)
+            + stream
+            + b"\nendstream",
+        ),
+        b"[]",
+    )
 
 
 @pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
@@ -1785,6 +1802,29 @@ def test_the_resources_pdfminer_walks_for_each_draw_count(
         extract(_drawn_pdf(b"/X0 Do " * 20, b"", fonts=300))
     with pytest.raises(CardNotReadableError, match="no text layer"):
         extract(_drawn_pdf(b"/X0 Do " * 3, b"", fonts=300))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_only_the_resources_pdfminer_walks_are_counted(
+    extract: Callable[[bytes], str],
+) -> None:
+    """Counting a kind of resources pdfminer never reads, here graphics
+    states kept in an object stream it cannot decode, read them, and the
+    card failed on them."""
+    content = b"BT /F1 12 Tf 72 720 Td (%s) Tj ET" % (b"tariff card text " * 60)
+    payload = _packed_pdf(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R"
+            b"/Resources<</Font<</F1 5 0 R>>/ExtGState 6 0 R>>>>",
+            b"<</Length %d>>\nstream\n%s\nendstream" % (len(content), content),
+            b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+        ),
+        b"<</GS0<</LW 1>>>>",
+        filter=b"/FooDecode",
+    )
+    assert "tariff card" in extract(payload)
 
 
 def _mapped_pdf(last: int) -> bytes:

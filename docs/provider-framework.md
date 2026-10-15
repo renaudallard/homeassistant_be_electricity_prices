@@ -726,10 +726,11 @@ Internals worth knowing:
   does not paint took 45 s. A reader parses at most `_MAX_PARSED`
   (2 000 000) objects of a card: under pdfminer each token of the
   file, of a content stream for each page drawing it and of a form for each
-  draw, and of a font's maps and programs, and each entry of the resources
-  it walks for a page or a form drawn; under pypdf each operand and operator
+  draw, and of a font's maps and programs, and each font, colour space,
+  form or image and procedure set of the resources it walks for a page or a
+  form drawn, the kinds it reads of them; under pypdf each operand and operator
   of a content stream each time it is interpreted, and each element of an
-  array or dictionary. The most a card reaches is 935 707 under pdfminer
+  array or dictionary. The most a card reaches is 935 694 under pdfminer
   and 912 313 under pypdf, both on a Bolt card of 2,8 MB, and this is
   about twice that, as the decode bound is, since what it lets through is
   CPU: a token of a Bolt card costs pdfminer about 50 us on a Raspberry
