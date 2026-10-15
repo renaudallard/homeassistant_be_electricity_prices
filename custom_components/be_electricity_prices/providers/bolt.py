@@ -79,6 +79,7 @@ from ._bolt_cards import (
     _prints_promotion,
     _with_index_card_formula,
     check_quarter_table,
+    quarter_indices,
 )
 from ._bolt_overlays import (
     _extract_brussels_dsos,
@@ -104,8 +105,10 @@ from ._pdf import (
 from ._rates import (
     Contract,
     TariffKind,
+    VariableRates,
     vat_basis,
 )
+from ._settle import settled_registers
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
@@ -540,7 +543,8 @@ async def fetch_for_month(
     month too. The variable folder uses a stable version-number suffix
     (``bolt_res_el_fr_13.pdf``), so older months can't be addressed there,
     those return ``None`` and the YTD path falls back to the current snapshot
-    as a proxy.
+    as a proxy. A variable month the card archive holds settles in place
+    (:func:`settle_month`).
     """
     if contract_id not in _CONTRACTS_BY_ID:
         return None
@@ -569,6 +573,57 @@ async def fetch_for_month(
     # against the requested month and fall back to the proxy snapshot on
     # a mismatch rather than mis-billing a past month at current rates.
     return archive_validity_check(snap, text, year_month, month_names=_FR_MONTH_NAMES)
+
+
+async def settle_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,  # Bolt's PDFs cover every region.
+    year_month: date,
+    held: SupplierSnapshot,
+) -> SupplierSnapshot:
+    """``held``, a variable card's month, re-priced on the indices its
+    quarter settled at.
+
+    The card prints its rates at the last closed quarter's indices and bills
+    the delivery quarter's, so the month's own card runs a quarter behind:
+    September 2026 printed 14,18 c/kWh on the second quarter's 100,09
+    EUR/MWh, where the third quarter's 139,36 gives 19,05. The cards of the
+    quarter after print that quarter's table, one index per meter register
+    and CWaPE band (``quarter_indices``), and every rate is rebuilt on the
+    month's own formula at its index (``settled_registers``).
+
+    In place, as at TotalEnergies: the variable folder addresses no card by
+    month, so the next quarter's card is only ever the live one. Before the
+    quarter has closed, or while the live card's table names another
+    quarter, the month is ``provisional`` and asked again; once the live card
+    is a later quarter's, the card archive's row settled while it ran holds
+    the month, and ``held`` comes back as it is.
+    """
+    energy = held.energy
+    if not isinstance(energy, VariableRates) or not energy.quarter_indexed:
+        return held
+    quarter = (year_month.month - 1) // 3
+    following = date(year_month.year + (quarter == 3), (quarter + 1) % 4 * 3 + 1, 1)
+    running = dt_util.now().date().replace(day=1)
+    if running < following:
+        return replace(held, provisional=True)
+    if (running.year - following.year) * 12 + running.month - following.month >= 3:
+        return held
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Bolt")
+    try:
+        _url, text = await _fetch_pdf_text(session, contract)
+    except ExtractorError as err:
+        if is_transient_fetch_error(str(err)):
+            raise
+        return replace(held, provisional=True)
+    table = quarter_indices(text.replace("\u2028", "\n"))
+    settled = None
+    if table is not None and table[0] == f"Q{quarter + 1} {year_month.year}":
+        settled = settled_registers(energy, table[1])
+    if settled is None:
+        return replace(held, provisional=True)
+    return replace(held, energy=settled)
 
 
 def parse_snapshot(
@@ -763,4 +818,6 @@ EXTRACTOR = SupplierExtractor(
     fetch=fetch,
     fetch_for_month=fetch_for_month,
     probe=probe,
+    settles_on_next_card=True,
+    settle_month=settle_month,
 )

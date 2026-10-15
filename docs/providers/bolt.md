@@ -24,7 +24,7 @@ Related reading:
 | Publication shape | Monthly PDF card per contract, at a predictable CDN URL; a public HTML listing page links every current PDF | `bolt.py` |
 | Fetch transport | `fetch_pdf_text_layout` (pdfplumber, layout-aware) | `bolt.py` |
 | Probe | the card's address and its `Last-Modified`, the Online card's too for Plenty Online | `bolt.py` |
-| Archive | The `fix` folder (`bolt_fix`, `bolt_plenty_fix` and their professional twins) is monthly-archived back to 2024-01; the variable folder has no month-addressable card and falls back to the current snapshot | `bolt.py` |
+| Archive | The `fix` folder (`bolt_fix`, `bolt_plenty_fix` and their professional twins) is monthly-archived back to 2024-01; the variable folder has no month-addressable card and falls back to the current snapshot, while a variable month the card archive holds settles in place on the next quarter's card (`settle_month`) | `bolt.py` |
 | VAT convention | Prices are VAT-incl; `vat_rate=0.0` | `bolt.py`, `base.py` |
 
 Bolt's PDFs are the reason this extractor exists in its current form. They are around 5 MB each,
@@ -278,7 +278,7 @@ would come back.
 
 The variable branch of `_extract_energy` reads both halves of the card. The printed `Prix mensuel`
 becomes `VariableRates.current`: the formula at the last closed quarter's index, which is what an
-entry without an ENTSO-E key keeps (see [Quarterly index](#quarterly-index)); `_consumption_formula` reads the `Belpex * <factor> <sign> <base>` row beside it into
+entry without an ENTSO-E key bills until the quarter closes (see [Quarterly index](#quarterly-index)); `_consumption_formula` reads the `Belpex * <factor> <sign> <base>` row beside it into
 `formula_factor` / `formula_base`, converted to the EUR/kWh basis applied against the EUR/kWh spot
 (factor stays a ratio, base is EUR/MWh -> EUR/kWh, both VAT-baked since `vat_rate=0`).
 `resolve_settlement_grid` turns that pair into a `DynamicRates(quarter_hourly=True)` for an entry
@@ -366,6 +366,8 @@ and every card in it addresses its current card the same way, so all four clear 
 `bolt_fix`, `bolt_plenty_fix` and their professional twins. Variable cards are keyed by version
 (`bolt_res_el_fr_13.pdf`) rather than by month, so past months cannot be addressed there at all;
 those return `None` and the YTD path falls back to the current snapshot as a proxy (`bolt.py`).
+A variable month the card archive holds is settled in place instead (see
+[Settlement](#settlement)).
 
 The gate used to require the slug to be `fix` as well, which locked the two `plenty_fix` contracts
 out of an archive that does exist (verified against the CDN: `plenty_fix_res_el_fr_202601.pdf` and
@@ -839,9 +841,10 @@ The spreads are the last closed quarter's, the only ones the card prints. They m
 2,4 EUR/MWh between the second and third quarter of 2026: priced on the October card, the second
 quarter comes out 0,06 c/kWh high by day, 0,13 low at night, 0,32 low on Eco and 0,26 high on
 Medium, against about 4,9 c/kWh on every register in the third quarter before, when the
-second quarter's printed rates were billed. Without a
-key the printed rates stand. The quarter-hour settlement box is unaffected: it bills the same
-formula per quarter-hour.
+second quarter's printed rates were billed. A month of a closed quarter settled on the next
+quarter's card carries that quarter's own spreads (see [Settlement](#settlement)). Without a key
+the running quarter bills the printed rates. The quarter-hour settlement box is unaffected: it
+bills the same formula per quarter-hour.
 
 The table is checked against the price it stands beside. `check_quarter_table` (`_bolt_cards.py`)
 puts the table's mono index through the card's formula and refuses the card (an `ExtractorError`,
@@ -860,3 +863,28 @@ below the rest of the card. Bolt replaced the file in place two days later with 
 quarter's table. Plenty Online is checked on the Online card's table, the one behind the formula
 it is billed on, so it is refused with it. Every other variable card on file reproduces its price
 to 0,005 c/kWh.
+
+### Settlement
+
+A closed quarter's months settle on the indices the next quarter's card prints, keyed or not
+(`settle_month`, `bolt.py`, flagged with `settles_on_next_card`). Billed on its own card, a
+keyless entry ran a quarter behind: September 2026 printed 14,18 c/kWh at the second quarter's
+100,09 EUR/MWh, where the third quarter's 139,36 gives 19,05, 25% low on every September kWh.
+`quarter_indices` (`_bolt_cards.py`) reads the next card's table, one index per meter register
+and CWaPE band, and `settled_registers` (`_settle.py`) rebuilds each rate on the month's own
+formula at its own index, recording the mono one as `index_realised`. Every variable card on file
+prints the same seven indices for a quarter, the professional and Plenty Online cards included.
+
+A keyed entry bills the same rates: `_energy_month_spot` (`spot_stats.py`) takes
+`index_realised` over its own quarter mean, which the hourly cache leaves 0,22 EUR/MWh short of
+the printed one, and `_quarter_leg` reads each register's spread off the settled rates.
+
+It is in place, as at TotalEnergies: the variable folder addresses no card by month, so the next
+quarter's card is only ever the live one, fetched off the listing. Until the quarter has closed,
+and while the live card's table names another quarter (the October 2026 Online edition that
+printed the second quarter's), the month keeps its printed rates and is `provisional`, so it is
+asked again. Once the live card is a later quarter's, the card archive's row, settled by the daily
+run while the next quarter's card was served, holds the month, and an unsettled one is handed back
+as it is. A replay after a parser change puts each register's index back on the re-parsed card
+(`settled_as`, `_settle.py`). The feed-in leg is credited per quarter-hour, or at its printed
+indicative without a key, and is not settled.

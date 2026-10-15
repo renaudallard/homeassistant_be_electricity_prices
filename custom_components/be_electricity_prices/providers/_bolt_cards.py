@@ -258,12 +258,13 @@ def _extract_energy(
         # la valeur Belpex la plus recente". The bill is "calcule sur base de
         # l'indice applicable pendant la periode pour laquelle vous etes
         # facture", so the leg is quarter indexed: an entry with an ENTSO-E
-        # key re-prices the formula on the delivery quarter's index, and the
-        # printed rates are what a keyless one keeps. The coefficients are
-        # also the other settlement the card sells, per quarter-hour, which
-        # resolve_settlement_grid builds when the entry says so. Carried on
-        # every variable card, not only where the box is ticked, because the
-        # parser has no entry to consult and the pair is free to read.
+        # key re-prices the formula on the delivery quarter's index, and a
+        # keyless one bills the printed rates until the quarter closes and the
+        # next quarter's card settles it (bolt.settle_month). The coefficients
+        # are also the other settlement the card sells, per quarter-hour,
+        # which resolve_settlement_grid builds when the entry says so. Carried
+        # on every variable card, not only where the box is ticked, because
+        # the parser has no entry to consult and the pair is free to read.
         #
         # A card with no formula table still prices: the printed rate is the
         # whole variable contract, and only the quarter-hourly settlement
@@ -399,6 +400,36 @@ def check_quarter_table(text: str, energy: EnergyRates, label: str) -> None:
         )
 
 
+def quarter_indices(text: str) -> tuple[str, dict[str, float]] | None:
+    """The quarter a variable card's index table names ("Q3 2026"), and its
+    indices in EUR/kWh by the rate each prices, or ``None``.
+
+    The rates are ``VariableRates`` fields: ``current``, ``peak``,
+    ``offpeak`` and ``exclusive_night`` for the meter registers, and
+    ``impact_eco``, ``impact_medium`` and ``impact_pic`` for the CWaPE bands,
+    present only when all three read. ``None`` when the card prints no table
+    or one of its meter rows does not read. The card of the quarter after
+    prints the indices a quarter's months settle at (``bolt.settle_month``).
+    """
+    head = _QUARTER_MONO_INDEX_RE.search(text)
+    if head is None:
+        return None
+    table = text[head.start() :]
+    indices: dict[str, float] = {}
+    for field, label in _REGISTER_ROWS:
+        row = re.search(rf"^[ \t]*{label}\s+([\d.,]+)\s*€/MWh", table, re.M)
+        if row is None:
+            return None
+        indices[field] = to_float(row.group(1)) / 1000.0
+    bands = {
+        f"impact_{band.lower()}": to_float(index) / 1000.0
+        for band, _printed, index, *_formula in _IMPACT_ROW_RE.findall(text)
+    }
+    if len(bands) == 3:
+        indices |= bands
+    return " ".join(head.group(1).split()), indices
+
+
 def _impact_energy_bands(text: str, vat: float) -> dict[str, float]:
     """The three CWaPE supplier-energy rates, or ``{}``.
 
@@ -527,6 +558,16 @@ _QUARTER_INDEX_RE = re.compile(r"Belpex\s+Q[1-4]\s+\d{4}")
 # "Belpex Q3 2026 ... Simple 139,36 €/MWh".
 _QUARTER_MONO_INDEX_RE = re.compile(
     r"Belpex\s+(Q[1-4]\s+\d{4}).*?Simple\s+([\d.,]+)\s*€/MWh", re.S
+)
+# The table's meter rows, by the rate each prices: "Simple 139,36 €/MWh",
+# "Jour 147,78", "Nuit 132,12" and "Exclusif nuit 132,12" on the October 2026
+# card, each label at the start of its line, which keeps the injection rows
+# ("Injection jour") out.
+_REGISTER_ROWS = (
+    ("current", "Simple"),
+    ("peak", "Jour"),
+    ("offpeak", "Nuit"),
+    ("exclusive_night", "Exclusif nuit"),
 )
 # How far the table's index through the formula may sit from the printed
 # monthly price: one step of the price's last printed digit, 0,01 c/kWh.

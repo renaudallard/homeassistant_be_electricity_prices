@@ -100,7 +100,7 @@ Each of these has a section of its own further down; this is the scan.
 | Supplier | Contracts | Source |
 | --- | --- | --- |
 | **Aspiravi Energy** | Eco Plus Flex *(monthly Belpex mean, mono / bi / excl. night, for members of its partner cooperatives)* · a closed month settles on the mean the next card prints for it, energy and feed-in | Flanders only · [`aspiravi.py`](./custom_components/be_electricity_prices/providers/aspiravi.py) · [notes](./docs/providers/aspiravi.md)
-| **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty Variable · Bolt Online · Bolt Plenty Online · all six as **pro** contracts · the variable cards index quarterly on the RLP-weighted Belpex, re-priced on the delivery quarter with an ENTSO-E key, or settled per quarter-hour on request, and a card whose quarterly index table does not give back its own monthly price is refused, so the card held before keeps billing · the Plenty cards run an offer for contracts signed in their month, a lump with a feed-in bonus until September 2026 and a cut per kWh with one since October (9 c€/kWh on the residential cards and 10 c€/kWh before VAT on the professional Plenty Fixe card, whose VAT basis is read off its Dutch edition, Plenty Fixe in Flanders only), credited at the first year's settlement off the card of the month you signed and to no contract signed in another | [`bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) · [notes](./docs/providers/bolt.md)
+| **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty Variable · Bolt Online · Bolt Plenty Online · all six as **pro** contracts · the variable cards index quarterly on the RLP-weighted Belpex, re-priced on the delivery quarter with an ENTSO-E key, or settled per quarter-hour on request, and a closed quarter's months, key or not, settle on the indices the next quarter's card prints, and a card whose quarterly index table does not give back its own monthly price is refused, so the card held before keeps billing · the Plenty cards run an offer for contracts signed in their month, a lump with a feed-in bonus until September 2026 and a cut per kWh with one since October (9 c€/kWh on the residential cards and 10 c€/kWh before VAT on the professional Plenty Fixe card, whose VAT basis is read off its Dutch edition, Plenty Fixe in Flanders only), credited at the first year's settlement off the card of the month you signed and to no contract signed in another | [`bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) · [notes](./docs/providers/bolt.md)
 | **Cociter** | Tarif Variable (BELIX) · Tarif Variable Trihoraire *(BELIX on the CWaPE 3-band schedule)* · Tarif Dynamique (quarter-hourly BELPEX) | Wallonia only · [`cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) · [notes](./docs/providers/cociter.md)
 | **DATS 24** *(withdrawn 2026-08-31)* | Elektriciteit Groen Variabel (BE_spotRLP-indexed monthly) | Flanders + Wallonia · [`dats24.py`](./custom_components/be_electricity_prices/providers/dats24.py) · [notes](./docs/providers/dats24.md)
 | **EBEM** | Groen Variabel (BelpexRLP0 monthly, mono / bi / excl. night) · Groen B@sic+ (BelpexRLP0 monthly, single rate, online-only) · Groen Dyn@mic (Belpex 15-min, SMR3) | Flanders only · [`ebem.py`](./custom_components/be_electricity_prices/providers/ebem.py) · [notes](./docs/providers/ebem.md)
@@ -739,7 +739,8 @@ Online, residential and pro) on the delivery quarter's, which is what Bolt
 indexes them on. Both stay off without a key rather than failing the entry: a
 feed-in credit settled per slot goes unavailable, while a monthly one and the
 re-price keep the card's printed figure, which is the previous month's, or on
-Bolt the previous quarter's. The token is free but ENTSO-E does not auto-grant it —
+Bolt the previous quarter's, until the next card settles the closed month or
+quarter where the supplier prints the index it closed at. The token is free but ENTSO-E does not auto-grant it —
 you have to request access explicitly:
 
 1. **Register** an account on the
@@ -1871,7 +1872,9 @@ place: its own archive drops the new-customer campaign a live card carries,
 so the card kept for the month stays whole and only its indexed rates move
 to the index the next card names. TotalEnergies keeps no archive of its own and
 settles the rows the daily run caught in place too, while the card after the
-month is still its live one. The request names the supplier, contract, region and month
+month is still its live one. Bolt's variable cards are settled in place
+too, a quarter at a time: a closed quarter's months move to the indices the
+next quarter's card prints, one per meter register and Impact band. The request names the supplier, contract, region and month
 and nothing else, and the month lookup only asks for a month the archive can
 hold: a closed one, and for a supplier with no archive of its own not before August
 2026, the earliest month the daily captures reach. A signing month older than

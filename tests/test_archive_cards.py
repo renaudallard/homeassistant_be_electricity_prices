@@ -665,6 +665,115 @@ async def test_a_supplier_settling_in_place_keeps_the_card_it_caught(
     assert replayed["publication_label"] == "augustus 2026"
 
 
+async def test_a_quarter_indexed_row_settles_in_place_on_every_register(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bolt's variable cards bill the delivery quarter on an index per meter
+    register and CWaPE band, which the next quarter's card prints, and its
+    variable folder addresses no card by month: the row the walk caught is
+    settled in place, every rate on its own index. Settled, it is not asked
+    again, and a replay after a parser change rebuilds each rate, not the
+    single meter's alone."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.providers._settle import (
+        settled_registers,
+    )
+
+    asked: list[str] = []
+    indices = {
+        "current": 0.19,
+        "peak": 0.2,
+        "offpeak": 0.18,
+        "exclusive_night": 0.18,
+        "impact_eco": 0.14,
+    }
+
+    async def fetch(_session: Any, contract: str, _region: str) -> SupplierSnapshot:
+        await fetch_text(_Session({CARD_URL: "card"}), CARD_URL)  # type: ignore[arg-type]
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=VariableRates(
+                current=0.1418,
+                peak=0.1515,
+                offpeak=0.134,
+                exclusive_night=0.134,
+                impact_eco=0.0991,
+                formula_factor=1.0,
+                formula_base=0.0,
+                quarter_indexed=True,
+            ),
+            publication_label=(
+                "augustus 2026" if dt_util.now().month == 8 else "september 2026"
+            ),
+            source_url=CARD_URL,
+        )
+
+    async def settle_month(
+        _session: Any, _contract: str, _region: str, month: date, held: SupplierSnapshot
+    ) -> SupplierSnapshot:
+        asked.append(f"settle {month:%Y-%m}")
+        assert isinstance(held.energy, VariableRates)
+        energy = settled_registers(held.energy, indices)
+        assert energy is not None
+        return replace(held, energy=energy)
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_flex",
+                label="Flex",
+                kind="variable",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=fetch,
+        settles_on_next_card=True,
+        settle_month=settle_month,
+    )
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    row = tmp_path / "cards/acme/acme_flex/wallonia/2026-08.json"
+    with monkeypatch.context() as clock:
+        clock.setattr(dt_util, "now", lambda *_a: datetime(2026, 8, 20, tzinfo=UTC))
+        await ac.archive(
+            tmp_path,
+            extractors=[extractor],
+            now=datetime(2026, 8, 20, 6, 0, tzinfo=UTC),
+            sleep=_no_sleep,
+        )
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert asked == ["settle 2026-08"]
+    assert summary.settled == 1
+    settled = json.loads(row.read_text())
+    assert {field: settled["energy"][field] for field in indices} == pytest.approx(
+        indices
+    )
+    assert settled["energy"]["index_realised"] == pytest.approx(0.19)
+
+    asked.clear()
+    await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert asked == []
+
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep
+    )
+    assert summary.unreplayable == []
+    replayed = json.loads(row.read_text())
+    assert replayed["publication_label"] == "augustus 2026"
+    assert {field: replayed["energy"][field] for field in indices} == pytest.approx(
+        indices
+    )
+    assert replayed["energy"]["index_realised"] == pytest.approx(0.19)
+
+
 async def test_a_month_the_supplier_settles_nothing_for_is_not_counted_settled(
     tmp_path: Path,
 ) -> None:

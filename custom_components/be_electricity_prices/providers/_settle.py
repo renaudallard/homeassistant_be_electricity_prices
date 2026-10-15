@@ -28,11 +28,13 @@
 A card indexed on the delivery month prints its rates at the previous
 month's index, and the card after it names the value the month closed at.
 These rebuild a leg's rates from its own coefficients at that value, for
-every supplier that settles a month that way.
+every supplier that settles a month that way, and for Bolt, whose variable
+cards do the same on the delivery quarter.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any
 
@@ -134,10 +136,69 @@ def settled_energy(energy: EnergyRates, index: float) -> EnergyRates:
     return replace(energy, index_realised=index, **rates)
 
 
+# The rates of a leg billed on one formula at an index per meter register and
+# CWaPE band (Bolt's variable cards).
+_REGISTER_RATES = (
+    "current",
+    "peak",
+    "offpeak",
+    "exclusive_night",
+    "impact_eco",
+    "impact_medium",
+    "impact_pic",
+)
+
+
+def settled_registers(
+    energy: VariableRates, indices: Mapping[str, float]
+) -> VariableRates | None:
+    """A quarter-indexed leg recomputed at the indices its quarter settled at.
+
+    Bolt prints one formula and bills it on an index per meter register and
+    CWaPE band, the quarter's RLP-weighted mean over that register's hours,
+    so each rate is rebuilt on the formula at its own index (``indices``, by
+    rate). The single meter's is recorded as ``index_realised``, which is
+    what a keyed entry's monthly leg resolves on; that leg reads each
+    register's spread off these rates (``cohort_legs._quarter_leg``), so it
+    bills them too. ``None``, settling nothing, when the leg has no formula
+    or ``indices`` lacks a rate it carries.
+    """
+    factor, base = energy.formula_factor, energy.formula_base
+    carried = [field for field in _REGISTER_RATES if getattr(energy, field) is not None]
+    if factor is None or base is None or any(f not in indices for f in carried):
+        return None
+    rates: dict[str, Any] = {field: factor * indices[field] + base for field in carried}
+    return replace(energy, index_realised=indices["current"], **rates)
+
+
+def _register_indices(energy: VariableRates) -> dict[str, float]:
+    """The index each rate of a leg :func:`settled_registers` settled stands
+    at, read back through its formula."""
+    factor, base = energy.formula_factor, energy.formula_base
+    if not factor or base is None:
+        return {}
+    return {
+        field: (rate - base) / factor
+        for field in _REGISTER_RATES
+        if (rate := getattr(energy, field)) is not None
+    }
+
+
+def indexed_energy(energy: object) -> bool:
+    """Whether an energy leg is indexed on its delivery month, or on its
+    delivery quarter (Bolt's variable cards), and so settles once that has
+    closed."""
+    return bool(
+        getattr(energy, "month_indexed", False)
+        or getattr(energy, "quarter_indexed", False)
+    )
+
+
 def _indexed_legs(snap: SupplierSnapshot) -> list[EnergyRates | InjectionRates]:
-    """The legs of ``snap`` its card indexes on the month, and so settles."""
+    """The legs of ``snap`` its card indexes on the month or the quarter, and
+    so settles."""
     legs: list[EnergyRates | InjectionRates] = []
-    if getattr(snap.energy, "month_indexed", False):
+    if indexed_energy(snap.energy):
         legs.append(snap.energy)
     inj = snap.injection
     if inj is not None and (inj.month_indexed or inj.spp_indexed):
@@ -161,17 +222,26 @@ def settled_as(snap: SupplierSnapshot, settled: SupplierSnapshot) -> SupplierSna
     A card re-parsed after a parser change comes back as printed; this puts
     back what its month settled at, read off the stored row rather than off
     a next card that may no longer be served. A leg ``settled`` holds no
-    index for is left as it is.
+    index for is left as it is. A quarter-indexed leg settled on an index
+    per register takes each back from the rate it was settled to.
     """
-    index = getattr(settled.energy, "index_realised", None)
+    held = settled.energy
+    index = getattr(held, "index_realised", None)
     energy = snap.energy if index is None else settled_energy(snap.energy, index)
+    if (
+        index is not None
+        and isinstance(energy, VariableRates)
+        and isinstance(held, VariableRates)
+        and energy.quarter_indexed
+    ):
+        energy = settled_registers(energy, _register_indices(held)) or energy
     injection = snap.injection
-    held = settled.injection
+    held_injection = settled.injection
     if (
         injection is not None
-        and held is not None
-        and held.index_realised is not None
+        and held_injection is not None
+        and held_injection.index_realised is not None
         and (injection.month_indexed or injection.spp_indexed)
     ):
-        injection = settled_injection(injection, held.index_realised)
+        injection = settled_injection(injection, held_injection.index_realised)
     return replace(snap, energy=energy, injection=injection)

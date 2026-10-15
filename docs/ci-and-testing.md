@@ -1246,14 +1246,14 @@ supplier answers None for is left absent, as is a card still flagged provisional
 estimate before the next card prints the settled index), so a later backfill fills it once it has
 settled, and a month already on disk is not asked again, with one exception. A month held as
 caught live on a card indexed on its own month (`_settles_after_its_month`, `snapshot_months.py`:
-an energy leg flagged `month_indexed`, a `SpotMonthlyRates` leg, or an injection credit on a
-month mean) holds the estimate that card printed while the month ran, from the month before's
+an energy leg flagged `month_indexed` or `quarter_indexed`, a `SpotMonthlyRates` leg, or an
+injection credit on a month mean) holds the estimate that card printed while the month ran, from the month before's
 index, and the supplier settles the month on the card after it. At a supplier flagged
 `settles_on_next_card` such a row is asked for until `fetch_for_month` answers settled, then replaced by that answer under `archive`
 (`_awaits_settlement`, counted as `settled` in the summary); while the answer is still
 provisional or None the live row stays. The live walk never writes a card back over a closed
 month already filed under `archive`, which keeps a supplier still serving last month's card on
-the 1st from undoing the settlement. A supplier with `settle_month` (Luminus, TotalEnergies) is the exception
+the 1st from undoing the settlement. A supplier with `settle_month` (Luminus, TotalEnergies, Bolt) is the exception
 to the replacement: every row of its, live or archive, is settled in place (`_settle_held`), the
 row keeping its sources, capture day and every field but the re-priced month-indexed rates. A
 settle that moved one leg and left the month provisional (TotalEnergies' feed-in card lagging its

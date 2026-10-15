@@ -69,10 +69,11 @@ supplier's answer, filed as ``archive``; the live walk does not write a card
 it still serves for such a month back over it. Any other supplier answers
 with the card the row already holds, so it is not asked. A supplier that
 settles in place (``settle_month``, Luminus, whose archive drops the
-campaign a live card carries) keeps the row it holds and has only its
-month-indexed rates re-priced on the index the next card names, written
-even while one leg still waits on its index; a replay puts that index back
-on the re-parsed card (``settled_as``).
+campaign a live card carries, and TotalEnergies and Bolt's variable cards,
+which no archive addresses by month) keeps the row it holds and has only its
+month-indexed rates, or Bolt's a quarter at a time, re-priced on the index
+the next card names, written even while one leg still waits on its index; a
+replay puts that index back on the re-parsed card (``settled_as``).
 
 Exits 0 when at least one card was stored or confirmed unchanged and 1 when
 none was: that is a runner-wide problem rather than a supplier's, so the

@@ -469,7 +469,7 @@ carries each register's spread from the mono index on its base, and
 `_energy_month_spot` resolves the leg on the quarter's mean, quarter to date
 while it runs. See [providers/bolt.md](providers/bolt.md#quarterly-index).
 
-Luminus and TotalEnergies settle a closed month IN PLACE rather than through
+Luminus, TotalEnergies and Bolt settle a closed month IN PLACE rather than through
 `fetch_for_month` (`settle_month`, `providers/_settle.py`). The card held for the month, the card
 archive's row or the supplier's own answer, keeps every field, and only its
 month-indexed energy and feed-in legs are re-priced at the index the next card
@@ -482,7 +482,11 @@ printed at; it keeps no archive, so that card is only ever the live one, and the
 daily card archive run settles the rows it caught while it is served. Until the
 next card is out the month stays `provisional`, and at TotalEnergies also while
 its feed-in card still names the month before or a card's monthly block is not
-read, the other leg settling meanwhile.
+read, the other leg settling meanwhile. Bolt's variable cards settle a quarter at
+a time: the next quarter's card prints that quarter's index for each meter
+register and Impact band, each rate is rebuilt on the month's formula at its own
+index (`settled_registers`), and the mono index is recorded; its variable folder
+addresses no card by month either, so the next card is the live one.
 
 ### Monthly-indexed feed-in credits
 

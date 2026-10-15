@@ -31,6 +31,7 @@ import asyncio
 import re
 from dataclasses import replace
 from datetime import UTC, date, datetime
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -52,6 +53,7 @@ from custom_components.be_electricity_prices.providers._resolve import (
 from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
     ExtractorError,
+    SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.bolt import parse_snapshot
 from tests import FIXTURES, fixture_text
@@ -1731,6 +1733,184 @@ def test_a_variable_card_is_re_priced_on_its_quarter_index() -> None:
     assert rate(19, "bi", "bi_horaire", "flanders") == pytest.approx(
         energy.peak, abs=5e-5
     )
+
+
+async def _settle_august(
+    today: date, live: str
+) -> tuple[SupplierSnapshot, SupplierSnapshot, AsyncMock]:
+    """August 2026's card as held, settled with ``live`` the card served on
+    ``today``, and the fetch that served it."""
+    from homeassistant.util import dt as dt_util
+
+    held = parse_snapshot(
+        "bolt_variable",
+        fixture_text("bolt_variable_impact_w.pdf", layout=True),
+        "wallonia",
+    )
+    fetched = AsyncMock(return_value=("url", fixture_text(live, layout=True)))
+    now = datetime(today.year, today.month, today.day, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    with (
+        patch.object(bolt_mod, "_fetch_pdf_text", fetched),
+        patch.object(bolt_mod.dt_util, "now", return_value=now),
+    ):
+        settled = await bolt_mod.settle_month(
+            None,  # type: ignore[arg-type]
+            "bolt_variable",
+            "wallonia",
+            date(2026, 8, 1),
+            held,
+        )
+    return held, settled, fetched
+
+
+async def test_a_closed_quarter_s_month_settles_on_the_next_quarter_s_table() -> None:
+    """August 2026's card prints 14,18 c/kWh at the second quarter's index
+    and bills the third quarter's, which October's card prints: 139,36 mono,
+    147,78 day, 132,12 night, 102,42 / 153,31 / 180,89 Eco / Medium / Pic.
+    Each rate is rebuilt on August's formula at its own index, which is the
+    rate October prints on the same formula, and a keyed entry's monthly leg
+    resolves on the mono index the row records to the same rates."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _cohort_energy_from_archived,
+    )
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+    from custom_components.be_electricity_prices.providers._settle import is_settled
+
+    held, settled, fetched = await _settle_august(
+        date(2026, 10, 15), "bolt_online_oct_reissue.pdf"
+    )
+    october = parse_snapshot(
+        "bolt_online",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "wallonia",
+    ).energy
+    energy = settled.energy
+    assert isinstance(energy, VariableRates) and isinstance(october, VariableRates)
+    assert fetched.await_count == 1
+    assert not settled.provisional and is_settled(settled) and not is_settled(held)
+    assert isinstance(held.energy, VariableRates)
+    assert held.energy.current == pytest.approx(0.1418)
+    assert energy.index_realised == pytest.approx(0.13936)
+    rates = ("current", "peak", "offpeak", "exclusive_night")
+    bands = ("impact_eco", "impact_medium", "impact_pic")
+    for field in rates:
+        assert getattr(energy, field) == pytest.approx(
+            getattr(october, field), abs=5e-5
+        )
+    for field in bands:
+        assert getattr(energy, field) == pytest.approx(getattr(october, field))
+    assert settled.dsos == held.dsos and settled.taxes == held.taxes
+
+    leg = _cohort_energy_from_archived(settled)
+    assert isinstance(leg, SpotMonthlyRates)
+    leg = replace(leg, index_realised=energy.index_realised)
+    for hour, meter, mode, field in (
+        (15, "mono", "simple", "current"),
+        (3, "bi", "bi_horaire", "offpeak"),
+        (15, "exclusive_night", "impact", "exclusive_night"),
+        (13, "dynamic", "impact", "impact_eco"),
+        (9, "dynamic", "impact", "impact_medium"),
+        (19, "dynamic", "impact", "impact_pic"),
+    ):
+        when = datetime(2026, 8, 12, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        assert energy_eur_per_kwh(
+            leg,
+            when,
+            None,
+            meter=meter,  # type: ignore[arg-type]
+            region="wallonia",
+            dso_tariff_mode=mode,  # type: ignore[arg-type]
+        ) == pytest.approx(getattr(energy, field))
+
+
+@pytest.mark.parametrize(
+    ("today", "live", "provisional", "asked"),
+    [
+        # The quarter is still running: nothing to ask yet.
+        (date(2026, 9, 30), "bolt_online_oct_reissue.pdf", True, False),
+        # The October edition printing the second quarter's table.
+        (date(2026, 10, 1), "bolt_online_oct.pdf", True, True),
+        # Past the fourth quarter the live card prints its table, and the
+        # card archive's row settled while October's was served holds August.
+        (date(2027, 1, 4), "bolt_online_oct_reissue.pdf", False, False),
+    ],
+)
+async def test_a_quarter_s_month_settles_only_on_the_quarter_after(
+    today: date, live: str, provisional: bool, asked: bool
+) -> None:
+    held, settled, fetched = await _settle_august(today, live)
+    assert settled == replace(held, provisional=provisional)
+    assert fetched.await_count == asked
+
+
+async def test_the_month_cache_bills_a_closed_quarter_on_its_settled_indices(
+    hass: Any, freezer: Any
+) -> None:
+    """The card archive holds August 2026 as the walk caught it, at the second
+    quarter's index. Asked for it in October, the month cache settles it on
+    the live card's third quarter table and keeps the settled row, so a keyless
+    entry no longer bills a closed quarter on the one before it."""
+    from unittest.mock import MagicMock
+
+    from custom_components.be_electricity_prices import snapshot_months
+    from custom_components.be_electricity_prices.snapshot_months import (
+        ArchivedCard,
+        _snapshot_for_month,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
+    )
+
+    freezer.move_to("2026-10-15 10:00:00+02:00")
+    caught = parse_snapshot(
+        "bolt_variable",
+        fixture_text("bolt_variable_impact_w.pdf", layout=True),
+        "wallonia",
+    )
+    october = parse_snapshot(
+        "bolt_variable",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "wallonia",
+    )
+    github = AsyncMock(
+        return_value=ArchivedCard(
+            snapshot=caught, read_by_ocr=False, captured_live=True
+        )
+    )
+    fetched = AsyncMock(
+        return_value=("url", fixture_text("bolt_online_oct_reissue.pdf", layout=True))
+    )
+    _monthly_snapshots(hass).clear()
+
+    async def august() -> SupplierSnapshot:
+        return await _snapshot_for_month(
+            hass,
+            MagicMock(),
+            EXTRACTORS["bolt"],
+            "bolt_variable",
+            "wallonia",
+            date(2026, 8, 1),
+            october,
+        )
+
+    with (
+        patch.object(snapshot_months, "_archived_card_from_github", github),
+        patch.object(bolt_mod, "_fetch_pdf_text", fetched),
+    ):
+        first = await august()
+        again = await august()
+    energy = first.energy
+    assert isinstance(energy, VariableRates)
+    assert not first.provisional
+    assert energy.index_realised == pytest.approx(0.13936)
+    assert isinstance(october.energy, VariableRates)
+    assert energy.current == pytest.approx(october.energy.current, abs=5e-5)
+    assert again is first and fetched.await_count == 1
 
 
 def test_a_card_whose_index_table_is_another_quarter_is_refused() -> None:

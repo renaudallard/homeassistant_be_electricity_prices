@@ -537,18 +537,19 @@ class SupplierExtractor:
     # that follows it, and flags it provisional until that card is out
     # (Aspiravi, Cociter, Eneco, EBEM, Trevion, Mega and Engie), or on the
     # month's own card where the live capture is not settled (Ecopower).
-    # Luminus and TotalEnergies set it too, beside ``settle_month``, which
-    # settles the month in place instead. Only for such a supplier is a closed
-    # month the card archive caught while it ran worth asking it about again:
-    # every other one answers with the same card.
+    # Luminus, TotalEnergies and Bolt set it too, beside ``settle_month``,
+    # which settles the month in place instead. Only for such a supplier is
+    # a closed month the card archive caught while it ran worth asking it
+    # about again: every other one answers with the same card.
     settles_on_next_card: bool = False
-    # Set where a month is settled IN PLACE instead (Luminus, TotalEnergies):
-    # the card held for it, live capture or archive answer, keeps every field
-    # and only its month-indexed rates move to the index the next card names,
-    # or at TotalEnergies the one the next card's rates solve to.
+    # Set where a month is settled IN PLACE instead (Luminus, TotalEnergies,
+    # Bolt): the card held for it, live capture or archive answer, keeps
+    # every field and only its month-indexed rates move to the index the next
+    # card names, or at TotalEnergies the one the next card's rates solve to.
     # Luminus's archive serves a month without its campaign and kept serving
     # a first edition after the live card was corrected, so its answer must
-    # never replace a captured card. TotalEnergies keeps no archive at all.
+    # never replace a captured card. TotalEnergies keeps no archive at all,
+    # nor does Bolt's variable folder, whose months settle a quarter at a time.
     settle_month: MonthSettler | None = None
     # Set when the supplier has announced it is leaving the residential
     # market: the date its contracts stop being supplied, and the registry
