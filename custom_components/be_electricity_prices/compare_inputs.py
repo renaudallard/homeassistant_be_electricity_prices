@@ -673,8 +673,11 @@ class _HouseholdQuote:
         the export shape, for the per-register clamp a compensation quote
         settles on (:func:`compare_quote._annual_bill`). ``None`` off that
         regime, on a single register, or without a card, where the clamp
-        does not read them."""
-        if self.regime != SOLAR_REGIME_COMPENSATION or snapshot is None:
+        does not read them. Either regime counts, the what-if or the stored
+        one, since the what-if note prices the entry as configured too."""
+        if SOLAR_REGIME_COMPENSATION not in (self.regime, self.stored_regime):
+            return None
+        if snapshot is None:
             return None
         from .compare_weighting import _register_names, _register_rates
 

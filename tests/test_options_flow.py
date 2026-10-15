@@ -3104,6 +3104,94 @@ async def test_compare_solar_whatif_to_none_keeps_the_baseline_netted(
     assert float(whatif["current_annual"]) == pytest.approx(5000.0 * per_kwh, abs=0.5)
 
 
+@pytest.mark.parametrize("regime", ["injection", "none"])
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_solar_whatif_baseline_nets_each_register(
+    hass: HomeAssistant, regime: str
+) -> None:
+    """On a bi-hourly meter a compensation entry nets each register at its own
+    rate, weighted by when the panels export. The what-if baseline was handed
+    no export rate off the compensation regime and netted the annual totals
+    instead, so the note's figure as configured was not the entry's own: 30
+    to 36 EUR a year apart on the Walloon fixed cards."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
+
+    entry, current_snap, other_snap = _prosumer_entry_and_snapshots(hass)
+    hass.config_entries.async_update_entry(entry, data={**entry.data, "meter": "bi"})
+    dsos = {
+        "ores": replace(
+            current_snap.dsos["ores"], distribution_peak=0.14, distribution_offpeak=0.06
+        )
+    }
+    current_snap = replace(
+        current_snap, energy=FixedRates(single=0.20, peak=0.24, offpeak=0.15), dsos=dsos
+    )
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+    # Midday export against an evening-heavy draw.
+    export_shape = {h: (1.0 if 11 <= h <= 15 else 0.0) for h in range(24)}
+    draw_shape = {h: (2.0 if 17 <= h <= 21 else 1.0) for h in range(24)}
+
+    async def _weights(*_a: Any, side: str = "consumption", **_k: Any) -> Any:
+        shape = export_shape if side == "injection" else draw_shape
+        total = sum(shape.values())
+        return {h: v / total for h, v in shape.items()}
+
+    async def _hourly(
+        _hass: HomeAssistant, _entry: Any, start: Any, end: Any, **kw: Any
+    ) -> Any:
+        if kw.get("side") != "injection":
+            return None
+        first = dt_util.as_utc(datetime.combine(start, datetime.min.time()))
+        return {
+            first + timedelta(hours=i): export_shape[
+                dt_util.as_local(first + timedelta(hours=i)).hour
+            ]
+            for i in range(((end - start).days + 1) * 24)
+        }
+
+    async def _fake_recorder_daily_kwh(
+        _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+    ) -> dict[Any, float]:
+        if entity_id == "sensor.cons":
+            return _spread(5000.0, start, end)
+        if entity_id == "sensor.inj":
+            return _spread(4000.0, start, end)
+        return {}
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+            new=_fake_recorder_daily_kwh,
+        ),
+        patch.object(compare_household, "_measured_hour_weights", _weights),
+        patch.object(compare_household, "_measured_hourly", _hourly),
+    ):
+        as_configured = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+            meter="bi",
+        )
+        whatif = await _drive_compare(
+            hass,
+            entry,
+            other_snap=other_snap,
+            other_supplier="mega",
+            other_contract="mega_online_fixed",
+            meter="bi",
+            regime=regime,
+        )
+
+    assert (
+        f"{as_configured['current_annual']} EUR/year as configured"
+        in whatif["solar_note"]
+    )
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_solar_typed_volumes_explain_themselves_without_a_flip(
     hass: HomeAssistant,

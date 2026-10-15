@@ -702,14 +702,17 @@ class _HouseholdMixin:
             Only a compensation meter needs it: it nets against the rate in
             force at the time, so the exported side has to be priced on its
             own shape rather than on the consumption one. Every other regime
-            never reads it, so it is not worth the second pass.
+            never reads it, so it is not worth the second pass. Asked when
+            either the what-if or the stored regime nets: the note's figure
+            as configured prices a compensation entry on its own regime, and
+            without this rate it netted the annual totals instead.
 
             ``mode`` is the side's own DSO tariff mode, since a Tarif Impact
             target is billed on a configuration the household need not be on.
             """
-            if regime != SOLAR_REGIME_COMPENSATION or snapshot is None:
+            if SOLAR_REGIME_COMPENSATION not in (regime, stored_regime):
                 return None
-            if inj_hour_weights is None:
+            if snapshot is None or inj_hour_weights is None:
                 return None
             return _tou_weighted_per_kwh(
                 snapshot,
