@@ -719,7 +719,22 @@ Internals worth knowing:
   is read, its text being read off its glyphs alone (a page of a Bolt card
   held 123 000 segments), pdfplumber lets go of each page once read rather
   than with the document, and its `dedupe_chars` finds each glyph it keeps
-  at once rather than by looking it up in the page's list. A refusal ends
+  at once rather than by looking it up in the page's list. What a reader
+  parses is held too, counted as it parses, since what the bytes draw costs
+  even when it builds nothing: 78 kB inflating to 32 MB of numbers no
+  operator takes held pypdf 238 s and 1,2 GB, and 3 MB of paths pdfminer
+  does not paint took 45 s. A reader parses at most `_MAX_PARSED`
+  (2 000 000) objects of a card: under pdfminer each token of the
+  file, of a content stream for each page drawing it and of a form for each
+  draw, and of a font's maps and programs, and each entry of the resources
+  it walks for a page or a form drawn; under pypdf each operand and operator
+  of a content stream each time it is interpreted, and each element of an
+  array or dictionary. The most a card reaches is 935 707 under pdfminer
+  and 912 313 under pypdf, both on a Bolt card of 2,8 MB, and this is
+  about twice that, as the decode bound is, since what it lets through is
+  CPU: a token of a Bolt card costs pdfminer about 50 us on a Raspberry
+  Pi, more than any made up to cost more, so the most it lets through
+  takes about 100 s. A refusal ends
   the read where it is made, raised as an error no reader catches: pypdf
   catches any error a form raises and goes on to its next draw, logging
   each, 99 984 lines for one file. pypdf reaching one of its own limits is

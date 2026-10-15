@@ -1733,6 +1733,60 @@ def test_what_pdfminer_holds_at_once_is_held(
             extract(_pdf_of(content, attrs=b""))
 
 
+def _drawn_pdf(content: bytes, form: bytes, *, fonts: int = 1) -> bytes:
+    """A page of ``content`` that may draw the form ``X0`` of ``form``,
+    which names no resources of its own, both naming ``fonts`` fonts."""
+    named = b"/Font<<%s>>" % b"".join(b"/F%d 3 0 R" % n for n in range(fonts))
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[6 0 R]/Count 1>>",
+            b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+            b"<</Type/XObject/Subtype/Form/BBox[0 0 612 792]/Resources<<%s>>"
+            b"/Length %d>>\nstream\n%s\nendstream" % (named, len(form), form),
+            b"<</Length %d>>\nstream\n%s\nendstream" % (len(content), content),
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 5 0 R"
+            b"/Resources<<%s/XObject<</X0 4 0 R>>>>>>" % named,
+        )
+    )
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_what_a_reader_parses_is_held(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """What the bytes draw cost even when it builds nothing: 78 kB of
+    numbers no operator takes held pypdf 238 s and 1,2 GB, and 3 MB of
+    saved and restored states took pdfminer 56 s. Each operand and
+    operator counts as the reader parses it, a form's each time it is
+    drawn."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_PARSED", 5000)
+    refused = r"^PDF has a reader parse more than 5000 objects"
+    for content, form in (
+        (b"q Q " * 3000, b""),
+        (b"/X0 Do " * 30, b"q Q " * 100),
+    ):
+        with pytest.raises(ExtractorError, match=refused):
+            extract(_drawn_pdf(content, form))
+    for content, form in ((b"q Q " * 1000, b""), (b"/X0 Do " * 10, b"q Q " * 100)):
+        with pytest.raises(CardNotReadableError, match="no text layer"):
+            extract(_drawn_pdf(content, form))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_the_resources_pdfminer_walks_for_each_draw_count(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer walks a form's resources each time the form is drawn,
+    looking up each font: a few bytes drawing a form again walk them all
+    again."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_PARSED", 5000)
+    with pytest.raises(ExtractorError, match=r"^PDF has a reader parse more than"):
+        extract(_drawn_pdf(b"/X0 Do " * 20, b"", fonts=300))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_drawn_pdf(b"/X0 Do " * 3, b"", fonts=300))
+
+
 @pytest.mark.parametrize("extract", _EVERY_READER)
 def test_a_card_is_held_to_a_page_count(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]

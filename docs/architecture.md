@@ -145,7 +145,7 @@ relative to that package directory.
 | `providers/_settle.py` | Settling a month-indexed card's month on the index the next card names: every rate with a formula behind it rebuilt at that value, energy (`settled_energy`) and feed-in (`settled_injection`). Used by every provider that settles a closed month on a published index. |
 | `providers/__init__.py` | The supplier registry: imports each module's `EXTRACTOR`, exposes the `EXTRACTORS` dict, and the `get()` / `all_extractors()` lookups. |
 | `providers/_pdf.py` | Fetching a card and getting text out of it: the HTTP layer, transient-error classification via `is_transient_fetch_error`, plain and column-aligned extraction, and the per-tick memo. |
-| `providers/_pdf_bound.py` | What a card's streams may decode to, and how many pages it has and what pdfminer lays out and holds of them, held to while pypdf (`bounded_pypdf`), or pdfminer under pdfplumber (`bounded_pdfminer`), reads it: the decode bound, counted on each reader as it reads. |
+| `providers/_pdf_bound.py` | What a card's streams may decode to, how many pages it has, what the readers parse of it and what pdfminer lays out and holds of it, held to while pypdf (`bounded_pypdf`), or pdfminer under pdfplumber (`bounded_pdfminer`), reads it: the decode bound, counted on each reader as it reads. |
 | `providers/_parse.py` | Reading a figure off a line of that text: the number formats Belgian cards print in, the sign words, the DSO table columns and the regional tax overlay. |
 | `providers/_validity.py` | Which month a card is for and until when it is good: the validity sentences, the month-name headings and the archive's date check. |
 

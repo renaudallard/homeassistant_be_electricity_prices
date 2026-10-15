@@ -23,8 +23,9 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""What a card's PDF streams may decode to, and what pdfminer may lay out of
-them, held to while pypdf, or pdfminer under pdfplumber, reads it."""
+"""What a card's PDF streams may decode to, what a reader may parse of
+them and what pdfminer may lay out of them, held to while pypdf, or
+pdfminer under pdfplumber, reads it."""
 
 from __future__ import annotations
 
@@ -42,6 +43,7 @@ from pypdf import filters as pypdf_filters
 from pypdf._font import Font
 from pypdf.errors import LimitReachedError
 from pypdf.generic import DecodedStreamObject, EncodedStreamObject, StreamObject
+from pypdf.generic import _data_structures as pypdf_structures
 
 from .base import ExtractorError
 
@@ -112,6 +114,22 @@ _MAX_STACK = 5_000
 _MAX_NESTING = 20
 _MAX_PATH_SEGMENTS = 450_000
 
+# The most a reader may parse of a card, counted as it parses, each time it
+# does: under pdfminer every token of the file, of its content streams for
+# each page drawing them and of a form each time it is drawn, of a font's
+# maps and programs, and each entry of a page's or form's resources it
+# walks for each draw; under pypdf every operand and operator of a content
+# stream each time it is interpreted, and every element of an array or
+# dictionary. What the bytes draw cost even when it built nothing: 78 kB
+# inflating to 32 MB of numbers no operator took held pypdf 238 s and 1,2
+# GB, and 3 MB of paths pdfminer does not paint took 45 s. Measured as
+# above: at most 935 707 under pdfminer and 912 313 under pypdf, both on a
+# Bolt card of 2,8 MB. This is about twice that, as the decode bound is,
+# since what it lets through is CPU: a token of a Bolt card costs pdfminer
+# about 50 us on a Raspberry Pi, more than any made up to cost more, so 2
+# million take about 100 s.
+_MAX_PARSED = 2_000_000
+
 
 def _over_the_bound() -> str:
     return (
@@ -181,6 +199,7 @@ class _Reading:
     refusal: ExtractorError | None = None
     pages: int = 0
     built: int = 0
+    parsed: int = 0
     inflated: list[int] = field(default_factory=list)
     streams: list[EncodedStreamObject] = field(default_factory=list)
     fonts: dict[int, tuple[Any, Font]] = field(default_factory=dict)
@@ -210,6 +229,15 @@ class _Reading:
             raise self.refuse(
                 f"PDF lays out more than {_MAX_PAGE_OBJECTS} objects on a "
                 f"page or {_MAX_CARD_OBJECTS} in all; refusing to read it"
+            )
+
+    def parse(self, count: int = 1) -> None:
+        """Count ``count`` objects parsed, or resources walked."""
+        self.parsed += count
+        if self.parsed > _MAX_PARSED:
+            raise self.refuse(
+                f"PDF has a reader parse more than {_MAX_PARSED} objects; "
+                "refusing to read it"
             )
 
     def hold(self, count: int, most: int) -> None:
@@ -312,12 +340,26 @@ def _ascii85_held(decode: Any) -> Any:
     return held
 
 
+def _parsed(parse: Any) -> Any:
+    """``parse``, counted while a card is read as one object parsed."""
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        reading = _READING.get()
+        if reading is not None:
+            reading.parse()
+        return parse(*args, **kwargs)
+
+    return counted
+
+
 def _hold_pypdf_to_the_bound() -> None:
     """Have pypdf held to the bound while a card is read, and left as it is
     otherwise. Every stream it reads goes through ``get_data``, every one it
     inflates through ``pypdf.filters.decompress``, every font it loads
-    through ``Font.from_font_resource``, and every page it lists through
-    ``PageObject``. Done once whatever the copy of this module."""
+    through ``Font.from_font_resource``, every page it lists through
+    ``PageObject``, and every operand, operator, and element of an array or
+    dictionary it parses through its ``generic`` module's ``read_object``
+    and ``read_until_regex``. Done once whatever the copy of this module."""
     if hasattr(EncodedStreamObject.get_data, _MARK):
         return
     decompress = pypdf_filters.decompress
@@ -409,6 +451,9 @@ def _hold_pypdf_to_the_bound() -> None:
     pypdf_filters.ASCII85Decode.decode = staticmethod(  # type: ignore[method-assign]
         _ascii85_held(pypdf_filters.ASCII85Decode.decode)
     )
+    structures = vars(pypdf_structures)
+    for name in ("read_object", "read_until_regex"):
+        structures[name] = _parsed(structures[name])
     pypdf_filters.decompress = inflate
     setattr(read_encoded, _MARK, (_READING, _HOLDING))
     EncodedStreamObject.get_data = read_encoded  # type: ignore[method-assign]
@@ -472,13 +517,16 @@ def _hold_pdfminer_to_the_bound() -> None:
     is otherwise. Every stream it reads goes through ``PDFStream.get_data``,
     every stream it inflates through its module's ``zlib``, every page it
     lists through ``PDFPage.create_pages``, everything it lays out through
-    the device pdfplumber gives it, and what it holds through its
-    interpreter's and content parser's ``push``. Done once whatever the copy
+    the device pdfplumber gives it, what it holds through its interpreter's
+    and content parser's ``push``, every token it parses through
+    ``PSBaseParser.nexttoken``, and the resources it walks for a page or a
+    form drawn through ``init_resources``. Done once whatever the copy
     of this module."""
     from pdfminer import pdftypes
     from pdfminer.arcfour import Arcfour
     from pdfminer.pdfinterp import PDFContentParser, PDFPageInterpreter
     from pdfminer.pdfpage import PDFPage
+    from pdfminer.psparser import PSBaseParser
     from pdfplumber import utils
     from pdfplumber.page import PDFPageAggregatorWithMarkedContent as Device
 
@@ -580,6 +628,20 @@ def _hold_pdfminer_to_the_bound() -> None:
             start(self, pos, type)
             _held(len(self.context), _MAX_NESTING)
 
+        init_resources = PDFPageInterpreter.init_resources
+
+        def walked(self: PDFPageInterpreter, resources: dict[object, object]) -> None:
+            # Walked again for each form drawn, each entry a font looked up
+            # or a colour space made.
+            reading = _READING.get()
+            listed = pdftypes.resolve1(resources)
+            if reading is not None and isinstance(listed, dict):
+                for kind in listed.values():
+                    entries = pdftypes.resolve1(kind)
+                    if isinstance(entries, (dict, list)):
+                        reading.parse(len(entries))
+            init_resources(self, resources)
+
         create_pages = PDFPage.create_pages
 
         def paged(document: Any) -> Iterator[PDFPage]:
@@ -606,6 +668,8 @@ def _hold_pdfminer_to_the_bound() -> None:
         PDFContentParser.push = parsed  # type: ignore[method-assign]
         PDFContentParser.start_type = nested  # type: ignore[method-assign]
         PDFPage.create_pages = staticmethod(paged)  # type: ignore[method-assign]
+        PDFPageInterpreter.init_resources = walked  # type: ignore[method-assign]
+        PSBaseParser.nexttoken = _parsed(PSBaseParser.nexttoken)  # type: ignore[method-assign]
         names["zlib"] = _BoundedZlib()
 
 
@@ -661,9 +725,11 @@ def bounded_pypdf() -> Iterator[None]:
     :data:`_FONT_LOAD_BYTES`, pypdf loading the same dictionary to the same
     font once a read. LZW, run length, CCITT fax and JBIG2 are refused,
     since pypdf never decodes an image to read text, and ASCII85 past
-    :data:`_MAX_ASCII85_BYTES`. A refusal ends the read where it is made:
-    pypdf catches any Exception a form raises and goes on to its next draw,
-    and a refusal is not one.
+    :data:`_MAX_ASCII85_BYTES`. pypdf parses no more than
+    :data:`_MAX_PARSED` operands, operators and elements of arrays and
+    dictionaries, a content stream's each time it is interpreted. A refusal
+    ends the read where it is made: pypdf catches any Exception a form
+    raises and goes on to its next draw, and a refusal is not one.
     """
     with _held_to_the_bound():
         yield
@@ -699,7 +765,9 @@ def bounded_pdfminer() -> Iterator[None]:
     card; no path is painted, a card's text being read off its glyphs alone;
     and no stack holds more than :data:`_MAX_STACK` at once, arrays and
     dictionaries nest no deeper than :data:`_MAX_NESTING`, and a path not
-    yet painted has no more than :data:`_MAX_PATH_SEGMENTS` segments.
+    yet painted has no more than :data:`_MAX_PATH_SEGMENTS` segments. It
+    parses no more than :data:`_MAX_PARSED` tokens and resources walked, a
+    content stream's for each page drawing it and a form's for each draw.
     pdfplumber's ``dedupe_chars`` finds each glyph it keeps at once, where it
     looked each one up in the page's list.
     """
