@@ -10121,6 +10121,68 @@ async def test_a_month_before_the_signing_month_bills_its_own_card(
     assert await billed(date(2026, 3, 1), signing) is march
 
 
+@pytest.mark.parametrize(
+    ("start", "card", "first"),
+    [
+        # A switcher signs on the card of the month before supply begins:
+        # July was billed on June's locked rate for a contract supplied from
+        # August.
+        ("2026-08-01", "2026-06-15", date(2026, 8, 1)),
+        # A renewal re-signs a supply that began years ago onto a later card:
+        # January to July were on the terms it renewed, not on August's card.
+        ("2020-03-01", "2026-08-10", date(2026, 8, 1)),
+    ],
+)
+async def test_a_month_before_the_cohort_bills_its_own_card(
+    hass: HomeAssistant, freezer: Any, start: str, card: str, first: date
+) -> None:
+    """The signed formula bills from the later of the tariff card month and
+    the start date's month, and every month before it on its own card."""
+    from custom_components.be_electricity_prices.cohort import (
+        _effective_snapshot_for_month,
+    )
+
+    freezer.move_to("2026-10-15 12:00:00+02:00")
+    signed = make_snapshot(energy=FixedRates(single=0.30))
+    cards = {
+        date(2026, m, 1): make_snapshot(energy=FixedRates(single=0.10 + m / 100))
+        for m in range(1, 11)
+    }
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return signed
+
+    async def _for_month(*_a: object, **_k: object) -> SupplierSnapshot:
+        return cards[cast(date, _a[5])]
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date=start, tariff_card_date=card)
+
+    async def billed(month: date) -> SupplierSnapshot:
+        with patch(
+            "custom_components.be_electricity_prices.cohort._snapshot_for_month",
+            _for_month,
+        ):
+            return await _effective_snapshot_for_month(
+                hass,
+                MagicMock(),
+                _fixed_extractor(_ffm),
+                "test",
+                "wallonia",
+                month,
+                cards[date(2026, 10, 1)],
+                entry,
+            )
+
+    for month in sorted(cards)[:-1]:
+        snap = await billed(month)
+        if month < first:
+            assert snap is cards[month], month
+        else:
+            assert isinstance(snap.energy, FixedRates)
+            assert snap.energy.single == pytest.approx(0.30), month
+
+
 async def test_a_keyless_cohort_credits_each_past_month_its_own_printed_figure(
     hass: HomeAssistant, freezer: Any
 ) -> None:

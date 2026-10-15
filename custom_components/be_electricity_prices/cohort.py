@@ -134,6 +134,20 @@ def _tariff_card_month(entry: ConfigEntry) -> date | None:
     return date(d.year, d.month, 1)
 
 
+def _cohort_first_month(entry: ConfigEntry, card_month: date) -> date:
+    """First-of-month the signed formula bills from: the later of
+    ``card_month`` and the contract start date's month.
+
+    Neither alone will do. A switcher signs on the card of the month before
+    supply begins, so on June's card supplied from August, July was not on the
+    contract yet. A renewal re-signs a supply that began years ago onto this
+    month's card, so on August's card supplied since 2020, July was on the
+    terms it renewed, not a card published after it.
+    """
+    d = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
+    return card_month if d is None else max(card_month, date(d.year, d.month, 1))
+
+
 def ytd_window_start(entry: ConfigEntry, today: date) -> date:
     """First day ``current_year_cost`` accumulates from, for ``today``'s year.
 
@@ -258,9 +272,11 @@ async def _cohort_legs(
     month there is no lock, so the feed-in leg is ``None`` and the energy leg
     is the delivery month's card re-priced on its monthly mean when that card
     is month indexed and the entry has a key (:func:`_month_indexed_leg`),
-    ``None`` otherwise. A month before the cohort month (``year_month``, the
-    month ``month_snapshot`` is the card of) is billed the same way: the
-    contract was not signed yet, so nothing on the signing card applies.
+    ``None`` otherwise. A month before the later of the card month and the
+    contract start date's (``year_month``, the month ``month_snapshot`` is the
+    card of) is billed the same way: the contract was not signed or not
+    supplying yet, so nothing on the signing card applies
+    (:func:`_cohort_first_month`).
 
     Resolution order is a hand-entered signing rate, then the archive, then
     the card of the month being billed (``month_snapshot``, the current card
@@ -303,18 +319,20 @@ async def _cohort_legs(
         # supplier no longer applies, and dropped the day and night pairs.
         return _CohortLegs(None, None)
     start = _tariff_card_month(entry)
-    if start is None or (year_month is not None and year_month < start):
+    if start is None or (
+        year_month is not None and year_month < _cohort_first_month(entry, start)
+    ):
         # No signing month named, so there is no cohort lock and every month is
         # billed on its own card. ``month_snapshot`` is the card that was in
         # force for the delivery month; the live path leaves it unset, where
         # the current card IS that card.
         #
-        # A month before the signing month is in the same position: the year
-        # to date counts it from 1 January unless the entry bills from its
-        # start date, and whatever the household was on then, it was not this
-        # cohort's formula. Billing it on the signing card put an Engie Direct
-        # Online contract signed in August 13 EUR under its own cards over
-        # January to July at 3500 kWh a year, keyed or not.
+        # A month before the signing month or the start date's is in the same
+        # position: the year to date counts it from 1 January unless the entry
+        # bills from its start date, and whatever the household was on then,
+        # it was not this cohort's formula. Billing it on the signing card put
+        # an Engie Direct Online contract signed in August 13 EUR under its
+        # own cards over January to July at 3500 kWh a year, keyed or not.
         #
         # Taking the leg from the current card regardless billed a past month
         # on today's coefficients. They move every month on these products:

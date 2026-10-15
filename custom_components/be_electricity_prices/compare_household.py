@@ -632,7 +632,7 @@ class _HouseholdMixin:
         # mean, since the splice can put a month-priced leg on a card whose
         # feed-in varies per hour. The own row's year to date walks it as the
         # current_year_cost sensor does: that walk resolves the cohort per
-        # month itself, and a month before the signing month bills on its own
+        # month itself, and a month before the cohort's first bills on its own
         # card, or on this one where no archive holds it, never on a leg
         # spliced on here.
         raw_snapshot = coord._snapshot

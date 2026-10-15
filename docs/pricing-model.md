@@ -516,15 +516,19 @@ and none on the live tick: a spot-monthly signing card carries its own month's,
 which the day and night sensors fell back on while the running month had no
 mean yet.
 
-A month before the signing month, which the year to date counts from 1 January
-unless the entry bills from its start date, is on no signed formula at all.
-`_effective_snapshot_for_month` hands `_cohort_legs` the month it bills, and a
-month before the cohort month gets what an entry with no start date gets: its
-own card, re-priced on its own index with a key (`_month_indexed_leg`), feed-in
+A month before the later of the tariff card month and the contract start
+date's, which the year to date counts from 1 January unless the entry bills from
+its start date, is on no signed formula at all. `_effective_snapshot_for_month`
+hands `_cohort_legs` the month it bills, and such a month
+(`_cohort_first_month`) gets what an entry with no start date gets: its own
+card, re-priced on its own index with a key (`_month_indexed_leg`), feed-in
 included. Every contract kind alike, a fixed or dynamic cohort's earlier months
 too. Billing them on the signing card put an Engie Direct Online contract signed
 in August 2026 13 EUR under its own cards over January to July at 3500 kWh a
-year, key or not.
+year, key or not. Neither date alone will do: a switcher on June's card
+supplied from August was not on the contract in July, and a renewal onto
+August's card of a supply that began in 2020 was on the terms it renewed until
+then. An entry that names only one of the two starts there.
 
 ### Monthly-indexed feed-in credits
 
