@@ -28,18 +28,19 @@ from pathlib import Path
 from typing import Any
 
 # The two PDF text readers, pdfplumber standing for the pdfminer.six it pins,
-# and the code that drives them. Each PDF source of a row names what rendered
-# its text, and a stored text is served again only to the same versions and
-# code: a reader upgrade or a render fix reads every card afresh, in the
-# archive and in the live check alike.
+# and the code that drives them and holds them to the decode bound. Each PDF
+# source of a row names what rendered its text, and a stored text is served
+# again only to the same versions and code: a reader upgrade, a render fix or
+# a change to the bound reads every card afresh, in the archive and in the
+# live check alike.
 _READERS = ("pypdf", "pdfplumber")
-_RENDER_CODE = (
+_PROVIDERS = (
     Path(__file__).resolve().parent.parent
     / "custom_components"
     / "be_electricity_prices"
     / "providers"
-    / "_pdf.py"
 )
+_RENDER_CODE = (_PROVIDERS / "_pdf.py", _PROVIDERS / "_pdf_bound.py")
 # The engine that reads a card published as page images, and what it reads
 # with: pypdfium2 renders the pages, numpy matches the glyphs and pdfplumber
 # lays out the words, all installed beside it unpinned, so one of them moving
@@ -120,8 +121,10 @@ def readers_line() -> str:
     """The text readers' versions and a digest of the render code, as a PDF
     source records them."""
     versions = " ".join(f"{name}=={_version(name)}" for name in _READERS)
-    render = hashlib.sha256(_RENDER_CODE.read_bytes()).hexdigest()[:16]
-    return f"{versions} render={render}"
+    render = hashlib.sha256()
+    for code in _RENDER_CODE:
+        render.update(code.read_bytes())
+    return f"{versions} render={render.hexdigest()[:16]}"
 
 
 def engine_version() -> str:

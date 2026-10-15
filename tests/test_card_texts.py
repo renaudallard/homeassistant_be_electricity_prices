@@ -8,6 +8,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 # scripts/ is not a package, so it is added to sys.path above rather than
@@ -126,3 +128,19 @@ def test_helpers_keep_bytes_and_digests_intact(tmp_path: Path) -> None:
     assert read_text(path) == "a\r\nb"
     assert digest_of("cards-2026-09/abc.pdf") == "abc"
     assert digest_of("abc") == "abc"
+
+
+def test_the_render_stamp_moves_with_the_decode_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The decode bound moved out of providers/_pdf.py into _pdf_bound.py,
+    and a change to it kept serving the texts it would now refuse."""
+    before = readers_line()
+    read = Path.read_bytes
+
+    def edited(path: Path) -> bytes:
+        data = read(path)
+        return data + b"\n# edited" if path.name == "_pdf_bound.py" else data
+
+    monkeypatch.setattr(Path, "read_bytes", edited)
+    assert readers_line() != before

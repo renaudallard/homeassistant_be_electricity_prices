@@ -1066,7 +1066,8 @@ and every later month's row names that copy (`test_prune_keeps_a_pdf_a_kept_row_
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_codec.py`,
 plus the installed `pypdf` and `pdfplumber` versions with a digest of the render code in
-`providers/_pdf.py`, and the OCR engine's version, with the git commit it was installed from and
+`providers/_pdf.py` and the decode bound in `providers/_pdf_bound.py`, and the OCR engine's
+version, with the git commit it was installed from and
 beside the `pypdfium2`, `numpy` and `pdfplumber` it reads a card through, since a reader release lays a card out
 differently and a stored text is served to every replay and to the live check for as long as the
 card's bytes stand; `_parser_digest`, `scripts/archive_cards.py`) with the one stamped in the
