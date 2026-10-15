@@ -257,7 +257,9 @@ def _add_manual_num(
     *,
     negative: bool = False,
 ) -> None:
-    """Append an optional manual signing-rate field, pre-filled on reconfigure.
+    """Append an optional manual signing-rate field, pre-filled in Edit settings
+    while the entry keeps its contract (``_after_settlement`` drops the rate
+    otherwise).
 
     The stored value is a *suggestion*, not a default, so blanking the box omits
     the key and the step handler can pop it (how the override is cleared). A

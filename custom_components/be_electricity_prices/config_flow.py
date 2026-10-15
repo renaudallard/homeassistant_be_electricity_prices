@@ -102,6 +102,7 @@ from .const import (
     METER_EXCLUSIVE_NIGHT,
 )
 from .flow_switch import (
+    _another_contract,
     _record_switch,
     _removable_switch,
     _remove_last_switch,
@@ -159,10 +160,7 @@ def _card_figures(entry: ConfigEntry, data: Mapping[str, Any]) -> dict[str, str]
     figures = dict.fromkeys((*_CARD_FIGURES, "card_fee", "card_month"), "-")
     coord = getattr(entry, "runtime_data", None)
     snapshot = coord._snapshot if isinstance(coord, BePricesCoordinator) else None
-    if snapshot is None or any(
-        data.get(key) != entry.data.get(key)
-        for key in (CONF_SUPPLIER, CONF_CONTRACT, CONF_REGION)
-    ):
+    if snapshot is None or _another_contract(entry.data, data):
         return figures
     energy = snapshot.energy
     for key, (field, unit) in _CARD_FIGURES.items():
@@ -342,6 +340,9 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
 
     def _seed_data(self) -> dict[str, Any]:
         return {**self.config_entry.data, **self.config_entry.options}
+
+    def _stored_data(self) -> Mapping[str, Any] | None:
+        return self.config_entry.data
 
     async def async_step_edit(
         self, user_input: dict[str, Any] | None = None

@@ -491,7 +491,9 @@ exclude it on a professional contract and on Ecopower's cards; the yearly fee
 includes VAT. When you edit an existing entry, each box also shows what the
 current card gives it, so you can see whether your contract says anything
 different, as long as the edit keeps the same supplier, contract and region
-(recording a supplier switch never does).
+(recording a supplier switch never does). An edit that changes any of the
+three starts the boxes empty: a rate typed for the contract being left is
+dropped rather than billed on the new card.
 
 1. **Supplier + Region** — Flanders / Wallonia / Brussels. Suppliers that
    have announced their exit from the residential market are dropped from

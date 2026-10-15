@@ -46,6 +46,7 @@ from homeassistant.helpers.selector import (
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_CONTRACT,
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
     CONF_MANUAL_ENERGY_BASE,
@@ -56,6 +57,8 @@ from .const import (
     CONF_MANUAL_ENERGY_SINGLE,
     CONF_MANUAL_YEARLY_FEE,
     CONF_PREVIOUS_CONTRACTS,
+    CONF_REGION,
+    CONF_SUPPLIER,
     CONF_SWITCH_DATE,
     CONF_TARIFF_CARD_DATE,
     CONF_YTD_FROM_CONTRACT_START,
@@ -145,6 +148,16 @@ _MANUAL_RATE_KEYS: tuple[str, ...] = (
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_YEARLY_FEE,
 )
+
+
+def _another_contract(stored: Mapping[str, Any], data: Mapping[str, Any]) -> bool:
+    """Whether ``data`` has moved off the stored entry's supplier, contract or
+    region, so the stored contract's card and typed signing rate no longer
+    describe the one being set up."""
+    return any(
+        data.get(key) != stored.get(key)
+        for key in (CONF_SUPPLIER, CONF_CONTRACT, CONF_REGION)
+    )
 
 
 def _switch_schema(today: date) -> vol.Schema:

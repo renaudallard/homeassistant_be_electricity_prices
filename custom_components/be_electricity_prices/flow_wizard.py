@@ -34,6 +34,7 @@ is saved.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
@@ -115,6 +116,7 @@ from .flow_schemas_meters import (
 )
 from .flow_switch import (
     _MANUAL_RATE_KEYS,
+    _another_contract,
     _validate_contract_dates,
 )
 from .providers import (
@@ -158,6 +160,11 @@ class _WizardStepsMixin:
         """What ``_data`` starts as. Install starts empty; the OptionsFlow
         starts from the stored entry."""
         return {}
+
+    def _stored_data(self) -> Mapping[str, Any] | None:
+        """The entry's settings as stored before this flow, ``None`` while
+        installing, where there is no entry yet."""
+        return None
 
     async def _async_entry_step(
         self, user_input: dict[str, Any] | None = None
@@ -252,14 +259,19 @@ class _WizardStepsMixin:
         )
 
     async def _after_settlement(self) -> ConfigFlowResult:
-        if self._needs_manual_rate():
+        ask = self._needs_manual_rate()
+        stored = self._stored_data()
+        # A rate typed for the entry's previous contract has to go. Not asked,
+        # the way _after_contract drops a settlement answer: left behind, it
+        # billed a variable card re-priced on its signing month at the old
+        # contract's coefficients. Asked on another supplier, contract or
+        # region, it was pre-filled as this contract's own and, submitted as
+        # shown, billed the old rate and fee on the new card.
+        if not ask or (stored is not None and _another_contract(stored, self._data)):
+            for key in _MANUAL_RATE_KEYS:
+                self._data.pop(key, None)
+        if ask:
             return await self.async_step_signed_rate()
-        # The step was not asked, so a rate typed for the entry's previous
-        # contract has to go, the way _after_contract drops a settlement
-        # answer: left behind, it billed a variable card re-priced on its
-        # signing month at the old contract's coefficients.
-        for key in _MANUAL_RATE_KEYS:
-            self._data.pop(key, None)
         return await self.async_step_dso()
 
     def _quarter_hourly(self) -> bool:

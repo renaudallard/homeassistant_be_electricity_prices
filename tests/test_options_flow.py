@@ -5296,6 +5296,48 @@ async def test_signing_rate_step_without_a_loaded_entry_shows_dashes(
     assert set(placeholders.values()) == {"-"}
 
 
+@pytest.mark.parametrize(
+    ("supplier", "contract", "kept"),
+    [
+        ("eneco", "power_fix", True),
+        ("engie", "engie_easy_fixed", False),
+    ],
+)
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_signing_rate_is_offered_only_for_the_contract_it_was_typed_for(
+    hass: HomeAssistant, supplier: str, contract: str, kept: bool
+) -> None:
+    """A rate typed for the stored contract is pre-filled while the edit keeps
+    that contract. Moved to another one, the boxes start empty: pre-filled,
+    the old rate and fee were billed on the new card when the step was
+    submitted as shown."""
+    entry = make_entry(
+        contract_start_date="2026-03-01",
+        manual_energy_single=0.1234,
+        manual_yearly_fee=50.0,
+    )
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": supplier, "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"contract": contract, "contract_start_date": "2026-03-01"},
+    )
+    assert result["step_id"] == "signed_rate"
+    schema = result["data_schema"]
+    assert schema is not None
+    suggested = {
+        str(marker): marker.description["suggested_value"]
+        for marker in schema.schema
+        if (marker.description or {}).get("suggested_value") is not None
+    }
+    expected = {"manual_energy_single": 0.1234, "manual_yearly_fee": 50.0}
+    assert suggested == (expected if kept else {})
+
+
 async def test_card_fee_is_shown_with_vat_for_a_deducting_business(
     hass: HomeAssistant,
 ) -> None:
