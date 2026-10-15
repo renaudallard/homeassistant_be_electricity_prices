@@ -80,6 +80,7 @@ from .providers._rates import InjectionRates
 from .providers.base import SupplierExtractor, SupplierSnapshot
 from .spot_stats import (
     _bucket_by_local_month,
+    _energy_is_quarter_hourly,
     _energy_needs_spot,
     _hour_spot,
     _injection_is_spp_indexed,
@@ -522,10 +523,14 @@ async def _ytd_hourly_energy(
                 inj_spot,
                 # Asked of the hour's own card, as the backfill asks it: a
                 # month whose credit settles on a month index is not priced by
-                # what one hour's quarters did, whatever walk it falls in.
+                # what one hour's quarters did, whatever walk it falls in, and
+                # neither is a card settled by the hour. The quarters are
+                # fetched for the entry's current card, and an earlier
+                # contract billed hourly floors its credit once an hour.
                 quarters=(
                     quarters.get(utc_hour)
-                    if hourly_injection or not _injection_on_month_mean(snap_h)
+                    if (hourly_injection or not _injection_on_month_mean(snap_h))
+                    and _energy_is_quarter_hourly(snap_h.energy)
                     else None
                 ),
                 energy=snap_h.energy,

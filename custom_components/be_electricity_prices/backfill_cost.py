@@ -88,6 +88,7 @@ from .providers._rates import InjectionRates
 from .providers.base import SupplierSnapshot
 from .spot_stats import (
     _bucket_by_local_month,
+    _energy_is_quarter_hourly,
     _energy_needs_spot,
     _hour_spot,
     _injection_is_spp_indexed,
@@ -139,8 +140,10 @@ def _injection_rate_for_hour(
     energy kind from the cohort leg, so the flag is per-hour, not per-run.
     That is also why the hour's own 15-minute slots are only handed on when
     this hour is priced off its own spot: a credit settling on a month mean is
-    not priced by what one hour's quarters did. ``quarters`` is empty except
-    on an entry whose feed-in formula is floored.
+    not priced by what one hour's quarters did. Nor by a card settled by the
+    hour: ``quarters`` is empty except on an entry whose current card floors
+    its feed-in per quarter-hour, and an earlier contract billed hourly floors
+    its credit once an hour.
 
     ``bucket`` is ``spots`` grouped by month, which each pass builds once.
     Handed the raw cache instead, _spp_injection_spot grouped the whole year
@@ -182,7 +185,11 @@ def _injection_rate_for_hour(
     return _historical_injection_rate(
         snap_h.injection,
         inj_spot,
-        quarters=(quarters.get(utc_hour) if hourly or not monthly_mean else None),
+        quarters=(
+            quarters.get(utc_hour)
+            if (hourly or not monthly_mean) and _energy_is_quarter_hourly(snap_h.energy)
+            else None
+        ),
         energy=snap_h.energy,
         when=local,
         meter=meter,

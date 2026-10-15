@@ -1698,6 +1698,71 @@ async def test_a_month_indexed_credit_ignores_the_hours_quarters(
     assert live == pytest.approx(backfill, abs=1e-3)
 
 
+async def test_a_card_settled_by_the_hour_floors_its_credit_by_the_hour(
+    hass: HomeAssistant,
+) -> None:
+    """The quarters are fetched for today's card, which floors its feed-in per
+    quarter-hour. January and February were held on a card that settles the
+    same floored formula by the hour, so those months are credited on the
+    hour's spot, as that card bills them. Both walks floored them per quarter
+    whenever the cache held the quarters."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+    )
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    last = date(2026, 3, 31)
+    snap = make_snapshot(
+        energy=DynamicRates(factor=1.0, base=0.02, quarter_hourly=True),
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+        injection=InjectionRates(factor=1.0, base=-0.01, floor_at_zero=True),
+    )
+    hourly = replace(snap, energy=DynamicRates(factor=1.0, base=0.02))
+    hours = bf._hour_iter(
+        dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC),
+        dt_util.start_of_local_day(last + timedelta(days=1)).astimezone(UTC),
+    )
+    # Around the formula's floor while the panels export, so the quarters of
+    # an hour fall on both sides of it.
+    spots = {
+        h: 0.012 if 10 <= dt_util.as_local(h).hour <= 15 else _sine_spot(h)
+        for h in hours
+    }
+    quarters = {h: [v - 0.05, v - 0.015, v + 0.015, v + 0.05] for h, v in spots.items()}
+    march = dt_util.start_of_local_day(date(2026, 3, 1)).astimezone(UTC)
+
+    async def run(kept: dict[datetime, list[float]]) -> tuple[float, float]:
+        return await _live_and_backfill(
+            hass,
+            make_entry(
+                meter="dynamic",
+                solar_regime="injection",
+                consumption_kwh="sensor.cons",
+                injection_kwh="sensor.inj",
+            ),
+            snap,
+            last,
+            _evening_draw_midday_export,
+            cards=lambda month: hourly if month < date(2026, 3, 1) else None,
+            spots=spots,
+            quarters=kept,
+        )
+
+    backfill, live = await run(quarters)
+    # What the two cards bill: the hourly one's months have no quarters to
+    # read, March has its own.
+    want_backfill, want_live = await run(
+        {h: q for h, q in quarters.items() if h >= march}
+    )
+    assert backfill == pytest.approx(want_backfill, abs=1e-6)
+    assert live == pytest.approx(want_live, abs=1e-6)
+    # The quarters do move a floored credit, or this would prove nothing.
+    unfloored, _live = await run({})
+    assert unfloored != pytest.approx(want_backfill, abs=1e-2)
+
+
 def _winter_heavy_profile(year: int) -> dict[tuple[int, int, int], float]:
     """A load profile for ``year`` keyed like Synergrid's, heavier in winter
     and in the evening, summing to one."""
