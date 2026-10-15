@@ -510,7 +510,11 @@ October 2026 Electricité Variable edition in Flanders that printed its block as
 bases solves to 161,9 EUR/MWh. Once the live card has moved past the next one, the card
 archive's row, which the daily run settled while the next card was served, holds the
 month; there are no rows before September 2026, and those months keep the hourly
-estimate.
+estimate. A row no run settled while the next card was served (the range never
+agreed on a misprint that was never corrected, say) stays as it is for good: a
+keyless entry bills the index its own card printed, the month before's, and a keyed
+one the engine's hourly mean, and a warning in the log names the month
+(`settle_month`).
 
 The four carry the registry twin `month_indexed_energy` (`_MONTH_INDEXED_ENERGY`,
 `totalenergies.py`), without which the config flow never offers the optional

@@ -1575,6 +1575,48 @@ async def test_a_closed_month_settles_on_the_rates_the_next_card_prints(
     assert EXTRACTORS["totalenergies"].settle_month is totalenergies.settle_month
 
 
+async def test_a_month_left_unsettled_is_logged_when_nothing_can_settle_it(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    """September's index never agreed across the range while October's card
+    was served (a misprint never corrected). From November no card settles
+    it, and the archive's row comes back final at its estimate, which is
+    logged rather than kept silently."""
+    from datetime import date
+
+    from custom_components.be_electricity_prices.providers import totalenergies
+    from custom_components.be_electricity_prices.providers._settle import (
+        is_settled,
+    )
+    from custom_components.be_electricity_prices.snapshot_months import (
+        _settled_in_place,
+    )
+
+    held = parse_snapshot(
+        "totalenergies_mycomfort",
+        fixture_text("totalenergies_mycomfort_v.pdf", layout=True),
+        "flanders",
+    )
+
+    async def unread(*_a: Any) -> Any:
+        raise AssertionError("no card is read")
+
+    monkeypatch.setattr(totalenergies, "_fetch_card", unread)
+    freezer.move_to("2026-11-02 12:00:00+01:00")
+    out = await _settled_in_place(
+        None,  # type: ignore[arg-type]
+        totalenergies.settle_month,
+        "totalenergies_mycomfort",
+        "flanders",
+        date(2026, 9, 1),
+        held,
+    )
+    assert out == held and not out.provisional and not is_settled(out)
+    assert "totalenergies_mycomfort in flanders, 2026-09, was not settled" in (
+        caplog.text
+    )
+
+
 @pytest.mark.parametrize(
     ("feed_in_cards", "settles"),
     [

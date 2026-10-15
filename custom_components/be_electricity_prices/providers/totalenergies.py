@@ -55,6 +55,7 @@ pattern as Engie/Luminus.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
@@ -121,6 +122,8 @@ from .base import (
     TaxOverlay,
     with_vat_basis,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 _BASE_URL = "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest"
 
@@ -771,10 +774,11 @@ async def settle_month(
     the live one. Not out yet, or a live card titled for another month, and
     the month is ``provisional`` so it is asked again; once the live card is
     a later one, the card archive's row settled while it ran is what holds
-    the month, and ``held`` comes back as it is. The feed-in card is uploaded
-    on its own and can lag the tariff card (Electricité Fixe in Flanders
-    still said September on 5 and 14 October 2026), so only the one titled
-    like it settles the feed-in. A leg the next card gives no index for is
+    the month, and ``held`` comes back as it is: a month still unsettled
+    then never will be, and stays at its estimate, which is logged. The
+    feed-in card is uploaded on its own and can lag the tariff card
+    (Electricité Fixe in Flanders still said September on 5 and 14 October
+    2026), so only the one titled like it settles the feed-in. A leg the next card gives no index for is
     left as held, and the month stays ``provisional`` while the other leg
     settles, as does the energy of a card no other card of the range is
     printed like yet (``_range_agrees``).
@@ -785,6 +789,15 @@ async def settle_month(
     if following > running:
         return replace(held, provisional=True)
     if following < running:
+        _LOGGER.warning(
+            "TotalEnergies %s in %s, %04d-%02d, was not settled while the next "
+            "card, the only one that settles it, was served, so the month "
+            "stays at its estimate",
+            contract_id,
+            region,
+            first.year,
+            first.month,
+        )
         return held
     try:
         contract = _contract_in(contract_id, region)
