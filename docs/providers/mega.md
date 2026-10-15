@@ -458,7 +458,7 @@ card); `test_missing_yearly_fee_is_fatal` (`test_mega.py`) enforces it.
 > billed M at the stated figures like any other entry (`_effective_snapshot_for_month`,
 > `cohort.py`), keeps M's printed pairs on both legs, and bills each later month
 > on them at that month's `index_realised`. A stating card printing no formula gives no
-> > index. The M+1 card goes through the same `archive_validity_check` as
+> index. The M+1 card goes through the same `archive_validity_check` as
 > the main path, so a CDN stub cannot shift the rates by a further month. When
 > that card is not out yet (or does not resolve) the month keeps its own
 > figures but comes back `provisional`, as Eneco, EBEM and Trevion do, so the
