@@ -276,11 +276,15 @@ before August 2026. A card standing in for such a month is the exception
 (`_proxy_for_month`, `snapshot_months.py`): it prints another month's levies,
 so the month takes the household excise schedule and the energy contribution
 the law then set, read from Justel's archived copy of the article as it stood
-before the measure (`EXCISE_LAW_ARCHIVE_URL`), dated by its bracket and by the
-archive's note saying when it ended (from 1 April 2023 to 31 July 2026). A
-month's own card is not given them: that copy leaves out the rates a
-transition fixed in the amending law's own articles (April to June 2023) and
-the quarterly notices article 420 provides for, which only the card carries.
+before the measure (`EXCISE_LAW_ARCHIVE_URL`), ended where the archive's note
+says, and started the day after the last rate the law that wrote it fixed in
+its own articles, read from that law's page, which the bracket's footnote
+links: from 1 July 2023 to 31 July 2026, since that law billed the first band
+42,5755 EUR/MWh from April to June 2023. Earlier months stand in with the
+card's levies, as before. A month's own card is not given them: the quarterly
+notices article 420 provides for are on no page the law is read from, and
+only the card carries one (the cards of July 2023 to July 2026 show none was
+issued).
 The same holds while the law has never been read, which is a host that cannot
 reach Justel at all: once read, the table is kept in the store across
 restarts, and a fetch that fails with nothing held logs a warning every six

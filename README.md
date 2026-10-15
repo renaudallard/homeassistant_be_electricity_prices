@@ -373,7 +373,9 @@ before August 2026, which the correction leaves alone, except where a later
 card stands in for a month whose own card no archive kept (TotalEnergies and
 Ecofix before August 2026): that month is billed the excise table and the
 energy contribution the law set then, read once from Justel's archived copy
-of the same article. Where the card prints
+of the same article, from July 2023, since the law that wrote that table set
+another rate on its first band until June 2023 (read from that law too);
+an earlier month keeps the card's. Where the card prints
 the degressive table of the time, a household above 20 000 kWh a year is
 billed the blend over its volume; Cociter's card prints only the first tranche
 and energie.be's and Frank's say the excise is degressive without the other

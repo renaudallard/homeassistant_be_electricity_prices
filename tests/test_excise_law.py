@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -631,14 +632,29 @@ _ARCHIVE = (
 )
 
 
+# The law of 19 March 2023 that wrote it, as its footnote links it.
+_AMENDING = (
+    Path(__file__).resolve().parent / "fixtures" / "justel_loi_2023_03_19_fr.html"
+)
+
+
 @pytest.fixture(scope="module")
 def archive() -> str:
     return _ARCHIVE.read_bytes().decode("iso-8859-1")
 
 
+@pytest.fixture(scope="module")
+def amending() -> str:
+    return _AMENDING.read_bytes().decode("iso-8859-1")
+
+
+def _schedule(archive: str, amending: str) -> excise_law.Schedule:
+    return excise_law.after_transitions(*excise_law.parse_archive(archive), amending)
+
+
 @pytest.fixture
-def schedule_held(archive: str) -> Iterator[None]:
-    excise_law._SCHEDULES[excise_law.SCHEDULE] = excise_law.parse_archive(archive)
+def schedule_held(archive: str, amending: str) -> Iterator[None]:
+    excise_law._SCHEDULES[excise_law.SCHEDULE] = _schedule(archive, amending)
     yield
     excise_law._SCHEDULES.clear()
 
@@ -649,9 +665,15 @@ def test_the_archived_article_sets_the_schedule_before_august_2026(
     """Article 419 as it stood before the law of 30 May 2026: the household
     excise by annual volume and the energy contribution beside it, from the
     entry into force of the law of 19 March 2023 that wrote them (footnote
-    32 dates its bracket) to the day the archive's note says it ended."""
-    schedule = excise_law.parse_archive(archive)
+    32 dates its bracket and links the law) to the day the archive's note
+    says it ended."""
+    schedule, dossier = excise_law.parse_archive(archive)
     assert (schedule.start, schedule.until) == (date(2023, 4, 1), date(2026, 8, 1))
+    assert dossier == "2023031902"
+    assert excise_law.law_url(dossier) == (
+        "https://www.ejustice.just.fgov.be/cgi_loi/article.pl"
+        "?language=fr&lg_txt=F&cn_search=2023031902"
+    )
     assert [upper for upper, _rate in schedule.bands] == [
         3000.0,
         20000.0,
@@ -682,12 +704,37 @@ def test_a_page_that_is_not_the_archived_article_is_refused(
     # Nor is the archived wording read as the one in force.
     with pytest.raises(excise_law.ExciseLawError, match="banded"):
         excise_law.parse(archive)
+    # A bracket no footnote links to its law cannot be checked for the
+    # rates that law fixed in its own articles.
+    unlinked = archive.replace("cn_search=2023031902", "")
+    with pytest.raises(excise_law.ExciseLawError, match="no link"):
+        excise_law.parse_archive(unlinked)
+
+
+def test_the_schedule_starts_after_the_transition_its_law_fixed(
+    archive: str, amending: str, page: str
+) -> None:
+    """The law of 19 March 2023 billed the first band 42,5755 EUR/MWh from
+    April to June 2023 in its own article 15, which the archived wording does
+    not show, so the schedule is billed from July (the cards of April to June
+    2023 print 4,5130 c/kWh on 0 to 3 MWh, those from July 5,0329)."""
+    schedule, dossier = excise_law.parse_archive(archive)
+    held = excise_law.after_transitions(schedule, dossier, amending)
+    assert held == replace(schedule, start=date(2023, 7, 1))
+    # Neither the archive nor the law in force is the law that wrote it.
+    for other in (archive, page):
+        with pytest.raises(excise_law.ExciseLawError, match="not the law"):
+            excise_law.after_transitions(schedule, dossier, other)
+    impossible = amending.replace("30 juin 2023 inclus", "31 juin 2023 inclus")
+    with pytest.raises(excise_law.ExciseLawError, match="unreadable"):
+        excise_law.after_transitions(schedule, dossier, impossible)
 
 
 @pytest.mark.usefixtures("schedule_held")
 def test_a_month_takes_the_schedule_only_inside_its_days() -> None:
     assert excise_law.household_schedule(date(2023, 3, 1)) is None
-    assert excise_law.household_schedule(date(2023, 4, 1)) is not None
+    assert excise_law.household_schedule(date(2023, 6, 30)) is None
+    assert excise_law.household_schedule(date(2023, 7, 1)) is not None
     assert excise_law.household_schedule(date(2026, 7, 31)) is not None
     assert excise_law.household_schedule(date(2026, 8, 1)) is None
 
@@ -702,18 +749,21 @@ def test_the_store_round_trips_the_schedule() -> None:
     excise_law.restore({excise_law.SCHEDULE: {**stored[excise_law.SCHEDULE]}})
     assert excise_law._SCHEDULES[excise_law.SCHEDULE] == held
     excise_law._SCHEDULES.clear()
-    excise_law.restore({excise_law.SCHEDULE: {"start": "2023-04-01"}})
+    excise_law.restore({excise_law.SCHEDULE: {"start": "2023-07-01"}})
     excise_law.restore({excise_law.SCHEDULE: "nonsense"})
     assert excise_law.household_schedule(date(2026, 3, 1)) is None
 
 
 async def test_the_archived_wording_is_read_once(
-    fresh_fetch: None, page: str, archive: str
+    fresh_fetch: None, page: str, archive: str, amending: str
 ) -> None:
-    """It never changes, so it is asked for with the law until it is held."""
+    """It never changes, nor does the law that wrote it, so both are asked
+    for with the law until the schedule is held."""
+    law = excise_law.law_url("2023031902")
+    pages = {EXCISE_LAW_URL: page, EXCISE_LAW_ARCHIVE_URL: archive, law: amending}
 
     async def fetch(_session: Any, url: str, **_kwargs: Any) -> str:
-        return archive if url == EXCISE_LAW_ARCHIVE_URL else page
+        return pages[url]
 
     got = AsyncMock(side_effect=fetch)
     try:
@@ -724,22 +774,46 @@ async def test_the_archived_wording_is_read_once(
         assert [call.args[1] for call in got.await_args_list] == [
             EXCISE_LAW_URL,
             EXCISE_LAW_ARCHIVE_URL,
+            law,
             EXCISE_LAW_URL,
         ]
+        assert excise_law.household_schedule(date(2023, 6, 1)) is None
         assert excise_law.household_schedule(date(2026, 3, 1)) is not None
     finally:
         excise_law._SCHEDULES.clear()
 
 
+async def test_a_schedule_whose_law_cannot_be_read_is_not_held(
+    fresh_fetch: None, page: str, archive: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Held without its law, April to June 2023 would bill the schedule over
+    the rate that law fixed, so the card's levies are billed until it is
+    read."""
+
+    async def fetch(_session: Any, url: str, **_kwargs: Any) -> str:
+        if url == EXCISE_LAW_URL:
+            return page
+        if url == EXCISE_LAW_ARCHIVE_URL:
+            return archive
+        raise ExtractorError("HTTP 503")
+
+    with patch.object(excise_law, "fetch_text", AsyncMock(side_effect=fetch)):
+        await excise_law.ensure_excise_law(AsyncMock())
+    assert excise_law.SCHEDULE not in excise_law._SCHEDULES
+    assert "billed the levies it prints" in caplog.text
+
+
 @pytest.mark.parametrize("annual_kwh", [3500.0, 30000.0])
 async def test_a_card_standing_in_bills_the_levies_the_law_then_set(
-    hass: HomeAssistant, archive: str, annual_kwh: float
+    hass: HomeAssistant, archive: str, amending: str, annual_kwh: float
 ) -> None:
     """TotalEnergies keeps no archive and the project's starts in August
     2026, so its January to July months bill on October's card, which prints
     0,0488 and a stale 0,002. Those months owed the household schedule and
     the energy contribution the law then set; the month's own card, where
-    there is one, is billed as printed."""
+    there is one, is billed as printed, and so is a month of April to June
+    2023, when the law that wrote the schedule billed the first band
+    another rate."""
     raw = make_snapshot(
         supplier="totalenergies",
         contract="totalenergies_myessential",
@@ -764,14 +838,14 @@ async def test_a_card_standing_in_bills_the_levies_the_law_then_set(
     march = date(2026, 3, 1)
     current = _resolve_snapshot(entry, raw)
 
-    async def stand_in() -> TaxOverlay:
+    async def stand_in(month: date = march) -> TaxOverlay:
         got = await _snapshot_for_month(
             hass,
             None,  # type: ignore[arg-type]
             get_extractor("totalenergies"),
             "totalenergies_myessential",
             "wallonia",
-            march,
+            month,
             current,
             entry,
             current_raw=raw,
@@ -780,9 +854,10 @@ async def test_a_card_standing_in_bills_the_levies_the_law_then_set(
 
     before = await stand_in()
     assert (before.federal_excise, before.energy_contribution) == (0.0488, 0.002)
-    excise_law._SCHEDULES[excise_law.SCHEDULE] = excise_law.parse_archive(archive)
+    excise_law._SCHEDULES[excise_law.SCHEDULE] = _schedule(archive, amending)
     try:
         taxes = await stand_in()
+        transition = await stand_in(date(2023, 5, 1))
         own = _resolve_snapshot(entry, raw, delivery_month=march).taxes
     finally:
         excise_law._SCHEDULES.clear()
@@ -791,3 +866,7 @@ async def test_a_card_standing_in_bills_the_levies_the_law_then_set(
     assert taxes.federal_excise == pytest.approx((first + second) / annual_kwh * 1.06)
     assert taxes.energy_contribution == pytest.approx(0.0019261 * 1.06)
     assert (own.federal_excise, own.energy_contribution) == (0.0488, 0.002)
+    assert (transition.federal_excise, transition.energy_contribution) == (
+        0.0488,
+        0.002,
+    )

@@ -1025,22 +1025,36 @@ law as it stood before the amendment, `EXCISE_LAW_ARCHIVE_URL` (`const.py`),
 read by `parse_archive` into a `Schedule`: the excise by annual volume ("pour
 la tranche de 0 à 3 MWh", the last band open above its bound), the energy
 contribution beside it, which has to be one figure across the bands, and the
-days it was in force. Its start is its bracket's entry into force (an archived
-copy numbers its brackets and dates each number in a footnote) and its end the
-date the archive's note gives article 419 ("En vigueur jusqu'au 01-08-2026").
-It is read once, after a successful read of the law, and asked for again with
-each daily read until it is held. Only a card standing in for one of its months
-is billed it (`_stand_in_levies`, `snapshot_resolve.py`): the copy leaves out
-the rates a transition fixed in the amending law's own articles (42,5755
-EUR/MWh from April to June 2023) and the quarterly notices article 420
-provides for, which a month's own card carries.
+days it was in force. Its end is the date the archive's note gives article
+419 ("En vigueur jusqu'au 01-08-2026"). Its bracket's footnote (an archived
+copy numbers its brackets and dates each number in a footnote) dates the law
+that wrote it and links that law's page by its dossier number, which
+`after_transitions` reads (`law_url`): a rate that law fixed for a while in
+its own articles rather than in the wording ("pour la période du 1er avril
+2023 jusqu'au 30 juin 2023 inclus", article 15 of the law of 19 March 2023,
+42,5755 EUR/MWh on the first band) was billed instead of the schedule, so the
+schedule starts the day after the last one (1 July 2023), not on that law's
+entry into force. The quarterly notices article 420 provides for are not on
+Justel either; the archived cards show none was issued in its days. The
+first band (47,48 EUR/MWh, 5,03288 c/kWh with VAT, printed to four decimals
+or five) is on every monthly card of Luminus, Eneco, Engie and OCTA+ from
+July 2023 to September 2025, Cociter's from December 2023, Bolt's from
+February 2024, EBEM's from January 2025 and every card of the project's
+archive but the social tariff from October 2025 to July 2026, where the
+April to June 2023 cards of the first four print the transition's (42,5755
+EUR/MWh, 4,5130 c/kWh with VAT). Both pages are read once, after a
+successful read of the law, and asked for again with each daily read until
+the schedule is held; a failure on either holds nothing. Only a card
+standing in for one of its months is billed it (`_stand_in_levies`,
+`snapshot_resolve.py`); a month's own card is billed as printed.
 
 Anything that is not the article as expected raises rather than reading half
 of it: no article, no electricity paragraph, a rate banded by volume (which
 the household rate was before August 2026), two rates where one is expected,
 steps out of order, a rate outside the plausible range, or a date or number
 that does not convert (31 April), all as `ExciseLawError` so the backoff below
-applies.
+applies. So does an archived copy whose schedule's bracket links no law, and a
+page of that law that does not give its dossier number.
 
 ### Caching and failure
 
@@ -1071,5 +1085,6 @@ for it, with the `excise_law_unread` Repairs card, until it is.
 
 The parser is tested on the page as Justel served it on 2026-10-09
 (`tests/fixtures/justel_loi_programme_2004_fr.html`), which every test holds
-in place of the network, and the archived copy on the one served on 2026-10-15
-(`tests/fixtures/justel_loi_programme_2004_fr_arch070.html`).
+in place of the network, the archived copy on the one served on 2026-10-15
+(`tests/fixtures/justel_loi_programme_2004_fr_arch070.html`) and the law of
+19 March 2023 on the same day (`tests/fixtures/justel_loi_2023_03_19_fr.html`).

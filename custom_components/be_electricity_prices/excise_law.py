@@ -43,10 +43,15 @@ it, a schedule by annual volume with the energy contribution beside it, is in
 Justel's archived copy of the law as it stood before the amendment, read once
 and held with the days it was in force: the bracket around it and the note
 the archive carries ("En vigueur jusqu'au"). Those are its words alone, not
-the rates a transition fixed in the amending law's own articles or the
-quarterly notices article 420 provides for, so it only stands in for a card
-that does not print its own month (``household_schedule``); a month's own
-card is billed as printed. The protected customer has no card that prints it
+the rates a transition fixed in the amending law's own articles, so the law
+the bracket's footnote links to is read as well and the schedule starts the
+day after the last transition it fixed for the household rate (42,5755
+EUR/MWh on the first band from April to June 2023). Nor are they the
+quarterly notices article 420 provides for, which Justel does not
+consolidate; the archived cards of July 2023 to July 2026 all print the
+schedule, so none was issued in its days. It only stands in for a card that
+does not print its own month (``household_schedule``); a month's own card is
+billed as printed. The protected customer has no card that prints it
 reliably, so its two closed rates are typed in beside the law they came from.
 Both are held for the process, the law read again daily, and kept in every
 entry's store so a restart without the network still knows the last one.
@@ -57,11 +62,12 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import date, datetime
+from dataclasses import dataclass, replace
+from datetime import date, datetime, timedelta
 from html import unescape
 from itertools import pairwise
 from typing import Any, Final
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 import aiohttp
 from homeassistant.util import dt as dt_util
@@ -96,12 +102,14 @@ _OPEN_RE = re.compile(
 )
 _CLOSE_RE = re.compile(r"\]<sup>(?:(?!</sup>).)*</sup>", re.S)
 # An archived copy titles no bracket. It numbers them and dates each number
-# in its footnotes: (32)<L 2023-03-19/02, art. 9, 068; En vigueur : 01-04-2023>.
+# in its footnotes: (32)<L 2023-03-19/02, art. 9, 068; En vigueur : 01-04-2023>,
+# the law linked to its own page by its dossier number (cn_search=2023031902).
 # A number no footnote dates is marked with no date, which is refused only
 # when it is the bracket a rate is dated by.
 _NUMBERED_RE = re.compile(r"\[<sup><font color=red>(\d+)</font></sup>")
 _FOOTNOTE_RE = re.compile(
     r"\(<font color=red>(\d+)</font>\)&lt;(?:(?!\(<font color=red>).)*?"
+    r"(?:cn_search=(\d+)(?:(?!\(<font color=red>).)*?)?"
     r"En vigueur\s*:\s*(\d{2}-\d{2}-\d{4})",
     re.S | re.I,
 )
@@ -115,9 +123,9 @@ _NON_PROFESSIONAL_RE = re.compile(r"consommation non-professionnelle\s*:")
 # "a)" in the wording in force, "a." in the one before it.
 _PROTECTED_RE = re.compile(r"a[.)]\s*client protégé résidentiel")
 _OTHERS_RE = re.compile(r"b[.)]\s*autres\s*:")
-_STEP_RE = re.compile(
-    r"A partir du (1er|\d{1,2}) (" + "|".join(FR_MONTHS) + r") (\d{4})\s*:"
-)
+# A date as the law writes it: "1er janvier 2027", "30 juin 2023".
+_DAY = r"(1er|\d{1,2}) (" + "|".join(FR_MONTHS) + r") (\d{4})"
+_STEP_RE = re.compile(r"A partir du " + _DAY + r"\s*:")
 _EXCISE_RE = re.compile(r"droit d['’]accise\s*:\s*([\d.,]+)\s*euros?\s+par\s+MWh")
 _SPECIAL_RE = re.compile(
     r"droit d['’]accise spécial\s*:\s*([\d.,]+)\s*euros?\s+par\s+MWh"
@@ -134,14 +142,31 @@ _NOTE_RE = re.compile(r'id="note".*?</div>', re.S)
 _UNTIL_RE = re.compile(
     r"Art\.\s*(.*?)\s*En vigueur jusqu['’]au\s*(\d{2})-(\d{2})-(\d{4})"
 )
+# The number a law's own page gives it: "Dossier numéro : 2023031902".
+_DOSSIER_RE = re.compile(r"Dossier ?(?:numéro|nummer)\s*:\s*(\d+)")
+# A rate the amending law fixed for a while in its own articles rather than
+# in the wording: "Le taux du droit d'accise spécial, prévu à l'article 419,
+# k), 2), b), i), ... s'élève, pour la période du 1er avril 2023 jusqu'au 30
+# juin 2023 inclus, à 42,5755 euros/MWh". The citation is the household
+# rate's ("b) autres" under electricity's "2. consommation
+# non-professionnelle"), any of its bands.
+_TRANSITION_RE = re.compile(
+    r"article 419, k\), 2\), b\),[^.]*?pour la période du "
+    + _DAY
+    + r" jusqu['’]au "
+    + _DAY
+    + r" inclus"
+)
 
 
 @dataclass(frozen=True)
 class Schedule:
-    """A household wording the law no longer prints, in force from ``start``
+    """A household wording the law no longer prints, billed from ``start``
     to the day before ``until``: the excise by annual volume as ((upper kWh,
     EUR/kWh excluding VAT), ...), the last band open above its bound, and the
-    energy contribution beside it, EUR/kWh excluding VAT."""
+    energy contribution beside it, EUR/kWh excluding VAT. ``start`` is the
+    day after the last rate the law that wrote it fixed in its own articles
+    for a while, rather than that law's entry into force."""
 
     start: date
     until: date
@@ -185,8 +210,15 @@ def _rate(chunk: str) -> float:
     return rate
 
 
-def _in_force(text: str, at: int) -> date:
-    """The entry into force of the innermost amendment around ``at``."""
+def _day(day: str, month: str, year: str) -> date:
+    """A date as the law writes it, in the three parts ``_DAY`` reads."""
+    return date(int(year), FR_MONTHS.index(month) + 1, 1 if day == "1er" else int(day))
+
+
+def _amendment(text: str, at: int) -> tuple[date, str]:
+    """The entry into force of the innermost amendment around ``at``, and
+    the dossier number of the law that made it where the page links that
+    law, else ``""``."""
     stack: list[str] = []
     pos = 0
     while pos < at:
@@ -197,14 +229,14 @@ def _in_force(text: str, at: int) -> date:
         if nxt < 0 or nxt >= at:
             break
         if text[nxt] == _OPEN:
-            stack.append(text[nxt + 1 : nxt + 11])
+            stack.append(text[nxt + 1 : text.index(" ", nxt)])
         elif stack:
             stack.pop()
         pos = nxt + 1
     if not stack:
         raise ExciseLawError("no entry into force around the rate")
-    day, month, year = stack[-1].split("-")
-    return date(int(year), int(month), int(day))
+    day, month, year = stack[-1][:10].split("-")
+    return date(int(year), int(month), int(day)), stack[-1][10:]
 
 
 def _steps(text: str, start: int, end: int) -> tuple[tuple[date, float], ...]:
@@ -219,11 +251,13 @@ def _steps(text: str, start: int, end: int) -> tuple[tuple[date, float], ...]:
     if special is None:
         raise ExciseLawError("no special excise")
     out = [
-        (_in_force(text, start + special.start()), _rate(chunk[bounds[0] : bounds[1]]))
+        (
+            _amendment(text, start + special.start())[0],
+            _rate(chunk[bounds[0] : bounds[1]]),
+        )
     ]
     for i, head in enumerate(heads):
-        day = 1 if head.group(1) == "1er" else int(head.group(1))
-        when = date(int(head.group(3)), FR_MONTHS.index(head.group(2)) + 1, day)
+        when = _day(*head.groups())
         out.append((when, _rate(chunk[head.end() : bounds[i + 2]])))
     if not _ascending(out):
         raise ExciseLawError("steps out of order")
@@ -252,10 +286,15 @@ def _household(page: str) -> tuple[str, int, int, int, int]:
     match = _ARTICLE_RE.search(page)
     if match is None:
         raise ExciseLawError("article 419 not found")
-    dated = dict(_FOOTNOTE_RE.findall(match.group(1)))
+    # An opening is marked with its entry into force, then the amending
+    # law's dossier number where a footnote links it, and a space.
+    dated = {
+        number: f"{when}{dossier}"
+        for number, dossier, when in _FOOTNOTE_RE.findall(match.group(1))
+    }
     marked = _CLOSE_RE.sub(_CLOSE, match.group(1))
-    marked = _OPEN_RE.sub(lambda m: f"{_OPEN}{m[1]}-{m[2]}-{m[3]}", marked)
-    marked = _NUMBERED_RE.sub(lambda m: f"{_OPEN}{dated.get(m[1], _UNDATED)}", marked)
+    marked = _OPEN_RE.sub(lambda m: f"{_OPEN}{m[1]}-{m[2]}-{m[3]} ", marked)
+    marked = _NUMBERED_RE.sub(lambda m: f"{_OPEN}{dated.get(m[1], _UNDATED)} ", marked)
     text = " ".join(unescape(_TAG_RE.sub(" ", marked)).split())
     start = text.find(_ELECTRICITY)
     if start < 0:
@@ -292,9 +331,10 @@ def _until(page: str) -> date:
     raise ExciseLawError("no end to article 419")
 
 
-def parse_archive(page: str) -> Schedule:
-    """The household schedule an archived copy of article 419 sets, and the
-    days it was in force.
+def parse_archive(page: str) -> tuple[Schedule, str]:
+    """The household schedule an archived copy of article 419 sets, from the
+    entry into force of the law that wrote it to the day it ended, and that
+    law's dossier number, which :func:`after_transitions` reads it by.
 
     Raises :class:`ExciseLawError` on anything else, as :func:`parse` does.
     """
@@ -304,7 +344,7 @@ def parse_archive(page: str) -> Schedule:
         raise ExciseLawError(f"unreadable article: {err}") from err
 
 
-def _parse_archive(page: str) -> Schedule:
+def _parse_archive(page: str) -> tuple[Schedule, str]:
     until = _until(page)
     text, _protected, _others_at, others, end = _household(page)
     chunk = text[others:end]
@@ -341,10 +381,43 @@ def _parse_archive(page: str) -> Schedule:
     special = _SPECIAL_RE.search(chunk, heads[0].end())
     if special is None:
         raise ExciseLawError("no special excise")
-    start = _in_force(text, others + special.start())
+    start, dossier = _amendment(text, others + special.start())
+    if not dossier:
+        raise ExciseLawError("no link to the law that wrote the schedule")
     if start >= until:
         raise ExciseLawError("in force for no day")
-    return Schedule(start, until, tuple(bands), contribution)
+    return Schedule(start, until, tuple(bands), contribution), dossier
+
+
+def law_url(dossier: str) -> str:
+    """Justel's page of the law numbered ``dossier``, asked for as the
+    archived copy is, as its footnotes link it."""
+    parts = urlsplit(EXCISE_LAW_ARCHIVE_URL)
+    query = {**parse_qs(parts.query), "cn_search": [dossier]}
+    query.pop("arch", None)
+    return urlunsplit(parts._replace(query=urlencode(query, doseq=True)))
+
+
+def after_transitions(schedule: Schedule, dossier: str, page: str) -> Schedule:
+    """``schedule`` from the day after the last household rate its law,
+    ``page``, fixed for a while in its own articles rather than in the
+    wording, since those days were billed that rate and not the schedule.
+
+    Raises :class:`ExciseLawError` on a page that is not the law numbered
+    ``dossier``, as :func:`parse` does.
+    """
+    text = " ".join(unescape(_TAG_RE.sub(" ", page)).split())
+    if dossier not in _DOSSIER_RE.findall(text):
+        raise ExciseLawError(f"not the law numbered {dossier}")
+    start = schedule.start
+    try:
+        for match in _TRANSITION_RE.finditer(text):
+            start = max(start, _day(*match.groups()[3:]) + timedelta(days=1))
+    except (ValueError, OverflowError) as err:
+        raise ExciseLawError(f"unreadable transition: {err}") from err
+    if start >= schedule.until:
+        raise ExciseLawError("in force for no day")
+    return replace(schedule, start=start)
 
 
 def _rate_for(kind: str, month: date) -> float | None:
@@ -486,8 +559,9 @@ async def ensure_excise_law(session: aiohttp.ClientSession) -> None:
 
     A failure keeps what is held and is retried after ``_FAILURE_RETRY_S``;
     nothing here raises, since the caller is the coordinator tick. The
-    archived wording never changes, so it is asked for only while it is not
-    held, with each daily read of the law until it has been read.
+    archived wording and the law that wrote it never change, so they are
+    asked for only while the schedule is not held, with each daily read of
+    the law until both have been read.
     """
     global _fetched_at, _failed_at
     now = dt_util.utcnow()
@@ -523,8 +597,11 @@ async def ensure_excise_law(session: aiohttp.ClientSession) -> None:
     if SCHEDULE in _SCHEDULES:
         return
     try:
-        schedule = parse_archive(
+        schedule, dossier = parse_archive(
             await fetch_text(session, EXCISE_LAW_ARCHIVE_URL, timeout=15)
+        )
+        schedule = after_transitions(
+            schedule, dossier, await fetch_text(session, law_url(dossier), timeout=15)
         )
     except ExtractorError as err:
         # Only a month a card stands in for needs it, which then bills the
