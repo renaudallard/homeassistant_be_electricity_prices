@@ -36,8 +36,11 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import date
 from difflib import SequenceMatcher
 from typing import TypeVar
+
+from homeassistant.util import dt as dt_util
 
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
 from .base import DsoOverlay, ExtractorError, TaxOverlay, brussels_sibelga_overlay
@@ -98,15 +101,36 @@ def require_every_area(
     would let the backfill path silently skip whole months (it swallows the
     resulting KeyError). Refusing keeps the last good card serving.
 
-    Cociter, EBEM, Eneco and OCTA+ ask it of the live card only. A past
-    month's card keeps a short table: its energy is still what a signing
-    cohort is billed, and the month walk drops that one month on the missing
-    area, where refusing the card billed both on today's card.
+    Cociter, EBEM, Eneco and OCTA+ ask it of the live card, and hold the
+    running month's card to the same areas through
+    ``running_month_short_of_an_area``. A past month's card keeps a short
+    table: its energy is still what a signing cohort is billed, and the month
+    walk drops that one month on the missing area, where refusing the card
+    billed both on today's card.
     """
     missing = sorted(key for key in keys if key not in out)
     if missing:
         where = f" in the {block} block" if block else ""
         raise ExtractorError(f"{supplier}: DSO rows not found for {missing}{where}")
+
+
+def running_month_short_of_an_area(
+    out: Mapping[str, DsoOverlay], keys: Iterable[str], year_month: date
+) -> bool:
+    """Whether ``year_month`` is still running and its card's network table
+    lacks one of ``keys``.
+
+    The month walk reads the running month through ``fetch_for_month``, since
+    the card archive is not asked for it, and that is the live card again.
+    Where ``fetch`` refused it (``require_every_area``) and the last good card
+    stayed, adopting it there dropped the running month from every walk on
+    the missing area. ``fetch_for_month`` answers None on it instead, so the
+    current card stands in. A closed month keeps its short table.
+    """
+    today = dt_util.now().date()
+    if (year_month.year, year_month.month) < (today.year, today.month):
+        return False
+    return any(key not in out for key in keys)
 
 
 def require_contract(by_id: dict[str, _T], contract_id: str, label: str) -> _T:

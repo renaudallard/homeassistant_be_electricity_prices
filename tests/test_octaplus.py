@@ -32,6 +32,7 @@ import base64
 import json
 from dataclasses import fields
 from datetime import date
+from typing import Any
 from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlsplit
 
@@ -1036,13 +1037,15 @@ async def test_archive_renders_the_base64_card_through_the_render_seam(
 
 
 async def test_an_archived_card_short_of_an_area_keeps_its_energy(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:
     """The Walloon cards of October to December 2025 print a seven-column
     network table the reader does not take. The live card is refused for it,
     but a past month's card is what a contract signed then is billed on:
     refusing it too billed that contract's energy on today's card, and the
-    month itself on today's rates where it used to be dropped."""
+    month itself on today's rates where it used to be dropped. The running
+    month's is refused as the live card is, or the month walk would drop the
+    month on the missing area where the last good card stands in."""
     from custom_components.be_electricity_prices.providers import octaplus
 
     name = "octaplus_fixed_w_nov2025.pdf"
@@ -1071,6 +1074,15 @@ async def test_an_archived_card_short_of_an_area_keeps_its_energy(
     )
     with pytest.raises(ExtractorError, match="DSO rows not found"):
         await octaplus.fetch(None, "octaplus_fixed", "wallonia")  # type: ignore[arg-type]
+
+    freezer.move_to("2025-11-20 12:00:00+01:00")
+    running = await octaplus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "octaplus_fixed",
+        "wallonia",
+        date(2025, 11, 1),
+    )
+    assert running is None
 
 
 async def test_archive_answers_none_without_the_card_or_for_another_month(

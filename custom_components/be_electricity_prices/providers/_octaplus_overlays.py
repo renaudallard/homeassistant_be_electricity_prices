@@ -33,7 +33,7 @@ regulator's, reprinted on the supplier's card.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable
 
 from ..const import (
     DSO_AIEG,
@@ -44,7 +44,7 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_WALLONIA,
 )
-from ._parse import excise_tier_bands, require_every_area, to_float
+from ._parse import excise_tier_bands, to_float
 from ._rates import TariffKind
 from .base import DsoOverlay, ExtractorError, walloon_dso_overlay
 
@@ -300,19 +300,17 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     return out
 
 
-def _require_every_area(dsos: Mapping[str, DsoOverlay], region: str) -> None:
-    """Refuse a live card whose network table lacks one of the region's areas.
+def _areas(region: str) -> Iterable[str]:
+    """The areas a card read for ``region`` must hold.
 
-    Asked by ``fetch`` alone (see ``require_every_area``): the Walloon cards
-    of October to December 2025 print a seven-column table the reader does
-    not take, and as past months they still give a signing cohort its energy.
+    Asked of the live card and the running month's (see ``require_every_area``):
+    the Walloon cards of October to December 2025 print a seven-column table
+    the reader does not take, and as past months they still give a signing
+    cohort its energy.
     """
-    keys = (
-        (key for _, key in _WALLONIA_LABELS)
-        if region == REGION_WALLONIA
-        else _FLANDERS_LABELS.values()
-    )
-    require_every_area("OCTA+", dsos, keys)
+    if region == REGION_WALLONIA:
+        return [key for _, key in _WALLONIA_LABELS]
+    return _FLANDERS_LABELS.values()
 
 
 # Matched case-insensitively (see _extract_wallonia_dsos): the 2026

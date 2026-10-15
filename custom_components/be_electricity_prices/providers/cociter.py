@@ -58,7 +58,14 @@ from ..const import (
     WALLONIA_DSO_KEYS,
 )
 from ._cociter_settle import published_belix
-from ._parse import SIGN_CHARS, numeric_row, parse_sign, require_every_area, to_float
+from ._parse import (
+    SIGN_CHARS,
+    numeric_row,
+    parse_sign,
+    require_every_area,
+    running_month_short_of_an_area,
+    to_float,
+)
 from ._pdf import (
     FR_MONTHS,
     fetch_pdf_text,
@@ -189,7 +196,9 @@ async def fetch_for_month(
             raise
         return None
     found = await _card_for_month(session, html, pattern, contract_id, year_month)
-    if found is None:
+    if found is None or running_month_short_of_an_area(
+        found[0].dsos, _DSO_KEY.values(), year_month
+    ):
         return None
     return await _settle_on_next_card(
         session, html, pattern, contract_id, year_month, found[0]

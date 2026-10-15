@@ -116,12 +116,13 @@ def test_fix_extracts_dso_overlay() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.04)
 
 
-def test_a_live_card_missing_an_area_is_refused() -> None:
+def test_a_live_card_missing_an_area_is_refused(freezer: Any) -> None:
     """Every card prints both regions' tables, and a live one missing an area
     is refused rather than adopted without it, which left an entry on that
     area failing every tick while the last good card was gone. The same card
     as a past month keeps its energy, which a contract signed then is billed
-    on."""
+    on. As the running month's it is refused too, or the month walk would
+    drop that month on the missing area where the last good card stands in."""
     text = fixture_text("eneco_fix.pdf")
     relabelled = text.replace("FLUVIUS WEST", "FLUVIUS W.")
     assert relabelled != text, "the fixture stopped printing FLUVIUS WEST"
@@ -143,9 +144,19 @@ def test_a_live_card_missing_an_area_is_refused() -> None:
                 date(2026, 4, 1),
             )
         )
+        freezer.move_to("2026-04-20 12:00:00+02:00")
+        running = _run(
+            fetch_for_month(
+                None,  # type: ignore[arg-type]
+                "power_fix",
+                REGION_WALLONIA,
+                date(2026, 4, 1),
+            )
+        )
     assert snap is not None
     assert isinstance(snap.energy, FixedRates)
     assert "fluvius_west" not in snap.dsos and "aieg" in snap.dsos
+    assert running is None
 
 
 def test_fix_fluvius_has_no_prosumer_rate() -> None:

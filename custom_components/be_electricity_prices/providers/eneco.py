@@ -69,6 +69,7 @@ from ._parse import (
     numeric_row,
     parse_sign,
     require_every_area,
+    running_month_short_of_an_area,
     to_float,
 )
 from ._pdf import (
@@ -148,6 +149,9 @@ _FLUVIUS_LABELS: dict[str, str] = {
     "FLUVIUS ZENNE DIJLE": DSO_FLUVIUS_ZENNE_DIJLE,
 }
 
+# Every card prints both regions' tables, whichever region it is read for.
+_AREAS = (*_WALLONIA_LABELS.values(), *_FLUVIUS_LABELS.values())
+
 # A Belgian decimal number. Two forms: a thousands-grouped value using a
 # non-breaking / thin / narrow-no-break space (the separators to_float
 # strips, and the only ones Eneco's PDFs use for grouping: columns are
@@ -203,9 +207,7 @@ async def fetch(
     text = await fetch_pdf_text(session, url)
     snap = parse_snapshot(text, contract_id, url, region)
     # Here and not in the reader: a past month's card keeps a short table.
-    require_every_area(
-        "Eneco", snap.dsos, (*_WALLONIA_LABELS.values(), *_FLUVIUS_LABELS.values())
-    )
+    require_every_area("Eneco", snap.dsos, _AREAS)
     return snap
 
 
@@ -233,6 +235,8 @@ async def fetch_for_month(
     if found is None:
         return None
     snap, _text = found
+    if running_month_short_of_an_area(snap.dsos, _AREAS, year_month):
+        return None
     return await _settle_on_published_index(
         session, slug, contract_id, region, snap, year_month
     )

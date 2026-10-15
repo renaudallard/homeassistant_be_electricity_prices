@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -162,11 +163,13 @@ def test_variable_extracts_flanders_dsos_with_prosumer() -> None:
     assert iveka.prosumer_eur_per_kva_year == pytest.approx(67.79)
 
 
-def test_a_live_card_missing_an_area_is_refused() -> None:
+def test_a_live_card_missing_an_area_is_refused(freezer: Any) -> None:
     """A live card whose table lost a row to a relabel is refused rather than
     adopted without that area, which left an entry on it failing every tick
     while the last good card was gone from the cache. The same card as a past
-    month keeps its energy, which a contract signed then is billed on."""
+    month keeps its energy, which a contract signed then is billed on. As the
+    running month's it is refused too, or the month walk would drop that
+    month on the missing area where the last good card stands in."""
     text = _layout(_VARIABLE)
     relabelled = text.replace("Fluvius West", "Fluvius W.")
     assert relabelled != text, "the fixture stopped printing Fluvius West"
@@ -192,9 +195,19 @@ def test_a_live_card_missing_an_area_is_refused() -> None:
                 date(2026, 5, 1),
             )
         )
+        freezer.move_to("2026-05-20 12:00:00+02:00")
+        running = asyncio.run(
+            fetch_for_month(
+                make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
+                "ebem_variable",
+                "flanders",
+                date(2026, 5, 1),
+            )
+        )
     assert snap is not None
     assert isinstance(snap.energy, VariableRates)
     assert "fluvius_west" not in snap.dsos and "fluvius_antwerpen" in snap.dsos
+    assert running is None
 
 
 def test_variable_extracts_injection_formula() -> None:

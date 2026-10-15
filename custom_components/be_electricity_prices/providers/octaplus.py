@@ -59,15 +59,23 @@ from ..const import (
     WELCOME_CREDIT_PRO_RATA,
 )
 from ._octaplus_overlays import (
+    _areas,
     _extract_flanders_dsos,
     _extract_flanders_renewables,
     _extract_supplier_prosumer,
     _extract_taxes,
     _extract_wallonia_dsos,
     _extract_wallonia_renewables,
-    _require_every_area,
 )
-from ._parse import SIGN_CHARS, fold_accents, parse_sign, require_contract, to_float
+from ._parse import (
+    SIGN_CHARS,
+    fold_accents,
+    parse_sign,
+    require_contract,
+    require_every_area,
+    running_month_short_of_an_area,
+    to_float,
+)
 from ._pdf import (
     FR_MONTHS,
     _is_pdf_payload,
@@ -263,7 +271,8 @@ async def fetch(
     # still keeping real word spacing intact.
     text = await fetch_pdf_text_aligned(session, url, x_join_threshold=1.0)
     snap = parse_snapshot(contract_id, text, region, url)
-    _require_every_area(snap.dsos, region)
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("OCTA+", snap.dsos, _areas(region))
     return snap
 
 
@@ -415,6 +424,8 @@ async def fetch_for_month(
         # so the month cache retries it instead of caching it as absent.
         if is_transient_fetch_error(str(err)):
             raise
+        return None
+    if running_month_short_of_an_area(snap.dsos, _areas(region), first):
         return None
     return archive_validity_check(snap, text, first, month_names=FR_MONTHS)
 

@@ -70,6 +70,7 @@ from ._parse import (
     parse_prosumer_column,
     parse_sign,
     require_every_area,
+    running_month_short_of_an_area,
     to_float,
 )
 from ._pdf import (
@@ -217,6 +218,8 @@ async def fetch_for_month(
     if found is None:
         return None
     snap, _text = found
+    if running_month_short_of_an_area(snap.dsos, _FLANDERS_LABELS.values(), year_month):
+        return None
     return await _settle_on_published_index(
         session, contract_id, contract, snap, year_month, html
     )
