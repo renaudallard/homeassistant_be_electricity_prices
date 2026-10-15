@@ -22,6 +22,12 @@ on:
   pull_request:
     paths:
       - "custom_components/be_electricity_prices/providers/**"
+      # What live_check loads beside providers/, and what the providers
+      # import from the package.
+      - "custom_components/be_electricity_prices/const.py"
+      - "custom_components/be_electricity_prices/api.py"
+      - "custom_components/be_electricity_prices/excise_law.py"
+      - "custom_components/be_electricity_prices/vat_rates.py"
       - "scripts/live_check.py"
       # live_check imports it.
       - "scripts/card_texts.py"

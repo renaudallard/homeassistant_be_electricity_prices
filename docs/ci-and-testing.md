@@ -1339,7 +1339,8 @@ These validate packaging and manifest conformance, not runtime behaviour.
 ### live_check.yml - Live extractor check
 
 Runs on the daily `cron: "17 6 * * *"` (06:17 UTC, after suppliers' overnight publication), on
-manual dispatch, and on pull requests that touch `providers/**`,
+manual dispatch, and on pull requests that touch `providers/**`, the package modules it loads
+beside them or the providers import (`const.py`, `api.py`, `excise_law.py`, `vat_rates.py`),
 `scripts/live_check.py`, `scripts/card_texts.py` (which it imports), or the workflow itself
 (`.github/workflows/live_check.yml`). It needs `issues: write` to file drift/catalog/extractor
 issues (`.github/workflows/live_check.yml`), and checks out with `persist-credentials: false` so
