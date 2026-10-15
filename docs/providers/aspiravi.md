@@ -20,7 +20,7 @@ Aspiravi Samen, ECO2050), in Flanders only. Read this alongside the framework an
 | Region(s) served | Flanders only | `EXTRACTOR`, `aspiravi.py` |
 | Publication form | One monthly PDF card, a Word export read with pypdf | `aspiravi.py` |
 | Current card | The link labelled "Huidige tariefkaart" on `https://aspiravi-energy.be/downloads/` | `_current_card_url` |
-| Archive | Every past card on `https://aspiravi-energy.be/tariefkaarten/`, labelled by month | `fetch_for_month` |
+| Archive | Every past card on `https://aspiravi-energy.be/tariefkaarten/`, labelled by month, each closed month settled on the next one | `fetch_for_month` |
 | Probe | The current card's `Last-Modified` | `probe` |
 
 The card URLs are WordPress uploads whose names follow no pattern
@@ -39,7 +39,9 @@ find the card and asks the card itself. The WordPress REST API is closed
 `month_indexed_energy` and `spot_indexed_injection` are both set: the energy
 and the credit are indexed on the delivery month's mean, and the card prints
 last month's rates. The ENTSO-E key is optional; without it an entry bills the
-printed rates, which are the previous month's.
+running month on the printed rates, which are the previous month's, and a
+closed month on the mean the next card prints for it (see
+[Settlement](#settlement)).
 
 ## The index
 
@@ -50,8 +52,29 @@ the last twelve months the September 2026 card prints, the mean of the Belgian
 day-ahead prices reproduces every one of the thirteen published months from
 August 2025 to August 2026 to the cent, across the switch to quarter-hour
 prices in October 2025 (129,317 computed for August 2026 against 129,32
-printed). So `rlp_indexed` stays off and no archived month is settled on a
-published figure: the mean the coordinator computes is the one Aspiravi bills.
+printed). So `rlp_indexed` stays off: the mean the coordinator computes is the
+one Aspiravi bills.
+
+## Settlement
+
+A closed month is settled on the mean the next card prints for it, as Cociter's
+is on its BELIX. The card for a month prints its rates at the month before's
+mean and names it twice, "Voor augustus 2026 was de gemiddelde prijs (Belpex)
+129,32 EUR/MWh" and the last row of its twelve-month table, which is the row
+that dates the card. `fetch_for_month` reads that row off the next month's card
+(`_settle_on_next_card`, `aspiravi.py`) and rebuilds every register and the
+feed-in leg on their own formulas at it (`settled_energy`, `settled_injection`,
+`_settle.py`), recording it as `index_realised`. A keyed entry bills that
+figure too, rather than its own mean, which matches it to the cent.
+
+Billed on its own card instead, a keyless entry ran a month behind: on the 2026
+cards, between 3,33 c/kWh under (September) and 2,88 c/kWh over (February) on
+the single meter, 25,48 EUR under over January to September at 3500 kWh a year,
+and the feed-in 4,15 EUR under at 1000 kWh exported. While the next card is not
+linked the month keeps its printed rates and is `provisional`, so it is asked
+again; a next card whose table ends on another month settles nothing. The
+extractor sets `settles_on_next_card`, so a month the card archive caught live
+is asked again once it has closed.
 
 ## Energy
 
@@ -158,9 +181,11 @@ Eco Plus Flex, off both pages. A code no contract carries surfaces as
 
 ## Tests
 
-`tests/test_aspiravi.py` runs against two cards:
+`tests/test_aspiravi.py` runs against three cards:
 
 - `aspiravi_eco_plus_flex_2026-09.pdf`: the September 2026 card, every field
   read, and the formulas reproducing the rates it prints at August's mean.
+- `aspiravi_eco_plus_flex_2026-08.pdf`: the August 2026 card, settled on the
+  September card's 129,32 to the rates that card prints.
 - `aspiravi_eco_plus_flex_2026-03.pdf`: the March 2026 card, whose own sentences
   name February, dated by its price table.

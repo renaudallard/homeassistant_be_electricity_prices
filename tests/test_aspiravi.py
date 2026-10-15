@@ -41,6 +41,7 @@ from tests import fixture_text, make_text_session
 
 _CID = "aspiravi_eco_plus_flex"
 _SEPTEMBER = "aspiravi_eco_plus_flex_2026-09.pdf"
+_AUGUST = "aspiravi_eco_plus_flex_2026-08.pdf"
 _MARCH = "aspiravi_eco_plus_flex_2026-03.pdf"
 _UPLOADS = "https://aspiravi-energy.be/wp-content/uploads"
 
@@ -308,6 +309,52 @@ async def test_fetch_for_month_takes_the_card_labelled_with_the_month(
         )
         is None
     )
+
+
+async def test_a_closed_month_settles_on_the_mean_the_next_card_prints(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """August's card prints July's mean; September's names August's, 129,32,
+    and August is billed on it. September, whose next card is not linked yet,
+    keeps its printed rates and stays provisional."""
+    texts = {
+        f"{_UPLOADS}/2026/08/aug.pdf": fixture_text(_AUGUST),
+        f"{_UPLOADS}/2026/09/sep.pdf": fixture_text(_SEPTEMBER),
+    }
+
+    async def render(_session: Any, url: str) -> str:
+        return texts[url]
+
+    monkeypatch.setattr(aspiravi, "fetch_pdf_text", render)
+    session = make_text_session(
+        _link("2026/09/sep.pdf", "900027 eco plus flex (huishoudelijk) sep 26")
+        + _link("2026/08/aug.pdf", "900027 eco plus flex (huishoudelijk) aug 26")
+    )
+    august = await aspiravi.fetch_for_month(
+        session, _CID, REGION_FLANDERS, date(2026, 8, 1)
+    )
+    september = await aspiravi.fetch_for_month(
+        session, _CID, REGION_FLANDERS, date(2026, 9, 1)
+    )
+    assert august is not None and september is not None
+    energy, printed = august.energy, september.energy
+    assert isinstance(energy, VariableRates) and isinstance(printed, VariableRates)
+    assert not august.provisional
+    assert energy.index_realised == pytest.approx(0.12932)
+    assert august.injection is not None and september.injection is not None
+    assert august.injection.index_realised == pytest.approx(0.12932)
+    # September's card prints its rates at that same mean, on the same
+    # formulas: the day rate's coefficient is printed rounded (3e-5 EUR/kWh).
+    for field in ("current", "peak", "offpeak", "exclusive_night"):
+        assert getattr(energy, field) == pytest.approx(
+            getattr(printed, field), abs=5e-5
+        )
+    assert august.injection.current == pytest.approx(
+        september.injection.current, abs=1e-5
+    )
+    assert september.provisional
+    assert printed.index_realised is None
+    assert september.injection.index_realised is None
 
 
 async def test_fetch_for_month_refuses_a_card_of_another_month(

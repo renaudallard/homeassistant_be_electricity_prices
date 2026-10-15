@@ -29,7 +29,8 @@ Aspiravi Energy sells one residential product, Eco Plus Flex, to members of
 its partner cooperatives, in Flanders only. Its energy is indexed on the
 arithmetic mean of the Belpex day-ahead quarter-hour prices of the delivery
 month, with one formula per meter register, and the card prints the rates at
-the previous month's mean. The feed-in credit is indexed on the same mean.
+the previous month's mean. The feed-in credit is indexed on the same mean. The
+next card prints the mean a month closed at, which settles it.
 
 The current card is linked as "Huidige tariefkaart" from the downloads page,
 and every past card from the tariff page under a label naming its month. File
@@ -56,6 +57,7 @@ from ._pdf import (
     vat_multiplier,
 )
 from ._rates import Contract, InjectionRates, VariableRates
+from ._settle import settled_energy, settled_injection
 from ._validity import archive_validity_check, end_of_month
 from .base import (
     DsoOverlay,
@@ -101,7 +103,7 @@ _NIGHT_RE = re.compile(rf"Exclusief nachtmeter\s+{_FORMULA}")
 _INJECTION_RE = re.compile(rf"Terugleververgoeding\s+{_FORMULA}")
 # The last row of the "Energiekost van de afgelopen 12 maanden" table: the
 # month the printed rates were computed on, its Belpex mean and the four
-# rates. It is what dates the card. The sentence naming the month the card is
+# rates. It is what dates the card, and its mean settles that month. The sentence naming the month the card is
 # for, and the start of the period its formulas hold for, were both left on
 # the previous month on the September 2025 and March 2026 cards, while this
 # row moved on every time.
@@ -208,12 +210,11 @@ async def fetch_for_month(
     region: str,  # Aspiravi only sells in Flanders.
     year_month: date,
 ) -> SupplierSnapshot | None:
-    """The card published for ``year_month``, or ``None``.
+    """The card published for ``year_month``, settled on the next card, or
+    ``None``.
 
-    Every link labelled with the month is tried, because two months carry a
-    second link to a card of another year, and the first that proves to be
-    the month's card wins. The cards before April 2024 use another layout and
-    do not parse, which leaves those months to the proxy.
+    The cards before April 2024 use another layout and do not parse, which
+    leaves those months to the proxy.
     """
     if contract_id != _CONTRACT_ID:
         return None
@@ -225,20 +226,72 @@ async def fetch_for_month(
         if is_transient_fetch_error(str(err)):
             raise
         return None
+    month = year_month.replace(day=1)
+    found = await _card_for_month(session, page, month)
+    if found is None:
+        return None
+    return await _settle_on_next_card(session, page, month, found[0])
+
+
+async def _card_for_month(
+    session: aiohttp.ClientSession, page: str, year_month: date
+) -> tuple[SupplierSnapshot, str] | None:
+    """The card the archive page links for ``year_month``, and its text.
+
+    Every link labelled with the month is tried, because two months carry a
+    second link to a card of another year, and the first that proves to be
+    the month's card wins.
+    """
     for url, label in _links(page):
-        if _archive_month(label) != year_month.replace(day=1):
+        if _archive_month(label) != year_month:
             continue
         try:
             text = await fetch_pdf_text(session, url)
-            snap = parse_snapshot(contract_id, text, url)
+            snap = parse_snapshot(_CONTRACT_ID, text, url)
         except ExtractorError as err:
             if is_transient_fetch_error(str(err)):
                 raise
             continue
         checked = archive_validity_check(snap, text, year_month)
         if checked is not None:
-            return checked
+            return checked, text
     return None
+
+
+async def _settle_on_next_card(
+    session: aiohttp.ClientSession,
+    page: str,
+    year_month: date,
+    snap: SupplierSnapshot,
+) -> SupplierSnapshot:
+    """Settle a month on the Belpex mean the next card prints for it.
+
+    The card prints its rates at the previous month's mean and the contract
+    bills the delivery month's, so a closed month billed on its own card runs
+    one mean behind: over January to September 2026, 25 EUR under on 3500 kWh
+    and 4 EUR under on 1000 kWh of feed-in. The next card names the month and
+    its mean ("Voor augustus 2026 was de gemiddelde prijs (Belpex) 129,32
+    EUR/MWh", and the last row of its table), and both legs are rebuilt on it.
+
+    While that card is not out the printed rates stand and the month is
+    provisional, so the monthly cache asks again. A next card whose table ends
+    on another month settles nothing.
+    """
+    following = date(
+        year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
+    )
+    found = await _card_for_month(session, page, following)
+    if found is None:
+        return replace(snap, provisional=True)
+    month, mean = _last_index(found[1])
+    if month != year_month:
+        return snap
+    injection = snap.injection
+    return replace(
+        snap,
+        energy=settled_energy(snap.energy, mean),
+        injection=None if injection is None else settled_injection(injection, mean),
+    )
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
@@ -303,14 +356,20 @@ def parse_snapshot(
 
 def _index_month(text: str) -> date:
     """The month the printed rates were computed on."""
+    return _last_index(text)[0]
+
+
+def _last_index(text: str) -> tuple[date, float]:
+    """The month the printed rates were computed on and its Belpex mean, in
+    EUR/kWh."""
     rows = _INDEX_ROW_RE.findall(text)
     if not rows:
         raise ExtractorError("Aspiravi: price table of the past 12 months not found")
-    name, year, *_ = rows[-1]
+    name, year, mean, *_ = rows[-1]
     month = _MONTHS.get(name.lower())
     if month is None:
         raise ExtractorError(f"Aspiravi: unknown month {name!r} in the price table")
-    return date(2000 + int(year), month, 1)
+    return date(2000 + int(year), month, 1), to_float(mean) / 1000.0
 
 
 def _printed_rates(text: str) -> list[float]:
@@ -478,4 +537,5 @@ EXTRACTOR = SupplierExtractor(
     fetch=fetch,
     probe=probe,
     fetch_for_month=fetch_for_month,
+    settles_on_next_card=True,
 )
