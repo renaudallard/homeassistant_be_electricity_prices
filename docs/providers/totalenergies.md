@@ -493,10 +493,12 @@ at the same one, and the Brussels Electricité Variable card of the afternoon of
 which would have settled September 4,8 below the 164,7 of the rest for good. The
 other variable cards titled for the same month are read, the region's first, and
 the index stands once one solves within `_INDEX_FIT` (1,3 EUR/MWh, the fit of a
-card's own columns) of it; once two disagree, or the only one heard does, the
-energy waits and the month stays provisional. With no other card printing its
-block the index cannot be checked and stands. Settling reads at least one card
-more for that, 10 to 13 s of CPU each on a Raspberry Pi.
+card's own columns) of it; once two disagree, or none agrees, the energy waits
+and the month stays provisional. With no other card titled for the month printing
+its block, the rest of the range still carrying last month's title or its block
+unread, the index cannot be checked and waits too, so a misprinted card heard
+first never settles alone. Settling reads at least one card more for that, 10 to
+13 s of CPU each on a Raspberry Pi.
 Only a rate read off a card's "prix mensuels" block settles anything
 (`monthly_rates_printed`, `_totalenergies_cards.py`): where the block is not read
 the parser bills the table row, the regulator's annual estimate, which on the

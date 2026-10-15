@@ -1803,6 +1803,42 @@ async def test_a_card_the_range_is_not_printed_like_does_not_settle_the_energy(
     assert is_settled(out) and not out.provisional
 
 
+async def test_a_card_the_range_cannot_check_yet_does_not_settle_the_energy(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """The next card can be out before the rest of the range carries its
+    month: here myComfort in Flanders still carries an older card and the
+    one in Brussels its block unread. Nothing then disagrees with the
+    misprinted Electricité Variable card in Brussels, and nothing agrees
+    either, so September waits rather than keep its 159,9 EUR/MWh."""
+    from dataclasses import replace
+    from datetime import date
+
+    from custom_components.be_electricity_prices.providers import totalenergies
+
+    filled = "totalenergies_electricite_variable_b_2026-10_filled.pdf"
+    cards = {
+        "ELECTRICITE-VARIABLE_ELECTRICITY_BXL_FR.pdf": filled,
+        "MYCOMFORT_ELECTRICITY_BXL_FR.pdf": "totalenergies_mycomfort_b_2026-10.pdf",
+        "MYCOMFORT_ELECTRICITY_VL_FR.pdf": "totalenergies_mycomfort_v.pdf",
+    }
+    monkeypatch.setattr(totalenergies, "fetch_pdf_text_layout", _serve(cards))
+    freezer.move_to("2026-10-01 16:00:00+02:00")
+    held = parse_snapshot(
+        "totalenergies_electricite_variable",
+        fixture_text("totalenergies_electricite_variable_b_2026-10.pdf", layout=True),
+        "brussels",
+    )
+    out = await totalenergies.settle_month(
+        None,  # type: ignore[arg-type]
+        "totalenergies_electricite_variable",
+        "brussels",
+        date(2026, 9, 1),
+        held,
+    )
+    assert out == replace(held, provisional=True)
+
+
 def test_the_printed_index_is_the_median_of_the_columns() -> None:
     """Each printed figure is rounded to a hundredth of a cent, and on the
     October 2026 myDrive card in Wallonia the mono column alone solves to

@@ -667,8 +667,9 @@ async def _range_agrees(
     settled on it, September would have kept 159,9 for good. So ``index``
     stands once one other card titled for the same month agrees within the
     fit of a card's own columns, the region's cards asked first, and falls
-    once two disagree, or the only one heard does. Where no other card
-    prints its block the index cannot be checked and stands.
+    once two disagree. Where no other card titled for the month prints its
+    block, the rest of the range still carrying last month's title or its
+    block unread, the index cannot be checked and falls until one does.
     """
     regions = (region, *(r for r in _REGION_TO_CODE if r != region))
     disagree = 0
@@ -700,7 +701,7 @@ async def _range_agrees(
             disagree += 1
             if disagree == 2:
                 return False
-    return disagree == 0
+    return False
 
 
 async def settle_month(
@@ -733,8 +734,8 @@ async def settle_month(
     still said September on 5 and 14 October 2026), so only the one titled
     like it settles the feed-in. A leg the next card gives no index for is
     left as held, and the month stays ``provisional`` while the other leg
-    settles, as does the energy of a card the rest of the range is not
-    printed like (``_range_agrees``).
+    settles, as does the energy of a card no other card of the range is
+    printed like yet (``_range_agrees``).
     """
     first = date(year_month.year, year_month.month, 1)
     following = date(first.year + (first.month == 12), first.month % 12 + 1, 1)
