@@ -1755,8 +1755,9 @@ def test_what_pdfminer_gathers_of_one_token_is_held(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
 ) -> None:
     """pdfminer grows a token, a comment included, and the data of an inline
-    image a byte at a time, copying what it holds each time, and parses each
-    as one object: 1 MB of inline image data took 352 s. The check is made
+    image a byte at a time, copying what it holds each time, while the parse
+    count sees each as one object at most: 1 MB of inline image data took
+    352 s. The check is made
     as it reads through each buffer of 4 kB."""
     monkeypatch.setattr(_pdf_bound, "_MAX_TOKEN_BYTES", 10_000)
 

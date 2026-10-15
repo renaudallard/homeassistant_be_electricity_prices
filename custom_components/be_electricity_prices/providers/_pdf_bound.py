@@ -117,20 +117,22 @@ _MAX_NESTING = 20
 _MAX_PATH_SEGMENTS = 450_000
 
 # The most a reader may parse of a card, counted as it parses, each time it
-# does: under pdfminer every token of the file, of its content streams for
-# each page drawing them and of a form each time it is drawn, of a font's
-# maps and programs, and each font, colour space, form or image and
+# does: under pdfminer every token but a comment of the file, of its content
+# streams for each page drawing them and of a form each time it is drawn, of
+# a font's maps and programs, and each font, colour space, form or image and
 # procedure set of a page's or form's resources it walks for each draw, the
-# kinds it reads of them; under pypdf every operand and operator of a content
-# stream each time it is interpreted, and every element of an array or
-# dictionary. What the bytes draw cost even when it built nothing: 78 kB
+# kinds it reads of them; under pypdf every operand and operator of a
+# content stream each time it is interpreted, and every element of an array
+# or dictionary. What the bytes draw cost even when it built nothing: 78 kB
 # inflating to 32 MB of numbers no operator took held pypdf 238 s and 1,2
 # GB, and 3 MB of paths pdfminer does not paint took 45 s. Measured as
 # above: at most 935 694 under pdfminer and 912 313 under pypdf, both on a
 # Bolt card of 2,8 MB. This is about three times that, since what it lets
 # through is CPU: a token of a Bolt card costs pdfminer about 50 us on a
 # Raspberry Pi, more than any made up to cost more, so 3 million take about
-# 150 s.
+# 150 s. A comment counts nothing: pdfminer passes over one in a time
+# linear in its length, the decode bound and the download cap holding how
+# many bytes it passes over, and _MAX_TOKEN_BYTES how long one may be.
 _MAX_PARSED = 3_000_000
 
 # The most a reader may build of a card's fonts, counted as it builds them:
@@ -146,12 +148,12 @@ _MAX_FONT_ENTRIES = 1_000_000
 
 # The longest token pdfminer may gather, a comment included, and the most
 # data of an inline image: it grows each a byte at a time, copying what it
-# holds each time, so in a time quadratic in its length, and parses each as
-# one object. 1 MB of inline image data took 352 s on a Raspberry Pi, from
-# a file under 2 kB. Measured as above: at most 1815 bytes, on a
-# TotalEnergies card, and no card carries an inline image. This is about
-# nine times that: 8 MB of strings this long take 29 s on a Raspberry Pi,
-# where the same bytes in strings of 1 kB take 22 s.
+# holds each time, so in a time quadratic in its length, while the parse
+# count sees each as one object at most. 1 MB of inline image data took
+# 352 s on a Raspberry Pi, from a file under 2 kB. Measured as above: at
+# most 1815 bytes, on a TotalEnergies card, and no card carries an inline
+# image. This is about nine times that: 8 MB of strings this long take
+# 29 s on a Raspberry Pi, where the same bytes in strings of 1 kB take 22 s.
 _MAX_TOKEN_BYTES = 16 * 1024
 
 
@@ -618,8 +620,8 @@ def _hold_pdfminer_to_the_bound() -> None:
     every stream it inflates through its module's ``zlib``, every page it
     lists through ``PDFPage.create_pages``, everything it lays out through
     the device pdfplumber gives it, what it holds through its interpreter's
-    and content parser's ``push``, every token it parses through
-    ``PSBaseParser.nexttoken``, the token or inline image it gathers
+    and content parser's ``push``, every token but a comment it parses
+    through ``PSBaseParser.nexttoken``, the token or inline image it gathers
     through its parsers' ``fillbuf``, a content parser's ``fillfp`` and
     ``get_inline_data``, the resources it walks for a page or a form drawn
     through ``init_resources``, and every loop building a font
