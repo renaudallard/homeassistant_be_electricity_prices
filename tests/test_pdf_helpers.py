@@ -1751,6 +1751,46 @@ def test_pdfminer_lays_out_no_paths_while_a_card_is_read() -> None:
         assert pdf.pages[0].lines and pdf.pages[0].rects
 
 
+def test_a_second_copy_of_the_bound_reads_through_the_same_wrappers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The live check loads the package again under a name of its own, and
+    that copy wrapped the readers again on top of the first, which then
+    wrapped them again in turn: a card's charges and objects were counted
+    four times over after a few reads. The copy reads through the wrappers
+    in place, and is held to its own bound all the same."""
+    import importlib.util
+    import io
+    import sys
+
+    import pdfplumber
+    import pypdf
+    from pdfminer.pdftypes import PDFStream
+    from pypdf.generic import EncodedStreamObject
+
+    _pdf_bound._hold_pdfminer_to_the_bound()
+    wrapped = (PDFStream.get_data, EncodedStreamObject.get_data)
+    name = f"{_pdf_bound.__package__}._pdf_bound_copy"
+    spec = importlib.util.spec_from_file_location(name, _pdf_bound.__file__)
+    assert spec is not None and spec.loader is not None
+    copy = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, copy)
+    spec.loader.exec_module(copy)
+    copy._hold_pdfminer_to_the_bound()
+    assert (PDFStream.get_data, EncodedStreamObject.get_data) == wrapped
+    monkeypatch.setattr(copy, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    payload = _inflating_pdf(2 << 20)
+    refused = r"^PDF streams decode to more than 1048576 bytes"
+    with pytest.raises(ExtractorError, match=refused), copy.bounded_pypdf():
+        pypdf.PdfReader(io.BytesIO(payload)).pages[0].extract_text()
+    with (
+        pytest.raises(ExtractorError, match=refused),
+        copy.bounded_pdfminer(),
+        pdfplumber.open(io.BytesIO(payload)) as pdf,
+    ):
+        pdf.pages[0].extract_text()
+
+
 @pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
 def test_each_page_is_let_go_of_once_read(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]

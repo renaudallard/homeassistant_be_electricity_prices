@@ -722,13 +722,18 @@ Internals worth knowing:
   at once rather than by looking it up in the page's list. A refusal a
   reader wraps in an error of its own, or swallows as pypdf does any error
   in a form, is refused all the same, and so is pypdf reaching one of its
-  own limits. The checks only count, and what they change (a font pypdf
-  loads once, the paths pdfminer no longer paints, a page let go of once
-  read, a glyph found at once) leaves the text as it was, so a card under
-  the bound renders to the same text as before, and only these refuse: a
-  file a reader cannot open is left to it to fail on. The manifest asks for
-  pypdf 6.6.0 or later, the first release whose text extraction loads its
-  fonts through `Font.from_font_resource`, which the bound counts.
+  own limits. The readers are wrapped once per process: a second copy of
+  `_pdf_bound.py`, as the live check loads under a package of its own,
+  finds the wrappers in place by a marker they carry and reads through
+  them, held to its own bound, where it wrapped them again and had each
+  read counted once for every copy. The checks only count, and what they
+  change (a font pypdf loads once, the paths pdfminer no longer paints, a
+  page let go of once read, a glyph found at once) leaves the text as it
+  was, so a card under the bound renders to the same text as before, and
+  only these refuse: a file a reader cannot open is left to it to fail on.
+  The manifest asks for pypdf 6.6.0 or later, the first release whose text
+  extraction loads its fonts through `Font.from_font_resource`, which the
+  bound counts.
 - `_require_https` (`_pdf.py`) refuses to fetch a card or page whose address
   is not https, before any request. Most links are read off a supplier's page
   and only energie.be checked their scheme, so a plain http link was fetched

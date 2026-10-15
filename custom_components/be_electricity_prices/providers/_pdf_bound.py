@@ -113,17 +113,10 @@ _MAX_NESTING = 20
 _MAX_PATH_SEGMENTS = 450_000
 
 
-def _bound_refusal() -> ExtractorError:
-    return ExtractorError(
+def _over_the_bound() -> str:
+    return (
         f"PDF streams decode to more than {_MAX_DECODED_STREAM_BYTES} bytes; "
         "refusing to read them"
-    )
-
-
-def _ascii85_refusal() -> ExtractorError:
-    return ExtractorError(
-        f"PDF carries an ASCII85 stream over {_MAX_ASCII85_BYTES} bytes; "
-        "refusing to read it"
     )
 
 
@@ -146,14 +139,14 @@ def _inflate(
                 out += inflater.decompress(pending, _PIECE)
                 pending = inflater.unconsumed_tail
                 if len(out) > room:
-                    raise _bound_refusal()
+                    raise ExtractorError(_over_the_bound())
             if inflater.eof:
                 break
         out += inflater.flush()
     except zlib.error:
         return bytes(out), False, True
     if len(out) > room:
-        raise _bound_refusal()
+        raise ExtractorError(_over_the_bound())
     return bytes(out), inflater.eof, False
 
 
@@ -171,7 +164,11 @@ class _Reading:
     ended it, which a reader may wrap in an error of its own or swallow,
     for each stream being decoded, innermost last, what its last inflate
     handed back, counted already, and under pypdf which stream that is and
-    the fonts loaded so far, by the dictionary they were loaded from."""
+    the fonts loaded so far, by the dictionary they were loaded from.
+
+    Every refusal is made here, so it is an error of the copy of this
+    module the read was started from, whichever copy put the wrappers in
+    place."""
 
     left: int
     refusal: ExtractorError | None = None
@@ -181,7 +178,8 @@ class _Reading:
     streams: list[EncodedStreamObject] = field(default_factory=list)
     fonts: dict[int, tuple[Any, Font]] = field(default_factory=dict)
 
-    def refuse(self, err: ExtractorError) -> ExtractorError:
+    def refuse(self, message: str) -> ExtractorError:
+        err = ExtractorError(message)
         if self.refusal is None:
             self.refusal = err
         return err
@@ -189,16 +187,14 @@ class _Reading:
     def charge(self, cost: int) -> None:
         self.left -= cost
         if self.left < 0:
-            raise self.refuse(_bound_refusal())
+            raise self.refuse(_over_the_bound())
 
     def list_page(self, count: int) -> None:
         """Refuse a reader listing its ``count``-th page, past
         :data:`_MAX_PAGES`."""
         if count > _MAX_PAGES:
             raise self.refuse(
-                ExtractorError(
-                    f"PDF has more than {_MAX_PAGES} pages; refusing to read it"
-                )
+                f"PDF has more than {_MAX_PAGES} pages; refusing to read it"
             )
 
     def build(self, on_page: int) -> None:
@@ -206,10 +202,17 @@ class _Reading:
         self.built += 1
         if on_page > _MAX_PAGE_OBJECTS or self.built > _MAX_CARD_OBJECTS:
             raise self.refuse(
-                ExtractorError(
-                    f"PDF lays out more than {_MAX_PAGE_OBJECTS} objects on a "
-                    f"page or {_MAX_CARD_OBJECTS} in all; refusing to read it"
-                )
+                f"PDF lays out more than {_MAX_PAGE_OBJECTS} objects on a "
+                f"page or {_MAX_CARD_OBJECTS} in all; refusing to read it"
+            )
+
+    def hold(self, count: int, most: int) -> None:
+        """Refuse the card once pdfminer holds ``count`` of something, past
+        ``most``."""
+        if count > most:
+            raise self.refuse(
+                f"PDF has pdfminer hold more than {most} items at once; "
+                "refusing to read it"
             )
 
     def inflate(
@@ -220,16 +223,27 @@ class _Reading:
         try:
             out, whole, failed = _inflate(data, self.left, wbits)
         except ExtractorError as err:
-            raise self.refuse(err) from None
+            raise self.refuse(str(err)) from None
         if self.inflated:
             self.inflated[-1] = len(out)
         self.charge(len(out))
         return out, whole, failed
 
 
-# The card being read in this thread, or None outside one: the readers are
-# only held to the bound then.
-_READING: ContextVar[_Reading | None] = ContextVar("_READING", default=None)
+# What the wrappers this module puts on pypdf and on pdfminer carry: the
+# card being read in this thread, or None outside one, the readers being
+# held to the bound only then, and the lock pdfminer is wrapped under. A
+# second copy of this module, as the live check loads under a package of
+# its own, finds them there and reads through the same wrappers, rather
+# than wrapping the readers again and having each read counted once for
+# every copy.
+_MARK = "_be_electricity_prices_bound"
+_READING: ContextVar[_Reading | None]
+_HOLDING: threading.Lock
+_READING, _HOLDING = getattr(EncodedStreamObject.get_data, _MARK, None) or (
+    ContextVar[_Reading | None]("_READING", default=None),
+    threading.Lock(),
+)
 
 # pdfminer decrypts RC4 a byte at a time, appending each to what it holds:
 # 64 kB took 0,27 s of CPU on a Raspberry Pi and 1 MiB 365 s. A decryption
@@ -269,9 +283,7 @@ def _refused_while_reading(name: str, decode: Any) -> Any:
         reading = _READING.get()
         if reading is not None:
             raise reading.refuse(
-                ExtractorError(
-                    f"PDF carries a {name} stream outside an image; refusing to read it"
-                )
+                f"PDF carries a {name} stream outside an image; refusing to read it"
             )
         return decode(*args, **kwargs)
 
@@ -285,7 +297,10 @@ def _ascii85_held(decode: Any) -> Any:
     def held(data: bytes, *args: Any, **kwargs: Any) -> Any:
         reading = _READING.get()
         if reading is not None and len(data) > _MAX_ASCII85_BYTES:
-            raise reading.refuse(_ascii85_refusal())
+            raise reading.refuse(
+                f"PDF carries an ASCII85 stream over {_MAX_ASCII85_BYTES} bytes; "
+                "refusing to read it"
+            )
         return decode(data, *args, **kwargs)
 
     return held
@@ -296,7 +311,9 @@ def _hold_pypdf_to_the_bound() -> None:
     otherwise. Every stream it reads goes through ``get_data``, every one it
     inflates through ``pypdf.filters.decompress``, every font it loads
     through ``Font.from_font_resource``, and every page it lists through
-    ``PageObject``."""
+    ``PageObject``. Done once whatever the copy of this module."""
+    if hasattr(EncodedStreamObject.get_data, _MARK):
+        return
     decompress = pypdf_filters.decompress
 
     def inflate(data: bytes) -> bytes:
@@ -387,6 +404,7 @@ def _hold_pypdf_to_the_bound() -> None:
         _ascii85_held(pypdf_filters.ASCII85Decode.decode)
     )
     pypdf_filters.decompress = inflate
+    setattr(read_encoded, _MARK, (_READING, _HOLDING))
     EncodedStreamObject.get_data = read_encoded  # type: ignore[method-assign]
     DecodedStreamObject.get_data = read_decoded  # type: ignore[method-assign]
     Font.from_font_resource = classmethod(loaded)  # type: ignore[assignment]
@@ -439,16 +457,8 @@ def _held(count: int, most: int) -> None:
     """Refuse the card being read once pdfminer holds ``count`` of
     something, past ``most``."""
     reading = _READING.get()
-    if reading is not None and count > most:
-        raise reading.refuse(
-            ExtractorError(
-                f"PDF has pdfminer hold more than {most} items at once; "
-                "refusing to read it"
-            )
-        )
-
-
-_HOLDING = threading.Lock()
+    if reading is not None:
+        reading.hold(count, most)
 
 
 def _hold_pdfminer_to_the_bound() -> None:
@@ -457,7 +467,8 @@ def _hold_pdfminer_to_the_bound() -> None:
     every stream it inflates through its module's ``zlib``, every page it
     lists through ``PDFPage.create_pages``, everything it lays out through
     the device pdfplumber gives it, and what it holds through its
-    interpreter's and content parser's ``push``."""
+    interpreter's and content parser's ``push``. Done once whatever the copy
+    of this module."""
     from pdfminer import pdftypes
     from pdfminer.arcfour import Arcfour
     from pdfminer.pdfinterp import PDFContentParser, PDFPageInterpreter
@@ -466,9 +477,9 @@ def _hold_pdfminer_to_the_bound() -> None:
     from pdfplumber.page import PDFPageAggregatorWithMarkedContent as Device
 
     with _HOLDING:
-        names = vars(pdftypes)
-        if isinstance(names["zlib"], _BoundedZlib):
+        if hasattr(pdftypes.PDFStream.get_data, _MARK):
             return
+        names = vars(pdftypes)
         get_data = pdftypes.PDFStream.get_data
 
         def measured(self: pdftypes.PDFStream) -> bytes:
@@ -504,10 +515,8 @@ def _hold_pdfminer_to_the_bound() -> None:
             reading = _READING.get()
             if reading is not None and columns > max(len(data), _PIECE):
                 raise reading.refuse(
-                    ExtractorError(
-                        "PDF names a predictor row wider than its stream; "
-                        "refusing to read it"
-                    )
+                    "PDF names a predictor row wider than its stream; "
+                    "refusing to read it"
                 )
             return bytes(png_predictor(pred, colors, columns, bits, data))
 
@@ -578,6 +587,7 @@ def _hold_pdfminer_to_the_bound() -> None:
 
         names["ascii85decode"] = _ascii85_held(names["ascii85decode"])
         names["apply_png_predictor"] = predicted
+        setattr(measured, _MARK, True)
         pdftypes.PDFStream.get_data = measured  # type: ignore[method-assign]
         Arcfour.decrypt = charged
         Device.render_char = _built(Device.render_char)  # type: ignore[method-assign]
@@ -607,7 +617,7 @@ def _held_to_the_bound() -> Iterator[None]:
         if reading.refusal is not None and err is not reading.refusal:
             raise reading.refusal from err
         if isinstance(err, LimitReachedError):
-            raise _bound_refusal() from err
+            raise ExtractorError(_over_the_bound()) from err
         raise
     finally:
         _READING.reset(token)
