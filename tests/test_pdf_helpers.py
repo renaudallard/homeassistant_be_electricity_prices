@@ -1825,6 +1825,26 @@ def test_dedupe_finds_each_glyph_kept_at_once() -> None:
     assert [id(glyph) for glyph in kept] == [id(glyph) for glyph in expected]
 
 
+def test_the_ci_text_cache_key_moves_with_the_extractor() -> None:
+    """fixture_text keys what it read on providers/_pdf.py and the decode
+    bound beside it, and the CI cache key named only the first: a change to
+    the bound restored the old texts under a key that did not move, none of
+    them of use, and saved none of the new ones."""
+    import yaml  # type: ignore[import-untyped]
+
+    from tests import PACKAGE
+
+    workflow = PACKAGE.parent.parent / ".github" / "workflows" / "test.yml"
+    steps = yaml.safe_load(workflow.read_text())["jobs"]["test"]["steps"]
+    (key,) = (
+        step["with"]["key"]
+        for step in steps
+        if step.get("with", {}).get("path") == "tmp/fixture_text"
+    )
+    for code in sorted((PACKAGE / "providers").glob("_pdf*.py")):
+        assert str(code.relative_to(PACKAGE.parent.parent)) in key, code.name
+
+
 def test_text_mentions_month_tolerates_split_whitespace() -> None:
     months = (
         "januari",
