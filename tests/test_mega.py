@@ -1750,8 +1750,8 @@ async def test_a_settled_month_bills_its_stated_figure_and_a_cohort_its_own_pair
                     billed[date(2026, 7, 1)].energy, when, None, meter
                 ) == pytest.approx(figure)
             assert billed[date(2026, 8, 1)].injection == cohort_feed_in
-            if CONF_API_KEY in data:
-                assert billed[date(2026, 8, 1)].energy == leg
+            # Both legs off July's card: the settled index needs no key.
+            assert billed[date(2026, 8, 1)].energy == leg
 
 
 async def test_archive_keeps_its_own_rates_when_the_next_card_is_absent() -> None:

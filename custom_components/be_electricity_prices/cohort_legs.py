@@ -567,11 +567,12 @@ def _cohort_card(
     that could not be retrieved for a past signing the archive has nothing
     for, which is the case the entry otherwise hides; and the current card
     with the archived one and ``unbilled``, the reason nothing on it is
-    billed. A keyless variable cohort is that last case: its signing card is
-    retrieved, but re-pricing it needs spots, so the entry bills the current
-    card's printed rate exactly as it would with no start date at all, and
-    naming the signing card alone answered "did my start date do anything?"
-    with a yes it had not earned.
+    billed. A keyless variable cohort is that last case while the month
+    runs: its signing card is retrieved, but re-pricing it needs spots until
+    the month settles, so the entry bills the current card's printed rate
+    exactly as it would with no start date at all, and naming the signing
+    card alone answered "did my start date do anything?" with a yes it had
+    not earned.
     """
     label = current.publication_label or "the current card"
     if archived is not None:

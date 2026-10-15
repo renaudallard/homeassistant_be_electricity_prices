@@ -249,7 +249,8 @@ async def _cohort_legs(
     (:meth:`_CohortLegs.splice`), and names the card they came off. A leg left
     ``None`` means "no cohort override, keep the card's own": nothing to
     re-price with (no signing rate typed and no archived card, or a variable
-    cohort with no ENTSO-E key to resolve its monthly mean). With no cohort
+    cohort with no ENTSO-E key to resolve its monthly mean, in a month whose
+    card does not carry the index it settled at). With no cohort
     month there is no lock, so the feed-in leg is ``None`` and the energy leg
     is the delivery month's card re-priced on its monthly mean when that card
     is month indexed and the entry has a key (:func:`_month_indexed_leg`),
@@ -349,6 +350,19 @@ async def _cohort_legs(
             # resolved rate) instead of tearing the entry down over a key the
             # user was never prompted for.
             #
+            # Unless the month being billed has settled: its card then carries
+            # the index the month closed at (``index_realised``), which the leg
+            # bills with no spot at all, so a keyless cohort is billed that
+            # month on the coefficients it signed, as a keyed one is. Keeping
+            # the month's stated figure there billed the energy off one card
+            # while the feed-in, frozen below, was credited on the signing
+            # card's formula at that same index: a Mega Cosy Flex contract
+            # signed in January 2026 was billed 0,26 c/kWh under its own
+            # formula in August and in September. Only on a month walk
+            # (``month_snapshot``): the live tick bills the running month,
+            # which has not settled, and a leg there would send it to the spot
+            # fetch whatever card stands in for it.
+            #
             # An archived DynamicRates leg needs a spot just as much, and is
             # deliberately not gated here: every extractor derives the energy
             # shape from the static catalogue kind rather than from the card
@@ -356,11 +370,19 @@ async def _cohort_legs(
             # collected a key. Flipping an existing contract's kind in place,
             # or sniffing the shape out of the card, would break that and let
             # a keyless entry reach the spot fetch again.
+            settled = (
+                None
+                if month_snapshot is None
+                else getattr(month_snapshot.energy, "index_realised", None)
+            )
             if isinstance(cohort, SpotMonthlyRates) and not entry.data.get(
                 CONF_API_KEY
             ):
-                cohort = None
-                unbilled = "no ENTSO-E key"
+                if settled is None:
+                    cohort = None
+                    unbilled = "no ENTSO-E key"
+                else:
+                    cohort = replace(cohort, index_realised=settled)
             archived = cohort
     # The typed rate overlays whichever card was retrieved, so a user who
     # filled in only some boxes keeps the archived signing-month values for
@@ -397,7 +419,8 @@ async def _cohort_legs(
         # re-priceable leg (_cohort_energy_from_archived returns None for a
         # variable card whose coefficients would not parse and for a TOU or
         # Impact card printing resolved bands with no formula behind them, and
-        # a spot-monthly leg is dropped above without a key).
+        # a spot-monthly leg is dropped above without a key in a month that
+        # has not settled).
         #
         # With no signing rate to hold, the month is billed on its own card,
         # as it is for an entry that names no cohort month at all: the card of

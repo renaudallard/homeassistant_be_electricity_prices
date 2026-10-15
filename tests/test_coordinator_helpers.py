@@ -9804,6 +9804,69 @@ async def test_the_cohort_credit_keeps_the_delivery_month_index(
     assert eff.injection.index_realised == pytest.approx(0.0545)
 
 
+async def test_a_keyless_cohort_bills_a_settled_month_on_its_own_formula(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A settled month carries the index it closed at, which bills a cohort's
+    formula with no spot at all, so a keyless entry signed in May bills
+    September on May's coefficients at September's index. It was billed
+    September's stated figure, the next card's formula, while its feed-in
+    was credited on May's. The running month has no index yet and keeps the
+    printed rate, and the per-day walk the keyless entry takes bills the
+    settled month rather than dropping it for want of a mean."""
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+
+    freezer.move_to("2026-10-15 12:00:00+02:00")
+
+    def card(**rates: Any) -> SupplierSnapshot:
+        return replace(
+            _yearly_snapshot(), energy=VariableRates(month_indexed=True, **rates)
+        )
+
+    may = card(current=0.15, formula_factor=1.1, formula_base=0.036)
+    september = card(
+        current=0.16, formula_factor=1.2, formula_base=0.04, index_realised=0.10
+    )
+    october = card(current=0.17, formula_factor=1.2, formula_base=0.04)
+    cards = {date(2026, 5, 1): may, date(2026, 9, 1): september}
+
+    async def _ffm(
+        _session: object, _contract: str, _region: str, month: date
+    ) -> SupplierSnapshot | None:
+        return cards.get(month)
+
+    extractor = _fixed_extractor(_ffm)
+    entry = _yearly_entry(contract_start_date="2026-05-10")
+    days = _days_through(date(2026, 9, 1), date(2026, 9, 30))
+    stats: dict[str, float] = {}
+    _monthly_snapshots(hass).clear()
+    with (
+        _patch_recorder_per_entity(
+            {
+                "sensor.day_cons": {d: 10.0 for d in days},
+                "sensor.night_cons": dict.fromkeys(days, 0.0),
+                "sensor.day_inj": {},
+                "sensor.night_inj": {},
+            }
+        ),
+        patch.object(
+            snapshot_months,
+            "_archived_card_from_github",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        live = await _cohort_legs(
+            hass, MagicMock(), extractor, "test", "wallonia", entry, october
+        )
+        await _compute_current_year_cost(
+            hass, MagicMock(), extractor, october, entry, breakdown=stats
+        )
+    assert live.energy is None
+    assert stats["energy_component_ytd_eur"] == pytest.approx(
+        300.0 * (1.1 * 0.10 + 0.036)
+    )
+
+
 async def test_a_keyless_cohort_credits_each_past_month_its_own_printed_figure(
     hass: HomeAssistant, freezer: Any
 ) -> None:

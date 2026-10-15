@@ -495,6 +495,20 @@ cohort bills such a month on its own formula at each of those indices
 (`_on_settled_quarter`, `cohort_legs.py`), not on the spreads its signing card
 printed.
 
+A signing cohort without a key bills a settled month the same way as one with a
+key: `_cohort_legs` keeps the signing card's coefficients whenever the month
+being billed carries `index_realised`, which the leg bills with no day-ahead
+cache at all, and drops them only for a month that has not settled, which then
+bills its printed rate as an entry with no start date does. Every supplier that
+settles a month records the index its own formula reads (the RLP-weighted one
+at Eneco, EBEM and TotalEnergies, the quarter's per register at Bolt, one BELIX
+for Cociter's three bands), so the signing card's formula at that index is the
+contract's figure. Keeping the month's own figure instead billed the energy off
+one card while the feed-in, frozen with it (issue #85), was credited off the
+signing card. The per-day walk a keyless entry takes bills such a month on the
+recorded index (`static_energy_eur_per_kwh`) rather than dropping it for want
+of a mean.
+
 ### Monthly-indexed feed-in credits
 
 The same lag applies to a feed-in credit. Eneco Power Fix, Fix One, Flex and Flex One
@@ -1223,7 +1237,9 @@ rate for the current-year-cost / YTD sensor when the contract has one
 
 `static_energy_eur_per_kwh(energy, band)` returns a rate for `band in
 ("single","peak","offpeak")` for Fixed and Variable, falling back to
-single/current when the card publishes no split (`pricing.py`). A
+single/current when the card publishes no split (`pricing.py`), and for a
+spot-monthly leg once its month's mean is passed or the leg carries the index
+its month settled at. A
 HALF-published pair counts as no split, the same rule `_routed_rate` applies on
 the hourly path: filling the missing half from the single rate reads a rate the
 card never printed for that band, and it made the two walks disagree about one

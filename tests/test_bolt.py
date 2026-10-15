@@ -1919,9 +1919,9 @@ async def test_a_cohort_bills_a_settled_quarter_on_that_quarter_s_spreads(
     """A contract signed on a card printing the second quarter's table bills
     a settled month of the third on the third quarter's index for every
     register and band, not on the third quarter's mono index plus the spreads
-    its signing card printed. August's own card is the signing card here, so
-    the cohort's formula is the month's and every rate has to come out at the
-    settled one."""
+    its signing card printed, with an ENTSO-E key or without one. The signing
+    card is August's with its base a cent higher, so every rate has to come out
+    a cent above the settled one."""
     from types import SimpleNamespace
 
     from homeassistant.util import dt as dt_util
@@ -1940,51 +1940,62 @@ async def test_a_cohort_bills_a_settled_quarter_on_that_quarter_s_spreads(
     )
     freezer.move_to("2026-10-15 10:00:00+02:00")
 
-    async def _month(*args: Any, **_k: object) -> SupplierSnapshot:
-        return held if args[5] == date(2026, 7, 1) else settled
-
-    entry = SimpleNamespace(
-        data={
-            CONF_SUPPLIER: "bolt",
-            CONF_CONTRACT: "bolt_variable",
-            CONF_TARIFF_CARD_DATE: "2026-07-01",
-            CONF_API_KEY: "k",
-        }
+    printed = held.energy
+    assert isinstance(printed, VariableRates) and printed.formula_base is not None
+    rates = ("current", "peak", "offpeak", "exclusive_night")
+    bands = ("impact_eco", "impact_medium", "impact_pic")
+    signing = replace(
+        held,
+        energy=replace(
+            printed,
+            formula_base=printed.formula_base + 0.01,
+            **{field: getattr(printed, field) + 0.01 for field in rates + bands},
+        ),
     )
-    with (
-        patch.object(cohort, "_snapshot_for_month", new=_month),
-        patch.object(cohort, "month_card", new=_month),
-    ):
-        billed = await cohort._effective_snapshot_for_month(
-            None,  # type: ignore[arg-type]
-            None,  # type: ignore[arg-type]
-            EXTRACTORS["bolt"],
-            "bolt_variable",
-            "wallonia",
-            date(2026, 8, 1),
-            settled,
-            entry,  # type: ignore[arg-type]
-        )
+
+    async def _month(*args: Any, **_k: object) -> SupplierSnapshot:
+        return signing if args[5] == date(2026, 7, 1) else settled
+
+    signed = {
+        CONF_SUPPLIER: "bolt",
+        CONF_CONTRACT: "bolt_variable",
+        CONF_TARIFF_CARD_DATE: "2026-07-01",
+    }
     energy = settled.energy
     assert isinstance(energy, VariableRates)
-    for hour, meter, mode, region, field in (
-        (15, "mono", "simple", "wallonia", "current"),
-        (15, "bi", "bi_horaire", "flanders", "peak"),
-        (3, "bi", "bi_horaire", "flanders", "offpeak"),
-        (15, "exclusive_night", "impact", "wallonia", "exclusive_night"),
-        (13, "dynamic", "impact", "wallonia", "impact_eco"),
-        (9, "dynamic", "impact", "wallonia", "impact_medium"),
-        (19, "dynamic", "impact", "wallonia", "impact_pic"),
-    ):
-        when = datetime(2026, 8, 12, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
-        assert energy_eur_per_kwh(
-            billed.energy,
-            when,
-            None,
-            meter=meter,  # type: ignore[arg-type]
-            region=region,
-            dso_tariff_mode=mode,  # type: ignore[arg-type]
-        ) == pytest.approx(getattr(energy, field))
+    for data in (signed | {CONF_API_KEY: "k"}, signed):
+        with (
+            patch.object(cohort, "_snapshot_for_month", new=_month),
+            patch.object(cohort, "month_card", new=_month),
+        ):
+            billed = await cohort._effective_snapshot_for_month(
+                None,  # type: ignore[arg-type]
+                None,  # type: ignore[arg-type]
+                EXTRACTORS["bolt"],
+                "bolt_variable",
+                "wallonia",
+                date(2026, 8, 1),
+                settled,
+                SimpleNamespace(data=data),  # type: ignore[arg-type]
+            )
+        for hour, meter, mode, region, field in (
+            (15, "mono", "simple", "wallonia", "current"),
+            (15, "bi", "bi_horaire", "flanders", "peak"),
+            (3, "bi", "bi_horaire", "flanders", "offpeak"),
+            (15, "exclusive_night", "impact", "wallonia", "exclusive_night"),
+            (13, "dynamic", "impact", "wallonia", "impact_eco"),
+            (9, "dynamic", "impact", "wallonia", "impact_medium"),
+            (19, "dynamic", "impact", "wallonia", "impact_pic"),
+        ):
+            when = datetime(2026, 8, 12, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+            assert energy_eur_per_kwh(
+                billed.energy,
+                when,
+                None,
+                meter=meter,  # type: ignore[arg-type]
+                region=region,
+                dso_tariff_mode=mode,  # type: ignore[arg-type]
+            ) == pytest.approx(getattr(energy, field) + 0.01)
 
 
 def test_a_card_whose_index_table_is_another_quarter_is_refused() -> None:

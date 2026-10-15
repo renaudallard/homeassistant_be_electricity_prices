@@ -499,8 +499,9 @@ def static_energy_eur_per_kwh(
 
     A monthly leg is as stable as a variable card's rate, one figure for the
     whole month, but only once that month's mean is known: ``month_mean``
-    passes it, and without it the leg has no rate here, which is what the
-    year-to-date walk relies on to take such a month through its own path.
+    passes it, or the leg carries the index its month settled at, and without
+    either the leg has no rate here, which is what the year-to-date walk
+    relies on to take such a month through its own path.
     """
     if isinstance(energy, SpotMonthlyRates):
         return _static_monthly(energy, band, month_mean)
@@ -528,7 +529,12 @@ def _static_monthly(
     time-of-use or Tarif Impact schedule has no day and night band to report;
     a card printing Impact bands beside its pairs still has those pairs, and
     ``static_breakdown`` already refuses the Impact configuration.
+
+    A leg settled on its month's index needs no mean, the same as on the
+    hourly path: that value is the month's.
     """
+    if month_mean is None:
+        month_mean = energy.index_realised
     if month_mean is None:
         return None
     if energy.factor_transition is not None or (
