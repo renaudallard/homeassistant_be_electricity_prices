@@ -130,6 +130,16 @@ def _forget_rolled_back_mega_cards() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _forget_heard_totalenergies_range() -> None:
+    """TotalEnergies keeps what each card of its range said for an hour when
+    settling a month, keyed on the contract and region, and tests serve other
+    cards under the same keys."""
+    from custom_components.be_electricity_prices.providers import totalenergies
+
+    totalenergies._RANGE_HEARD.clear()
+
+
+@pytest.fixture(autouse=True)
 def _card_archive_holds_nothing() -> Iterator[None]:
     """The month cache asks the repository's card archive first for every
     closed month, over the network. Tests that are not about that tier get a

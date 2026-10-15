@@ -57,7 +57,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import date, datetime, timedelta
 from statistics import median
 
 import aiohttp
@@ -650,6 +650,48 @@ def _printed_injection_index(injection: InjectionRates | None) -> float | None:
     return (rate - base) / factor
 
 
+# What each variable card said when last read for a settlement: when, the
+# month it is titled for, and the index its monthly block is printed at, or
+# None where the block is unread or the card is not served. A card takes 10 to
+# 13 s of CPU to read on a Raspberry Pi, and every contract and region settling
+# in a refresh asks the same range, 12 cards while it still carries last
+# month's title. Kept for an hour, so a refresh reads each card once, while a
+# provisional month, asked again the next day, reads them afresh.
+_RANGE_HEARD: dict[tuple[str, str], tuple[datetime, date | None, float | None]] = {}
+_RANGE_HEARD_FOR = timedelta(hours=1)
+
+
+def _heard(
+    contract_id: str, region: str, card: SupplierSnapshot | None, text: str
+) -> tuple[date | None, float | None]:
+    """The month ``card`` is titled for and the index its monthly block is
+    printed at, kept in ``_RANGE_HEARD``; ``None`` for a card not served."""
+    said = (
+        (None, None)
+        if card is None
+        else (
+            card_valid_until(None, card.publication_label),
+            (
+                _printed_energy_index(card.energy)
+                if monthly_rates_printed(text)[0]
+                else None
+            ),
+        )
+    )
+    _RANGE_HEARD[contract_id, region] = (dt_util.utcnow(), *said)
+    return said
+
+
+def _heard_lately(
+    contract_id: str, region: str
+) -> tuple[date | None, float | None] | None:
+    """What ``_heard`` kept of this card within the hour, or ``None``."""
+    heard = _RANGE_HEARD.get((contract_id, region))
+    if heard is None or dt_util.utcnow() - heard[0] >= _RANGE_HEARD_FOR:
+        return None
+    return heard[1], heard[2]
+
+
 async def _range_agrees(
     session: aiohttp.ClientSession,
     contract: _ContractDef,
@@ -666,41 +708,41 @@ async def _range_agrees(
     EUR/MWh, where every other card of the range solves to 164,4 to 164,7;
     settled on it, September would have kept 159,9 for good. So ``index``
     stands once one other card titled for the same month agrees within the
-    fit of a card's own columns, the region's cards asked first, and falls
-    once two disagree. Where no other card titled for the month prints its
-    block, the rest of the range still carrying last month's title or its
-    block unread, the index cannot be checked and falls until one does.
+    fit of a card's own columns, and falls once two disagree. Where no other
+    card titled for the month prints its block, the rest of the range still
+    carrying last month's title or its block unread, the index cannot be
+    checked and falls until one does. The cards heard within the hour are
+    asked first, costing nothing (``_heard``), then the region's.
     """
     regions = (region, *(r for r in _REGION_TO_CODE if r != region))
+    others = [
+        (other, where)
+        for where in regions
+        for other in _CONTRACTS
+        if (other, where) != (contract, region)
+        and other.contract_id in _MONTH_INDEXED_ENERGY
+        and where in other.regions
+    ]
+    others.sort(key=lambda pair: _heard_lately(pair[0].contract_id, pair[1]) is None)
     disagree = 0
-    for where in regions:
-        for other in _CONTRACTS:
-            if (
-                (other, where) == (contract, region)
-                or other.contract_id not in _MONTH_INDEXED_ENERGY
-                or where not in other.regions
-            ):
-                continue
+    for other, where in others:
+        said = _heard_lately(other.contract_id, where)
+        if said is None:
             try:
                 card, text = await _fetch_card(session, other, where)
             except ExtractorError as err:
                 if is_transient_fetch_error(str(err)):
                     raise
-                continue
-            if card_valid_until(None, card.publication_label) != titled:
-                continue
-            printed = (
-                _printed_energy_index(card.energy)
-                if monthly_rates_printed(text)[0]
-                else None
-            )
-            if printed is None:
-                continue
-            if abs(printed - index) <= _INDEX_FIT:
-                return True
-            disagree += 1
-            if disagree == 2:
-                return False
+                card, text = None, ""
+            said = _heard(other.contract_id, where, card, text)
+        month, printed = said
+        if month != titled or printed is None:
+            continue
+        if abs(printed - index) <= _INDEX_FIT:
+            return True
+        disagree += 1
+        if disagree == 2:
+            return False
     return False
 
 
@@ -747,7 +789,7 @@ async def settle_month(
     try:
         contract = _contract_in(contract_id, region)
         card, text = await _fetch_card(session, contract, region)
-        titled = card_valid_until(None, card.publication_label)
+        titled, printed = _heard(contract_id, region, card, text)
         if titled != end_of_month(following.year, following.month):
             return replace(held, provisional=True)
         feed_in, feed_in_text = card.injection, text
@@ -760,13 +802,12 @@ async def settle_month(
             raise
         return replace(held, provisional=True)
     # A rate the card prints as the regulator's annual estimate, its monthly
-    # block unread, is at no index the month closed at.
-    monthly_energy = monthly_rates_printed(text)[0]
+    # block unread, is at no index the month closed at (``_heard``).
     monthly_feed_in = monthly_rates_printed(feed_in_text)[1]
     energy, injection = held.energy, held.injection
     pending = False
     if getattr(energy, "month_indexed", False):
-        index = _printed_energy_index(card.energy) if monthly_energy else None
+        index = printed
         if index is not None and not await _range_agrees(
             session, contract, region, titled, index
         ):

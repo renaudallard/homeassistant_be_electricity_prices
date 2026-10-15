@@ -1839,6 +1839,81 @@ async def test_a_card_the_range_cannot_check_yet_does_not_settle_the_energy(
     assert out == replace(held, provisional=True)
 
 
+async def test_a_refresh_reads_each_card_of_the_range_once(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """Checking a next card against the range reads up to 12 more cards, 10
+    to 13 s of CPU each on a Raspberry Pi, and every contract and region
+    settling in a refresh asks the same ones. What a card said is kept for
+    an hour: the second settlement reads only its own card, and finds the
+    agreeing one among those heard without reading the rest of the range."""
+    from datetime import date, timedelta
+
+    from custom_components.be_electricity_prices.providers import totalenergies
+    from custom_components.be_electricity_prices.providers._settle import (
+        is_settled,
+    )
+
+    serve = _serve(
+        {
+            "ELECTRICITE-VARIABLE_ELECTRICITY_BXL_FR.pdf": (
+                "totalenergies_electricite_variable_b_2026-10_filled.pdf"
+            ),
+            "MYCOMFORT_ELECTRICITY_BXL_FR.pdf": "totalenergies_mycomfort_b_2026-10.pdf",
+            "MYESSENTIAL_ELECTRICITY_BXL_FR.pdf": (
+                "totalenergies_myessential_b_2026-10.pdf"
+            ),
+            "MYCOMFORT_ELECTRICITY_WAL_FR.pdf": (
+                "totalenergies_mycomfort_w_2026-10_nl.pdf"
+            ),
+        }
+    )
+    read: list[str] = []
+
+    async def counted(session: object, url: str) -> str:
+        if "/INJECTION_" not in url:
+            read.append(url.rsplit("/", 1)[1])
+        text: str = await serve(session, url)  # type: ignore[operator]
+        return text
+
+    monkeypatch.setattr(totalenergies, "fetch_pdf_text_layout", counted)
+    freezer.move_to("2026-10-01 16:00:00+02:00")
+
+    async def settle(contract_id: str, fixture: str) -> Any:
+        held = parse_snapshot(
+            contract_id, fixture_text(fixture, layout=True), "brussels"
+        )
+        return await totalenergies.settle_month(
+            None,  # type: ignore[arg-type]
+            contract_id,
+            "brussels",
+            date(2026, 9, 1),
+            held,
+        )
+
+    misprinted = await settle(
+        "totalenergies_electricite_variable",
+        "totalenergies_electricite_variable_b_2026-10.pdf",
+    )
+    assert misprinted.provisional
+    assert "MYCOMFORT_ELECTRICITY_WAL_FR.pdf" in read
+    read.clear()
+    good = await settle(
+        "totalenergies_myessential", "totalenergies_myessential_b_2026-10.pdf"
+    )
+    assert is_settled(good) and not good.provisional
+    assert read == ["MYESSENTIAL_ELECTRICITY_BXL_FR.pdf"]
+
+    # An hour on, the range is read again.
+    read.clear()
+    freezer.tick(timedelta(hours=1))
+    again = await settle(
+        "totalenergies_myessential", "totalenergies_myessential_b_2026-10.pdf"
+    )
+    assert again == good
+    assert "MYCOMFORT_ELECTRICITY_WAL_FR.pdf" in read
+
+
 def test_the_printed_index_is_the_median_of_the_columns() -> None:
     """Each printed figure is rounded to a hundredth of a cent, and on the
     October 2026 myDrive card in Wallonia the mono column alone solves to

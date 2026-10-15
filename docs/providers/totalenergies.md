@@ -498,7 +498,11 @@ and the month stays provisional. With no other card titled for the month printin
 its block, the rest of the range still carrying last month's title or its block
 unread, the index cannot be checked and waits too, so a misprinted card heard
 first never settles alone. Settling reads at least one card more for that, 10 to
-13 s of CPU each on a Raspberry Pi.
+13 s of CPU each on a Raspberry Pi, and up to 12 while the range still carries last
+month's title, so what each card said is kept for an hour (`_RANGE_HEARD`), the
+card a settlement reads for itself included: the contracts and regions settling in
+one refresh read each card once, the cards already heard asked first, and a month
+still provisional the next day reads them afresh.
 Only a rate read off a card's "prix mensuels" block settles anything
 (`monthly_rates_printed`, `_totalenergies_cards.py`): where the block is not read
 the parser bills the table row, the regulator's annual estimate, which on the
