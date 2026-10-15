@@ -487,13 +487,13 @@ async def _fetch_dbs_for_month(
     _sort_key, yyyymm, url = eligible[-1]
     try:
         text = await fetch_pdf_text_layout(session, url)
+        return parse_dbs_snapshot(text, url, f"{yyyymm[:4]}-{yyyymm[4:]}")
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
         # so the month cache retries it instead of caching it as absent.
         if is_transient_fetch_error(str(err)):
             raise
         return None
-    return parse_dbs_snapshot(text, url, f"{yyyymm[:4]}-{yyyymm[4:]}")
 
 
 # Re-export the layout extractor for fixture-based tests so they can

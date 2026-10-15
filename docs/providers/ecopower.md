@@ -169,8 +169,9 @@ possible.
   taken from `_card_stamp_keys` rather than the raw stamp -- comparing the raw stamp excluded a
   `YYYYMMDD` card from its own month, since `"20260801" > "202608"`). That is the card that was
   billing then across a year-boundary rate change. Returns
-  `None` before the earliest published card, and there is no `archive_validity_check` step (the
-  card-in-effect logic already picks the right one).
+  `None` before the earliest published card, or when the URL 404s or the PDF does not parse,
+  like gbs; a transient fetch error is raised so the month is retried. There is no
+  `archive_validity_check` step (the card-in-effect logic already picks the right one).
 
 ### Catalog discovery (`discover`)
 

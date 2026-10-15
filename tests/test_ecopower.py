@@ -761,6 +761,26 @@ def test_dbs_fetch_for_month_returns_none_before_first_card() -> None:
     assert snap is None
 
 
+def test_dbs_fetch_for_month_returns_none_on_an_unreadable_card() -> None:
+    """A dynamic card that does not parse is a month without a card, as on
+    the Groene Burgerstroom path, not an error that escapes the month cache
+    and is refetched every time the failure expires."""
+    text = _text("ecopower_dynamische_burgerstroom_jan.pdf").replace("Fluvius", "")
+    with patch(
+        "custom_components.be_electricity_prices.providers.ecopower.fetch_pdf_text_layout",
+        new=AsyncMock(return_value=text),
+    ):
+        snap = asyncio.run(
+            fetch_for_month(
+                make_text_session(_DBS_LISTING_HTML),  # type: ignore[arg-type]
+                "ecopower_dynamische_burgerstroom",
+                "flanders",
+                date(2026, 2, 1),
+            )
+        )
+    assert snap is None
+
+
 _DBS_LISTING_HTML_DATED = """
 <a href="https://cdn.example/202510_dbs_tariefkaart.pdf">2025-10</a>
 <a href="https://cdn.example/202601_dbs_tariefkaart.pdf">2026-01</a>
