@@ -44,6 +44,7 @@ from custom_components.be_electricity_prices.providers.ebem import (
     _extract_validity,
     _settled_on,
     discover,
+    fetch,
     fetch_for_month,
     parse_snapshot,
     published_index,
@@ -161,17 +162,39 @@ def test_variable_extracts_flanders_dsos_with_prosumer() -> None:
     assert iveka.prosumer_eur_per_kva_year == pytest.approx(67.79)
 
 
-def test_a_network_table_missing_an_area_is_refused() -> None:
-    """A table that lost a row to a relabel is refused rather than adopted
-    without that area, which left an entry on it failing every tick while
-    the last good card was gone from the cache."""
+def test_a_live_card_missing_an_area_is_refused() -> None:
+    """A live card whose table lost a row to a relabel is refused rather than
+    adopted without that area, which left an entry on it failing every tick
+    while the last good card was gone from the cache. The same card as a past
+    month keeps its energy, which a contract signed then is billed on."""
     text = _layout(_VARIABLE)
     relabelled = text.replace("Fluvius West", "Fluvius W.")
     assert relabelled != text, "the fixture stopped printing Fluvius West"
-    with pytest.raises(
-        ExtractorError, match=r"DSO rows not found for \['fluvius_west'\]"
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.ebem._find_latest",
+            new=AsyncMock(return_value=("test://v", "2026-05")),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.ebem.fetch_pdf_text_layout",
+            new=AsyncMock(return_value=relabelled),
+        ),
     ):
-        parse_snapshot("ebem_variable", relabelled, "test://v", "2026-05")
+        with pytest.raises(
+            ExtractorError, match=r"DSO rows not found for \['fluvius_west'\]"
+        ):
+            asyncio.run(fetch(None, "ebem_variable", "flanders"))  # type: ignore[arg-type]
+        snap = asyncio.run(
+            fetch_for_month(
+                make_text_session(_LISTING_HTML),  # type: ignore[arg-type]
+                "ebem_variable",
+                "flanders",
+                date(2026, 5, 1),
+            )
+        )
+    assert snap is not None
+    assert isinstance(snap.energy, VariableRates)
+    assert "fluvius_west" not in snap.dsos and "fluvius_antwerpen" in snap.dsos
 
 
 def test_variable_extracts_injection_formula() -> None:

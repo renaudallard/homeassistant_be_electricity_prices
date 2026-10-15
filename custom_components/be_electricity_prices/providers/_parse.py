@@ -97,6 +97,11 @@ def require_every_area(
     failing, while the last good card is gone from the cache. An empty one
     would let the backfill path silently skip whole months (it swallows the
     resulting KeyError). Refusing keeps the last good card serving.
+
+    Cociter, EBEM, Eneco and OCTA+ ask it of the live card only. A past
+    month's card keeps a short table: its energy is still what a signing
+    cohort is billed, and the month walk drops that one month on the missing
+    area, where refusing the card billed both on today's card.
     """
     missing = sorted(key for key in keys if key not in out)
     if missing:

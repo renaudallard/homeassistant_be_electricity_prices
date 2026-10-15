@@ -201,7 +201,12 @@ async def fetch(
             f"Eneco listing page did not advertise a PDF for {contract_id!r}"
         )
     text = await fetch_pdf_text(session, url)
-    return parse_snapshot(text, contract_id, url, region)
+    snap = parse_snapshot(text, contract_id, url, region)
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area(
+        "Eneco", snap.dsos, (*_WALLONIA_LABELS.values(), *_FLUVIUS_LABELS.values())
+    )
+    return snap
 
 
 async def fetch_for_month(
@@ -656,9 +661,6 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         row = _find_fluvius_row(text, pdf_label)
         if row is not None:
             out[key] = row
-    require_every_area(
-        "Eneco", out, (*_WALLONIA_LABELS.values(), *_FLUVIUS_LABELS.values())
-    )
     return out
 
 

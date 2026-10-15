@@ -65,6 +65,7 @@ from ._octaplus_overlays import (
     _extract_taxes,
     _extract_wallonia_dsos,
     _extract_wallonia_renewables,
+    _require_every_area,
 )
 from ._parse import SIGN_CHARS, fold_accents, parse_sign, require_contract, to_float
 from ._pdf import (
@@ -261,7 +262,9 @@ async def fetch(
     # tax block ("5 ,0 3 2 9 0 ,2 0 4 2" -> "5,0329 0,2042") while
     # still keeping real word spacing intact.
     text = await fetch_pdf_text_aligned(session, url, x_join_threshold=1.0)
-    return parse_snapshot(contract_id, text, region, url)
+    snap = parse_snapshot(contract_id, text, region, url)
+    _require_every_area(snap.dsos, region)
+    return snap
 
 
 def _archive_name_key(name: str) -> str:

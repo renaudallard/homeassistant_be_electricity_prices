@@ -33,6 +33,7 @@ regulator's, reprinted on the supplier's card.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 
 from ..const import (
     DSO_AIEG,
@@ -235,7 +236,6 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             terme_fixe=terme_fixe,
             prosumer=prosumer,
         )
-    require_every_area("OCTA+", out, (key for _, key in _WALLONIA_LABELS))
     return out
 
 
@@ -297,8 +297,22 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
             capacity_eur_per_kw_year=capacity,
             prosumer_eur_per_kva_year=prosumer_by_key.get(key),
         )
-    require_every_area("OCTA+", out, _FLANDERS_LABELS.values())
     return out
+
+
+def _require_every_area(dsos: Mapping[str, DsoOverlay], region: str) -> None:
+    """Refuse a live card whose network table lacks one of the region's areas.
+
+    Asked by ``fetch`` alone (see ``require_every_area``): the Walloon cards
+    of October to December 2025 print a seven-column table the reader does
+    not take, and as past months they still give a signing cohort its energy.
+    """
+    keys = (
+        (key for _, key in _WALLONIA_LABELS)
+        if region == REGION_WALLONIA
+        else _FLANDERS_LABELS.values()
+    )
+    require_every_area("OCTA+", dsos, keys)
 
 
 # Matched case-insensitively (see _extract_wallonia_dsos): the 2026

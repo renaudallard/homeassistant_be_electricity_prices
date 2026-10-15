@@ -116,15 +116,36 @@ def test_fix_extracts_dso_overlay() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.04)
 
 
-def test_a_network_table_missing_an_area_is_refused() -> None:
-    """Every card prints both regions' tables, and one missing an area is
-    refused rather than adopted without it, which left an entry on that
-    area failing every tick while the last good card was gone."""
+def test_a_live_card_missing_an_area_is_refused() -> None:
+    """Every card prints both regions' tables, and a live one missing an area
+    is refused rather than adopted without it, which left an entry on that
+    area failing every tick while the last good card was gone. The same card
+    as a past month keeps its energy, which a contract signed then is billed
+    on."""
     text = fixture_text("eneco_fix.pdf")
     relabelled = text.replace("FLUVIUS WEST", "FLUVIUS W.")
     assert relabelled != text, "the fixture stopped printing FLUVIUS WEST"
-    with pytest.raises(eneco_mod.ExtractorError, match="DSO rows not found"):
-        parse_snapshot(relabelled, "power_fix", "test://fix", REGION_WALLONIA)
+    with (
+        patch.object(eneco_mod, "_fetch_listing", new=AsyncMock(return_value="")),
+        patch.object(eneco_mod, "_resolve_url", return_value="test://fix"),
+        patch.object(eneco_mod, "head_or_raise", new=AsyncMock(return_value=None)),
+        patch.object(
+            eneco_mod, "fetch_pdf_text", new=AsyncMock(return_value=relabelled)
+        ),
+    ):
+        with pytest.raises(eneco_mod.ExtractorError, match="DSO rows not found"):
+            _run(eneco_mod.fetch(None, "power_fix", REGION_WALLONIA))  # type: ignore[arg-type]
+        snap = _run(
+            fetch_for_month(
+                None,  # type: ignore[arg-type]
+                "power_fix",
+                REGION_WALLONIA,
+                date(2026, 4, 1),
+            )
+        )
+    assert snap is not None
+    assert isinstance(snap.energy, FixedRates)
+    assert "fluvius_west" not in snap.dsos and "aieg" in snap.dsos
 
 
 def test_fix_fluvius_has_no_prosumer_rate() -> None:

@@ -32,6 +32,7 @@ import base64
 import json
 from dataclasses import fields
 from datetime import date
+from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -800,17 +801,22 @@ def test_flanders_dsos_extract_full_set() -> None:
         ("octaplus_fixed_w.pdf", "wallonia", "AIESH"),
     ],
 )
-def test_a_network_table_missing_an_area_is_refused(
-    fixture: str, region: str, label: str
+async def test_a_live_card_missing_an_area_is_refused(
+    monkeypatch: pytest.MonkeyPatch, fixture: str, region: str, label: str
 ) -> None:
-    """A table that lost a row to a relabel is refused rather than adopted
-    without that area, which left an entry on it failing every tick while
-    the last good card was gone from the cache."""
+    """A live card whose table lost a row to a relabel is refused rather than
+    adopted without that area, which left an entry on it failing every tick
+    while the last good card was gone from the cache."""
+    from custom_components.be_electricity_prices.providers import octaplus
+
     text = _text(fixture)
     relabelled = text.replace(label, "X.")
     assert relabelled != text, f"the fixture stopped printing {label}"
+    monkeypatch.setattr(
+        octaplus, "fetch_pdf_text_aligned", AsyncMock(return_value=relabelled)
+    )
     with pytest.raises(ExtractorError, match="DSO rows not found"):
-        parse_snapshot("octaplus_fixed", relabelled, region)
+        await octaplus.fetch(None, "octaplus_fixed", region)  # type: ignore[arg-type]
 
 
 def test_unknown_contract_raises() -> None:
@@ -1027,6 +1033,44 @@ async def test_archive_renders_the_base64_card_through_the_render_seam(
     assert url.startswith(octaplus._ARCHIVE_SHEET_URL)
     assert "2026-04 E OCTA+DYNAMIC RE WL FR.pdf" in url
     assert size == len(sheet)
+
+
+async def test_an_archived_card_short_of_an_area_keeps_its_energy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Walloon cards of October to December 2025 print a seven-column
+    network table the reader does not take. The live card is refused for it,
+    but a past month's card is what a contract signed then is billed on:
+    refusing it too billed that contract's energy on today's card, and the
+    month itself on today's rates where it used to be dropped."""
+    from custom_components.be_electricity_prices.providers import octaplus
+
+    name = "octaplus_fixed_w_nov2025.pdf"
+    monkeypatch.setattr(
+        octaplus,
+        "fetch_text",
+        _archive_router(
+            [{"NomPdf": "2025-11 E OCTA+FIXED RE WL FR.pdf"}],
+            (FIXTURES / name).read_bytes(),
+            [],
+        ),
+    )
+    snap = await octaplus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "octaplus_fixed",
+        "wallonia",
+        date(2025, 11, 10),
+    )
+    assert snap is not None
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(0.1224)
+    assert len(snap.dsos) < 5, "the reader takes this table now: pick another card"
+
+    monkeypatch.setattr(
+        octaplus, "fetch_pdf_text_aligned", AsyncMock(return_value=_text(name))
+    )
+    with pytest.raises(ExtractorError, match="DSO rows not found"):
+        await octaplus.fetch(None, "octaplus_fixed", "wallonia")  # type: ignore[arg-type]
 
 
 async def test_archive_answers_none_without_the_card_or_for_another_month(

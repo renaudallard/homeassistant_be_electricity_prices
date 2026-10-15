@@ -181,7 +181,10 @@ async def fetch(
         raise ExtractorError(f"unknown EBEM contract {contract_id!r}")
     url, label = await _find_latest(session, contract.pdf_kind)
     text = await fetch_pdf_text_layout(session, url)
-    return parse_snapshot(contract_id, text, url, label)
+    snap = parse_snapshot(contract_id, text, url, label)
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("EBEM", snap.dsos, _FLANDERS_LABELS.values())
+    return snap
 
 
 async def fetch_for_month(
@@ -926,7 +929,6 @@ def _extract_dsos(text: str, contract: _ContractDef) -> dict[str, DsoOverlay]:
             capacity_eur_per_kw_year=capacity,
             prosumer_eur_per_kva_year=prosumer_by_key.get(key),
         )
-    require_every_area("EBEM", out, _FLANDERS_LABELS.values())
     return out
 
 

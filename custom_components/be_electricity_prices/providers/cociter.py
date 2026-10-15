@@ -154,7 +154,10 @@ async def fetch(
 
     pdf_url, label = await _find_latest(session, pattern)
     text = await fetch_pdf_text(session, pdf_url)
-    return parse_snapshot(text, contract_id, pdf_url, label)
+    snap = parse_snapshot(text, contract_id, pdf_url, label)
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("Cociter", snap.dsos, _DSO_KEY.values())
+    return snap
 
 
 async def fetch_for_month(
@@ -795,7 +798,6 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=to_float(row[0]),
             prosumer_eur_per_kva_year=prosumer_rate,
         )
-    require_every_area("Cociter", out, _DSO_KEY.values())
     return out
 
 
@@ -830,7 +832,10 @@ def _extract_impact_dsos(text: str, transport: float) -> dict[str, DsoOverlay]:
             transport=transport,
             data_management_per_year=to_float(row[0]),
         )
-    require_every_area("Cociter", out, _DSO_KEY.values(), block="trihoraire")
+    if not out:
+        # An empty overlay is not a soft failure: it bills the whole network
+        # leg at zero, which is a bigger error than the card being offline.
+        raise ExtractorError("Cociter: trihoraire distribution table not found")
     return out
 
 

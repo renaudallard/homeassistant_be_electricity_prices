@@ -48,6 +48,7 @@ from custom_components.be_electricity_prices.providers._rates import (
 )
 from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers.cociter import (
+    fetch,
     fetch_for_month,
     parse_snapshot,
 )
@@ -105,15 +106,38 @@ def test_variable_extracts_dso_overlay() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.03)
 
 
-def test_a_network_table_missing_an_area_is_refused() -> None:
-    """A card whose table lost a row to a relabel is refused rather than
+def test_a_live_card_missing_an_area_is_refused() -> None:
+    """A live card whose table lost a row to a relabel is refused rather than
     adopted without that area, which left an entry on it failing every tick
-    while the last good card was gone from the cache."""
+    while the last good card was gone from the cache. The same card as a past
+    month keeps its energy, which a contract signed then is billed on."""
     text = fixture_text("cociter_var_2604.pdf")
     relabelled = text.replace("\nREW ", "\nR.E.W. ")
     assert relabelled != text, "the fixture stopped printing the REW row"
-    with pytest.raises(ExtractorError, match=r"DSO rows not found for \['rew'\]"):
-        parse_snapshot(relabelled, "cociter_variable", "test://var", "2026-04")
+    url = "https://www.cociter.be/wp-content/uploads/RCVar_YMR_Coop-2604-fr.pdf"
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.cociter._find_latest",
+            new=AsyncMock(return_value=(url, "2026-04")),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.cociter.fetch_pdf_text",
+            new=AsyncMock(return_value=relabelled),
+        ),
+    ):
+        with pytest.raises(ExtractorError, match=r"DSO rows not found for \['rew'\]"):
+            asyncio.run(fetch(None, "cociter_variable", "wallonia"))  # type: ignore[arg-type]
+        snap = asyncio.run(
+            fetch_for_month(
+                make_text_session(f'<a href="{url}">April 2026</a>'),  # type: ignore[arg-type]
+                "cociter_variable",
+                "wallonia",
+                date(2026, 4, 1),
+            )
+        )
+    assert snap is not None
+    assert isinstance(snap.energy, VariableRates)
+    assert "rew" not in snap.dsos and "aieg" in snap.dsos
 
 
 def test_variable_extracts_supplier_prosumer_forfait() -> None:
@@ -207,7 +231,7 @@ def test_trihoraire_layout_is_chosen_by_the_card_title() -> None:
     a bad one. Take the title away and the variable and dynamic lookups both
     refuse the five-figure rows, where the old pattern read the last one by
     running past the end of the line onto the "3." of the taxes heading and
-    landing PIC on the mono rate. With no row read, the card is refused.
+    landing PIC on the mono rate.
     """
     from custom_components.be_electricity_prices.providers.cociter import (
         _extract_dsos,
@@ -217,9 +241,8 @@ def test_trihoraire_layout_is_chosen_by_the_card_title() -> None:
     proper = _extract_dsos(raw)
     assert proper["aieg"].distribution_pic == pytest.approx(0.1508)
 
-    untitled = raw.replace("prix variable trihoraire", "prix variable")
-    with pytest.raises(ExtractorError, match="DSO rows not found"):
-        _extract_dsos(untitled)
+    untitled = _extract_dsos(raw.replace("prix variable trihoraire", "prix variable"))
+    assert untitled == {}
 
 
 def test_trihoraire_injection_is_the_variable_card_formula() -> None:

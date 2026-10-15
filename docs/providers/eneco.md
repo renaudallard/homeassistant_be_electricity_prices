@@ -333,10 +333,13 @@ would otherwise cancel.
 
 `_extract_dsos` (`eneco.py`) walks two label maps and emits a `DsoOverlay`
 per matched row. Every card prints both regions' tables whichever region it is
-read for, and one missing any of the thirteen areas is refused rather than
-adopted with a hole in it, since an entry on the missing area would fail every
-tick until the next good card (`require_every_area`, `_parse.py`;
-`test_a_network_table_missing_an_area_is_refused`, `tests/test_eneco.py`).
+read for, and `fetch` refuses a live one missing any of the thirteen areas
+rather than adopt it with a hole in it, since an entry on the missing area would
+fail every tick until the next good card (`require_every_area`, `_parse.py`).
+A past month's card keeps its short table: its energy is what a contract
+signed that month is billed on, and the month walk drops the month itself on
+the missing area rather than billing it on today's card
+(`test_a_live_card_missing_an_area_is_refused`, `tests/test_eneco.py`).
 
 Wallonia (`_WALLONIA_LABELS`, `eneco.py`), via `_find_wallonia_row`
 (`eneco.py`):

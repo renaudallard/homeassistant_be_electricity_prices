@@ -403,14 +403,18 @@ illustrative for `aieg`: single 0.1087, peak 0.1205, offpeak 0.0667, transport
 (`test_wallonia_dsos_extract_full_set`, and the 2026-template variant
 `test_wallonia_dsos_new_2026_template`).
 
-Both region readers refuse a table missing any of their areas
-(`require_every_area`, `_parse.py`), since an entry on the missing area would
-fail every tick until the next good card
-(`test_a_network_table_missing_an_area_is_refused`, `tests/test_octaplus.py`).
-The Walloon cards of October to December 2025, before the Impact tariff, print
-a seven-column table this reader does not take, and on several of them the
-aligned text drops digits from it or loses it whole, so they are refused where
-they used to be adopted with an empty table.
+`fetch` refuses a live card whose table misses any of the region's areas
+(`_require_every_area`, `_octaplus_overlays.py`, on `require_every_area`,
+`_parse.py`), since an entry on the missing area would fail every tick until
+the next good card (`test_a_live_card_missing_an_area_is_refused`,
+`tests/test_octaplus.py`). `fetch_for_month` does not. The Walloon cards of
+October to December 2025, before the Impact tariff, print a seven-column table
+this reader does not take, and on several of them the aligned text drops digits
+from it or loses it whole, so they come back with an empty table. Their energy
+is what a contract signed in those months is billed on, and the month walk
+drops each of those months on the missing area rather than billing it on
+today's card (`test_an_archived_card_short_of_an_area_keeps_its_energy`, on the
+real November 2025 Fixed card).
 
 ### Flanders (`_extract_flanders_dsos`, `_octaplus_overlays.py`)
 
@@ -557,6 +561,7 @@ cards unless the row names another month):
 | `octaplus_dynamic_w.pdf` | OCTA+ Dynamic, Wallonia. `Epex 15'` consumption + injection formulas, spaced DSO labels. |
 | `octaplus_dynamic_v_jan.pdf` | OCTA+ Dynamic, Flanders, **January 2026**. Both formulas name the index `Belpex 15'`, followed by the AMR clause the open injection search used to run into. |
 | `octaplus_dynamic_v_dec2025.pdf` | OCTA+ Dynamic, Flanders, **December 2025**, from the archive endpoint. Both formulas name `Belpex Hourly`, the index every dynamic card printed from 2023 to 2025. |
+| `octaplus_fixed_w_nov2025.pdf` | OCTA+ Fixed, Wallonia, **November 2025**, from the archive endpoint. The seven-column network table before the Impact tariff, which the reader does not take: the archive path keeps the card for its energy, the live fetch refuses it. |
 | `octaplus_fixed_v_mar.pdf` | OCTA+ Fixed, Flanders, **March 2026**, the card the archive lists as `FIXEDD`. Fetched from the archive endpoint. |
 | `octaplus_fixed_v_jan.pdf` | OCTA+ Fixed, Flanders, **January 2026**. The monthly feed-in formula reads `Belpex SPP x 0,852 - 13,39`. The same bytes as the card archive's row for the month. |
 | `octaplus_boostfix_w_oct.pdf` | OCTA+ Boost Fix, Wallonia, **October 2026**, the first card of the Boost range. Also parsed as Boost Fix Impact. |
