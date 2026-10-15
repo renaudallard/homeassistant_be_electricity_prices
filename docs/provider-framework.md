@@ -675,7 +675,11 @@ Internals worth knowing:
   a page or form names each time it is drawn, reading widths and encodings no
   stream holds (a 3 kB file naming one font 200 times in a form drawn 200
   times took 10,8 s), so a font load counts `_FONT_LOAD_BYTES` (1 kB) and
-  pypdf loads the same dictionary to a font once a read. A damaged FlateDecode
+  pypdf loads the same dictionary to a font once a read. pdfminer keeps a
+  font it finds by reference, but built one written into the resources
+  again for each page or form drawn, its widths with it (100 000 widths
+  drawn 400 times took 46,7 s), so it too builds a dictionary into a font
+  once a read. A damaged FlateDecode
   stream, cut short or failing its checksum, counts again once for every
   `_DAMAGED_FLATE_UNIT` (16 kB) of the stream under pdfminer, which inflates
   one a byte at a time in a time quadratic in its size. pypdf reads one cut
@@ -749,9 +753,11 @@ Internals worth knowing:
   take 29 s on a Raspberry Pi, where the same bytes in strings of 1 kB take
   22 s. pypdf gathers both into growing buffers, in a time linear in their
   length. A reader builds at most `_MAX_FONT_ENTRIES`
-  (1 000 000) entries of a card's fonts, each code a font's ToUnicode map,
-  encoding or widths give, or its program's own tables, a range counting
-  each code in it before it is gone through: a range takes a line, and
+  (1 000 000) entries of a card's fonts, each code a range of a font's
+  ToUnicode map, encoding or widths gives, or its program's own tables,
+  counted before the range is gone through, and under pypdf each code of
+  a ToUnicode map once it is built; a code listed on its own is a token
+  parsed. A range takes a line, and
   2,8 kB mapping 2^32 codes ran pdfminer out of memory after 52 s, while
   pypdf held 970 MB for 48 fonts of the 100 000 codes it maps at most for
   one. The most a card reaches is 196 659 under pdfminer and 198 676 under
@@ -766,7 +772,7 @@ Internals worth knowing:
   loads under a package of its own, finds the wrappers in place by a
   marker they carry and reads through them, held to its own bound, where
   it wrapped them again and had each read counted once for every copy.
-  The checks only count, and what they change (a font pypdf loads once,
+  The checks only count, and what they change (a font a reader builds once,
   the paths pdfminer no longer paints, a page let go of once read, a glyph
   found at once) leaves the text as it was, so a card under the bound
   renders to the same text as before, and only these refuse: a file a

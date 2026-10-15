@@ -1275,7 +1275,7 @@ def test_the_bound_is_the_only_reason_pdfplumber_is_refused(
 def _font_pdf(pages: int, to_unicode: bytes, attrs: bytes = b"") -> bytes:
     """``pages`` pages sharing resources whose font is written into them,
     with ``to_unicode``, a FlateDecode stream with ``attrs``, as its
-    ToUnicode map, which pdfminer reads again for each page."""
+    ToUnicode map."""
     kids = b" ".join(b"%d 0 R" % (6 + page) for page in range(pages))
     return _pdf_from(
         (
@@ -1359,20 +1359,18 @@ def test_pdfminer_stops_inflating_at_the_bound(
 
 
 @pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
-def test_a_font_loaded_on_each_page_counts_for_each(
+def test_a_font_written_into_shared_resources_is_read_once(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
 ) -> None:
     """pdfminer keeps a font only when it is referenced, so one written into
-    the resources pages share has its ToUnicode map parsed again on every
-    page: a 1 MiB map on ten pages took 130 s and was counted once."""
+    the resources pages share had its ToUnicode map parsed again on every
+    page: a 1 MiB map on ten pages took 130 s. It is built once a read."""
     import zlib
 
     monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
     to_unicode = zlib.compress(_comment(300_000), 9)
-    with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
-        extract(_font_pdf(4, to_unicode))
     with pytest.raises(CardNotReadableError, match="no text layer"):
-        extract(_font_pdf(3, to_unicode))
+        extract(_font_pdf(10, to_unicode))
 
 
 @pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
@@ -1937,6 +1935,42 @@ def test_what_a_reader_builds_of_fonts_is_held(
     for payload in (_mapped_pdf(0xFF), _widths_pdf(255)):
         with pytest.raises(CardNotReadableError, match="no text layer"):
             extract(payload)
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_a_font_written_into_a_form_is_built_once_a_read(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer keeps a font it finds by reference, but builds one written
+    into the resources again for each draw, its widths with it, which no
+    count saw: 100 000 widths drawn 400 times took 46,7 s."""
+    from pdfminer import pdffont
+
+    built: list[object] = []
+    init = pdffont.PDFType1Font.__init__
+
+    def counted(font: Any, *args: Any) -> None:
+        built.append(font)
+        init(font, *args)
+
+    monkeypatch.setattr(pdffont.PDFType1Font, "__init__", counted)
+    content = b"BT /F1 12 Tf 72 720 Td (%s) Tj ET " % (b"tariff card text " * 60)
+    font = b"<</Type/Font/Subtype/Type1/BaseFont/Custom/Widths[%s]>>" % (b"0 " * 500)
+    payload = _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[6 0 R]/Count 1>>",
+            b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+            b"<</Type/XObject/Subtype/Form/BBox[0 0 612 792]"
+            b"/Resources<</Font<</F1 %s>>>>/Length 1>>\nstream\nn\nendstream" % font,
+            b"<</Length %d>>\nstream\n%s\nendstream"
+            % (len(content) + 50 * 7, content + b"/X0 Do " * 50),
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 5 0 R"
+            b"/Resources<</Font<</F1 3 0 R>>/XObject<</X0 4 0 R>>>>>>",
+        )
+    )
+    assert "tariff card" in extract(payload)
+    assert len(built) == 2
 
 
 @pytest.mark.parametrize("extract", _EVERY_READER)

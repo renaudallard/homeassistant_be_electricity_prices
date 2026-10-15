@@ -33,7 +33,7 @@ from __future__ import annotations
 import sys
 import threading
 import zlib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -139,11 +139,13 @@ _MAX_PATH_SEGMENTS = 450_000
 _MAX_PARSED = 3_000_000
 
 # The most a reader may build of a card's fonts, counted as it builds them:
-# each code a font's ToUnicode map, encoding or widths give, or its program's
-# own tables, a range of codes counting each code in it before it is gone
-# through. A range takes a line: 2,8 kB mapping 2^32 codes ran pdfminer out
-# of memory after 52 s, and pypdf, which maps at most 100 000 codes for a
-# font from 6.7.1, held 970 MB for 48 fonts of that many. Measured as
+# each code a range of a font's ToUnicode map, encoding or widths gives, or
+# its program's own tables, counted before the range is gone through, and
+# under pypdf each code of a ToUnicode map once it is built. A code listed
+# on its own is a token parsed, and a reader builds a font from a dictionary
+# once a read. A range takes a line: 2,8 kB mapping 2^32 codes ran pdfminer
+# out of memory after 52 s, and pypdf, which maps at most 100 000 codes for
+# a font from 6.7.1, held 970 MB for 48 fonts of that many. Measured as
 # above: at most 196 659 under pdfminer and 198 676 under pypdf, Energy
 # Knights' cards mapping three fonts of 65 536 codes each. This is about
 # five times that: pypdf holds about 180 bytes a code.
@@ -217,8 +219,8 @@ class _Refused(BaseException):
 class _Reading:
     """What is left of the bound while a card is read, the refusal that
     ended it, for each stream being decoded, innermost last, what its last
-    inflate handed back, counted already, and under pypdf which stream that
-    is and the fonts loaded so far, by the dictionary they were loaded from.
+    inflate handed back, counted already, under pypdf which stream that is,
+    and the fonts built so far, by the dictionary they were built from.
 
     Every refusal is made here, so it is an error of the copy of this
     module the read was started from, whichever copy put the wrappers in
@@ -233,7 +235,7 @@ class _Reading:
     inline: int | None = None
     inflated: list[int] = field(default_factory=list)
     streams: list[EncodedStreamObject] = field(default_factory=list)
-    fonts: dict[int, tuple[Any, Font]] = field(default_factory=dict)
+    fonts: dict[int, tuple[Any, Any]] = field(default_factory=dict)
 
     def refuse(self, message: str) -> _Refused:
         if self.refusal is None:
@@ -289,6 +291,15 @@ class _Reading:
                 f"PDF has pdfminer gather a token or inline image over "
                 f"{_MAX_TOKEN_BYTES} bytes; refusing to read it"
             )
+
+    def font(self, spec: Any, build: Callable[[], Any]) -> Any:
+        """The font ``build`` makes of the dictionary ``spec``, made once a
+        read: a reader makes the same dictionary into the same font each
+        time."""
+        key = id(spec)
+        if key not in self.fonts:
+            self.fonts[key] = (spec, build())
+        return self.fonts[key][1]
 
     def make_font(self, entries: int) -> None:
         """Count ``entries`` built for a font."""
@@ -509,12 +520,7 @@ def _hold_pypdf_to_the_bound() -> None:
         if reading is None:
             return load(cls, pdf_font_dict)  # type: ignore[no-any-return]
         reading.charge(_FONT_LOAD_BYTES)
-        # Loaded once a read: pypdf reads the same dictionary to the same
-        # font each time.
-        key = id(pdf_font_dict)
-        if key not in reading.fonts:
-            reading.fonts[key] = (pdf_font_dict, load(cls, pdf_font_dict))
-        return reading.fonts[key][1]
+        return reading.font(pdf_font_dict, lambda: load(cls, pdf_font_dict))  # type: ignore[no-any-return]
 
     for decoder, label in (
         (pypdf_filters.LZWDecode, "LZW"),
@@ -628,12 +634,17 @@ def _hold_pdfminer_to_the_bound() -> None:
     ``PDFObjRef.resolve``, the token or inline image it gathers
     through its parsers' ``fillbuf``, a content parser's ``fillfp`` and
     ``get_inline_data``, the resources it walks for a page or a form drawn
-    through ``init_resources``, and every loop building a font
+    through ``init_resources``, every font it builds through
+    ``PDFResourceManager.get_font``, and every loop building a font
     through its font modules' ``range``. Done once whatever the copy
     of this module."""
     from pdfminer import cmapdb, pdffont, pdftypes
     from pdfminer.arcfour import Arcfour
-    from pdfminer.pdfinterp import PDFContentParser, PDFPageInterpreter
+    from pdfminer.pdfinterp import (
+        PDFContentParser,
+        PDFPageInterpreter,
+        PDFResourceManager,
+    )
     from pdfminer.pdfpage import PDFPage
     from pdfminer.psparser import PSBaseParser
     from pdfplumber import utils
@@ -767,6 +778,18 @@ def _hold_pdfminer_to_the_bound() -> None:
             finally:
                 reading.inline = None
 
+        get_font = PDFResourceManager.get_font
+
+        def font(self: PDFResourceManager, objid: object, spec: Any) -> Any:
+            # pdfminer keeps a font it found by reference, and builds one
+            # written into the resources again for each page or form drawn:
+            # 100 000 widths drawn 400 times took 46,7 s. An empty one is
+            # made anew for each font a page names but lacks.
+            reading = _READING.get()
+            if reading is None or objid or not spec:
+                return get_font(self, objid, spec)
+            return reading.font(spec, lambda: get_font(self, objid, spec))
+
         create_pages = PDFPage.create_pages
 
         def paged(document: Any) -> Iterator[PDFPage]:
@@ -793,6 +816,7 @@ def _hold_pdfminer_to_the_bound() -> None:
         PDFContentParser.push = parsed  # type: ignore[method-assign]
         PDFContentParser.start_type = nested  # type: ignore[method-assign]
         PDFPage.create_pages = staticmethod(paged)  # type: ignore[method-assign]
+        PDFResourceManager.get_font = font  # type: ignore[method-assign]
         PDFPageInterpreter.init_resources = walked  # type: ignore[method-assign]
         PSBaseParser.nexttoken = _parsed(PSBaseParser.nexttoken)  # type: ignore[method-assign]
         # An object that is a reference to itself, or a ring of them, has
@@ -886,14 +910,16 @@ def bounded_pdfminer() -> Iterator[None]:
     file tagged as an image, a filter after DCTDecode, a predictor between
     two inflates); each let pdfminer decode 40 MiB and more uncounted.
     Every time pdfminer reads a stream counts, so a content stream counts
-    once for each page drawing it, a form once for each time it is drawn,
-    and a font written into a page's resources once for each page loading
-    it, since pdfminer interprets each again; each inflate counts, every
-    step of a stream inflated more than once, and is refused past what is
-    left, before it is held, the cross-reference and object streams pdfminer
-    inflates opening the file included; and a stream counts what its
-    decoding hands back past its last inflate. A refusal ends the read
-    where it is made, whatever pdfminer or pdfplumber catch.
+    once for each page drawing it and a form once for each time it is
+    drawn, since pdfminer interprets each again, while it builds a font
+    written into the resources, rather than referred to, once a read, as it
+    does one referred to, where it built it again for each page or form
+    drawn; each inflate counts, every step of a stream inflated more than
+    once, and is refused past what is left, before it is held, the
+    cross-reference and object streams pdfminer inflates opening the file
+    included; and a stream counts what its decoding hands back past its
+    last inflate. A refusal ends the read where it is made, whatever
+    pdfminer or pdfplumber catch.
 
     What pdfminer lays out and holds is held too, since it grows with what
     the bytes draw, not with the bytes: a 6,5 kB card drawing 488 000 glyphs
