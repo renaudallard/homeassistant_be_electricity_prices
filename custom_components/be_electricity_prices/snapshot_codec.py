@@ -470,7 +470,8 @@ class _MigratingStore(Store[dict[str, Any]]):
 # TotalEnergies month settles only on an index its range agrees with, a
 # Trevion month stays provisional when the next card cannot settle it, the
 # EnergyVision Brussels cards read their energy contribution, the social card
-# holds to its own month, and four suppliers refuse a partial network table.
+# holds to its own month, and four suppliers refuse a live or running month's
+# card whose network table misses an area.
 _SNAPSHOT_SCHEMA_VERSION = 82
 
 # The oldest stored schema a rejected blob may still be replayed from when no
