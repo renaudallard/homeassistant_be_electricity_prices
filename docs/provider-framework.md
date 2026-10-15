@@ -734,8 +734,17 @@ Internals worth knowing:
   about twice that, as the decode bound is, since what it lets through is
   CPU: a token of a Bolt card costs pdfminer about 50 us on a Raspberry
   Pi, more than any made up to cost more, so the most it lets through
-  takes about 100 s. A refusal ends
-  the read where it is made, raised as an error no reader catches: pypdf
+  takes about 100 s. A reader builds at most `_MAX_FONT_ENTRIES`
+  (1 000 000) entries of a card's fonts, each code a font's ToUnicode map,
+  encoding or widths give, or its program's own tables, a range counting
+  each code in it before it is gone through: a range takes a line, and
+  2,8 kB mapping 2^32 codes ran pdfminer out of memory after 52 s, while
+  pypdf held 970 MB for 48 fonts of the 100 000 codes it maps at most for
+  one. The most a card reaches is 196 659 under pdfminer and 198 676 under
+  pypdf, on Energy Knights' cards mapping three fonts of 65 536 codes
+  each, and this is about five times that, pypdf holding about 180 bytes a
+  code. A refusal ends the read where it is made, raised as an error no
+  reader catches: pypdf
   catches any error a form raises and goes on to its next draw, logging
   each, 99 984 lines for one file. pypdf reaching one of its own limits is
   refused too, under pypdf's own words for it. The readers are wrapped
@@ -748,9 +757,10 @@ Internals worth knowing:
   found at once) leaves the text as it was, so a card under the bound
   renders to the same text as before, and only these refuse: a file a
   reader cannot open is left to it to fail on.
-  The manifest asks for pypdf 6.6.0 or later, the first release whose text
-  extraction loads its fonts through `Font.from_font_resource`, which the
-  bound counts.
+  The manifest asks for pypdf 6.7.1 or later, the first release that maps
+  at most 100 000 codes for a font, which the bound counts once the map is
+  built; 6.6.0 was the first whose text extraction loads its fonts through
+  `Font.from_font_resource`, which the bound counts too.
 - `_require_https` (`_pdf.py`) refuses to fetch a card or page whose address
   is not https, before any request. Most links are read off a supplier's page
   and only energie.be checked their scheme, so a plain http link was fetched

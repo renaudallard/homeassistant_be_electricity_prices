@@ -39,6 +39,8 @@ from dataclasses import dataclass, field
 from typing import Any, SupportsIndex
 
 from pypdf import PageObject
+from pypdf import _cmap as pypdf_cmap
+from pypdf import _font as pypdf_font
 from pypdf import filters as pypdf_filters
 from pypdf._font import Font
 from pypdf.errors import LimitReachedError
@@ -130,6 +132,17 @@ _MAX_PATH_SEGMENTS = 450_000
 # million take about 100 s.
 _MAX_PARSED = 2_000_000
 
+# The most a reader may build of a card's fonts, counted as it builds them:
+# each code a font's ToUnicode map, encoding or widths give, or its program's
+# own tables, a range of codes counting each code in it before it is gone
+# through. A range takes a line: 2,8 kB mapping 2^32 codes ran pdfminer out
+# of memory after 52 s, and pypdf, which maps at most 100 000 codes for a
+# font from 6.7.1, held 970 MB for 48 fonts of that many. Measured as
+# above: at most 196 659 under pdfminer and 198 676 under pypdf, Energy
+# Knights' cards mapping three fonts of 65 536 codes each. This is about
+# five times that: pypdf holds about 180 bytes a code.
+_MAX_FONT_ENTRIES = 1_000_000
+
 
 def _over_the_bound() -> str:
     return (
@@ -200,6 +213,7 @@ class _Reading:
     pages: int = 0
     built: int = 0
     parsed: int = 0
+    font_entries: int = 0
     inflated: list[int] = field(default_factory=list)
     streams: list[EncodedStreamObject] = field(default_factory=list)
     fonts: dict[int, tuple[Any, Font]] = field(default_factory=dict)
@@ -238,6 +252,15 @@ class _Reading:
             raise self.refuse(
                 f"PDF has a reader parse more than {_MAX_PARSED} objects; "
                 "refusing to read it"
+            )
+
+    def make_font(self, entries: int) -> None:
+        """Count ``entries`` built for a font."""
+        self.font_entries += entries
+        if self.font_entries > _MAX_FONT_ENTRIES:
+            raise self.refuse(
+                f"PDF has a reader build more than {_MAX_FONT_ENTRIES} font "
+                "entries; refusing to read it"
             )
 
     def hold(self, count: int, most: int) -> None:
@@ -352,14 +375,32 @@ def _parsed(parse: Any) -> Any:
     return counted
 
 
+def _font_range(*args: SupportsIndex) -> range:
+    """``range``, as the readers' font modules find it ahead of the builtin
+    one, every loop of theirs building a font going through it: counted
+    while a card is read, as that many entries built, before it is gone
+    through."""
+    span = range(*args)
+    reading = _READING.get()
+    if reading is not None:
+        try:
+            entries = len(span)
+        except OverflowError:
+            entries = sys.maxsize
+        reading.make_font(entries)
+    return span
+
+
 def _hold_pypdf_to_the_bound() -> None:
     """Have pypdf held to the bound while a card is read, and left as it is
     otherwise. Every stream it reads goes through ``get_data``, every one it
     inflates through ``pypdf.filters.decompress``, every font it loads
     through ``Font.from_font_resource``, every page it lists through
-    ``PageObject``, and every operand, operator, and element of an array or
+    ``PageObject``, every operand, operator, and element of an array or
     dictionary it parses through its ``generic`` module's ``read_object``
-    and ``read_until_regex``. Done once whatever the copy of this module."""
+    and ``read_until_regex``, every font map it builds through
+    ``_parse_to_unicode``, and every loop building a font through its font
+    modules' ``range``. Done once whatever the copy of this module."""
     if hasattr(EncodedStreamObject.get_data, _MARK):
         return
     decompress = pypdf_filters.decompress
@@ -451,6 +492,20 @@ def _hold_pypdf_to_the_bound() -> None:
     pypdf_filters.ASCII85Decode.decode = staticmethod(  # type: ignore[method-assign]
         _ascii85_held(pypdf_filters.ASCII85Decode.decode)
     )
+    parse_map = pypdf_cmap._parse_to_unicode
+
+    def mapped(*args: Any, **kwargs: Any) -> Any:
+        # Counted once built, pypdf building no more than 100 000 codes
+        # for a map.
+        built = parse_map(*args, **kwargs)
+        reading = _READING.get()
+        if reading is not None:
+            reading.make_font(len(built[1]))
+        return built
+
+    for module in (pypdf_cmap, pypdf_font):
+        vars(module)["range"] = _font_range
+    vars(pypdf_cmap)["_parse_to_unicode"] = mapped
     structures = vars(pypdf_structures)
     for name in ("read_object", "read_until_regex"):
         structures[name] = _parsed(structures[name])
@@ -519,10 +574,11 @@ def _hold_pdfminer_to_the_bound() -> None:
     lists through ``PDFPage.create_pages``, everything it lays out through
     the device pdfplumber gives it, what it holds through its interpreter's
     and content parser's ``push``, every token it parses through
-    ``PSBaseParser.nexttoken``, and the resources it walks for a page or a
-    form drawn through ``init_resources``. Done once whatever the copy
+    ``PSBaseParser.nexttoken``, the resources it walks for a page or a
+    form drawn through ``init_resources``, and every loop building a font
+    through its font modules' ``range``. Done once whatever the copy
     of this module."""
-    from pdfminer import pdftypes
+    from pdfminer import cmapdb, pdffont, pdftypes
     from pdfminer.arcfour import Arcfour
     from pdfminer.pdfinterp import PDFContentParser, PDFPageInterpreter
     from pdfminer.pdfpage import PDFPage
@@ -670,6 +726,8 @@ def _hold_pdfminer_to_the_bound() -> None:
         PDFPage.create_pages = staticmethod(paged)  # type: ignore[method-assign]
         PDFPageInterpreter.init_resources = walked  # type: ignore[method-assign]
         PSBaseParser.nexttoken = _parsed(PSBaseParser.nexttoken)  # type: ignore[method-assign]
+        for module in (cmapdb, pdffont):
+            vars(module)["range"] = _font_range
         names["zlib"] = _BoundedZlib()
 
 

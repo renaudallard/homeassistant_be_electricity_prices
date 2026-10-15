@@ -1787,6 +1787,60 @@ def test_the_resources_pdfminer_walks_for_each_draw_count(
         extract(_drawn_pdf(b"/X0 Do " * 3, b"", fonts=300))
 
 
+def _mapped_pdf(last: int) -> bytes:
+    """A font whose ToUnicode map gives the codes 0 to ``last`` in a line."""
+    import zlib
+
+    cmap = (
+        b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n"
+        b"1 begincodespacerange <0000> <FFFF> endcodespacerange\n"
+        b"1 beginbfrange\n<0000> <%04X> <0041>\nendbfrange\n"
+        b"endcmap CMapName currentdict /CMap defineresource pop end end" % last
+    )
+    return _font_pdf(1, zlib.compress(cmap))
+
+
+def _widths_pdf(last: int) -> bytes:
+    """A page naming a font whose widths give the codes 0 to ``last`` in a
+    range."""
+    content = b"BT /F1 9 Tf 10 10 Td <0041> Tj ET"
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[4 0 R]/Count 1>>",
+            b"<</Length %d>>\nstream\n%s\nendstream" % (len(content), content),
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 3 0 R"
+            b"/Resources<</Font<</F1 5 0 R>>>>>>",
+            b"<</Type/Font/Subtype/Type0/BaseFont/F/Encoding/Identity-H"
+            b"/DescendantFonts[6 0 R]>>",
+            b"<</Type/Font/Subtype/CIDFontType2/BaseFont/F/FontDescriptor 7 0 R"
+            b"/CIDSystemInfo<</Registry(Adobe)/Ordering(Identity)/Supplement 0>>"
+            b"/W[0 %d 500]>>" % last,
+            b"<</Type/FontDescriptor/FontName/F/Flags 4/FontBBox[0 0 1000 1000]"
+            b"/ItalicAngle 0/Ascent 800/Descent -200/CapHeight 700/StemV 80>>",
+        )
+    )
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_what_a_reader_builds_of_fonts_is_held(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """A font's map or widths give a range of codes in a line, and the
+    readers build each: 2,8 kB mapping 2^32 codes ran pdfminer out of
+    memory after 52 s, and pypdf held 970 MB for 48 fonts of the 100 000
+    codes it maps at most for one. Each code counts before the range is
+    gone through."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_FONT_ENTRIES", 10_000)
+    refused = r"^PDF has a reader build more than 10000 font entries"
+    for payload in (_mapped_pdf(0xFFFF), _widths_pdf(60_000)):
+        with pytest.raises(ExtractorError, match=refused):
+            extract(payload)
+    for payload in (_mapped_pdf(0xFF), _widths_pdf(255)):
+        with pytest.raises(CardNotReadableError, match="no text layer"):
+            extract(payload)
+
+
 @pytest.mark.parametrize("extract", _EVERY_READER)
 def test_a_card_is_held_to_a_page_count(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
