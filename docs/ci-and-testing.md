@@ -577,7 +577,9 @@ whose Dutch edition has stood in for it since 1 October, is allowed until the No
 So is the French myComfort card in Wallonia, re-uploaded on 8 October (issue #124): its title is
 printed from a form field the readers do not see, and its REGIE DE WAVRE and ORES (Verviers)
 distribution rows are swapped, so the Dutch edition standing in for it is the right one to bill.
-The report gives these rows their own section.
+The Dutch Électricité Fixe card in Wallonia (issue #129) leaves out the notice that its day/night
+rate does not apply under Tarif Impact, which its French edition and every other Walloon card
+print; the French card is billed. The report gives these rows their own section.
 
 An unreadable label is reported but does not fail: unknown is not evidence of staleness. The label
 parser is unicode-aware on purpose - a character class that forgets the `u` in `août` silently

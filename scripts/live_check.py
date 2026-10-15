@@ -763,6 +763,16 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "inbegrepen'; the French card is billed",
     ),
     (
+        "totalenergies/totalenergies_electricite_fixe/wallonia: French and Dutch "
+        "cards agree",
+        "energy.single_under_impact: French True, Dutch False",
+    ): (
+        date(2026, 11, 1),
+        "the October 2026 Dutch card leaves out the notice that its day/night "
+        "rate does not apply under Tarif Impact, which the French card and "
+        "every other Walloon card print; the French card is billed",
+    ),
+    (
         "totalenergies/totalenergies_mycomfort/brussels: French and Dutch cards agree",
         "the Dutch card does not read: ExtractorError: TotalEnergies: variable "
         "formula not found",
