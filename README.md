@@ -262,7 +262,10 @@ from August 2026 the energy contribution is dropped whatever you type, and
 the excise is billed at the rate the law sets for the month. Those are
 the residential figures: a business (a Yuso customer, say) still owes the
 professional excise and the contribution, so tick **Business contract** on the
-tax step and the two levies you type are billed as typed. Coefficients
+tax step and the two levies you type are billed as typed. The box also puts the
+entry in the professional segment, so the comparisons quote it against
+professional cards, excluding VAT when the VAT rate you typed is 0 and
+including it otherwise. Coefficients
 are entered excluding VAT and the VAT rate grosses them up. The spot and the base
 are both in EUR/kWh, so a formula printed in c€/kWh on a Belpex in EUR/MWh has to
 be converted: (0.1068 × Belpex + 1.5) c€/kWh is a factor of 1.068 and a base of

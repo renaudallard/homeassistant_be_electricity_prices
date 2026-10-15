@@ -6636,6 +6636,89 @@ def test_compare_pickers_do_not_cross_the_professional_line() -> None:
     assert all(not c.startswith("engie_pro_") for c in residential)
 
 
+@pytest.mark.parametrize("business", [False, True])
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_custom_business_entry_is_compared_with_professional_cards(
+    hass: HomeAssistant, business: bool
+) -> None:
+    """The expert custom supplier has no card for the registry to call
+    professional, so the tax step's Business contract box says it. Ignored,
+    a business was quoted against residential cards only, in the picker and
+    in the ranking alike."""
+    from custom_components.be_electricity_prices.flow_contracts import (
+        _ranking_candidates,
+    )
+    from custom_components.be_electricity_prices.providers import is_professional
+
+    entry = make_entry(
+        supplier="custom",
+        contract="custom_dynamic",
+        region="flanders",
+        dso="fluvius_antwerpen",
+        custom_professional=business,
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "compare"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "engie"}
+    )
+    assert result["step_id"] == "compare_contract"
+    schema = result["data_schema"]
+    assert schema is not None
+    selector = next(iter(schema.schema.values()))
+    offered = [o["value"] for o in selector.config["options"]]
+    assert offered
+    assert all(is_professional("engie", c) is business for c in offered)
+
+    ranked = _ranking_candidates(entry.data)
+    assert not isinstance(ranked, str)
+    _group, candidates = ranked
+    assert candidates
+    assert all(contract.professional is business for _, contract, _ in candidates)
+
+
+@pytest.mark.parametrize(("vat", "fee"), [(0.0, 100.0), (0.21, 121.0)])
+def test_a_custom_business_entry_sees_a_professional_card_on_its_vat_basis(
+    vat: float, fee: float
+) -> None:
+    """A custom entry is never asked whether it bills VAT: the rate it typed
+    says so, 0 for a business that deducts it. A professional card quoted for
+    it was grossed by the default answer whatever it typed, so a deducting
+    business compared its net bill with the alternatives' gross ones. Its own
+    card bills on the rate it typed, as before."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from custom_components.be_electricity_prices.providers.custom import (
+        build_snapshot,
+    )
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+    from tests import make_snapshot
+
+    entry = make_entry(
+        supplier="custom",
+        contract="custom_fixed",
+        custom_professional=True,
+        custom_vat_rate=vat,
+        custom_energy_single=0.12,
+    )
+    card = make_snapshot(
+        supplier="engie",
+        contract="engie_pro_easy_variable",
+        energy=FixedRates(single=0.10, yearly_fixed_fee=100.0),
+    )
+    card = replace(card, taxes=replace(card.taxes, vat_rate=0.21))
+    resolved = _resolve_snapshot(entry, card)
+    assert resolved.energy.yearly_fixed_fee == pytest.approx(fee)
+    own = _resolve_snapshot(entry, build_snapshot(entry.data, "wallonia", "ores"))
+    assert own.taxes.vat_rate == vat
+
+
 def test_compare_supplier_list_drops_a_segment_only_supplier() -> None:
     """A supplier whose only in-region cards are professional must not reach
     the contract picker either, or it renders an empty list."""

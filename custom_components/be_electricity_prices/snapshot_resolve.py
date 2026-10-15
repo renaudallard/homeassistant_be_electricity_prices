@@ -52,12 +52,15 @@ from .brugel import cached_power_term
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_CUSTOM_PROFESSIONAL,
+    CONF_CUSTOM_VAT_RATE,
     CONF_DIRECT_DEBIT,
     CONF_INCLUDE_VAT,
     CONF_METER,
     CONF_QUARTER_HOURLY,
     CONF_SOLAR_REGIME,
+    CONF_SUPPLIER,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
+    DEFAULT_CUSTOM_VAT_RATE,
     DEFAULT_DIRECT_DEBIT,
     DEFAULT_INCLUDE_VAT,
     METER_MONO,
@@ -94,8 +97,18 @@ def _include_vat(entry: ConfigEntry) -> bool:
 
     Inert on a residential card, which prints VAT-inclusive already; it
     only bites on a card published excluding VAT.
+
+    The expert custom supplier never asks: the VAT rate typed on its tax step
+    answers instead, 0 for a business that deducts it. Its own card bills the
+    same either way, since apply_vat leaves a 0 rate alone and grosses a
+    positive one as the default did, but a professional card quoted for it on
+    the compare page is put onto the basis the entry bills on.
     """
-    return bool(entry.data.get(CONF_INCLUDE_VAT, DEFAULT_INCLUDE_VAT))
+    data = entry.data
+    if CONF_INCLUDE_VAT not in data and data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
+        rate = data.get(CONF_CUSTOM_VAT_RATE)
+        return (DEFAULT_CUSTOM_VAT_RATE if rate is None else float(rate)) > 0.0
+    return bool(data.get(CONF_INCLUDE_VAT, DEFAULT_INCLUDE_VAT))
 
 
 def _quarter_hourly(entry: ConfigEntry, snap: SupplierSnapshot) -> bool:

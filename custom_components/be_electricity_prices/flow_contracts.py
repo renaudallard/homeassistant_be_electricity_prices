@@ -40,6 +40,7 @@ from homeassistant.helpers.selector import SelectOptionDict
 
 from .const import (
     CONF_CONTRACT,
+    CONF_CUSTOM_PROFESSIONAL,
     CONF_REGION,
     CONF_SUPPLIER,
     DSO_CHOICES,
@@ -175,6 +176,16 @@ def _contract_is_professional(supplier_id: str | None, contract_id: str | None) 
     The flow's name for the registry lookup the pricing side reads as well.
     """
     return is_professional(supplier_id, contract_id)
+
+
+def _entry_is_professional(data: Mapping[str, Any]) -> bool:
+    """Whether the household behind ``data`` buys as a business, which decides
+    the segment its comparisons quote. The registry answers for a card; the
+    expert custom supplier has none, and the tax step's Business contract box
+    answers there instead."""
+    if data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
+        return bool(data.get(CONF_CUSTOM_PROFESSIONAL, False))
+    return _contract_is_professional(data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT))
 
 
 def _contract_has_spot_injection(
@@ -359,7 +370,7 @@ def _ranking_candidates(
     candidates = _sweep_candidates(
         data[CONF_REGION],
         group,
-        _contract_is_professional(data[CONF_SUPPLIER], data[CONF_CONTRACT]),
+        _entry_is_professional(data),
         data[CONF_CONTRACT],
     )
     if not candidates:

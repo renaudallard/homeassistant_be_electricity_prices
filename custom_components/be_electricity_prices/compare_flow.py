@@ -91,9 +91,9 @@ from .const import (
 )
 from .flow_contracts import (
     _contract_has_spot_injection,
-    _contract_is_professional,
     _contract_kind,
     _contracts_for,
+    _entry_is_professional,
 )
 from .flow_schemas import (
     _direct_debit_schema,
@@ -225,9 +225,7 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
             current[CONF_CONTRACT],
             quarter_hourly=settlement_answer(self.config_entry.data),
         )
-        own_professional = _contract_is_professional(
-            current[CONF_SUPPLIER], current[CONF_CONTRACT]
-        )
+        own_professional = _entry_is_professional(current)
         if not hasattr(self, "_compare"):
             self._compare = {}
         if user_input is not None:
@@ -261,9 +259,7 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
             current[CONF_CONTRACT],
             quarter_hourly=settlement_answer(self.config_entry.data),
         )
-        own_professional = _contract_is_professional(
-            current[CONF_SUPPLIER], current[CONF_CONTRACT]
-        )
+        own_professional = _entry_is_professional(current)
         if user_input is not None:
             self._compare.update(user_input)
             return await self._after_compare_contract()
