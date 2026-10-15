@@ -51,7 +51,7 @@ jobs:
         # next daily scheduled run.
         run: mypy custom_components/ tests/ scripts/
       - name: Doc references
-        # The docs name about 2800 files and the symbols inside them. Fails on
+        # The docs name files and the symbols inside them. Fails on
         # a file a doc names that is not on disk and on a file.md#anchor that
         # matches no heading, both of which only a rename can cause and both
         # provably wrong. A symbol the tree does not define is counted and

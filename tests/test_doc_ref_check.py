@@ -9,7 +9,9 @@ green.
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -141,6 +143,38 @@ def test_a_heading_is_slugged_the_way_github_slugs_it(
     out = capsys.readouterr().out
     assert "MISSING ANCHOR guide.md:9 #spot-factor-meanspot-base" in out
     assert out.count("MISSING") == 1
+
+
+def test_each_file_is_read_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The parse of a module and the headings of a doc were each looked up
+    through dict.setdefault, which evaluates its default on every call: the
+    tree's 226 files were parsed 3718 times and the check took seven minutes
+    where one parse each takes seconds."""
+    root = _tree(
+        tmp_path,
+        (
+            "guide.md",
+            "# Guide\n\n"
+            + "`pricing.py` binds `kept`, see [it](../README.md#setup).\n" * 3,
+        ),
+    )
+    package = root / "custom_components" / "be_electricity_prices"
+    package.mkdir(parents=True)
+    (package / "pricing.py").write_text("def kept():\n    pass\n", encoding="utf-8")
+    reads: Counter[Path] = Counter()
+    read_text = Path.read_text
+
+    def counting(self: Path, *args: Any, **kwargs: Any) -> str:
+        reads[self.resolve()] += 1
+        return read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", counting)
+    assert _run(monkeypatch, root) == 0
+    assert reads[(package / "pricing.py").resolve()] == 1
+    # Once for the private names every doc is scanned for, once for its headings.
+    assert reads[(root / "README.md").resolve()] == 2
 
 
 # A line pin after a file name, in the spellings the docs have used: a colon

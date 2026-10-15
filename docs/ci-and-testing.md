@@ -273,7 +273,8 @@ resolver. A method of the coordinator is exempt, since `coordinator.<method>` na
 its coordinator_* mixins define the method.
 
 It runs in the `test` job (`.github/workflows/test.yml`), before the suite, needs no network or
-fixtures, and reports in under a second. `NOT_OURS` lists the names that are not files of this
+fixtures, and reports in seconds, since it parses each file once however many lines name it
+(`test_each_file_is_read_once`). `NOT_OURS` lists the names that are not files of this
 repository and never will be: what a workflow writes into the cards repository or as a job
 artefact, the framework doc's `providers/foo.py` placeholder, and Home Assistant's own
 `sensor/recorder.py`. A doc naming one of those is correct, and resolving it is not the point.

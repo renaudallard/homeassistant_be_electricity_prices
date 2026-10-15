@@ -38,6 +38,7 @@ Usage:  doc_ref_check.py [--verbose]
 from __future__ import annotations
 
 import ast
+import functools
 import re
 import sys
 from pathlib import Path
@@ -142,10 +143,12 @@ def resolve_link(doc: Path, rel: str) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
+@functools.cache
 def anchors_of(path: Path) -> set[str]:
     """Every heading in a markdown file, as GitHub slugs it: lowercased,
     punctuation dropped, then each space a hyphen. Runs are not collapsed,
-    so ``a * b`` is ``a--b``, and a heading seen before gets ``-1``, ``-2``."""
+    so ``a * b`` is ``a--b``, and a heading seen before gets ``-1``, ``-2``.
+    Cached, as the docs link to one heading from many lines."""
     out: set[str] = set()
     for line in path.read_text(encoding="utf-8").splitlines():
         found = HEADING.match(line)
@@ -161,10 +164,11 @@ def anchors_of(path: Path) -> set[str]:
     return out
 
 
+@functools.cache
 def symbols_of(path: Path) -> set[str]:
     """Every name a module defines: functions, classes and module-level
     assignments. Enough to tell a symbol that still exists from one that was
-    renamed."""
+    renamed. Cached, as the docs name one module on hundreds of lines."""
     if path.suffix != ".py":
         return set()
     try:
@@ -204,14 +208,12 @@ def defined_anywhere() -> set[str]:
 
 def main() -> int:
     verbose = "--verbose" in sys.argv
-    anchor_cache: dict[Path, set[str]] = {}
-    symbol_cache: dict[Path, set[str]] = {}
     everywhere: set[str] = set()
     for base in BASES[1:]:
         folder = ROOT / base
         if folder.is_dir():
             for source in folder.glob("*.py"):
-                everywhere |= symbol_cache.setdefault(source, symbols_of(source))
+                everywhere |= symbols_of(source)
 
     files_seen = anchors_seen = 0
     defined = defined_anywhere()
@@ -238,7 +240,7 @@ def main() -> int:
                 if target is None:
                     missing_files.append(f"{doc.name}:{number} `{rel}`")
                     continue
-                named |= symbol_cache.setdefault(target, symbols_of(target))
+                named |= symbols_of(target)
             for rel, anchor in LINK_REF.findall(line):
                 files_seen += 1
                 target = resolve_link(doc, rel)
@@ -248,11 +250,11 @@ def main() -> int:
                 if not anchor:
                     continue
                 anchors_seen += 1
-                if anchor not in anchor_cache.setdefault(target, anchors_of(target)):
+                if anchor not in anchors_of(target):
                     missing_anchors.append(f"{doc.name}:{number} {rel}#{anchor}")
             for anchor in SELF_ANCHOR.findall(line):
                 anchors_seen += 1
-                if anchor not in anchor_cache.setdefault(doc, anchors_of(doc)):
+                if anchor not in anchors_of(doc):
                     missing_anchors.append(f"{doc.name}:{number} #{anchor}")
             # Bare tokens outside a link; the links were counted above.
             for rel, anchor in ANCHOR_REF.findall(LINK_REF.sub("", line)):
@@ -260,7 +262,7 @@ def main() -> int:
                 if target is None:
                     continue
                 anchors_seen += 1
-                if anchor not in anchor_cache.setdefault(target, anchors_of(target)):
+                if anchor not in anchors_of(target):
                     missing_anchors.append(f"{doc.name}:{number} {rel}#{anchor}")
             if not named:
                 continue
