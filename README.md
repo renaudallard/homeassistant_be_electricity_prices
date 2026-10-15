@@ -1799,8 +1799,10 @@ three ids the integration uses, which are the directory names under
    It holds the energy, DSO, tax and injection figures exactly as the
    integration stores them, plus `_seen_on` (the day it was captured),
    `_via` (`live` for a card captured while it was current, `archive`
-   for one mirrored from the supplier's archive, or settled there once a
-   month-indexed card's month had closed) and `_sources`: every
+   for one mirrored from the supplier's archive, or replaced by the settled
+   copy from that archive once a month-indexed card's month had closed; a
+   row settled in place, at Luminus and TotalEnergies, keeps the one it had)
+   and `_sources`: every
    page or document the parse read, each with its text file under
    `texts/` and, for a PDF, the digest of the file.
 2. **The original PDF** is easiest through
@@ -1860,7 +1862,9 @@ replaces the archive's copy with the settled one. Luminus (MaxxFlex,
 SmartFlex, BasicFlex and the monthly feed-in) is settled the same way but in
 place: its own archive drops the new-customer campaign a live card carries,
 so the card kept for the month stays whole and only its indexed rates move
-to the index the next card names. The request names the supplier, contract, region and month
+to the index the next card names. TotalEnergies keeps no archive of its own and
+settles the rows the daily run caught in place too, while the card after the
+month is still its live one. The request names the supplier, contract, region and month
 and nothing else, and the month lookup only asks for a month the archive can
 hold: a closed one, and for a supplier with no archive of its own not before August
 2026, the earliest month the daily captures reach. A signing month older than
