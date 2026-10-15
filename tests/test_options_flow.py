@@ -2988,9 +2988,10 @@ async def test_compare_own_row_credits_the_signed_feed_in_leg(
     Direct Online household signed in August, and every gap the page and the
     daily ranking print was measured from that figure.
 
-    The raw card the credit is handed carries the signed leg too: whether the
-    credit settles on a month mean, and whether the year-to-date column needs
-    spots, are read off it, and both belong to the formula credited."""
+    The raw card the credit is handed stays the coordinator's own: only its
+    energy kind is read off it, and the year-to-date walk it also goes to
+    resolves the cohort per month, so a signed leg laid on it billed the
+    months before the signing month on the signed formula."""
     from custom_components.be_electricity_prices import cohort, compare_placeholders
     from custom_components.be_electricity_prices.providers._rates import (
         InjectionRates,
@@ -3047,8 +3048,8 @@ async def test_compare_own_row_credits_the_signed_feed_in_leg(
     expected = 6160.0 * per_kwh - 2660.0 * 0.02
     assert float(ph["current_annual"]) == pytest.approx(expected, abs=0.5)
     assert raw_cards
-    assert all(raw.injection == signed for raw in raw_cards if raw is not None)
-    assert any(raw is not None for raw in raw_cards)
+    assert any(card is entry.runtime_data._snapshot for card in raw_cards)
+    assert all(card.injection != signed for card in raw_cards if card is not None)
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

@@ -36,7 +36,6 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections.abc import Sequence
-from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -628,10 +627,14 @@ class _HouseholdMixin:
         # nothing for a contract that is not the entry's own, so it can never
         # touch the other side.
         current_snapshot = coord._snapshot
-        # Kept before the ENERGY splice: _compare_injection_credit has to ask
-        # the raw card whether the CREDIT rides a month mean, and the energy
-        # splice can put a month-priced leg on a card whose feed-in varies per
-        # hour. The feed-in leg the entry bills goes onto it below.
+        # Kept before the cohort splice, for two readers. The feed-in credit
+        # asks the raw card's energy kind whether the CREDIT rides a month
+        # mean, since the splice can put a month-priced leg on a card whose
+        # feed-in varies per hour. The own row's year to date walks it as the
+        # current_year_cost sensor does: that walk resolves the cohort per
+        # month itself, and a month before the signing month bills on its own
+        # card, or on this one where no archive holds it, never on a leg
+        # spliced on here.
         raw_snapshot = coord._snapshot
         # The card the entry is actually configured on, which the baseline
         # leg prices. Only the expert custom supplier builds its snapshot
@@ -672,10 +675,6 @@ class _HouseholdMixin:
             if baseline_snapshot is current_snapshot:
                 baseline_snapshot = spliced
             current_snapshot = spliced
-            if legs.injection is not None and raw_snapshot is not None:
-                # Idempotent through the month walk the YTD column hands the
-                # raw card to: a leg already frozen re-freezes to itself.
-                raw_snapshot = replace(raw_snapshot, injection=legs.injection)
 
         # The household's own hour-of-day consumption shape, so a time-of-use
         # card is quoted on the kWh it actually bills rather than on clock

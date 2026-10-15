@@ -34,7 +34,6 @@ anything, so it lives away from the steps that do.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -205,10 +204,11 @@ class _PlaceholdersMixin(OptionsFlow):
         other_register_rates: Any = None
         other_snap = None
         other_raw = None
-        # The own contract's card before its cohort splice of the energy leg,
-        # which the feed-in credit asks whether it rides a month mean, as the
-        # own side's raw_snapshot. None for any other contract, which is not
-        # spliced.
+        # The quoted card before the own contract's cohort splice, for what the
+        # own side reads off raw_snapshot: the energy kind the feed-in credit
+        # asks whether it rides a month mean, and the card the year-to-date
+        # walk resolves the cohort on per month. The same card as other_snap
+        # for any other contract, which is not spliced.
         other_card = None
         own_contract = (
             self._compare[CONF_SUPPLIER] == current[CONF_SUPPLIER]
@@ -285,6 +285,7 @@ class _PlaceholdersMixin(OptionsFlow):
                 ),
                 fetched_snapshot,
             )
+            other_card = other_snap
             if own_contract:
                 # The household's own contract on another meter or regime is
                 # still the contract it signed: the rates it locked in, not
@@ -301,9 +302,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     target_entry,
                     other_snap,
                 )
-                spliced = legs.splice(other_snap)
-                other_card = replace(other_snap, injection=spliced.injection)
-                other_snap = spliced
+                other_snap = legs.splice(other_snap)
             if dso not in other_snap.dsos:
                 placeholders["error"] = (
                     f"{self._compare[CONF_SUPPLIER]} doesn't serve DSO {dso}"
@@ -750,14 +749,17 @@ class _PlaceholdersMixin(OptionsFlow):
                 own_quarters = coord._historical_spot_quarters
             if spot_priced and not _spots_cover(hist_spots, ytd_from, today_local):
                 archive_capable = False
-        if archive_capable and other_snap is not None and current_snapshot is not None:
+        if archive_capable and other_card is not None and current_snapshot is not None:
             try:
                 current_ytd_val = await _own_year(own_spots, own_quarters)
                 compare_ytd_val = await _compute_current_year_cost(
                     self.hass,
                     session,
                     other_extractor,
-                    other_snap,
+                    # Before the splice, as the own row is walked: the own
+                    # contract quoted on another meter resolves its cohort
+                    # per month like the sensor does.
+                    other_card,
                     target_entry,
                     contract_override=self._compare[CONF_CONTRACT],
                     meter_override=meter,

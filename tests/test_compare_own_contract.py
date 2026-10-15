@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -140,3 +140,72 @@ async def test_a_per_slot_feed_in_is_not_baked_on_the_own_contract(
     assert p["current_annual"] != "-"
     assert p["current_annual"] == p["compare_annual"]
     assert float(p["delta_annual"]) == 0.0
+
+
+async def test_the_year_to_date_walks_the_card_before_the_cohort_splice(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The walk behind current_year_cost resolves the cohort per month itself
+    and bills a month before the signing month on its own card, or on the
+    current one where no archive holds it. The page handed its own row, and
+    the own contract quoted on another meter, the current card with the
+    signed feed-in leg already laid on, so January to August of an Eneco
+    Power Flex One signed in September were credited on the signed formula:
+    13,61 EUR under the sensor at 10 kWh exported a day."""
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices import cohort, ytd_cost
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+    )
+
+    freezer.move_to("2026-10-15 13:00:00+02:00")
+    card = replace(
+        _stub_snapshot("eneco", "power_fix", 0.18),
+        injection=InjectionRates(current=0.05),
+    )
+    signed = InjectionRates(current=0.02, fixed_for_term=True)
+    entry = make_entry(
+        solar_regime="injection",
+        solar_kva=5.0,
+        contract_start_date="2026-09-05",
+        api_key="k",
+        injection_kwh="sensor.i",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, card)
+    # The page fetches a year of day-ahead for a feed-in it reads as spot
+    # indexed when the entry holds none.
+    coord._historical_spots = {dt_util.utcnow() - timedelta(days=1): 0.08}
+    entry.runtime_data = coord
+    walked: list[Any] = []
+
+    async def walk(
+        _hass: Any, _session: Any, _ext: Any, snap: Any, *_a: Any, **_k: Any
+    ) -> float:
+        walked.append(snap)
+        return 100.0
+
+    with (
+        patch.object(ytd_cost, "_compute_current_year_cost", walk),
+        patch.object(
+            cohort,
+            "_cohort_legs",
+            AsyncMock(return_value=cohort._CohortLegs(None, signed)),
+        ),
+    ):
+        p = await _compare_placeholders(
+            hass,
+            entry,
+            supplier="eneco",
+            contract="power_fix",
+            target_snapshot=card,
+            meter="bi",
+            solar_regime="injection",
+        )
+    assert p["current_ytd"] != "-"
+    assert len(walked) == 2
+    assert walked[0] is coord._snapshot
+    assert all(snap.injection != signed for snap in walked)
