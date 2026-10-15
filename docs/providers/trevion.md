@@ -37,7 +37,8 @@ gekende waarde is deze van augustus 2026 (79,11 EUR/MWh)". The sentence appears
 twice in the same words, once for `Belpex_RLP_VL` and once for `Belpex_SPP_BE`,
 so each reader is anchored on its own parameter. Only indexed legs ask, so the
 fixed and dynamic contracts pay for no second card, and a month whose following
-card is not out yet comes back `provisional`. A withdrawn product's last month
+card is not out yet, or names another month or no index for a leg, comes back
+`provisional`. A withdrawn product's last month
 has no following card of its own, so it is settled on the card of the product
 `_ContractDef.successor` names, which prints the same indices: LifePowr's
 September 2026 on the October FlexiO Max card.

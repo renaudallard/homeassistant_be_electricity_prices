@@ -770,6 +770,35 @@ async def test_fetch_for_month_flags_a_month_the_next_card_cannot_settle(
     assert may.injection.index_realised is None
 
 
+async def test_a_next_card_naming_another_month_leaves_the_month_provisional(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A card filed as the next one can still name the month before, as a
+    first upload made before this month's indices are known would. Kept as
+    settled, the printed estimate was filed for good; Engie's settle path
+    flags the same case provisional."""
+    from custom_components.be_electricity_prices.providers import trevion
+
+    monkeypatch.setattr(
+        trevion,
+        "fetch_pdf_text_layout",
+        AsyncMock(return_value=_layout("trevion_flex_2026-05.pdf")),
+    )
+    may = await fetch_for_month(
+        make_text_session(_flex_listing("202605", "202606")),
+        "groene_stroom_flex",
+        REGION_FLANDERS,
+        date(2026, 5, 1),
+    )
+    assert may is not None
+    assert may.provisional is True
+    energy = may.energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.index_realised is None
+    assert may.injection is not None
+    assert may.injection.index_realised is None
+
+
 async def test_lifepowr_last_month_settles_on_the_flexio_max_card(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

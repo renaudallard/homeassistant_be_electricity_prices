@@ -273,9 +273,10 @@ async def _settle_on_published_indices(
     carries an RLP-indexed energy leg and an SPP-indexed credit and takes both.
     A withdrawn product has no following card for its last month, so that one
     is read off its successor's, which names the same two market indices.
-    While the following card is not out the month is flagged ``provisional``,
-    so the month cache re-asks after its TTL and the archive walk leaves the
-    row absent rather than filing an estimate as a closed month's fact.
+    While the following card is not out, or names another month or no index
+    for a leg, the month is flagged ``provisional``, so the month cache re-asks
+    after its TTL and the archive walk leaves the row absent rather than
+    filing an estimate as a closed month's fact.
 
     Both means this replaces are near misses rather than the same number: the
     card defines each index on "de Belgische kwartierprijzen", the quarter-hour
@@ -318,7 +319,14 @@ async def _settle_on_published_indices(
         found = published_spp_index(text)
         if found is not None and found[0] == month:
             changed["injection"] = settled_injection(injection, found[1])
-    return replace(snap, **changed) if changed else snap
+    if (settles_energy and "energy" not in changed) or (
+        settles_injection and "injection" not in changed
+    ):
+        # The card filed as the next one names another month, as a first
+        # upload made before this month's indices were known does, or no
+        # index at all. Asked again, never filed as settled on the estimate.
+        return replace(snap, provisional=True, **changed)
+    return replace(snap, **changed)
 
 
 # Every residential card the listing links, by the product its file is named
