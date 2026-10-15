@@ -862,7 +862,7 @@ async def test_cost_rows_priced_before_new_year_import_on_their_own_cycle(
         patch.object(
             backfill_cost,
             "_contract_segments",
-            AsyncMock(return_value=[(entry, None, [hour])]),
+            AsyncMock(return_value=[(entry, None, None, [hour])]),
         ),
         patch.object(backfill_cost, "_accrue_cost", _slow_accrual),
         patch.object(backfill_cost, "_import_cost_rows", imported),

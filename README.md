@@ -901,7 +901,9 @@ one, starting from what you have now. From then on:
 
 - `current_year_cost` is the bill across both contracts: the old one priced on
   its own supplier's cards for its own days (its own archive, or the project's
-  card archive, month by month), the new one from its first day. The
+  card archive, month by month, and a month neither holds on the card it
+  publishes today, with that month's federal levies, as for your own
+  contract), the new one from its first day. The
   `previous_contracts` attribute lists each earlier contract with its dates
   and cost, and `previous_contracts_eur` their total.
 - Under the Walloon compensation regime each contract nets its own injection,

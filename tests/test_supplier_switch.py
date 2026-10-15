@@ -993,7 +993,7 @@ async def test_an_old_feed_in_settled_on_the_solar_profile_loads_it_before_prici
         hass_: Any, session: Any, coordinator: Any, period: Any, overrides: Any = None
     ) -> Any:
         proxy = _QuoteEntry(data=dict(period.data), runtime_data=coordinator)
-        return proxy, make_stub_extractor(), card, False, False, False
+        return proxy, make_stub_extractor(), card, False, False, False, None
 
     periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
     with (
@@ -1457,6 +1457,7 @@ async def test_the_backfill_bills_a_stand_in_as_the_live_sensor_does(
                         True,
                         read_failed,
                         False,
+                        None,
                     )
                 ),
             ),
@@ -1867,6 +1868,7 @@ async def test_the_backfilled_year_ends_on_what_the_two_contracts_cost_live(
                     False,
                     False,
                     False,
+                    None,
                 )
             ),
         ),
@@ -1918,6 +1920,149 @@ async def test_the_backfilled_year_ends_on_what_the_two_contracts_cost_live(
     # One running total: nothing falls back at the switch.
     assert all(later >= earlier for earlier, later in itertools.pairwise(sums))
     assert rows[-1]["sum"] == pytest.approx(old_live + new_live, abs=1e-3)
+
+
+async def test_an_earlier_contracts_months_bill_their_own_federal_levies(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A month no archive holds bills on the current card with that month's
+    federal levies. An earlier contract's walk was never handed the card as
+    parsed, so its January to July bill took October's levies, and the
+    backfill dropped it to agree with the live sensor."""
+    from custom_components.be_electricity_prices.providers import get
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+
+    freezer.move_to("2026-10-14 23:30:00+02:00")
+    # TotalEnergies keeps no archive, and the project's starts in August.
+    supplier = "totalenergies"
+    old_raw = make_snapshot(supplier=supplier, energy=FixedRates(single=0.16))
+    new_raw = make_snapshot(supplier=supplier, energy=FixedRates(single=0.14))
+    held = _held(
+        supplier,
+        "totalenergies_myessential_fixed",
+        consumption_kwh="sensor.cons",
+        card_archive=False,
+    )
+    entry = make_entry(
+        supplier=supplier,
+        contract="totalenergies_myessential",
+        consumption_kwh="sensor.cons",
+        card_archive=False,
+        previous_contracts=[{"until": "2026-08-01", "data": held}],
+    )
+    entry.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_current_year_cost",
+        suggested_object_id="te_current_year_cost",
+        config_entry=entry,
+    )
+    coordinator = SimpleNamespace(
+        hass=hass,
+        entry=entry,
+        _snapshot=_resolve_snapshot(entry, new_raw),
+        _snapshot_raw=new_raw,
+        _session=None,
+        _historical_spots={},
+        _historical_spot_quarters={},
+        _spp_weights={},
+        _rlp_weights={},
+        _ensure_historical_spots=AsyncMock(),
+        _ensure_spp_weights=AsyncMock(),
+        _ensure_rlp_weights=AsyncMock(),
+        _billed_peak_kw=lambda: 0.0,
+    )
+    entry.runtime_data = coordinator
+    old_entry = cast(ConfigEntry, _QuoteEntry(data=held, runtime_data=coordinator))
+    start = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    stop = dt_util.start_of_local_day(date(2026, 10, 15)).astimezone(UTC)
+    hours = [
+        start + timedelta(hours=h)
+        for h in range(int((stop - start).total_seconds() // 3600))
+    ]
+
+    async def fake_deltas(
+        _h: Any, entity_id: str, first: date, last: date, period: str
+    ) -> list[tuple[datetime, float]]:
+        if entity_id != "sensor.cons":
+            return []
+        lo = dt_util.start_of_local_day(first).astimezone(UTC)
+        hi = dt_util.start_of_local_day(last + timedelta(days=1)).astimezone(UTC)
+        rows = [(h, 0.4) for h in hours if lo <= h < hi]
+        if period == "hour":
+            return rows
+        days: dict[datetime, float] = {}
+        for h, kwh in rows:
+            day = dt_util.start_of_local_day(dt_util.as_local(h)).astimezone(UTC)
+            days[day] = days.get(day, 0.0) + kwh
+        return sorted(days.items())
+
+    captured: list[dict[str, Any]] = []
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    fetched = SimpleNamespace(
+        row=SimpleNamespace(snapshot=old_raw), error=None, error_message=""
+    )
+    periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 10, 14))
+    with (
+        patch.object(energy_meters, "_read_deltas", new=fake_deltas),
+        patch.object(energy_meters, "_live_today_kwh", AsyncMock(return_value=None)),
+        patch.object(contract_periods, "fetch_shared", AsyncMock(return_value=fetched)),
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=lambda _h, _m, stats: captured.extend(stats),
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        (row,) = await contract_periods.price_previous_periods(
+            hass,
+            None,  # type: ignore[arg-type]
+            coordinator,
+            periods,
+            month_start=date(2026, 10, 1),
+        )
+
+        async def alone(raw: Any) -> float | None:
+            return await ytd_cost._compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                get(supplier),
+                _resolve_snapshot(old_entry, old_raw),
+                old_entry,
+                window_start_override=date(2026, 1, 1),
+                window_end=date(2026, 7, 31),
+                snapshot_raw=raw,
+            )
+
+        # The same card priced as the entry's own contract over those days.
+        own, on_todays_levies = await alone(old_raw), await alone(None)
+        await bf._backfill_cost_sensor(
+            hass,
+            entry,
+            coordinator,  # type: ignore[arg-type]
+            hours,
+            {},
+            {},
+        )
+        current = await ytd_cost._compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            get(supplier),
+            coordinator._snapshot,
+            entry,
+            window_start_override=date(2026, 8, 1),
+            snapshot_raw=new_raw,
+        )
+    assert row.cost is not None and own is not None and current is not None
+    assert row.cost == pytest.approx(own, abs=1e-6)
+    # The levies moved, or this proves nothing.
+    assert on_todays_levies is not None
+    assert own - on_todays_levies > 1.0
+    assert captured[-1]["sum"] == pytest.approx(row.cost + current, abs=1e-3)
 
 
 def _profile(slope: float, evening: float) -> dict[tuple[int, int, int], float]:
@@ -2042,7 +2187,15 @@ async def test_an_earlier_card_on_another_blend_nets_on_the_entrys_profile(
         captured.extend(stats)
 
     old = AsyncMock(
-        return_value=(old_entry, make_stub_extractor(), old_card, False, False, False)
+        return_value=(
+            old_entry,
+            make_stub_extractor(),
+            old_card,
+            False,
+            False,
+            False,
+            None,
+        )
     )
     instance = MagicMock()
     instance.async_add_executor_job = AsyncMock(return_value={})
@@ -2120,7 +2273,7 @@ async def test_the_backfilled_cost_leaves_out_days_no_contract_supplied(
     with patch.object(
         backfill_window,
         "period_card",
-        AsyncMock(return_value=(stand_in, None, card, False, False, False)),
+        AsyncMock(return_value=(stand_in, None, card, False, False, False, None)),
     ):
         billed = await backfill_window._contract_segments(
             hass,
@@ -2137,13 +2290,13 @@ async def test_the_backfilled_cost_leaves_out_days_no_contract_supplied(
         )
 
     def _first_day(segment: Any) -> date:
-        return dt_util.as_local(segment[2][0]).date()
+        return dt_util.as_local(segment[3][0]).date()
 
     assert [_first_day(s) for s in billed] == [date(2026, 3, 1), date(2026, 7, 1)]
     assert billed[0][1] is card and billed[1][1] is None
     # The price rows still cover every hour.
     assert _first_day(every[0]) == date(2026, 1, 1)
-    assert sum(len(s[2]) for s in every) == len(hours)
+    assert sum(len(s[3]) for s in every) == len(hours)
 
 
 def test_an_earlier_contract_takes_only_the_household_facts_it_left_blank() -> None:

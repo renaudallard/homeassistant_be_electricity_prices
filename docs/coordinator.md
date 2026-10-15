@@ -537,7 +537,11 @@ answers one, and one with neither to the
 entry's current card, flagged `stand_in`. A stand-in carries no welcome credit
 (`without_welcome_credit`): it is walked with the old contract's start date,
 so the ristourne or first-year bonus the current card offers a new customer
-was credited to a contract that never signed it.
+was credited to a contract that never signed it. `period_card` also hands back
+the card as parsed (the entry's `_snapshot_raw` for a stand-in, none for a
+card an archive kept, which was resolved for its own month), which the walk
+takes as `snapshot_raw`: a month no archive holds bills on the card with that
+month's federal levies (`_proxy_for_month`), as the entry's own contract does.
 
 Pricing fetches the old supplier's cards, so the tick never does it. It runs
 in the background once a day (`_schedule_previous_pricing`,
@@ -599,8 +603,9 @@ there. The quoted side, the kWh read, the "since" date and every ranking
 candidate take that day too, or the months before it were priced on the
 quoted side against nothing on the own row.
 The backfill cuts its hours at each switch
-(`_contract_segments`, `backfill_window.py`), builds a context per contract
-and accrues the cost series across them as one running total
+(`_contract_segments`, `backfill_window.py`), builds a context per contract,
+handing each the card its own was resolved from so a month no archive holds
+takes that month's levies as on the live sensor, and accrues the cost series across them as one running total
 (`_accrue_cost`, `backfill_cost.py`), leaving out of the cost series the days
 no contract supplied (`billed_only`) as the sensor does. An earlier
 contract none of whose cards any archive kept bills on the stand-in the live

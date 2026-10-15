@@ -265,11 +265,16 @@ async def _backfill_price_sensors(
     rows_per_key: dict[str, list[Any]] = {key: [] for key in stat_ids}
     # Each hour on the contract that supplied it: one piece for an entry that
     # recorded no switch, one per contract for one that did.
-    for seg_entry, seg_snap, seg_hours in await _contract_segments(
+    for seg_entry, seg_snap, seg_raw, seg_hours in await _contract_segments(
         hass, entry, coordinator, hours
     ):
         ctx = await _build_context(
-            hass, seg_entry, coordinator, seg_hours, snapshot=seg_snap
+            hass,
+            seg_entry,
+            coordinator,
+            seg_hours,
+            snapshot=seg_snap,
+            snapshot_raw=seg_raw,
         )
         region = ctx.region
         day_start = ctx.day_start

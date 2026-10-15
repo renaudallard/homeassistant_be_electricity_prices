@@ -625,10 +625,10 @@ async def _current_card(
     extractor: SupplierExtractor,
     proxy: ConfigEntry,
 ) -> tuple[SupplierSnapshot | None, bool, bool]:
-    """The old contract's card as its supplier publishes it today, resolved for
-    this household, or ``None`` when the supplier cannot be reached, whether it
-    was read off the archive's OCR reading, and whether a ``None`` is a read
-    that failed just now (a timeout, a 5xx) rather than a card that is gone.
+    """The old contract's card as its supplier publishes it today, as parsed,
+    or ``None`` when the supplier cannot be reached, whether it was read off
+    the archive's OCR reading, and whether a ``None`` is a read that failed
+    just now (a timeout, a 5xx) rather than a card that is gone.
 
     A card published as page images downloads fine and no parser here can read
     it: Ecofix's, every day since August 2026. The repository's archive reads
@@ -680,11 +680,7 @@ async def _current_card(
                 read_by_ocr = archived.read_by_ocr
     if raw is None:
         return None, False, read_failed
-    return (
-        _resolve_snapshot(proxy, raw, annual_kwh=entry_annual_kwh(proxy)),
-        read_by_ocr,
-        False,
-    )
+    return raw, read_by_ocr, False
 
 
 async def _latest_archived_card(
@@ -728,11 +724,26 @@ async def period_card(
     coordinator: Any,
     period: ContractPeriod,
     overrides: Mapping[str, Any] | None = None,
-) -> tuple[ConfigEntry, SupplierExtractor, SupplierSnapshot | None, bool, bool, bool]:
+) -> tuple[
+    ConfigEntry,
+    SupplierExtractor,
+    SupplierSnapshot | None,
+    bool,
+    bool,
+    bool,
+    SupplierSnapshot | None,
+]:
     """The stand-in entry, extractor and card an earlier contract is priced on,
     whether that card is the entry's own standing in, whether it stands in
-    because a read failed just now (``PricedPeriod.read_failed``), and whether
-    it was read off the archive's OCR reading.
+    because a read failed just now (``PricedPeriod.read_failed``), whether
+    it was read off the archive's OCR reading, and the card it was resolved
+    from.
+
+    The last is what the walk resolves for a month no archive holds, which
+    owes that month's federal levies rather than today's
+    (``_snapshot_for_month``): the card as parsed, the entry's own
+    (``_snapshot_raw``) where that stands in, and ``None`` for an archived
+    card, which was resolved for its own month.
 
     The card is the one its supplier publishes today, resolved for this
     household, and each month still bills on its own archived card through the
@@ -758,8 +769,11 @@ async def period_card(
     )
     extractor = get_extractor(str(period.data.get(CONF_SUPPLIER, "")))
     fallback = getattr(coordinator, "_snapshot", None)
-    card, read_by_ocr, read_failed = await _current_card(
-        hass, session, extractor, proxy
+    raw, read_by_ocr, read_failed = await _current_card(hass, session, extractor, proxy)
+    card = (
+        None
+        if raw is None
+        else _resolve_snapshot(proxy, raw, annual_kwh=entry_annual_kwh(proxy))
     )
     if card is None and fallback is not None:
         card, archive_failed = await _latest_archived_card(
@@ -768,8 +782,9 @@ async def period_card(
         read_failed = read_failed or archive_failed
     if card is None:
         stand_in = None if fallback is None else without_welcome_credit(fallback)
-        return proxy, extractor, stand_in, True, read_failed, False
-    return proxy, extractor, card, False, False, read_by_ocr
+        own_raw = getattr(coordinator, "_snapshot_raw", None)
+        return proxy, extractor, stand_in, True, read_failed, False, own_raw
+    return proxy, extractor, card, False, False, read_by_ocr, raw
 
 
 async def price_previous_periods(
@@ -830,6 +845,7 @@ async def price_previous_periods(
                 stand_in,
                 read_failed,
                 read_by_ocr,
+                raw,
             ) = await period_card(hass, session, coordinator, period, overrides)
             if card is not None:
                 regime = proxy.data.get(CONF_SOLAR_REGIME, "none")
@@ -859,6 +875,8 @@ async def price_previous_periods(
                         if proxy.data.get(CONF_REGION) == REGION_FLANDERS
                         else 0.0
                     ),
+                    # A month no archive holds bills its own levies on it.
+                    "snapshot_raw": raw,
                 }
                 cost = await _compute_current_year_cost(
                     hass,

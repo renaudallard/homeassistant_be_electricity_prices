@@ -323,6 +323,7 @@ async def _build_context(
     hours: list[datetime],
     *,
     snapshot: SupplierSnapshot | None = None,
+    snapshot_raw: SupplierSnapshot | None = None,
 ) -> _BackfillContext:
     """Resolve the per-run inputs shared by both passes.
 
@@ -334,7 +335,9 @@ async def _build_context(
     in the year (``_contract_segments``): its card, with ``entry`` the stand-in
     holding its settings. The load profile is then read as loaded rather than
     asked for, because asking for another card's blend would move the one the
-    live coordinator prices its own contract on.
+    live coordinator prices its own contract on. ``snapshot_raw`` is the card
+    it was resolved from, which a month no archive holds is resolved from
+    again for that month's federal levies, as the live sensor bills it.
     """
     snap = snapshot if snapshot is not None else coordinator._snapshot
     assert snap is not None
@@ -395,12 +398,12 @@ async def _build_context(
             region,
             snap,
             entry,
-            # The entry's own card is resolved from this; an earlier
-            # contract's card stands in as it is, as the live sensor bills it.
+            # The card each contract's own was resolved from, so a month no
+            # archive holds bills its own levies, as the live sensor bills it.
             current_raw=(
                 getattr(coordinator, "_snapshot_raw", None)
                 if snapshot is None
-                else None
+                else snapshot_raw
             ),
         ),
         # Entries whose injection is SPP-weighted - a card that indexes on
@@ -426,6 +429,13 @@ async def _build_context(
     )
 
 
+# A piece of the window on one contract: its entry, card and the card that
+# was resolved from (``None`` for the entry's own), and its hours.
+_Segment = tuple[
+    ConfigEntry, SupplierSnapshot | None, SupplierSnapshot | None, list[datetime]
+]
+
+
 async def _contract_segments(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -433,12 +443,13 @@ async def _contract_segments(
     hours: list[datetime],
     *,
     billed_only: bool = False,
-) -> list[tuple[ConfigEntry, SupplierSnapshot | None, list[datetime]]]:
+) -> list[_Segment]:
     """``hours`` cut at each recorded supplier switch, oldest first.
 
-    Each piece is priced on the contract that supplied it: the stand-in entry
-    and card of a contract held earlier in the year (``period_card``), or the
-    entry itself with ``None`` for its own contract and card. An entry that
+    Each piece is priced on the contract that supplied it: the stand-in entry,
+    card and the card that was resolved from of a contract held earlier in the
+    year (``period_card``), or the entry itself with ``None`` for its own
+    contract and cards. An entry that
     recorded no switch gets one piece, which is what every run was before. An
     hour outside every earlier contract's days, including one in a previous
     year, stays on the entry's own contract, as it always was.
@@ -461,9 +472,9 @@ async def _contract_segments(
     window_start = ytd_window_start(entry, today)
     periods = previous_periods(entry.data, window_start, today)
     if not periods:
-        return [(entry, None, hours)]
+        return [(entry, None, None, hours)]
     own_start = current_period_start(entry.data, window_start)
-    segments: list[tuple[ConfigEntry, SupplierSnapshot | None, list[datetime]]] = []
+    segments: list[_Segment] = []
     owner: int | None = None
     run: list[datetime] = []
     for hour in hours:
@@ -492,13 +503,13 @@ async def _segment_for(
     periods: list[ContractPeriod],
     index: int | None,
     hours: list[datetime],
-) -> tuple[ConfigEntry, SupplierSnapshot | None, list[datetime]]:
+) -> _Segment:
     if index is None or index < 0:
-        return entry, None, hours
-    proxy, _extractor, card, _stand_in, _failed, _read_by_ocr = await period_card(
+        return entry, None, None, hours
+    proxy, _extractor, card, _stand_in, _failed, _ocr, raw = await period_card(
         hass, coordinator._session, coordinator, periods[index]
     )
-    return proxy, card, hours
+    return proxy, card, raw, hours
 
 
 async def _stand_in_spans(
@@ -540,7 +551,7 @@ async def _stand_in_spans(
         ]
         if period.end < first or period.start > last:
             continue
-        proxy, _extractor, card, stand_in, failed, _ocr = await period_card(
+        proxy, _extractor, card, stand_in, failed, _ocr, _raw = await period_card(
             hass, coordinator._session, coordinator, period
         )
         if stand_in or card is None:

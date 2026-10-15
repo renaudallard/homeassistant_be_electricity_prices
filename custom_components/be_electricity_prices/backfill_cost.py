@@ -264,7 +264,7 @@ async def _backfill_cost_sensor(
     # One contract at a time, each carrying on from the bill the ones before it
     # ran up: an entry that recorded no switch is one piece, as it always was.
     carried = 0.0
-    for seg_entry, seg_snap, seg_hours in await _contract_segments(
+    for seg_entry, seg_snap, seg_raw, seg_hours in await _contract_segments(
         hass, entry, coordinator, hours, billed_only=True
     ):
         carried = await _accrue_cost(
@@ -275,6 +275,7 @@ async def _backfill_cost_sensor(
             spots,
             quarters,
             snapshot=seg_snap,
+            snapshot_raw=seg_raw,
             carried=carried,
             emit_from=emit_from,
             rows=rows,
@@ -508,6 +509,7 @@ async def _accrue_cost(
     quarters: dict[datetime, list[float]],
     *,
     snapshot: SupplierSnapshot | None,
+    snapshot_raw: SupplierSnapshot | None,
     carried: float,
     emit_from: datetime | None,
     rows: list[Any],
@@ -516,8 +518,9 @@ async def _accrue_cost(
 ) -> float:
     """One contract's hours onto the running year-to-date bill.
 
-    ``entry`` and ``snapshot`` are the contract's: the entry and ``None`` for
-    its own, the stand-in and card of one held earlier in the year. Every row
+    ``entry``, ``snapshot`` and ``snapshot_raw`` are the contract's: the entry
+    and ``None`` for its own, the stand-in, card and the card that was
+    resolved from of one held earlier in the year. Every row
     emitted carries ``carried``, what the contracts before it ran up, so the
     series stays one running total across a switch; the return is the bill at
     the last hour, for the next contract to carry on from. Each contract nets
@@ -528,7 +531,9 @@ async def _accrue_cost(
     if not hours:
         return carried
     bill = 0.0
-    ctx = await _build_context(hass, entry, coordinator, hours, snapshot=snapshot)
+    ctx = await _build_context(
+        hass, entry, coordinator, hours, snapshot=snapshot, snapshot_raw=snapshot_raw
+    )
     region = ctx.region
     day_start = ctx.day_start
     dso = ctx.dso
