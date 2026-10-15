@@ -508,7 +508,10 @@ contract's figure. Keeping the month's own figure instead billed the energy off
 one card while the feed-in, frozen with it (issue #85), was credited off the
 signing card. The per-day walk a keyless entry takes bills such a month on the
 recorded index (`static_energy_eur_per_kwh`) rather than dropping it for want
-of a mean.
+of a mean. The leg carries only the index of the month it bills, keyed or not,
+and none on the live tick: a spot-monthly signing card carries its own month's,
+which the day and night sensors fell back on while the running month had no
+mean yet.
 
 A month before the signing month, which the year to date counts from 1 January
 unless the entry bills from its start date, is on no signed formula at all.

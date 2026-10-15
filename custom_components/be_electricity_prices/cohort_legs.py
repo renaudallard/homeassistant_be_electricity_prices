@@ -213,11 +213,13 @@ def _cohort_energy_from_archived(
     pin the signing-month index.
 
     A spot-monthly leg is returned whole, ``index_realised`` included, and
-    that value is the SIGNING month's. It never reaches a bill:
-    :func:`_effective_snapshot_for_month` replaces it with the delivery
-    month's before pricing, which is where that split belongs, and every
-    other consumer ignores the field. Said out loud because the paragraph
-    above reads as though the leg carried no index at all.
+    that value is the SIGNING month's. ``_cohort_legs`` replaces it with the
+    index of the month billed, none on the live tick, and
+    :func:`_effective_snapshot_for_month` does again before pricing a past
+    month, so it never reaches a bill. It would otherwise: a leg carrying
+    an index bills on it without a mean (``pricing._static_monthly``). Said
+    out loud because the paragraph above reads as though the leg carried no
+    index at all.
     ``None`` when the archived card exposes no re-priceable rate (a variable
     card whose coefficients couldn't be parsed, a TOU / Impact card that
     prints resolved bands without a monthly formula behind them, or a

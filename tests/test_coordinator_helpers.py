@@ -9867,6 +9867,39 @@ async def test_a_keyless_cohort_bills_a_settled_month_on_its_own_formula(
     )
 
 
+async def test_the_live_cohort_leg_carries_no_signing_month_index(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A spot-monthly signing card carries the index its own month settled
+    at, and a leg carrying an index bills on it with no mean. On the live
+    tick that put the signing month's price on the day and night sensors
+    while the running month had no mean yet: a Trevion Groene Stroom Flex
+    cohort signed in March showed March's price."""
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+    from custom_components.be_electricity_prices.pricing import (
+        static_energy_eur_per_kwh,
+    )
+
+    freezer.move_to("2026-10-15 12:00:00+02:00")
+    march = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.1, base=0.02, index_realised=0.0979)
+    )
+    october = make_snapshot(energy=SpotMonthlyRates(factor=1.2, base=0.03))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return march
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(contract="test", contract_start_date="2026-03-05", api_key="k")
+    legs = await _cohort_legs(
+        hass, MagicMock(), _fixed_extractor(_ffm), "test", "wallonia", entry, october
+    )
+    assert isinstance(legs.energy, SpotMonthlyRates)
+    assert legs.energy.factor == pytest.approx(1.1)
+    assert legs.energy.index_realised is None
+    assert static_energy_eur_per_kwh(legs.energy, "single") is None
+
+
 @pytest.mark.parametrize("api_key", [None, "k"])
 async def test_a_month_before_the_signing_month_bills_its_own_card(
     hass: HomeAssistant, freezer: Any, api_key: str | None

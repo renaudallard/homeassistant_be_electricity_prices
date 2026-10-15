@@ -385,10 +385,14 @@ async def _cohort_legs(
                 if month_snapshot is None
                 else getattr(month_snapshot.energy, "index_realised", None)
             )
-            if isinstance(cohort, SpotMonthlyRates) and not entry.data.get(
-                CONF_API_KEY
-            ):
-                if settled is None:
+            # The index the leg carries is the month billed's, keyed or not.
+            # A spot-monthly signing card carries its own month's, and on the
+            # live tick that reached the static day and night sensors, which
+            # fall back on it while the running month has no mean: a Trevion
+            # Groene Stroom Flex cohort signed in March showed March's price
+            # through a cold start or an ENTSO-E outage.
+            if isinstance(cohort, SpotMonthlyRates):
+                if settled is None and not entry.data.get(CONF_API_KEY):
                     cohort = None
                     unbilled = "no ENTSO-E key"
                 else:
