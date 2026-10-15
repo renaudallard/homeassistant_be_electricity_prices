@@ -29,9 +29,10 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from datetime import date
 from types import SimpleNamespace
+from typing import Any
 
 import aiohttp
 import pytest
@@ -1619,6 +1620,209 @@ def test_a_refusal_pdfplumber_swallows_still_refuses() -> None:
     and the card's text came back as if the refusal had not been made."""
     with pytest.raises(ExtractorError, match=r"^PDF carries a LZW stream"):
         extract_pdf_text_layout(_swallowed_refusal_pdf())
+
+
+def _glyphs_pdf(pages: int, glyphs: int, *, draws: int = 0) -> bytes:
+    """``pages`` pages sharing one content stream that shows ``glyphs``
+    glyphs, each where no other is, and draws an empty form ``draws``
+    times."""
+    shown = b"".join(
+        b"1 0 0 1 %d %d Tm (%c) Tj\n"
+        % (10 + glyph % 50 * 11, 10 + glyph // 50 * 9, 65 + glyph % 26)
+        for glyph in range(glyphs)
+    )
+    content = b"BT /F1 9 Tf\n" + shown + b"ET\n" + b"/X0 Do\n" * draws
+    kids = b" ".join(b"%d 0 R" % (5 + page) for page in range(pages))
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[%s]/Count %d>>" % (kids, pages),
+            b"<</Length %d>>\nstream\n%s\nendstream" % (len(content), content),
+            b"<</Type/XObject/Subtype/Form/BBox[0 0 612 792]/Length 0>>\n"
+            b"stream\n\nendstream",
+            *(
+                b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 9999]/Contents 3 0 R"
+                b"/Resources<</Font<</F1<</Type/Font/Subtype/Type1"
+                b"/BaseFont/Helvetica>>>>/XObject<</X0 4 0 R>>>>>>",
+            )
+            * pages,
+        )
+    )
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_what_pdfminer_lays_out_is_held_to_a_page_and_a_card(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """Each glyph pdfplumber holds weighs about 3 kB, and the decode bound
+    counted the bytes that drew them: a 6,5 kB card drawing a page of 488
+    000 glyphs held 1,1 GB. pdfminer is held to what it lays out, on a page,
+    forms drawn included, and on the whole card."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_PAGE_OBJECTS", 1000)
+    monkeypatch.setattr(_pdf_bound, "_MAX_CARD_OBJECTS", 2000)
+    refused = r"^PDF lays out more than 1000 objects on a page or 2000 in all"
+    for payload in (_glyphs_pdf(1, 1001), _glyphs_pdf(1, 900, draws=101)):
+        with pytest.raises(ExtractorError, match=refused):
+            extract(payload)
+    with pytest.raises(ExtractorError, match=refused):
+        extract(_glyphs_pdf(3, 700))
+    assert extract(_glyphs_pdf(2, 900, draws=100)).count("A") >= 2 * 900 // 26
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_what_pdfminer_holds_at_once_is_held(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer keeps operands waiting for their operator, graphics states
+    saved, the pieces of an array being read and the segments of a path
+    not yet painted, each growing with the bytes drawing it: 2 MB of saved
+    states held 552 MB, and 400 kB of operands left waiting, each operator
+    then copying the rest, took 157 s."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_STACK", 50)
+    monkeypatch.setattr(_pdf_bound, "_MAX_NESTING", 3)
+    monkeypatch.setattr(_pdf_bound, "_MAX_PATH_SEGMENTS", 100)
+
+    def shapes(n: int, depth: int) -> tuple[bytes, ...]:
+        return (
+            b"0 " * n + b"Tz",
+            b"q " * n,
+            b"[" + b"0 " * n + b"] 0 d",
+            b"[ " * depth + b"0 " + b"] " * depth + b"0 d",
+            b"0 0 m " + b"1 1 l " * (2 * n) + b"S",
+            b"0 0 m " + b"h " * (2 * n) + b"n",
+        )
+
+    for content in shapes(60, 4):
+        with pytest.raises(ExtractorError, match=r"^PDF has pdfminer hold more"):
+            extract(_pdf_of(content, attrs=b""))
+    for content in shapes(40, 3):
+        with pytest.raises(CardNotReadableError, match="no text layer"):
+            extract(_pdf_of(content, attrs=b""))
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_a_card_is_held_to_a_page_count(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """Each page costs pdfplumber about 15 ms with nothing on it, and pypdf
+    1,4 ms: a 2 MB file of 20 000 empty pages took 302 s. The count stops
+    the reader listing them, before it holds them all."""
+    from pdfminer.pdfpage import PDFPage
+    from pypdf import PageObject
+
+    # Held first, so the counting below wraps the hold, not the reverse.
+    _pdf_bound._hold_pdfminer_to_the_bound()
+    monkeypatch.setattr(_pdf_bound, "_MAX_PAGES", 3)
+    pages: list[object] = []
+    page_object = PageObject.__init__
+
+    def listed(page: PageObject, *args: Any, **kwargs: Any) -> None:
+        pages.append(page)
+        page_object(page, *args, **kwargs)
+
+    create_pages = PDFPage.create_pages
+
+    def created(document: object) -> Iterator[PDFPage]:
+        for page in create_pages(document):  # type: ignore[arg-type]
+            pages.append(page)
+            yield page
+
+    monkeypatch.setattr(PageObject, "__init__", listed)
+    monkeypatch.setattr(PDFPage, "create_pages", created)
+    with pytest.raises(ExtractorError, match=r"^PDF has more than 3 pages"):
+        extract(_pdf_of(b"", attrs=b"", pages=200))
+    # pdfplumber lists them a second time to close them.
+    assert len(pages) <= 2 * 3
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_pdf_of(b"", attrs=b"", pages=3))
+
+
+def test_pdfminer_lays_out_no_paths_while_a_card_is_read() -> None:
+    """A card's text is read off its glyphs alone, and its paths were most
+    of what a page held: 123 000 segments on a page of a Bolt card."""
+    import io
+
+    import pdfplumber
+
+    payload = _pdf_of(b"0 0 m 10 10 l S 0 0 10 10 re f", attrs=b"")
+    with _pdf_bound.bounded_pdfminer(), pdfplumber.open(io.BytesIO(payload)) as pdf:
+        assert not pdf.pages[0].lines and not pdf.pages[0].rects
+    with pdfplumber.open(io.BytesIO(payload)) as pdf:
+        assert pdf.pages[0].lines and pdf.pages[0].rects
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_each_page_is_let_go_of_once_read(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfplumber holds every page it laid out until the document is closed,
+    so what a card held grew with each page."""
+    from pdfplumber.page import Page
+
+    close = Page.close
+    order: list[str] = []
+
+    def closed(page: Page) -> None:
+        order.append(f"close {page.page_number}")
+        close(page)
+
+    layout = Page.layout
+
+    def laid_out(page: Page) -> object:
+        if not hasattr(page, "_layout"):
+            order.append(f"layout {page.page_number}")
+        return layout.fget(page)  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(Page, "close", closed)
+    monkeypatch.setattr(Page, "layout", property(laid_out))
+    extract(_glyphs_pdf(3, 700))
+    assert order[:6] == [
+        "layout 1",
+        "close 1",
+        "layout 2",
+        "close 2",
+        "layout 3",
+        "close 3",
+    ]
+
+
+class _Glyph(dict[str, object]):
+    """A glyph pdfplumber can dedupe that counts how often it is compared."""
+
+    compared = 0
+
+    def __eq__(self, other: object) -> bool:
+        _Glyph.compared += 1
+        return super().__eq__(other)
+
+
+def test_dedupe_finds_each_glyph_kept_at_once() -> None:
+    """pdfplumber puts the glyphs it keeps back in order by looking each one
+    up in the page's list: 40 000 glyphs on a page took 303 s. The order,
+    duplicates dropped, is as pdfplumber has it."""
+    from pdfplumber import utils
+
+    glyphs: list[dict[str, object]] = [
+        _Glyph(
+            upright=True,
+            text=chr(65 + n % 26),
+            fontname="F",
+            size=9.0,
+            doctop=float(n // 50 * 9),
+            x0=float(n % 50 * 11),
+        )
+        for n in range(2000)
+    ]
+    glyphs[10:10] = [_Glyph(glyphs[5]), _Glyph(glyphs[700])]
+    _Glyph.compared = 0
+    expected = utils.dedupe_chars(glyphs)
+    assert _Glyph.compared > 1_000_000
+    _Glyph.compared = 0
+    with _pdf_bound.bounded_pdfminer():
+        kept = utils.dedupe_chars(glyphs)
+    assert _Glyph.compared < 10_000
+    assert len(kept) == 2000
+    assert [id(glyph) for glyph in kept] == [id(glyph) for glyph in expected]
 
 
 def test_text_mentions_month_tolerates_split_whitespace() -> None:

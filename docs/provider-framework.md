@@ -699,14 +699,36 @@ Internals worth knowing:
   `_RC4_UNIT` (16 kB) before it runs, as a damaged inflate does; every
   encrypted card is AES. A PNG predictor whose row is wider than both its
   stream and 16 kB is refused under pdfminer, which holds a row of that width
-  before it reads any (64 Mi columns took 581 MiB). A refusal a reader wraps
-  in an error of its own, or swallows as pypdf does any error in a form, is
-  refused all the same, and so is pypdf reaching one of its own limits. The
-  checks only count, and a font pypdf loads once comes out as it did each
-  time, so a card under the bound renders to the same text as before, and
-  only these refuse: a file a reader cannot open is left to it to fail on. The manifest asks for pypdf 6.6.0 or later,
-  the first release whose text extraction loads its fonts through
-  `Font.from_font_resource`, which the bound counts.
+  before it reads any (64 Mi columns took 581 MiB). What pdfminer lays out
+  and holds is held too, since it grows with what the bytes draw rather than
+  with the bytes: a 6,5 kB card drawing 488 000 glyphs on one page held
+  1,1 GB, pdfplumber's pass dropping duplicate glyphs took 303 s for 40 000
+  on a page, 2 MB of saved graphics states held 552 MB, 400 kB of operands
+  left waiting took 157 s, and 20 000 empty pages 302 s. A card lists at
+  most `_MAX_PAGES` (50) pages, on both readers; pdfminer builds at most
+  `_MAX_PAGE_OBJECTS` (120 000) glyphs, forms and images on a page and
+  `_MAX_CARD_OBJECTS` (180 000) on the card; no stack of its interpreter or
+  content parser holds more than `_MAX_STACK` (5 000) at once, arrays and
+  dictionaries nest at most `_MAX_NESTING` (20) deep, and a path not yet
+  painted has at most `_MAX_PATH_SEGMENTS` (450 000) segments. Each is about
+  ten times the most any shipped fixture or any of the 2488 cards the
+  archive held on 2026-10-15 reaches: 5 pages, 11 213 objects on a page of
+  a Luminus card and 17 374 on a Cociter card, 407 on a stack, 2 deep and
+  42 987 segments on a page of a Bolt card; a page of 119 000 glyphs holds
+  437 MB and takes 56 s on a Raspberry Pi. No path is painted while a card
+  is read, its text being read off its glyphs alone (a page of a Bolt card
+  held 123 000 segments), pdfplumber lets go of each page once read rather
+  than with the document, and its `dedupe_chars` finds each glyph it keeps
+  at once rather than by looking it up in the page's list. A refusal a
+  reader wraps in an error of its own, or swallows as pypdf does any error
+  in a form, is refused all the same, and so is pypdf reaching one of its
+  own limits. The checks only count, and what they change (a font pypdf
+  loads once, the paths pdfminer no longer paints, a page let go of once
+  read, a glyph found at once) leaves the text as it was, so a card under
+  the bound renders to the same text as before, and only these refuse: a
+  file a reader cannot open is left to it to fail on. The manifest asks for
+  pypdf 6.6.0 or later, the first release whose text extraction loads its
+  fonts through `Font.from_font_resource`, which the bound counts.
 - `_require_https` (`_pdf.py`) refuses to fetch a card or page whose address
   is not https, before any request. Most links are read off a supplier's page
   and only energie.be checked their scheme, so a plain http link was fetched

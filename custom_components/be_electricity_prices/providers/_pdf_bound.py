@@ -23,19 +23,21 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""What a card's PDF streams may decode to, held to while pypdf, or pdfminer
-under pdfplumber, reads it."""
+"""What a card's PDF streams may decode to, and what pdfminer may lay out of
+them, held to while pypdf, or pdfminer under pdfplumber, reads it."""
 
 from __future__ import annotations
 
+import sys
 import threading
 import zlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, SupportsIndex
 
+from pypdf import PageObject
 from pypdf import filters as pypdf_filters
 from pypdf._font import Font
 from pypdf.errors import LimitReachedError
@@ -81,6 +83,34 @@ _MAX_ASCII85_BYTES = 1024 * 1024
 # hundred bytes of content, and the most any fixture loads is 321, an OCTA+
 # card of four pages and six forms.
 _FONT_LOAD_BYTES = 1024
+
+# The most pages a card may have, and the most layout objects, glyphs,
+# forms and images, pdfminer may build for one page and for the whole card.
+# A page costs pdfplumber about 15 ms with nothing on it, and pypdf 1,4 ms,
+# so a 2 MB file of 20 000 empty pages took 302 s; a glyph holds about 3
+# kB under pdfplumber, so a 6,5 kB card drawing 488 000 on a page held 1,1
+# GB. Measured on 2026-10-15 as pdfplumber reads them, across the 179
+# shipped fixtures and the 2488 cards the archive held: at most 5 pages,
+# 11 213 objects on a page, Luminus' SmartFlex card for Wallonia of October
+# 2026, and 17 374 on a card, Cociter's dynamic card of October 2026.
+# These are about ten times that: a page of 119 000 glyphs holds 437 MB and
+# takes 56 s on a Raspberry Pi.
+_MAX_PAGES = 50
+_MAX_PAGE_OBJECTS = 120_000
+_MAX_CARD_OBJECTS = 180_000
+
+# The most pdfminer may hold at once laying a page out, besides what it
+# builds: on any one stack, operands waiting for their operator, graphics
+# states saved, or the pieces of an array or dictionary being read; arrays
+# and dictionaries nested in one another; and segments of a path not yet
+# painted. Each grew with the bytes drawing it: 2 MB of saved states held
+# 552 MB, and 400 kB of operands left waiting, each operator then copying
+# the rest, took 157 s. Measured as above: 407 on a stack, an OCTA+ card,
+# nested 2 deep, and 42 987 segments on a page of a Bolt card. These are
+# about ten times that.
+_MAX_STACK = 5_000
+_MAX_NESTING = 20
+_MAX_PATH_SEGMENTS = 450_000
 
 
 def _bound_refusal() -> ExtractorError:
@@ -145,6 +175,8 @@ class _Reading:
 
     left: int
     refusal: ExtractorError | None = None
+    pages: int = 0
+    built: int = 0
     inflated: list[int] = field(default_factory=list)
     streams: list[EncodedStreamObject] = field(default_factory=list)
     fonts: dict[int, tuple[Any, Font]] = field(default_factory=dict)
@@ -158,6 +190,27 @@ class _Reading:
         self.left -= cost
         if self.left < 0:
             raise self.refuse(_bound_refusal())
+
+    def list_page(self, count: int) -> None:
+        """Refuse a reader listing its ``count``-th page, past
+        :data:`_MAX_PAGES`."""
+        if count > _MAX_PAGES:
+            raise self.refuse(
+                ExtractorError(
+                    f"PDF has more than {_MAX_PAGES} pages; refusing to read it"
+                )
+            )
+
+    def build(self, on_page: int) -> None:
+        """Count a layout object built, the page's ``on_page``-th."""
+        self.built += 1
+        if on_page > _MAX_PAGE_OBJECTS or self.built > _MAX_CARD_OBJECTS:
+            raise self.refuse(
+                ExtractorError(
+                    f"PDF lays out more than {_MAX_PAGE_OBJECTS} objects on a "
+                    f"page or {_MAX_CARD_OBJECTS} in all; refusing to read it"
+                )
+            )
 
     def inflate(
         self, data: bytes, wbits: int = zlib.MAX_WBITS
@@ -241,8 +294,9 @@ def _ascii85_held(decode: Any) -> Any:
 def _hold_pypdf_to_the_bound() -> None:
     """Have pypdf held to the bound while a card is read, and left as it is
     otherwise. Every stream it reads goes through ``get_data``, every one it
-    inflates through ``pypdf.filters.decompress``, and every font it loads
-    through ``Font.from_font_resource``."""
+    inflates through ``pypdf.filters.decompress``, every font it loads
+    through ``Font.from_font_resource``, and every page it lists through
+    ``PageObject``."""
     decompress = pypdf_filters.decompress
 
     def inflate(data: bytes) -> bytes:
@@ -297,6 +351,15 @@ def _hold_pypdf_to_the_bound() -> None:
             reading.charge(len(data))
         return data
 
+    listed = PageObject.__init__
+
+    def page(self: PageObject, *args: Any, **kwargs: Any) -> None:
+        listed(self, *args, **kwargs)
+        reading = _READING.get()
+        if reading is not None:
+            reading.pages += 1
+            reading.list_page(reading.pages)
+
     load = Font.from_font_resource.__func__  # type: ignore[attr-defined]
 
     def loaded(cls: type[Font], pdf_font_dict: Any) -> Font:
@@ -327,9 +390,63 @@ def _hold_pypdf_to_the_bound() -> None:
     EncodedStreamObject.get_data = read_encoded  # type: ignore[method-assign]
     DecodedStreamObject.get_data = read_decoded  # type: ignore[method-assign]
     Font.from_font_resource = classmethod(loaded)  # type: ignore[assignment]
+    PageObject.__init__ = page  # type: ignore[method-assign]
 
 
 _hold_pypdf_to_the_bound()
+
+
+def _built(method: Any) -> Any:
+    """``method`` of the device pdfplumber lays a page out on, counted while
+    a card is read as one layout object built for that page."""
+
+    def build(self: Any, *args: Any, **kwargs: Any) -> Any:
+        reading = _READING.get()
+        if reading is not None:
+            self._bound_built = vars(self).get("_bound_built", 0) + 1
+            reading.build(self._bound_built)
+        return method(self, *args, **kwargs)
+
+    return build
+
+
+class _Positions(list[Any]):
+    """A page's glyphs, each found by ``index`` at once: pdfplumber puts the
+    glyphs ``dedupe_chars`` keeps back in order by looking each one up in
+    the list, which took 303 s for 40 000 glyphs on a page. It keeps the
+    first of glyphs alike in every way, so the first found is the one."""
+
+    def __init__(self, chars: list[Any]) -> None:
+        super().__init__(chars)
+        self._at: dict[int, int] = {}
+        for at, char in enumerate(chars):
+            self._at.setdefault(id(char), at)
+
+    def index(
+        self,
+        value: Any,
+        start: SupportsIndex = 0,
+        stop: SupportsIndex = sys.maxsize,
+        /,
+    ) -> int:
+        at = self._at.get(id(value))
+        if at is None or start != 0 or stop != sys.maxsize:
+            return super().index(value, start, stop)
+        return at
+
+
+def _held(count: int, most: int) -> None:
+    """Refuse the card being read once pdfminer holds ``count`` of
+    something, past ``most``."""
+    reading = _READING.get()
+    if reading is not None and count > most:
+        raise reading.refuse(
+            ExtractorError(
+                f"PDF has pdfminer hold more than {most} items at once; "
+                "refusing to read it"
+            )
+        )
+
 
 _HOLDING = threading.Lock()
 
@@ -337,9 +454,16 @@ _HOLDING = threading.Lock()
 def _hold_pdfminer_to_the_bound() -> None:
     """Have pdfminer held to the bound while a card is read, and left as it
     is otherwise. Every stream it reads goes through ``PDFStream.get_data``,
-    and every stream it inflates through its module's ``zlib``."""
+    every stream it inflates through its module's ``zlib``, every page it
+    lists through ``PDFPage.create_pages``, everything it lays out through
+    the device pdfplumber gives it, and what it holds through its
+    interpreter's and content parser's ``push``."""
     from pdfminer import pdftypes
     from pdfminer.arcfour import Arcfour
+    from pdfminer.pdfinterp import PDFContentParser, PDFPageInterpreter
+    from pdfminer.pdfpage import PDFPage
+    from pdfplumber import utils
+    from pdfplumber.page import PDFPageAggregatorWithMarkedContent as Device
 
     with _HOLDING:
         names = vars(pdftypes)
@@ -393,10 +517,79 @@ def _hold_pdfminer_to_the_bound() -> None:
             ("ccittfaxdecode", "CCITT fax"),
         ):
             names[name] = _refused_while_reading(label, names[name])
+        paint = Device.paint_path
+
+        def unpainted(self: Device, *args: Any, **kwargs: Any) -> None:
+            # A card's text is read off its glyphs alone, and a page's paths
+            # were most of what it held: 123 000 segments on a Bolt page.
+            if _READING.get() is None:
+                paint(self, *args, **kwargs)
+
+        dedupe = vars(utils)["dedupe_chars"]
+
+        def deduped(chars: list[Any], *args: Any, **kwargs: Any) -> Any:
+            if _READING.get() is None:
+                return dedupe(chars, *args, **kwargs)
+            return dedupe(_Positions(chars), *args, **kwargs)
+
+        push = PDFPageInterpreter.push
+
+        def pushed(self: PDFPageInterpreter, obj: Any) -> None:
+            push(self, obj)
+            _held(len(self.argstack), _MAX_STACK)
+            _held(len(self.curpath), _MAX_PATH_SEGMENTS)
+
+        # pdfminer calls an operator with as many operands as its method
+        # names, so these two keep theirs.
+        save = PDFPageInterpreter.do_q
+
+        def saved(self: PDFPageInterpreter) -> None:
+            save(self)
+            _held(len(self.gstack), _MAX_STACK)
+
+        close = PDFPageInterpreter.do_h
+
+        def closed(self: PDFPageInterpreter) -> None:
+            close(self)
+            _held(len(self.curpath), _MAX_PATH_SEGMENTS)
+
+        parse = PDFContentParser.push
+
+        def parsed(self: Any, *objs: Any) -> None:
+            parse(self, *objs)
+            _held(len(self.curstack), _MAX_STACK)
+
+        start = PDFContentParser.start_type
+
+        def nested(self: Any, pos: int, type: str) -> None:
+            start(self, pos, type)
+            _held(len(self.context), _MAX_NESTING)
+
+        create_pages = PDFPage.create_pages
+
+        def paged(document: Any) -> Iterator[PDFPage]:
+            # Counted for each listing: pdfplumber lists the pages again to
+            # close them.
+            for count, page in enumerate(create_pages(document), 1):
+                reading = _READING.get()
+                if reading is not None:
+                    reading.list_page(count)
+                yield page
+
         names["ascii85decode"] = _ascii85_held(names["ascii85decode"])
         names["apply_png_predictor"] = predicted
         pdftypes.PDFStream.get_data = measured  # type: ignore[method-assign]
         Arcfour.decrypt = charged
+        Device.render_char = _built(Device.render_char)  # type: ignore[method-assign]
+        Device.begin_figure = _built(Device.begin_figure)  # type: ignore[method-assign]
+        Device.paint_path = unpainted  # type: ignore[method-assign]
+        vars(utils)["dedupe_chars"] = deduped
+        PDFPageInterpreter.push = pushed  # type: ignore[method-assign]
+        PDFPageInterpreter.do_q = saved  # type: ignore[method-assign]
+        PDFPageInterpreter.do_h = closed  # type: ignore[method-assign]
+        PDFContentParser.push = parsed  # type: ignore[method-assign]
+        PDFContentParser.start_type = nested  # type: ignore[method-assign]
+        PDFPage.create_pages = staticmethod(paged)  # type: ignore[method-assign]
         names["zlib"] = _BoundedZlib()
 
 
@@ -475,6 +668,18 @@ def bounded_pdfminer() -> Iterator[None]:
     inflates opening the file included; and a stream counts what its
     decoding hands back past its last inflate. A refusal pdfminer or
     pdfplumber wrap in an error of their own is refused all the same.
+
+    What pdfminer lays out and holds is held too, since it grows with what
+    the bytes draw, not with the bytes: a 6,5 kB card drawing 488 000 glyphs
+    on a page held 1,1 GB. A card lists no more than :data:`_MAX_PAGES`
+    pages; each glyph, form and image counts as it is built, up to
+    :data:`_MAX_PAGE_OBJECTS` on a page and :data:`_MAX_CARD_OBJECTS` on the
+    card; no path is painted, a card's text being read off its glyphs alone;
+    and no stack holds more than :data:`_MAX_STACK` at once, arrays and
+    dictionaries nest no deeper than :data:`_MAX_NESTING`, and a path not
+    yet painted has no more than :data:`_MAX_PATH_SEGMENTS` segments.
+    pdfplumber's ``dedupe_chars`` finds each glyph it keeps at once, where it
+    looked each one up in the page's list.
     """
     _hold_pdfminer_to_the_bound()
     with _held_to_the_bound():

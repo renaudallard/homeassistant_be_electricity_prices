@@ -448,6 +448,14 @@ def _pdfplumber_text(payload: bytes, kind: str, render: Callable[[Any], str]) ->
         raise ExtractorError(f"PDF {kind} parse error: {err}") from err
 
 
+def _each_page(pdf: Any) -> Iterator[Any]:
+    """``pdf``'s pages, each let go of once read: pdfplumber holds every
+    page it laid out until the document is closed."""
+    for page in pdf.pages:
+        yield page
+        page.close()
+
+
 def extract_pdf_text_layout(payload: bytes) -> str:
     """Extract PDF text via pdfplumber, preserving table layout.
 
@@ -467,7 +475,7 @@ def extract_pdf_text_layout(payload: bytes) -> str:
         payload,
         "layout",
         lambda pdf: "\n".join(
-            (page.dedupe_chars().extract_text() or "") for page in pdf.pages
+            (page.dedupe_chars().extract_text() or "") for page in _each_page(pdf)
         ),
     )
 
@@ -499,7 +507,7 @@ def extract_pdf_text_aligned(
 
     def render(pdf: Any) -> str:
         out: list[str] = []
-        for page in pdf.pages:
+        for page in _each_page(pdf):
             rows: defaultdict[int, list[tuple[float, float, str]]] = defaultdict(list)
             for word in page.extract_words():
                 bucket = round(float(word["top"]) / y_tolerance) * y_tolerance
