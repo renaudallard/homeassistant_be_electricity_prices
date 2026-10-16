@@ -1056,8 +1056,8 @@ back a contract you left before the year began.
   figure keeps moving even when statistics compilation lags.
   Per-month tariff cards live in a cache keyed by
   `(supplier, contract, region, YYYY-MM)`, kept in the entry's store
-  across restarts for the months the YTD window covers, and looked up
-  once per month touched by that window. Annual fees are pro-rated to the elapsed
+  across restarts for the calendar year so far plus the signing month,
+  and looked up once per month touched by that window. Annual fees are pro-rated to the elapsed
   fraction of the year, so on Jan 1 the sensor sits at ~0 and grows day
   by day instead of jumping to the full annual upfront.
 - **Startup reads no meter.** Home Assistant waits on each integration's

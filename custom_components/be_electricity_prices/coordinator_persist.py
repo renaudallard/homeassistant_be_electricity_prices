@@ -588,9 +588,9 @@ class _PersistMixin:
         # coordinator keeps a trailing year of hours and no more.
         self._prune_historical_spots()
         # The archived cards each past month is billed with. Written under
-        # the tuple guard above like everything else, and only for the months
-        # the year-to-date window covers, so the blob does not grow past a
-        # year of them (about 5 KB apiece).
+        # the tuple guard above like everything else, and only for the
+        # calendar year so far plus the signing month, so the blob does not
+        # grow past a year of them (about 5 KB apiece).
         monthly_cards = monthly_rows_to_store(
             self.hass,
             *self._supplier_tuple,

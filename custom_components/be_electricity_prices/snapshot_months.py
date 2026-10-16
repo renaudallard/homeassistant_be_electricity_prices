@@ -192,8 +192,8 @@ def monthly_rows_to_store(
     the marker expires on the same ``_MONTHLY_PROVISIONAL_TTL`` it does in
     memory, which the restore applies.
 
-    ``months`` bounds the write to the months the year-to-date walk actually
-    asks for, so a blob does not accumulate every month an entry has ever
+    ``months`` bounds the write to the calendar year so far plus the signing
+    month, so a blob does not accumulate every month an entry has ever
     walked (about 5 KB per row).
     """
     today = dt_util.now().date()
