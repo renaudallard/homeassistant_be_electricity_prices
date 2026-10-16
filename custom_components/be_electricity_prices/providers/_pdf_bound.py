@@ -24,10 +24,10 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 """What a card's PDF streams may decode to, how many pages it may have,
-what a reader may parse of it and build of its fonts, and how many steps
+what a reader may parse of it and build of its fonts, how many steps
 pdfminer may take, how long a token or line it may gather and what it may
-lay out and hold of it, held to while pypdf, or pdfminer under pdfplumber,
-reads it. What pdfminer is held to on top of this, and the wrappers
+lay out and hold of it, and how many lines pypdf may read backwards, held
+to while pypdf, or pdfminer under pdfplumber, reads it. What pdfminer is held to on top of this, and the wrappers
 holding it, are in :mod:`._pdf_bound_pdfminer`."""
 
 from __future__ import annotations
@@ -44,6 +44,7 @@ from typing import Any, SupportsIndex
 from pypdf import PageObject
 from pypdf import _cmap as pypdf_cmap
 from pypdf import _font as pypdf_font
+from pypdf import _reader as pypdf_reader
 from pypdf import filters as pypdf_filters
 from pypdf._font import Font
 from pypdf.errors import LimitReachedError
@@ -166,6 +167,15 @@ _MAX_TOKEN_BYTES = 16 * 1024
 # stream read to its end, so the most it lets through take about 68 s.
 _MAX_STEPS = 8_000_000
 
+# The most lines pypdf may read backwards from the end of a file, looking
+# for its end marker and the pointer to its table. It reads a block of 8 kB
+# for each, so a file of short lines with no end marker took about 9 s a
+# MB on a Raspberry Pi, with nothing counting it. Measured as above: 4 at
+# most. pypdf itself reads up to 1000 more recovering a broken pointer past
+# up to 1000 end markers repeated, which this lets through: 4096 lines take
+# about 70 ms.
+_MAX_LINES_BACK = 4096
+
 
 def _over_the_bound() -> str:
     return (
@@ -238,6 +248,7 @@ class _Reading:
     parsed: int = 0
     steps: int = 0
     font_entries: int = 0
+    lines_back: int = 0
     run: int | None = None
     inflated: list[int] = field(default_factory=list)
     streams: list[EncodedStreamObject] = field(default_factory=list)
@@ -308,6 +319,15 @@ class _Reading:
         if key not in self.fonts:
             self.fonts[key] = (spec, build())
         return self.fonts[key][1]
+
+    def read_back(self) -> None:
+        """Count a line pypdf reads backwards from the end of the file."""
+        self.lines_back += 1
+        if self.lines_back > _MAX_LINES_BACK:
+            raise self.refuse(
+                f"PDF has pypdf read more than {_MAX_LINES_BACK} lines backwards; "
+                "refusing to read it"
+            )
 
     def make_font(self, entries: int) -> None:
         """Count ``entries`` built for a font."""
@@ -441,9 +461,11 @@ def _hold_pypdf_to_the_bound() -> None:
     through ``Font.from_font_resource``, every page it lists through
     ``PageObject``, every operand, operator, and element of an array or
     dictionary it parses through its ``generic`` module's ``read_object``
-    and ``read_until_regex``, every font map it builds through
-    ``_parse_to_unicode``, and every loop building a font through its font
-    modules' ``range``. Done once whatever the copy of this module."""
+    and ``read_until_regex``, every line it reads backwards from the end of
+    the file through its reader module's ``read_previous_line``, every font
+    map it builds through ``_parse_to_unicode``, and every loop building a
+    font through its font modules' ``range``. Done once whatever the copy of
+    this module."""
     if hasattr(EncodedStreamObject.get_data, _MARK):
         return
     decompress = pypdf_filters.decompress
@@ -544,6 +566,15 @@ def _hold_pypdf_to_the_bound() -> None:
     for module in (pypdf_cmap, pypdf_font):
         vars(module)["range"] = _font_range
     vars(pypdf_cmap)["_parse_to_unicode"] = mapped
+    previous_line = vars(pypdf_reader)["read_previous_line"]
+
+    def read_back(stream: Any) -> Any:
+        reading = _READING.get()
+        if reading is not None:
+            reading.read_back()
+        return previous_line(stream)
+
+    vars(pypdf_reader)["read_previous_line"] = read_back
     structures = vars(pypdf_structures)
     for name in ("read_object", "read_until_regex"):
         structures[name] = _parsed(structures[name])
@@ -612,9 +643,10 @@ def bounded_pypdf() -> Iterator[None]:
     since pypdf never decodes an image to read text, and ASCII85 past
     :data:`_MAX_ASCII85_BYTES`. pypdf parses no more than
     :data:`_MAX_PARSED` operands, operators and elements of arrays and
-    dictionaries, a content stream's each time it is interpreted, and
-    builds no more than :data:`_MAX_FONT_ENTRIES` entries of a card's
-    fonts. A refusal ends the read where it is made: pypdf catches any
+    dictionaries, a content stream's each time it is interpreted, reads
+    no more than :data:`_MAX_LINES_BACK` lines backwards from the end of
+    the file, and builds no more than :data:`_MAX_FONT_ENTRIES` entries of
+    a card's fonts. A refusal ends the read where it is made: pypdf catches any
     Exception a form raises and goes on to its next draw, and a refusal is
     not one.
     """

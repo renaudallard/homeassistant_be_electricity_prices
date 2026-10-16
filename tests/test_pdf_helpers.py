@@ -1873,6 +1873,19 @@ def test_the_lines_read_backwards_are_found_in_a_time_linear_in_the_file() -> No
         assert looked <= 2 * len(data), (line, looked)
 
 
+def test_the_lines_pypdf_reads_backwards_are_held(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pypdf reads a block of 8 kB for each line it reads backwards from the
+    end of the file, looking for its end marker: a file of short lines with
+    no end marker took about 9 s a MB on a Raspberry Pi, nothing counting
+    it. Each line counts."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_LINES_BACK", 100)
+    with pytest.raises(ExtractorError, match=r"^PDF has pypdf read more than 100"):
+        extract_pdf_text(_lined_pdf(b"", b"x\n" * 150))
+    assert "tariff card" in extract_pdf_text(_lined_pdf(b"", b"x\n" * 50))
+
+
 def _drawn_pdf(content: bytes, form: bytes, *, fonts: int = 1) -> bytes:
     """A page of ``content`` that may draw the form ``X0`` of ``form``,
     which names no resources of its own, both naming ``fonts`` fonts."""

@@ -776,7 +776,12 @@ Internals worth knowing:
   only by the download cap). The most a card takes is 2 612 279, on a Bolt
   card of 2,8 MB, and this is about three times that: a step costs at most
   about 8,5 us, a line of a stream read to its end, so the most it lets
-  through take about 68 s. A reader builds at most `_MAX_FONT_ENTRIES`
+  through take about 68 s. pypdf reads at most `_MAX_LINES_BACK` (4096) lines
+  backwards from the end of a file, looking for its end marker and the
+  pointer to its table, a block of 8 kB for each (a file of short lines
+  with no end marker took about 9 s a MB on a Raspberry Pi). A card reads
+  4 at most, and pypdf itself reads up to 1000 more recovering a broken
+  pointer past up to 1000 end markers repeated; 4096 take about 70 ms. A reader builds at most `_MAX_FONT_ENTRIES`
   (1 000 000) entries of a card's fonts, each code a range of a font's
   ToUnicode map, encoding or widths gives, or its program's own tables,
   counted before the range is gone through, and under pypdf each code of
