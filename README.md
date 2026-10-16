@@ -1397,8 +1397,10 @@ just then (a timeout, or GitHub briefly down) is different: the live sensor
 bills those days on their own card again as soon as it can be read, so the
 backfill leaves them out of the price sensors rather than write a stand-in,
 and lists them under `retry`. That covers a past month the archive could not serve, every month of
-a contract whose signing-month card could not be read, and an earlier contract
-whose supplier's site did not answer. The automatic backfill runs again an
+a contract whose signing-month card could not be read, an earlier contract
+whose supplier's site did not answer, and a past month whose card lacks your
+network operator while a nearer card of the same year, which may print it,
+could not be read. The automatic backfill runs again an
 hour later, then less often, up to once a day, until those days are written,
 and a restart does not lose it: the next start carries on. After a service
 call, call it again once those cards can be read. The running cost is written
