@@ -56,7 +56,7 @@ From `manifest.json`:
 | `config_flow` | `true` | Set up entirely through the UI wizard (`config_flow.py`). |
 | `requirements` | `pypdf>=6.7.1`, `pdfplumber>=0.11`, `defusedxml>=0.7`, `pyxlsb>=1.0` | PDF parsing (pypdf, pdfplumber) for tariff cards; pypdf 6.7.1 is the first that maps at most 100 000 codes for a font, which the decode bound counts once the map is built, and its text extraction loads its fonts through `Font.from_font_resource` (from 6.6.0), which the bound counts too, wherever the release keeps its font module (`pypdf.generic._font` from 6.20.0). defusedxml to parse the ENTSO-E XML and the Synergrid SPP workbook safely; pyxlsb to read the Synergrid RLP `.xlsb` workbook (`synergrid.py`). |
 | `after_dependencies` | `energy`, `recorder` | The integration writes cost statistics into the recorder and plugs into the Energy dashboard, but must not hard-require them, so they load first when present. |
-| `version` | `0.37.5` | Manifest version. CI auto-tags and publishes a release when this bumps on `main`. |
+| `version` | `0.38.0` | Manifest version. CI auto-tags and publishes a release when this bumps on `main`. |
 
 Home Assistant 2026.2.3 or newer is the declared minimum (README, `hacs.json`):
 the release the test suite runs on (`requirements-dev.txt`), which
