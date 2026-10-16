@@ -44,7 +44,7 @@ import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any
 
 import aiohttp
@@ -540,67 +540,6 @@ async def card_for_unreadable_month(
     return await _archived_card_from_github(
         session, supplier, contract, region, today.replace(day=1)
     )
-
-
-def month_before(day: date) -> date:
-    """The first day of the month before ``day``'s."""
-    return (day.replace(day=1) - timedelta(days=1)).replace(day=1)
-
-
-async def card_of_month_before(
-    session: aiohttp.ClientSession,
-    supplier: str,
-    contract: str,
-    region: str,
-    day: date,
-    entry: ConfigEntry | None,
-) -> ArchivedCard | None:
-    """The archive's row for the month before ``day``'s, for an entry left
-    with no card. Honours the card-archive box like the reader above.
-
-    A withdrawn product whose card the supplier took down is priced off the
-    last month it was sold, the month before ``withdrawn``.
-    """
-    if not _archive_allowed(entry):
-        return None
-    return await _archived_card_from_github(
-        session, supplier, contract, region, month_before(day)
-    )
-
-
-# How far back the card archive is asked for a card to stand in, a month at a
-# time: as far as it keeps rows.
-_ARCHIVE_MONTHS_BACK = 12
-
-
-async def newest_archived_card(
-    session: aiohttp.ClientSession,
-    supplier: str,
-    contract: str,
-    region: str,
-    today: date,
-    entry: ConfigEntry | None,
-) -> tuple[date, ArchivedCard] | None:
-    """The newest row the archive holds for this card, and its month.
-
-    This month's row first, then back a month at a time, stopping at the
-    first one that holds a card. For an entry whose supplier's card cannot be
-    had or has gone stale: the archive walks every supplier daily, and its
-    row may well be newer than what the supplier answered this entry. A
-    transient failure propagates, since a month it could not read may still
-    hold one. Honours the card-archive box like the readers above.
-    """
-    if not _archive_allowed(entry):
-        return None
-    month = today.replace(day=1)
-    for _ in range(_ARCHIVE_MONTHS_BACK):
-        archived = await _archived_card_from_github(
-            session, supplier, contract, region, month
-        )
-        if archived is not None:
-            return month, archived
-        month = month_before(month)
-    return None
 
 
 def _archive_allowed(entry: ConfigEntry | None) -> bool:
