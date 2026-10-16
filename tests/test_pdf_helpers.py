@@ -854,9 +854,12 @@ def test_a_content_stream_written_into_its_page_counts(
         extract_pdf_text(_written_into_pages_pdf(stream, 3))
 
 
-def _form_pdf(form: bytes, draws: int, fonts: int = 0) -> bytes:
+def _form_pdf(
+    form: bytes, draws: int, fonts: int = 0, attrs: bytes = b"/Filter/FlateDecode"
+) -> bytes:
     """One page drawing ``draws`` times a form, ``form`` a FlateDecode
-    stream, whose resources name one font ``fonts`` times."""
+    stream unless ``attrs`` says otherwise, whose resources name one font
+    ``fonts`` times."""
     names = b"".join(b"/F%d 5 0 R" % name for name in range(fonts))
     return _pdf_from(
         (
@@ -868,29 +871,34 @@ def _form_pdf(form: bytes, draws: int, fonts: int = 0) -> bytes:
             b"/Resources<</XObject<</X0 6 0 R>>>>>>",
             b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
             b"<</Type/XObject/Subtype/Form/BBox[0 0 612 792]"
-            b"/Resources<</Font<<%s>>>>/Filter/FlateDecode/Length %d>>\nstream\n"
-            % (names, len(form))
+            b"/Resources<</Font<<%s>>>>%s/Length %d>>\nstream\n"
+            % (names, attrs, len(form))
             + form
             + b"\nendstream",
         )
     )
 
 
+@pytest.mark.parametrize("filtered", [True, False])
 @pytest.mark.parametrize("extract", _EVERY_READER)
 def test_a_form_counts_once_for_each_time_it_is_drawn(
-    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str], filtered: bool
 ) -> None:
     """pypdf interprets a form again each time a page draws it, and it was
     counted once: a 934 B file kept pypdf busy for 77 s. A refusal in a
-    form, which pypdf logs and goes on from, still refuses."""
+    form, which pypdf logs and goes on from, still refuses. A form no
+    filter packs counts as much."""
     import zlib
 
     monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
-    form = zlib.compress(_comment(300_000), 9)
+    form = _comment(300_000)
+    attrs = b""
+    if filtered:
+        form, attrs = zlib.compress(form, 9), b"/Filter/FlateDecode"
     with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
-        extract(_form_pdf(form, 4))
+        extract(_form_pdf(form, 4, attrs=attrs))
     with pytest.raises(CardNotReadableError, match="no text layer"):
-        extract(_form_pdf(form, 3))
+        extract(_form_pdf(form, 3, attrs=attrs))
 
 
 def _fonts_pdf(pages: int, to_unicode: bytes) -> bytes:
@@ -933,6 +941,24 @@ def test_a_tounicode_map_counts_each_time_a_font_is_loaded_from_it(
         extract(_fonts_pdf(4, to_unicode))
     with pytest.raises(CardNotReadableError, match="no text layer"):
         extract(_fonts_pdf(3, to_unicode))
+
+
+def test_each_hex_string_of_a_tounicode_map_pypdf_reads_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pypdf goes through every hex string of a ToUnicode map before it
+    builds anything of it, and a map of empty ones builds nothing: 2
+    million took 1,9 s on a Raspberry Pi with nothing counting them. Each
+    counts as a font entry."""
+    import zlib
+
+    monkeypatch.setattr(_pdf_bound, "_MAX_FONT_ENTRIES", 10_000)
+    with pytest.raises(
+        ExtractorError, match=r"^PDF has a reader build more than 10000"
+    ):
+        extract_pdf_text(_fonts_pdf(1, zlib.compress(b"<>" * 20_000)))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract_pdf_text(_fonts_pdf(1, zlib.compress(b"<>" * 5_000)))
 
 
 def test_a_font_counts_each_time_pypdf_loads_it(
@@ -1992,11 +2018,16 @@ def test_what_a_reader_parses_is_held(
     refused = r"^PDF has a reader parse more than 5000 objects"
     for content, form in (
         (b"q Q " * 3000, b""),
+        (b"0 " * 6000, b""),
         (b"/X0 Do " * 30, b"q Q " * 100),
     ):
         with pytest.raises(ExtractorError, match=refused):
             extract(_drawn_pdf(content, form))
-    for content, form in ((b"q Q " * 1000, b""), (b"/X0 Do " * 10, b"q Q " * 100)):
+    for content, form in (
+        (b"q Q " * 1000, b""),
+        (b"0 " * 2000, b""),
+        (b"/X0 Do " * 10, b"q Q " * 100),
+    ):
         with pytest.raises(CardNotReadableError, match="no text layer"):
             extract(_drawn_pdf(content, form))
 
