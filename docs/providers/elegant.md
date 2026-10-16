@@ -124,8 +124,17 @@ them, Midden-Vlaanderen cut short to "Fluvius Midden-Vl.". Each row is read with
 exclusive-night rates, then the classic meter's three and its prosumer rate, of
 which only the prosumer rate is kept. The data management fee is one row for
 every area. On the October 2026 card every figure matches the Fluvius rows
-Aspiravi, EBEM, Energy Knights and Trevion print that month. Every area has to
-read, or the card is refused.
+Aspiravi, EBEM, Energy Knights and Trevion print that month. A row that does
+not read leaves its area out of the table. `fetch` then refuses the live card
+rather than adopt it with a hole in it, since an entry on the missing area
+would fail every tick until the next good card (`require_every_area`,
+`_parse.py`), and `fetch_for_month` refuses the running month's the same way
+(`running_month_short_of_an_area`), so the last good card stands in. A past
+month's card keeps its short table: its energy is what a contract signed that
+month is billed on, and the month walk drops the month on the missing area
+alone. Neither check applies to the next card a closed month is settled on,
+which is read for its indices only
+(`test_a_past_month_keeps_a_short_network_table`, `tests/test_elegant.py`).
 
 The tax block goes through `regional_tax_overlay`: the excise row opens a table
 by annual volume (read into bands while its rates differ, as before August

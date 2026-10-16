@@ -81,6 +81,8 @@ from ._parse import (
     parse_sign,
     regional_tax_overlay,
     require_contract,
+    require_every_area,
+    running_month_short_of_an_area,
     to_float,
 )
 from ._pdf import (
@@ -275,7 +277,10 @@ async def fetch(
     """The card at the product's stable address."""
     contract = _contract(contract_id, region)
     url = _current_url(contract)
-    return parse_snapshot(contract_id, await fetch_pdf_text_layout(session, url), url)
+    snap = parse_snapshot(contract_id, await fetch_pdf_text_layout(session, url), url)
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("Elegant", snap.dsos, _AREAS.values())
+    return snap
 
 
 async def probe(
@@ -313,7 +318,9 @@ async def fetch_for_month(
         if is_transient_fetch_error(str(err)):
             raise
         return None
-    if found is None:
+    if found is None or running_month_short_of_an_area(
+        found[0].dsos, _AREAS.values(), month
+    ):
         return None
     return await _settle_on_next_card(session, contract, found[0], month)
 
@@ -670,8 +677,10 @@ def _dsos(text: str) -> dict[str, DsoOverlay]:
 
     A row reads the digital meter's capacity, distribution and
     exclusive-night rates, then the classic meter's three and its prosumer
-    rate. Every area has to read: a partial table would be adopted as the
-    card and an entry on the missing area would fail every tick.
+    rate. An area whose row does not read is left out, which ``fetch``
+    refuses for the live card and ``fetch_for_month`` for the running
+    month's, while a past month's card keeps its short table
+    (``require_every_area``).
     """
     data = _DATA_MANAGEMENT_RE.search(text)
     if data is None:
@@ -680,7 +689,7 @@ def _dsos(text: str) -> dict[str, DsoOverlay]:
     for label, key in _AREAS.items():
         row = numeric_row(text, label, 7, after=_NETWORK_START, before=_NETWORK_END)
         if row is None:
-            raise ExtractorError(f"Elegant: network row {label!r} not read")
+            continue
         capacity, single, night, _, _, _, prosumer = (to_float(v) for v in row)
         out[key] = DsoOverlay(
             distribution_single=single / 100.0,

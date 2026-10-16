@@ -286,19 +286,26 @@ def test_a_card_for_another_product_is_refused() -> None:
 
 
 @pytest.mark.parametrize(
-    ("old", "new"),
+    ("old", "new", "area"),
     [
-        ("Fluvius Midden-Vl. ", "Fluvius Gent "),
-        ("Fluvius West 60,53", "Fluvius West 0,00 60,53"),
+        ("Fluvius Midden-Vl. ", "Fluvius Gent ", "fluvius_intergem"),
+        ("Fluvius West 60,53", "Fluvius West 0,00 60,53", "fluvius_west"),
     ],
 )
-def test_a_network_table_that_does_not_read_is_refused(old: str, new: str) -> None:
+async def test_a_live_network_table_that_does_not_read_is_refused(
+    monkeypatch: pytest.MonkeyPatch, old: str, new: str, area: str
+) -> None:
     """A partial table would be adopted as the card and an entry on the
-    missing area would fail every tick until the next good one."""
+    missing area would fail every tick until the next good one. The reader
+    itself leaves the area out, which a past month's card keeps."""
     text = _card("elegant_flex_2026-10.pdf")
     assert old in text
-    with pytest.raises(ExtractorError, match="network row"):
-        elegant.parse_snapshot(_FLEX, text.replace(old, new))
+    short = text.replace(old, new)
+    snap = elegant.parse_snapshot(_FLEX, short)
+    assert set(snap.dsos) == set(FLUVIUS_KEYS) - {area}
+    monkeypatch.setattr(elegant, "fetch_pdf_text_layout", AsyncMock(return_value=short))
+    with pytest.raises(ExtractorError, match=rf"DSO rows not found for \['{area}'\]"):
+        await elegant.fetch(make_text_session(""), _FLEX, REGION_FLANDERS)
 
 
 @pytest.mark.parametrize(
@@ -575,6 +582,49 @@ async def test_an_unreadable_archive_answer_is_no_card(
         session, _FLEX, REGION_FLANDERS, date(2026, 9, 1)
     )
     assert snap is not None and snap.provisional
+
+
+async def test_a_past_month_keeps_a_short_network_table(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A past month's card is still what a contract signed then is billed on,
+    so a table short of an area keeps the card and settles it; the month walk
+    drops that month on the missing area alone. As the running month's card
+    it is refused, so the live card stands in, as ``fetch`` refuses it. A
+    short table on the next card does not hold back the settlement, which
+    reads only its indices."""
+    september = _card("elegant_flex_2026-09.pdf")
+    october = _card("elegant_flex_2026-10.pdf")
+    short = {
+        name: text.replace("Fluvius Midden-Vl.", "Fluvius Gent")
+        for name, text in (("september", september), ("october", october))
+    }
+    assert short["september"] != september and short["october"] != october
+    answers = {
+        "2026-09-01": _offers("202609", _KEYS[_FLEX]),
+        "2026-10-01": _offers("202610", _KEYS[_FLEX]),
+    }
+    session = make_text_session("")
+    freezer.move_to("2026-10-16 12:00:00+02:00")
+    for sep, octo in ((short["september"], october), (september, short["october"])):
+        _archive(
+            monkeypatch,
+            answers,
+            {_chart(_FLEX, "202609"): sep, _chart(_FLEX, "202610"): octo},
+        )
+        snap = await elegant.fetch_for_month(
+            session, _FLEX, REGION_FLANDERS, date(2026, 9, 1)
+        )
+        assert snap is not None and not snap.provisional
+        assert isinstance(snap.energy, VariableRates)
+        assert snap.energy.index_realised == pytest.approx(0.15641)
+        assert ("fluvius_intergem" in snap.dsos) == (sep == september)
+    _archive(monkeypatch, answers, {_chart(_FLEX, "202609"): short["september"]})
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    assert (
+        await elegant.fetch_for_month(session, _FLEX, REGION_FLANDERS, date(2026, 9, 1))
+        is None
+    )
 
 
 def test_published_indices_read_both_forms() -> None:
