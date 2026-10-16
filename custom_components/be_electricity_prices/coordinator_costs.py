@@ -196,6 +196,7 @@ class _CostsMixin:
         async def async_request_refresh(self) -> None: ...
         def _billed_peak_kw(self) -> float: ...
         def _ytd_months(self, today: date) -> list[date]: ...
+        def _year_months(self, today: date) -> list[date]: ...
 
     async def _tick_costs(
         self,
@@ -550,9 +551,11 @@ class _CostsMixin:
         card, which is the same proxy the deferred tick already billed with.
 
         The refresh is only asked for when the walk actually retrieved a card
-        the tick did not have. A restart on a supplier with no archive, or one
-        whose months are all restored from the store, changes nothing, and an
-        extra full tick per entry per restart would buy nothing.
+        the tick did not have, counting the cards of the year a month short of
+        the entry's network area reads, which can predate the window
+        (``_with_nearest_area``). A restart on a supplier with no archive, or
+        one whose months are all restored from the store, changes nothing, and
+        an extra full tick per entry per restart would buy nothing.
         """
         if self._snapshot is None:
             return
@@ -560,7 +563,8 @@ class _CostsMixin:
         extractor = get_extractor(supplier)
         today = dt_util.now().date()
         months = self._ytd_months(today)
-        before = archived_months_present(self.hass, supplier, contract, region, months)
+        year = self._year_months(today)
+        before = archived_months_present(self.hass, supplier, contract, region, year)
         for month_first in months:
             if self._unloaded:
                 return
@@ -574,7 +578,7 @@ class _CostsMixin:
                 self._snapshot,
                 self.entry,
             )
-        after = archived_months_present(self.hass, supplier, contract, region, months)
+        after = archived_months_present(self.hass, supplier, contract, region, year)
         if self._unloaded or after == before:
             return
         await self.async_request_refresh()

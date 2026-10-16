@@ -7433,6 +7433,71 @@ async def test_archived_month_cards_survive_a_restart(
     )
 
 
+async def test_a_card_a_short_month_reads_survives_a_restart(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A window from the contract's start date leaves out the months of the
+    year before it, and a month whose card lacks the entry's network area is
+    billed on another card of its year, which can be one of those
+    (``_with_nearest_area``). Left off disk, the first tick after a restart
+    dropped that month and the warm-up fetched the card again."""
+    from custom_components.be_electricity_prices.providers import get
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.snapshot_months import (
+        _snapshot_for_month,
+    )
+
+    freezer.move_to("2026-09-15 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            "contract_start_date": "2026-06-10",
+            "ytd_from_contract_start": True,
+        },
+    )
+    coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coord
+    tuple_key = ("cociter", "cociter_dynamic", "wallonia")
+    short = make_snapshot(
+        dsos={"resa": DsoOverlay(distribution_single=0.07, transport=0.0145)}
+    )
+    may = make_snapshot(publication_label="2026-05")
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    for month in ("2026-06", "2026-07", "2026-08"):
+        _monthly_snapshots(hass)[(*tuple_key, month)] = short
+    _monthly_snapshots(hass)[(*tuple_key, "2026-05")] = may
+
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+    assert "2026-05" in saved["monthly_cards"]
+
+    _monthly_snapshots(hass).clear()
+    fresh = BePricesCoordinator(hass, entry)
+    with patch.object(fresh._store, "async_load", AsyncMock(return_value=saved)):
+        await fresh.async_load_persistent()
+    july = await _snapshot_for_month(
+        hass,
+        None,  # type: ignore[arg-type]
+        get("cociter"),
+        "cociter_dynamic",
+        "wallonia",
+        date(2026, 7, 1),
+        make_snapshot(dsos={}),
+        entry,
+        cached_only=True,
+    )
+    assert july.dsos["ores"] == may.dsos["ores"]
+
+
 async def test_a_provisional_month_card_bills_the_tick_after_a_restart(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -8068,6 +8133,58 @@ async def test_fill_month_cards_warms_the_year_then_asks_for_a_refresh(
         await coord._fill_month_cards()
         assert asked == [date(2026, 9, 1)]
         coord.async_request_refresh.assert_not_awaited()
+
+
+async def test_fill_month_cards_counts_a_card_a_short_month_reads(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Every month of a window from the contract's start date is in hand, but
+    June's card lacks the entry's network area, and the card of May it is
+    billed on was not. Fetching it is a card the tick did not have, so the
+    fill asks for the refresh that bills June."""
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    freezer.move_to("2026-09-15 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            "contract_start_date": "2026-06-10",
+            "ytd_from_contract_start": True,
+        },
+    )
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=DynamicRates(factor=1.0, base=0.01))
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    asked: list[date] = []
+
+    async def _fetch_for_month(
+        _session: Any, _contract: str, _region: str, year_month: date
+    ) -> SupplierSnapshot | None:
+        asked.append(year_month)
+        return make_snapshot() if year_month == date(2026, 5, 1) else None
+
+    extractor = replace(
+        make_stub_extractor(extractor_id="cociter"), fetch_for_month=_fetch_for_month
+    )
+    short = make_snapshot(
+        dsos={"resa": DsoOverlay(distribution_single=0.07, transport=0.0145)}
+    )
+    tuple_key = ("cociter", "cociter_dynamic", "wallonia")
+    _monthly_snapshots(hass).clear()
+    for month in ("2026-06", "2026-07", "2026-08", "2026-09"):
+        _monthly_snapshots(hass)[(*tuple_key, month)] = short
+        _monthly_fetched_at(hass)[(*tuple_key, month)] = dt_util.utcnow()
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_costs.get_extractor",
+        return_value=extractor,
+    ):
+        await coord._fill_month_cards()
+    assert asked == [date(2026, 5, 1)]
+    coord.async_request_refresh.assert_awaited_once()
 
 
 async def test_the_first_tick_gives_up_on_a_hanging_source(

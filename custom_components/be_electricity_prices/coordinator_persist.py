@@ -446,19 +446,31 @@ class _PersistMixin:
     def _persisted_months(self, today: date) -> list[date]:
         """The months whose archived card is worth keeping on disk.
 
-        The year-to-date window, plus the month of the card the entry is
+        The calendar year so far, plus the month of the card the entry is
         billed on when it names one, whether through its own tariff card month
         or through its start date. That one is not part of the walk, it can be
         years back, but ``_cohort_legs`` resolves it on every tick to freeze
         the rate the customer signed for, and it does so INSIDE config-entry
         setup, because the live price table is built from it. One row on disk
         is what keeps that from being a card fetch on every restart.
+
+        The whole year rather than the year-to-date window, which can start at
+        the contract's start date: a month whose card lacks the entry's
+        network area is billed on another card of its year
+        (``_with_nearest_area``), which may predate the window. Left off
+        disk, the first tick after a restart dropped that month and the
+        warm-up fetched the card again. Only rows the month cache holds are
+        written, so a window from 1 January writes what it always did.
         """
-        months = self._ytd_months(today)
+        months = self._year_months(today)
         signing = _tariff_card_month(self.entry)
         if signing is not None and signing not in months:
             months.append(signing)
         return months
+
+    def _year_months(self, today: date) -> list[date]:
+        """First of each month of ``today``'s calendar year, up to today."""
+        return [date(today.year, month, 1) for month in range(1, today.month + 1)]
 
     def _ytd_months(self, today: date) -> list[date]:
         """First of each month the year-to-date walk covers, up to today."""
