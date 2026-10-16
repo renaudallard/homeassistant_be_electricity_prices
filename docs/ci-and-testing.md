@@ -94,6 +94,7 @@ machinery.
 | `tests/test_setup_meter_reads.py` | What setup reads from the recorder (issue #107) |
 | `tests/test_snapshot_codec.py` | The snapshot codec against rows other versions wrote or will write |
 | `tests/test_month_card_eviction.py` | A month row's first fetch against an eviction of its supplier, contract and region (`month_card`, `evict_shared_caches`) |
+| `tests/test_snapshot_areas.py` | A closed month's card short of the entry's network area, completed from the nearest card of its calendar year that prints it (`_with_nearest_area`, per supplier on the policy) |
 | `tests/test_month_indexed_registry.py` | The registry's `month_indexed_energy` flag against what the parsers read |
 | `tests/test_supplier_switch.py` | A recorded supplier switch: the earlier contracts, their days and cost (`contract_periods.py`), the options step and the backfill split |
 | `tests/test_projected_volume.py` | Rolling-year and projected calendar-year consumption and injection |

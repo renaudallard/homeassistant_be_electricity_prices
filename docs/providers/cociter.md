@@ -322,8 +322,9 @@ overlay bills the whole network leg at zero. `fetch` also refuses a live card
 missing any of the five areas (`require_every_area`, `_parse.py`), since a
 partial table leaves an entry on the missing area failing every tick until the
 next good card. A past month's card keeps its short table: its energy is what
-a contract signed that month is billed on, and the month walk drops the month
-itself on the missing area rather than billing it on today's card.
+the month and a contract signed then are billed on, and the month cache bills
+the missing area on the nearest card of the same calendar year that prints it
+(`_with_nearest_area`, `snapshot_areas.py`).
 The running month's card is refused the same way where `fetch_for_month`
 reads it (`running_month_short_of_an_area`, `_parse.py`), so the last good
 card stands in rather than the month walk dropping the running month.

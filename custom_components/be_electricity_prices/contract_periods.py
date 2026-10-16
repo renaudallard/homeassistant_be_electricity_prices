@@ -707,7 +707,7 @@ async def _latest_archived_card(
     failed = False
     while month >= first:
         card = await month_card(
-            hass, session, extractor, contract, region, month, proxy
+            hass, session, extractor, contract, region, month, proxy, nearest_area=True
         )
         if card is not None:
             return card, False

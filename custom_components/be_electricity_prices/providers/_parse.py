@@ -104,9 +104,11 @@ def require_every_area(
     Cociter, EBEM, Elegant, Eneco and OCTA+ ask it of the live card, and hold
     the running month's card to the same areas through
     ``running_month_short_of_an_area``. A past month's card keeps a short
-    table: its energy is still what a signing cohort is billed, and the month
-    walk drops that one month on the missing area, where refusing the card
-    billed both on today's card.
+    table: its energy is still what the month and a signing cohort are
+    billed, where refusing the card billed both on today's card, and the
+    month cache takes the missing area's network from the nearest card of
+    the same calendar year that prints it (``_with_nearest_area``,
+    ``snapshot_areas.py``).
     """
     missing = sorted(key for key in keys if key not in out)
     if missing:
@@ -125,7 +127,8 @@ def running_month_short_of_an_area(
     Where ``fetch`` refused it (``require_every_area``) and the last good card
     stayed, adopting it there dropped the running month from every walk on
     the missing area. ``fetch_for_month`` answers None on it instead, so the
-    current card stands in. A closed month keeps its short table.
+    current card stands in. A closed month keeps its short table, and its
+    missing area is billed on the nearest card of its year that prints it.
     """
     today = dt_util.now().date()
     if (year_month.year, year_month.month) < (today.year, today.month):

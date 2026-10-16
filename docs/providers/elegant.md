@@ -130,9 +130,10 @@ rather than adopt it with a hole in it, since an entry on the missing area
 would fail every tick until the next good card (`require_every_area`,
 `_parse.py`), and `fetch_for_month` refuses the running month's the same way
 (`running_month_short_of_an_area`), so the last good card stands in. A past
-month's card keeps its short table: its energy is what a contract signed that
-month is billed on, and the month walk drops the month on the missing area
-alone. Neither check applies to the next card a closed month is settled on,
+month's card keeps its short table: its energy is what the month and a
+contract signed then are billed on, and the month cache bills the missing area
+on the nearest card of the same calendar year that prints it (`_with_nearest_area`,
+`snapshot_areas.py`). Neither check applies to the next card a closed month is settled on,
 which is read for its indices only
 (`test_a_past_month_keeps_a_short_network_table`, `tests/test_elegant.py`).
 

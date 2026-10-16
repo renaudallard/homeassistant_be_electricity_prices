@@ -607,11 +607,11 @@ async def test_a_past_month_keeps_a_short_network_table(
     monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:
     """A past month's card is still what a contract signed then is billed on,
-    so a table short of an area keeps the card and settles it; the month walk
-    drops that month on the missing area alone. As the running month's card
-    it is refused, so the live card stands in, as ``fetch`` refuses it. A
-    short table on the next card does not hold back the settlement, which
-    reads only its indices."""
+    so a table short of an area keeps the card and settles it; the month
+    cache bills the missing area on the nearest card printing it. As the
+    running month's card it is refused, so the live card stands in, as
+    ``fetch`` refuses it. A short table on the next card does not hold back
+    the settlement, which reads only its indices."""
     september = _card("elegant_flex_2026-09.pdf")
     october = _card("elegant_flex_2026-10.pdf")
     short = {

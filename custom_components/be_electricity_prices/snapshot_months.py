@@ -56,6 +56,7 @@ from .const import (
     CARD_ARCHIVE_FIRST_MONTH,
     CARD_ARCHIVE_URL,
     CONF_CARD_ARCHIVE,
+    CONF_DSO,
     DEFAULT_CARD_ARCHIVE,
     SUPPLIER_CUSTOM,
 )
@@ -68,6 +69,7 @@ from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
 )
+from .snapshot_areas import _with_nearest_area
 from .snapshot_codec import (
     _DEGRADED_MIN_SCHEMA_VERSION,
     _SNAPSHOT_SCHEMA_VERSION,
@@ -644,8 +646,9 @@ async def _snapshot_for_month(
     cached_only: bool = False,
     current_raw: SupplierSnapshot | None = None,
 ) -> SupplierSnapshot:
-    """The card ``year_month`` is billed on: its own (``month_card``), or
-    the current card standing in for it.
+    """The card ``year_month`` is billed on: its own (``month_card``), with
+    the entry's network area where it lacks it (``nearest_area``), or the
+    current card standing in for it.
 
     The stand-in is ``current_snapshot`` itself, unless the caller hands the
     card it was resolved from as ``current_raw``: the two federal levies are
@@ -663,6 +666,7 @@ async def _snapshot_for_month(
         year_month,
         entry,
         cached_only=cached_only,
+        nearest_area=True,
     )
     if card is not None:
         return card
@@ -712,6 +716,7 @@ async def month_card(
     entry: ConfigEntry | None = None,
     *,
     cached_only: bool = False,
+    nearest_area: bool = False,
 ) -> SupplierSnapshot | None:
     """The month's own card, resolved for the month, or None where the
     caller has to stand its current card in for it.
@@ -746,7 +751,11 @@ async def month_card(
     month" is a stable signal we shouldn't keep re-asking.
 
     The cache is shared across entries, so it holds archived cards exactly as parsed and
-    each caller's own VAT / consumption facts are applied on the way out.
+    each caller's own VAT / consumption facts are applied on the way out, and
+    so is the network area a closed month's card lacks when ``nearest_area``
+    asks for it (``_with_nearest_area``): a caller billing the month does, one
+    reading a card for its energy or a credit has no use for the area and
+    would only fetch the months around it.
 
     ``cached_only`` answers from the cache and never reaches the network: a
     month with no row answers None, the same proxy a supplier without an
@@ -759,23 +768,51 @@ async def month_card(
     path and asks for a refresh.
     """
 
-    def resolved(snap: SupplierSnapshot | None) -> SupplierSnapshot | None:
-        if snap is None:
-            return None
-        return (
-            snap
-            if entry is None
-            else _resolve_snapshot(entry, snap, delivery_month=year_month)
+    async def row(month: date) -> SupplierSnapshot | None:
+        return await _month_row(
+            hass,
+            session,
+            extractor,
+            contract,
+            region,
+            month,
+            entry,
+            cached_only=cached_only,
         )
+
+    snap = await row(year_month)
+    if snap is None or entry is None:
+        return snap
+    if nearest_area:
+        snap = await _with_nearest_area(
+            snap,
+            str(entry.data.get(CONF_DSO, "")),
+            year_month,
+            row,
+            lambda month: month_card_cached(
+                hass, extractor.id, contract, region, month
+            ),
+        )
+    return _resolve_snapshot(entry, snap, delivery_month=year_month)
+
+
+async def _month_row(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: SupplierExtractor,
+    contract: str,
+    region: str,
+    year_month: date,
+    entry: ConfigEntry | None = None,
+    *,
+    cached_only: bool = False,
+) -> SupplierSnapshot | None:
+    """The month's row as cached, before the entry's facts are applied: what
+    ``month_card`` and ``_with_nearest_area`` read."""
 
     cache = _monthly_snapshots(hass)
     failed = _monthly_failed_fetches(hass)
-    cache_key = (
-        extractor.id,
-        contract,
-        region,
-        f"{year_month.year:04d}-{year_month.month:02d}",
-    )
+    cache_key = _month_key(extractor.id, contract, region, year_month)
     fetched_at = _monthly_fetched_at(hass)
     skipped = _monthly_archive_skipped(hass)
     today = dt_util.now().date()
@@ -806,7 +843,7 @@ async def month_card(
             # A caller that cannot fetch keeps the row it has, expired or not: dropping
             # it here would forfeit a month it is already holding and hand back the
             # current card in its place.
-            return resolved(row)
+            return row
         # Provisional and past its TTL: drop the row and re-ask. Without this a supplier
         # correcting the running month's card moved current_price within a day while the
         # year-to-date and every backfilled row kept billing the vintage first cached at
@@ -839,7 +876,7 @@ async def month_card(
         # Re-check under the lock so the second waiter doesn't repeat
         # what the first just did.
         if cache_key in cache and not unasked(cache[cache_key]):
-            return resolved(cache[cache_key])
+            return cache[cache_key]
 
         last_fail = failed.get(cache_key)
         if (
@@ -936,4 +973,4 @@ async def month_card(
                 skipped.add(cache_key)
             else:
                 skipped.discard(cache_key)
-    return resolved(snap)
+    return snap

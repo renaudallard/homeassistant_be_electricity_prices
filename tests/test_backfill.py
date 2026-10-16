@@ -66,12 +66,13 @@ from custom_components.be_electricity_prices.providers._rates import (
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
     ExtractorError,
+    SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
 )
 from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 from custom_components.be_electricity_prices.spot_stats import _bucket_by_local_month
-from tests import make_entry, make_snapshot, make_stub_extractor
+from tests import fixture_text, make_entry, make_snapshot, make_stub_extractor
 
 # Belgian integration: tests pin Europe/Brussels via conftest, but
 # tz-sensitive constants in this file spell it out so the intent is
@@ -1496,6 +1497,7 @@ async def _live_and_backfill(
     quarters: dict[datetime, list[float]] | None = None,
     rlp: dict[tuple[int, int, int], float] | None = None,
     breakdown: dict[str, float] | None = None,
+    extractor: SupplierExtractor | None = None,
 ) -> tuple[float, float]:
     """The live year-to-date and the backfilled series' last row, over 1
     January to ``last`` on one recorder, one set of month cards and one
@@ -1503,7 +1505,8 @@ async def _live_and_backfill(
 
     ``per_hour`` answers a sensor's kWh in one UTC hour, ``None`` for an hour
     the recorder holds no row for. ``cards`` answers a month's archived card,
-    ``None`` for one billed on ``snap``.
+    ``None`` for one billed on ``snap``. An ``extractor`` is asked for them
+    instead, through the month cache both walks read.
     """
     from custom_components.be_electricity_prices import cohort, ytd_cost
 
@@ -1563,7 +1566,11 @@ async def _live_and_backfill(
     with (
         patch.object(energy_meters, "_read_deltas", new=fake_deltas),
         patch.object(energy_meters, "_live_today_kwh", AsyncMock(return_value=None)),
-        patch.object(cohort, "_snapshot_for_month", new=fake_card),
+        (
+            patch.object(cohort, "_snapshot_for_month", new=fake_card)
+            if extractor is None
+            else patch.object(backfill_window, "get_extractor", lambda _s: extractor)
+        ),
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
@@ -1586,7 +1593,7 @@ async def _live_and_backfill(
         live = await ytd_cost._compute_current_year_cost(
             hass,
             None,  # type: ignore[arg-type]
-            make_stub_extractor(),
+            extractor or make_stub_extractor(),
             snap,
             entry,
             historical_spots=dict(spots),
@@ -1911,6 +1918,65 @@ async def test_the_network_cap_weighs_only_the_hours_the_meter_reported(
         )
     )
     assert stats["network_cap_rebate_eur"] > 0.0
+
+
+async def test_a_month_short_of_the_households_area_is_billed_whole(
+    hass: HomeAssistant,
+) -> None:
+    """A past Elegant card whose table lost the Midden-Vlaanderen row left an
+    entry there with that month dropped from the year-to-date and from the
+    backfilled series, network, taxes and energy alike, while every other
+    area billed it. The month keeps its card and takes the area from the
+    nearest card printing it, which here prints what the month's own did."""
+    from custom_components.be_electricity_prices.providers import elegant
+
+    text = fixture_text("elegant_zeker_vast_2026-09.pdf", layout=True)
+    full = elegant.parse_snapshot("elegant_zeker_vast", text)
+    short = elegant.parse_snapshot(
+        "elegant_zeker_vast", text.replace("Fluvius Midden-Vl.", "Fluvius Gent")
+    )
+    assert "fluvius_intergem" in full.dsos and "fluvius_intergem" not in short.dsos
+    kwh = 3500.0 / 8760.0
+
+    def per_hour(entity_id: str, _h: datetime) -> float | None:
+        return kwh if entity_id == "sensor.cons" else None
+
+    totals = []
+    for march in (full, short):
+        rows = {date(2026, m, 1): full for m in range(1, 10)} | {
+            date(2026, 3, 1): march
+        }
+
+        async def served(
+            _s: object, _c: str, _r: str, month: date, rows: Any = rows
+        ) -> SupplierSnapshot | None:
+            return rows.get(month)
+
+        snapshot_months._monthly_snapshots(hass).clear()
+        totals.append(
+            await _live_and_backfill(
+                hass,
+                make_entry(
+                    supplier="elegant",
+                    contract="elegant_zeker_vast",
+                    region="flanders",
+                    dso="fluvius_intergem",
+                    solar_regime="none",
+                    consumption_kwh="sensor.cons",
+                    card_archive=False,
+                ),
+                full,
+                date(2026, 9, 30),
+                per_hour,
+                extractor=dataclasses.replace(
+                    get_extractor("elegant"), fetch_for_month=served
+                ),
+            )
+        )
+    (backfill, live), (backfill_short, live_short) = totals
+    assert live > 0.0 and backfill == pytest.approx(live, abs=1e-3)
+    assert live_short == pytest.approx(live, abs=1e-6)
+    assert backfill_short == pytest.approx(backfill, abs=1e-6)
 
 
 async def test_cost_backfill_skips_an_hour_one_register_did_not_report(

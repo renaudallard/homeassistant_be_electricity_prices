@@ -1483,11 +1483,17 @@ searching for:
   is left out rather than billed, so the year no longer over-bills, but its
   own energy is lost with it.
 - **"dropped from the year-to-date figure"** — a past month's archived card
-  has no row for your network operator, or (on a fixed or variable
-  contract) was a dynamic or time-of-use card with no flat rate a day can
-  be billed at. That month is left out of the bill whole, network and taxes
-  included, and its days and kWh are left out of `days_priced` (or
-  `hours_priced`) and `consumption_ytd_kwh` with it.
+  has no row for your network operator and neither has any other card of
+  the same calendar year, or (on a fixed or variable contract) was a
+  dynamic or time-of-use card with no flat rate a day can be billed at.
+  That month is left out of the bill whole, network and taxes included,
+  and its days and kWh are left out of `days_priced` (or `hours_priced`)
+  and `consumption_ytd_kwh` with it. A past card missing your operator's row is
+  otherwise billed on its own prices with that operator's network figures
+  from the nearest card of the same calendar year that prints them. Never
+  from another year's card: network tariffs change on 1 January, so it
+  would bill the month on a network it was never charged. While a nearer
+  card cannot be read yet, the month stays out until it can.
 
 If the consumption meter stops (renamed, replaced, or a sensor with no
 `state_class`) while the injection meter carries on, the days after it
