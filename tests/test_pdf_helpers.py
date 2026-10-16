@@ -1775,6 +1775,66 @@ def test_what_pdfminer_gathers_of_one_token_is_held(
             extract(_pdf_of(content, attrs=b""))
 
 
+def _lined_pdf(stream: bytes, tail: bytes) -> bytes:
+    """A page of text and of a stream saying it is empty but carrying
+    ``stream`` before its end, the file followed by ``tail``."""
+    text = b"BT /F1 12 Tf 72 720 Td (%s) Tj ET" % (b"tariff card text " * 60)
+    return (
+        _pdf_from(
+            (
+                b"<</Type/Catalog/Pages 2 0 R>>",
+                b"<</Type/Pages/Kids[5 0 R]/Count 1>>",
+                b"<</Length %d>>\nstream\n%s\nendstream" % (len(text), text),
+                b"<</Length 0>>\nstream\n%sendstream" % stream,
+                b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]"
+                b"/Contents[3 0 R 4 0 R]" + _FONT_RESOURCES + b">>",
+            )
+        )
+        + tail
+    )
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_what_pdfminer_gathers_of_one_line_is_held(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer grows a line a buffer at a time, copying what it holds each
+    time, reading it forwards, as it looks for the end of a stream whose
+    length is wrong, or backwards, from the end of the file: 16 MB with no
+    line end took 46,8 s on a Raspberry Pi. A line read forwards is held to the longest token;
+    one read backwards is found in the file whole, and counts as parsed:
+    2 MB of line ends there took 4,7 s."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_TOKEN_BYTES", 10_000)
+    monkeypatch.setattr(_pdf_bound, "_MAX_PARSED", 5000)
+    with pytest.raises(ExtractorError, match=r"^PDF has pdfminer gather a token"):
+        extract(_lined_pdf(b"x" * 15_000, b""))
+    with pytest.raises(ExtractorError, match=r"^PDF has a reader parse more"):
+        extract(_lined_pdf(b"", b"\n" * 6000))
+    for stream, tail in ((b"x" * 4000, b"x" * 15_000), (b"", b"\n" * 1000)):
+        assert "tariff card" in extract(_lined_pdf(stream, tail))
+
+
+def test_the_lines_read_backwards_are_pdfminer_s() -> None:
+    """Found in the file whole, the lines pdfminer reads backwards are the
+    ones it found a buffer at a time."""
+    import io
+
+    from pdfminer.psparser import PSBaseParser
+
+    _pdf_bound._hold_pdfminer_to_the_bound()
+    for data in (
+        b"",
+        b"a",
+        b"a\n",
+        b"\n\n",
+        b"a\r\nb\rc\n\r",
+        b"x" * 9000 + b"\r\n" + b"y" * 5000 + b"\n" * 3,
+    ):
+        expected = list(PSBaseParser(io.BytesIO(data)).revreadlines())
+        with _pdf_bound.bounded_pdfminer():
+            assert list(PSBaseParser(io.BytesIO(data)).revreadlines()) == expected
+
+
 def _drawn_pdf(content: bytes, form: bytes, *, fonts: int = 1) -> bytes:
     """A page of ``content`` that may draw the form ``X0`` of ``form``,
     which names no resources of its own, both naming ``fonts`` fonts."""

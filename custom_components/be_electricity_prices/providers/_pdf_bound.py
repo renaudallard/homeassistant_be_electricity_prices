@@ -25,9 +25,9 @@
 
 """What a card's PDF streams may decode to, how many pages it may have,
 what a reader may parse of it and build of its fonts, and how many steps
-pdfminer may take, how long a token it may gather and what it may lay out
-and hold of it, held to while pypdf, or pdfminer under pdfplumber, reads
-it."""
+pdfminer may take, how long a token or line it may gather and what it may
+lay out and hold of it, held to while pypdf, or pdfminer under pdfplumber,
+reads it."""
 
 from __future__ import annotations
 
@@ -123,22 +123,23 @@ _MAX_PATH_SEGMENTS = 450_000
 # streams for each page drawing them and of a form each time it is drawn, of
 # a font's maps and programs, and each font, colour space, form or image and
 # procedure set of a page's or form's resources it walks for each draw, the
-# kinds it reads of them, and each reference it resolves; under pypdf every
-# operand and operator of a content stream each time it is interpreted, and
-# every element of an array or dictionary. What the bytes draw cost even
-# when it built nothing: 78 kB inflating to 32 MB of numbers no operator
-# took held pypdf 238 s and 1,2 GB, and 3 MB of paths pdfminer does not
-# paint took 45 s, while a 700-byte card naming an object that refers to
-# itself had pdfminer resolve it for good. Measured as above: at most
-# 935 793 under pdfminer and 912 313 under pypdf, both on a Bolt card of
-# 2,8 MB. This is about three times that, since what it lets through is CPU:
-# a token of a Bolt card costs pdfminer about 40 us on a Raspberry Pi, and
-# of 30 kinds of operator made up to cost more none costs over a twentieth
-# more but one showing a glyph for every four tokens, half as much again,
-# which the object bound holds to 180 000 glyphs, so 3 million take about
-# 140 s. A comment counts nothing: pdfminer passes over one in a time linear
-# in its length, the decode bound and the download cap holding how many
-# bytes it passes over, and _MAX_TOKEN_BYTES how long one may be.
+# kinds it reads of them, each reference it resolves and each line it reads
+# backwards from the end of the file; under pypdf every operand and operator
+# of a content stream each time it is interpreted, and every element of an
+# array or dictionary. What the bytes draw cost even when it built nothing:
+# 78 kB inflating to 32 MB of numbers no operator took held pypdf 238 s and
+# 1,2 GB, and 3 MB of paths pdfminer does not paint took 45 s, while a
+# 700-byte card naming an object that refers to itself had pdfminer resolve
+# it for good. Measured as above: at most 935 796 under pdfminer and 912 313
+# under pypdf, both on a Bolt card of 2,8 MB. This is about three times
+# that, since what it lets through is CPU: a token of a Bolt card costs
+# pdfminer about 40 us on a Raspberry Pi, and of 30 kinds of operator made
+# up to cost more none costs over a twentieth more but one showing a glyph
+# for every four tokens, half as much again, which the object bound holds to
+# 180 000 glyphs, so 3 million take about 140 s. A comment counts nothing:
+# pdfminer passes over one in a time linear in its length, the decode bound
+# and the download cap holding how many bytes it passes over, and
+# _MAX_TOKEN_BYTES how long one may be.
 _MAX_PARSED = 3_000_000
 
 # The most a reader may build of a card's fonts, counted as it builds them:
@@ -154,14 +155,17 @@ _MAX_PARSED = 3_000_000
 # five times that: pypdf holds about 180 bytes a code.
 _MAX_FONT_ENTRIES = 1_000_000
 
-# The longest token pdfminer may gather, a comment included, and the most
-# data of an inline image: it grows each a byte at a time, copying what it
-# holds each time, so in a time quadratic in its length, while the parse
-# count sees each as one object at most. 1 MB of inline image data took
-# 352 s on a Raspberry Pi, from a file under 2 kB. Measured as above: at
-# most 1815 bytes, on a TotalEnergies card, and no card carries an inline
-# image. This is about nine times that: 8 MB of strings this long took 29 s
-# on a Raspberry Pi, where the same bytes in strings of 1 kB took 22 s.
+# The longest token pdfminer may gather, a comment included, the longest
+# line it may read forwards and the most data of an inline image: it grows
+# each a byte or a buffer at a time, copying what it holds each time, so in
+# a time quadratic in its length, while the parse count sees each as one
+# object at most. 1 MB of inline image data took 352 s on a Raspberry Pi,
+# from a file under 2 kB, and a stream saying it is empty carrying 16 MB
+# with no line end 47 s. Measured as above: at most 1815 bytes, on a
+# TotalEnergies card, lines of at most 140 bytes, and no card carries an
+# inline image. This is about nine times that: 8 MB of strings this long
+# took 29 s on a Raspberry Pi, where the same bytes in strings of 1 kB took
+# 22 s.
 _MAX_TOKEN_BYTES = 16 * 1024
 
 # The most steps pdfminer's parsers may take reading a card, a step each
@@ -170,8 +174,8 @@ _MAX_TOKEN_BYTES = 16 * 1024
 # reads take one each, which the parse count does not see: 2 MB of NUL bytes
 # took 7,5 s on a Raspberry Pi, in the file itself held only by the download
 # cap. Measured as above: at most 2 612 279, on a Bolt card of 2,8 MB. This
-# is about three times that: a step costs at most about 7 us, a line of a
-# stream read to its end, so the most it lets through take about 56 s.
+# is about three times that: a step costs at most about 8,5 us, a line of a
+# stream read to its end, so the most it lets through take about 68 s.
 _MAX_STEPS = 8_000_000
 
 
@@ -246,7 +250,7 @@ class _Reading:
     parsed: int = 0
     steps: int = 0
     font_entries: int = 0
-    inline: int | None = None
+    run: int | None = None
     inflated: list[int] = field(default_factory=list)
     streams: list[EncodedStreamObject] = field(default_factory=list)
     fonts: dict[int, tuple[Any, Any]] = field(default_factory=dict)
@@ -289,22 +293,22 @@ class _Reading:
 
     def step(self, parser: Any) -> None:
         """Refuse the card once pdfminer's parsers have taken more than
-        :data:`_MAX_STEPS` steps, or once the token or inline image
+        :data:`_MAX_STEPS` steps, or once the token, line or inline image
         ``parser`` gathers is past :data:`_MAX_TOKEN_BYTES`, checked as it
-        has read through its buffer: an inline image is as long as what it
-        read through gathering it."""
+        has read through its buffer: a line or an inline image is as long as
+        what it read through gathering it."""
         if self.steps > _MAX_STEPS:
             raise self.refuse(
                 f"PDF has pdfminer take more than {_MAX_STEPS} steps; "
                 "refusing to read it"
             )
-        if self.inline is None:
+        if self.run is None:
             length = len(parser._curtoken)
         else:
-            self.inline = length = self.inline + len(parser.buf)
+            self.run = length = self.run + len(parser.buf)
         if length > _MAX_TOKEN_BYTES:
             raise self.refuse(
-                f"PDF has pdfminer gather a token or inline image over "
+                f"PDF has pdfminer gather a token, line or inline image over "
                 f"{_MAX_TOKEN_BYTES} bytes; refusing to read it"
             )
 
@@ -633,6 +637,24 @@ def _stepped(fill: Any) -> Any:
     return filled
 
 
+def _run(gather: Any) -> Any:
+    """``gather``, a method by which a pdfminer parser gathers a line or an
+    inline image a buffer at a time, measured while a card is read by the
+    buffers it reads through, no other parser reading meanwhile."""
+
+    def gathered(self: Any, *args: Any, **kwargs: Any) -> Any:
+        reading = _READING.get()
+        if reading is None:
+            return gather(self, *args, **kwargs)
+        reading.run = 0
+        try:
+            return gather(self, *args, **kwargs)
+        finally:
+            reading.run = None
+
+    return gathered
+
+
 def _held(count: int, most: int) -> None:
     """Refuse the card being read once pdfminer holds ``count`` of
     something, past ``most``."""
@@ -649,10 +671,11 @@ def _hold_pdfminer_to_the_bound() -> None:
     the device pdfplumber gives it, what it holds through its interpreter's
     and content parser's ``push``, every token but a comment it parses
     through ``PSBaseParser.nexttoken``, every reference it resolves through
-    ``PDFObjRef.resolve``, every step its parsers take, and the token or
-    inline image they gather, through their ``fillbuf`` and a content
-    parser's ``get_inline_data``, the resources it walks for a page or a
-    form drawn through ``init_resources``, every font it builds through
+    ``PDFObjRef.resolve``, every step its parsers take, and the token, line
+    or inline image they gather, through their ``fillbuf``, ``nextline``
+    and a content parser's ``get_inline_data``, every line it reads
+    backwards through ``revreadlines``, the resources it walks for a page
+    or a form drawn through ``init_resources``, every font it builds through
     ``PDFResourceManager.get_font``, and every loop building a font through
     its font modules' ``range``. Done once whatever the copy of this
     module."""
@@ -782,19 +805,27 @@ def _hold_pdfminer_to_the_bound() -> None:
                         reading.parse(len(entries))
             init_resources(self, resources)
 
-        gather = PDFContentParser.get_inline_data
+        revreadlines = PSBaseParser.revreadlines
 
-        def inline(self: Any, pos: int, target: bytes = b"EI") -> tuple[int, bytes]:
-            # Measured by the buffers read through gathering it, no other
-            # parser reading meanwhile.
+        def backwards(self: PSBaseParser) -> Iterator[bytes]:
+            # pdfminer's, which reads the lines a buffer at a time, putting
+            # each in front of the rest of its line: 16 MB with no line end
+            # took 46,8 s. Found in the file whole, each counted as parsed.
             reading = _READING.get()
             if reading is None:
-                return gather(self, pos, target)
-            reading.inline = 0
-            try:
-                return gather(self, pos, target)
-            finally:
-                reading.inline = None
+                yield from revreadlines(self)
+                return
+            self.fp.seek(0)
+            data = self.fp.read()
+            end = len(data)
+            while True:
+                lf = data.rfind(b"\n", 0, end)
+                n = max(lf, data.rfind(b"\r", max(lf, 0), end))
+                if n < 0:
+                    return
+                reading.parse()
+                yield data[n:end]
+                end = n
 
         get_font = PDFResourceManager.get_font
         unnamed: dict[str, object] = {}
@@ -846,7 +877,9 @@ def _hold_pdfminer_to_the_bound() -> None:
         # through its own.
         PSBaseParser.fillbuf = _stepped(PSBaseParser.fillbuf)  # type: ignore[method-assign]
         PDFContentParser.fillbuf = _stepped(PDFContentParser.fillbuf)  # type: ignore[method-assign]
-        PDFContentParser.get_inline_data = inline  # type: ignore[method-assign]
+        PDFContentParser.get_inline_data = _run(PDFContentParser.get_inline_data)  # type: ignore[method-assign]
+        PSBaseParser.nextline = _run(PSBaseParser.nextline)  # type: ignore[method-assign]
+        PSBaseParser.revreadlines = backwards  # type: ignore[method-assign]
         for module in (cmapdb, pdffont):
             vars(module)["range"] = _font_range
         names["zlib"] = _BoundedZlib()
@@ -953,11 +986,11 @@ def bounded_pdfminer() -> Iterator[None]:
     parses no more than :data:`_MAX_PARSED` tokens, references resolved and
     resources walked, a content stream's for each page drawing it and a
     form's for each draw, takes no more than :data:`_MAX_STEPS` steps,
-    gathers no token, comment or inline image longer than
-    :data:`_MAX_TOKEN_BYTES`, which it grows a byte at a time, and builds
-    no more than :data:`_MAX_FONT_ENTRIES` entries of a card's fonts.
-    pdfplumber's ``dedupe_chars`` finds each glyph it keeps at once, where
-    it looked each one up in the page's list.
+    gathers no token, comment, line or inline image longer than
+    :data:`_MAX_TOKEN_BYTES`, which it grows a byte or a buffer at a time,
+    and builds no more than :data:`_MAX_FONT_ENTRIES` entries of a card's
+    fonts. pdfplumber's ``dedupe_chars`` finds each glyph it keeps at once,
+    where it looked each one up in the page's list.
     """
     _hold_pdfminer_to_the_bound()
     with _held_to_the_bound():
