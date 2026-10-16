@@ -1973,6 +1973,67 @@ def test_a_font_written_into_a_form_is_built_once_a_read(
     assert len(built) == 2
 
 
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_a_font_a_page_names_but_lacks_is_built_once_a_read(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer builds a font of a new empty dictionary for each font a
+    page names but lacks: naming one cost 146 us a token on a Raspberry Pi,
+    four times what a token of a Bolt card costs."""
+    from pdfminer import pdffont
+
+    built: list[object] = []
+    init = pdffont.PDFType1Font.__init__
+
+    def counted(font: Any, *args: Any) -> None:
+        built.append(font)
+        init(font, *args)
+
+    monkeypatch.setattr(pdffont.PDFType1Font, "__init__", counted)
+    content = b"BT /F1 12 Tf 72 720 Td (%s) Tj %s ET" % (
+        b"tariff card text " * 60,
+        b"/F9 1 Tf " * 100,
+    )
+    assert "tariff card" in extract(_pdf_of(content, attrs=b""))
+    assert len(built) == 2
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_the_steps_pdfminer_takes_are_held(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer takes a step of its own for each NUL byte, lone ">" and
+    escape in a string or a name, which no token counts: 2 MB of them took
+    7,5 s on a Raspberry Pi, in the file itself held only by the download
+    cap. Each step counts."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_STEPS", 20_000)
+    text = b"BT /F1 12 Tf 72 720 Td (%s) Tj ET " % (b"tariff card text " * 60)
+
+    def shapes(n: int) -> tuple[bytes, ...]:
+        return (
+            _pdf_of(text + b"\0" * n, attrs=b""),
+            _pdf_of(text + b"> " * n, attrs=b""),
+            _pdf_of(text + (b"(" + b"\\n" * 1000 + b") pop ") * (n // 1000), attrs=b""),
+            _pdf_from(
+                (
+                    b"<</Type/Catalog/Pages 2 0 R>>",
+                    b"<</Type/Pages/Kids[4 0 R]/Count 1>>",
+                    b"<</Length %d>>\nstream\n%s\nendstream" % (len(text), text),
+                    b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 3 0 R "
+                    + b"\0" * n
+                    + _FONT_RESOURCES
+                    + b">>",
+                )
+            ),
+        )
+
+    for payload in shapes(30_000):
+        with pytest.raises(ExtractorError, match=r"^PDF has pdfminer take more than"):
+            extract(payload)
+    for payload in shapes(5_000):
+        assert "tariff card" in extract(payload)
+
+
 @pytest.mark.parametrize("extract", _EVERY_READER)
 def test_a_card_is_held_to_a_page_count(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]

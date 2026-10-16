@@ -679,7 +679,9 @@ Internals worth knowing:
   font it finds by reference, but built one written into the resources
   again for each page or form drawn, its widths with it (100 000 widths
   drawn 400 times took 46,7 s), so it too builds a dictionary into a font
-  once a read. A damaged FlateDecode
+  once a read, and the font it made for each name the resources lack
+  (naming one cost 146 us a token on a Raspberry Pi) once a read too. A
+  damaged FlateDecode
   stream, cut short or failing its checksum, counts again once for every
   `_DAMAGED_FLATE_UNIT` (16 kB) of the stream under pdfminer, which inflates
   one a byte at a time in a time quadratic in its size. pypdf reads one cut
@@ -739,8 +741,11 @@ Internals worth knowing:
   or dictionary. The most a card reaches is 935 793 under pdfminer and
   912 313 under pypdf, both on a Bolt card of 2,8 MB, and this is
   about three times that, since what it lets through is CPU: a token of a
-  Bolt card costs pdfminer about 50 us on a Raspberry Pi, more than any
-  made up to cost more, so the most it lets through takes about 150 s.
+  Bolt card costs pdfminer about 40 us on a Raspberry Pi, and of 30 kinds
+  of operator made up to cost more none costs over a twentieth more but
+  one showing a glyph for every four tokens, half as much again, which the
+  object bound holds to 180 000 glyphs, so the most it lets through takes
+  about 140 s.
   A comment counts nothing: pdfminer passes over one in a time linear in
   its length, the decode bound and the download cap holding how many
   bytes it passes over. A token pdfminer gathers, a comment included, and
@@ -750,9 +755,17 @@ Internals worth knowing:
   `_MAX_TOKEN_BYTES` (16 kB), checked each time it reads through its
   buffer. The longest any card reaches is 1815 bytes, on a TotalEnergies
   card, and no card carries an inline image; 8 MB of strings 16 kB long
-  take 29 s on a Raspberry Pi, where the same bytes in strings of 1 kB take
+  took 29 s on a Raspberry Pi, where the same bytes in strings of 1 kB took
   22 s. pypdf gathers both into growing buffers, in a time linear in their
-  length. A reader builds at most `_MAX_FONT_ENTRIES`
+  length. pdfminer takes at most `_MAX_STEPS` (8 000 000) steps, a step
+  each time a parser looks at its buffer again: most make or end a token,
+  but a NUL byte, a lone `>`, each escape in a string or a name and each
+  line a parser reads take one each, which the parse count does not see
+  (2 MB of NUL bytes took 7,5 s on a Raspberry Pi, in the file itself held
+  only by the download cap). The most a card takes is 2 612 279, on a Bolt
+  card of 2,8 MB, and this is about three times that: a step costs at most
+  about 7 us, a line of a stream read to its end, so the most it lets
+  through take about 56 s. A reader builds at most `_MAX_FONT_ENTRIES`
   (1 000 000) entries of a card's fonts, each code a range of a font's
   ToUnicode map, encoding or widths gives, or its program's own tables,
   counted before the range is gone through, and under pypdf each code of
