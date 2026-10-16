@@ -193,12 +193,12 @@ prints.
 
 ## Tests
 
-`tests/test_elegant.py` runs against four cards:
+`tests/test_elegant.py` runs against eight cards:
 
 - `elegant_flex_2026-10.pdf`, `elegant_comfortflex_2026-10.pdf` and
   `elegant_zeker_vast_2026-10.pdf`: the October 2026 cards, every field read,
-  and the formulas reproducing the rates the Flex card prints at September's
-  indices.
+  the formulas reproducing the rates the Flex card prints at September's
+  indices, and the Flex card as the running month's, left provisional.
 - `elegant_flex_2025-11.pdf` and `elegant_zeker_vast_2025-11.pdf`: the cards
   of 8 November 2025, when the current products were launched, with the day
   after the product's name, and the launch month read on them and settled on
@@ -208,5 +208,5 @@ prints.
   the energy contribution still printed.
 - `elegant_flex_2026-09.pdf` and `elegant_zeker_vast_2026-09.pdf`: the
   September 2026 cards as the archive serves them, settled on the indices the
-  October cards name, the running month left provisional, and a next card
-  naming another month, or no index, settling nothing.
+  October cards name, and a next card naming another month, or no index,
+  settling nothing.
