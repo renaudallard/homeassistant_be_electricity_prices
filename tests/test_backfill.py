@@ -3722,7 +3722,7 @@ async def test_a_month_short_of_its_area_waits_for_a_nearer_card_that_failed(
     freezer.move_to("2026-08-02 12:00:00+02:00")
     entry = make_entry()
     full = _fixed_snapshot()
-    short = dataclasses.replace(full, dsos={})
+    short = dataclasses.replace(full, dsos={"resa": full.dsos["ores"]})
 
     async def archive(*args: Any) -> ArchivedCard:
         month = args[4]

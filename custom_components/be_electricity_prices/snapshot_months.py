@@ -70,7 +70,7 @@ from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
 )
-from .snapshot_areas import _search_end, _with_nearest_area
+from .snapshot_areas import _search_end, _short_of, _with_nearest_area
 from .snapshot_codec import (
     _DEGRADED_MIN_SCHEMA_VERSION,
     _SNAPSHOT_SCHEMA_VERSION,
@@ -628,7 +628,7 @@ def month_card_failed(
             and dt_util.utcnow() - failed_at < _MONTHLY_FAILURE_TTL
         )
     card = cache[key]
-    if not dso or card is None or dso in card.dsos:
+    if card is None or not _short_of(card, dso):
         return False
     stopped = _search_end(
         dso,

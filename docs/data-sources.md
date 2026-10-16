@@ -499,12 +499,17 @@ archives into), then the extractor's `fetch_for_month` archive for a month the p
 hold or holds only as the estimate a month-indexed card printed while it ran (see
 [provider-framework.md](provider-framework.md)), and falls back to the current live snapshot only
 when neither holds the month, with the federal levies that month owes (`_proxy_for_month`).
-A closed month's card whose network table lacks the entry's area keeps its own
-energy, taxes and fees and takes that one area's overlay from the nearest card of
-the same calendar year that prints it (`_with_nearest_area`, `snapshot_areas.py`),
-the earlier of two equally near months first. Never from another year: network
+A closed month's card whose network table lacks the entry's area while printing
+others (`_short_of`) keeps its own energy, taxes and fees and takes that one
+area's overlay from the nearest card of the same calendar year that prints it
+(`_with_nearest_area`, `snapshot_areas.py`), the earlier of two equally near
+months first. Never from another year: network
 tariffs change on 1 January, and Wallonia's of 2026 are not even shaped like those
 of 2025, so where no card of the year prints the area the month is still dropped.
+A card with no network table at all is not searched for and its month is dropped
+as before: the Walloon cards of October to December 2025 were read before their
+layout was, and the search asked the supplier's archive for every month of 2025
+before them, nine downloads for an Engie October, to bill a network never read.
 The order is fixed, and a nearer month not read yet (a failed read, or one the
 first tick's `cached_only` may not fetch) ends the search with the card short, so
 the month is left out until it is read rather than billed on a farther card; the

@@ -65,6 +65,18 @@ def _nearest_months(year_month: date, last: date) -> list[date]:
 type _Held = tuple[bool, SupplierSnapshot | None]
 
 
+def _short_of(card: SupplierSnapshot, dso: str) -> bool:
+    """Whether ``card`` prints a network table that lacks ``dso``.
+
+    Not a card with no table at all: the Walloon cards of October to
+    December 2025 were read before their layout was, and searching their
+    year for the area asked the supplier's archive for each month before
+    them, nine downloads for an Engie October, to bill a month whose own
+    network was never read. Such a month is dropped as it always was.
+    """
+    return bool(dso) and bool(card.dsos) and dso not in card.dsos
+
+
 def _ends_search(dso: str, held: _Held) -> bool:
     """Whether the search for ``dso`` stops on a month: one not held once
     asked, or one whose card prints the area."""
@@ -93,7 +105,8 @@ async def _with_nearest_area(
     held: Callable[[date], _Held],
 ) -> SupplierSnapshot:
     """``card`` with the network figures of ``dso`` taken from the nearest
-    month's card that prints them, where its own table lacks the area.
+    month's card that prints them, where its own table lacks the area
+    (``_short_of``).
 
     A closed month's card keeps a table short of an area
     (``require_every_area``): its energy, taxes and fees are still what the
@@ -110,7 +123,7 @@ async def _with_nearest_area(
     month is dropped as before until a walk can read it, and
     ``month_card_failed`` reports the failed read as the month's own.
     """
-    if not dso or dso in card.dsos:
+    if not _short_of(card, dso):
         return card
     for month in _nearest_months(year_month, dt_util.now().date().replace(day=1)):
         await row(month)

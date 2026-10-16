@@ -33,10 +33,12 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from homeassistant.core import HomeAssistant
 
+from custom_components.be_electricity_prices import snapshot_months
 from custom_components.be_electricity_prices.providers import (
     aspiravi,
     cociter,
@@ -54,9 +56,12 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.snapshot_areas import _nearest_months
 from custom_components.be_electricity_prices.snapshot_months import (
+    ArchivedCard,
     _snapshot_for_month,
     month_card,
     month_card_failed,
+    monthly_rows_to_store,
+    restore_monthly_rows,
 )
 from custom_components.be_electricity_prices.snapshot_resolve import _resolve_snapshot
 from custom_components.be_electricity_prices.snapshot_store import _monthly_snapshots
@@ -369,3 +374,64 @@ async def test_no_card_of_its_year_leaves_the_month_short(
     assert await _billed(hass, _stub(rows, asked), _AUGUST) is None
     assert sorted(asked) == [date(2026, month, 1) for month in range(1, 11)]
     assert not month_card_failed(hass, "test", "test", "wallonia", _AUGUST, "resa")
+
+
+async def test_a_card_with_no_network_table_is_not_searched_around(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Engie's Walloon cards of October to December 2025 were read before
+    their layout was, and come back with no network table at all, while the
+    card archive holds nothing of 2025 before them. Searching their year
+    for the area asked Engie's own archive for each of the nine months
+    before October, on a cold start and again after every restart, to bill
+    a network never read. Such a month is dropped as it was, and is no
+    failed read either."""
+    freezer.move_to(_NOW)
+    quarter = [date(2025, month, 1) for month in (10, 11, 12)]
+    archive_asked: list[date] = []
+    supplier_asked: list[date] = []
+    empty = make_snapshot(supplier="engie", contract="engie_easy_fixed", dsos={})
+
+    async def archive(*args: Any) -> ArchivedCard | None:
+        archive_asked.append(args[4])
+        if args[4] in quarter:
+            return ArchivedCard(snapshot=empty, read_by_ocr=False)
+        return None
+
+    extractor = replace(
+        get_extractor("engie"), fetch_for_month=_served({}, supplier_asked)
+    )
+    entry = make_entry(supplier="engie", contract="engie_easy_fixed", dso="ores")
+
+    async def walk() -> None:
+        for month in quarter:
+            card = await _snapshot_for_month(
+                hass,
+                None,  # type: ignore[arg-type]
+                extractor,
+                "engie_easy_fixed",
+                "wallonia",
+                month,
+                _NO_CARD,
+                entry,
+            )
+            assert card is not _NO_CARD and "ores" not in card.dsos
+            assert not month_card_failed(
+                hass, "engie", "engie_easy_fixed", "wallonia", month, "ores"
+            )
+
+    with patch.object(snapshot_months, "_archived_card_from_github", archive):
+        await walk()
+        assert (archive_asked, supplier_asked) == (quarter, [])
+        blob = monthly_rows_to_store(
+            hass,
+            "engie",
+            "engie_easy_fixed",
+            "wallonia",
+            [date(2026, month, 1) for month in range(1, 11)],
+        )
+        _monthly_snapshots(hass).clear()
+        restore_monthly_rows(hass, "engie", "engie_easy_fixed", "wallonia", blob)
+        archive_asked.clear()
+        await walk()
+        assert (archive_asked, supplier_asked) == (quarter, [])

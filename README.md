@@ -1488,9 +1488,11 @@ searching for:
   dynamic or time-of-use card with no flat rate a day can be billed at.
   That month is left out of the bill whole, network and taxes included,
   and its days and kWh are left out of `days_priced` (or `hours_priced`)
-  and `consumption_ytd_kwh` with it. A past card missing your operator's row is
-  otherwise billed on its own prices with that operator's network figures
-  from the nearest card of the same calendar year that prints them. Never
+  and `consumption_ytd_kwh` with it. A past card whose network table lists
+  other operators but not yours is otherwise billed on its own prices with
+  your operator's network figures from the nearest card of the same
+  calendar year that prints them; a card with no network table read at all
+  is not, and its month stays out. Never
   from another year's card: network tariffs change on 1 January, so it
   would bill the month on a network it was never charged. While a nearer
   card cannot be read yet, the month stays out until it can.

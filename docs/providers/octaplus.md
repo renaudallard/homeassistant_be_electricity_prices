@@ -414,9 +414,10 @@ cards of October to December 2025, before the Impact tariff, print a
 seven-column table this reader does not take, and on several of them the
 aligned text drops digits from it or loses it whole, so they come back with an
 empty table. Their energy is what those months and a contract signed in them
-are billed on, and the month cache bills each month's network on the nearest
-card of 2025 that prints the household's area (`_with_nearest_area`,
-`snapshot_areas.py`), or drops the month where none does: a card of 2026 is
+are billed on. A month whose table read no area at all is dropped, with no
+search for another card (`_short_of`, `snapshot_areas.py`); one that read some
+areas bills the missing one on the nearest card of 2025 that prints it
+(`_with_nearest_area`), or drops the month where none does: a card of 2026 is
 never taken, since the Impact tariff changed the Walloon network's very shape
 (`test_an_archived_card_short_of_an_area_keeps_its_energy`, on the real
 November 2025 Fixed card, which also pins the running month's refusal).
