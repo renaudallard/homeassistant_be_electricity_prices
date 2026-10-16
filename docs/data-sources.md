@@ -606,11 +606,11 @@ cost. Two rules enforce this:
   be read, a closed month whose card read failed and is waiting out its
   marker, a closed month whose card lacks the entry's network area while a
   nearer card of its year failed to read, so the search for it
-  (`_with_nearest_area`, `snapshot_areas.py`) stopped there, and every month of
-  a contract whose signing month is one (`month_card_failed`,
-  `snapshot_months.py`, which tells a failed read from a month no archive
-  holds, since `month_card` answers None for both, and given the area tells a
-  search stopped on a failed read from one that found no card of the year). An
+  (`_with_nearest_area`, `snapshot_areas.py`) stopped there
+  (`nearer_card_not_read`, `snapshot_months.py`, which names that card's
+  month), and every month of a contract whose signing month is one
+  (`month_card_failed`, `snapshot_months.py`, which tells a failed read from a
+  month no archive holds, since `month_card` answers None for both). An
   earlier contract no archive kept is priced on the stand-in the live walk
   uses, imported at once so the anchor probe finds its
   row on the next restart; the response lists it under `stand_in` and a

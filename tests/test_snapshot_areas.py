@@ -61,6 +61,7 @@ from custom_components.be_electricity_prices.snapshot_months import (
     month_card,
     month_card_failed,
     monthly_rows_to_store,
+    nearer_card_not_read,
     restore_monthly_rows,
 )
 from custom_components.be_electricity_prices.snapshot_resolve import _resolve_snapshot
@@ -293,12 +294,16 @@ async def test_a_nearer_month_not_read_takes_no_farther_card(
     assert await _billed(hass, extractor, _AUGUST) is None
     assert date(2026, 9, 1) not in asked
     # A failed read, as the month's own would be, so a backfill retries it.
-    assert month_card_failed(hass, "test", "test", "wallonia", _AUGUST, "resa")
+    assert nearer_card_not_read(
+        hass, "test", "test", "wallonia", _AUGUST, "resa"
+    ) == date(2026, 7, 1)
     assert not month_card_failed(hass, "test", "test", "wallonia", _AUGUST)
     rows[date(2026, 7, 1)] = _card(ores=0.10, resa=0.08)
     freezer.tick(timedelta(hours=1))
     assert await _billed(hass, extractor, _AUGUST) == _area(0.08)
-    assert not month_card_failed(hass, "test", "test", "wallonia", _AUGUST, "resa")
+    assert (
+        nearer_card_not_read(hass, "test", "test", "wallonia", _AUGUST, "resa") is None
+    )
 
 
 async def test_cached_only_takes_no_farther_card_than_it_holds(
@@ -373,7 +378,9 @@ async def test_no_card_of_its_year_leaves_the_month_short(
     }
     assert await _billed(hass, _stub(rows, asked), _AUGUST) is None
     assert sorted(asked) == [date(2026, month, 1) for month in range(1, 11)]
-    assert not month_card_failed(hass, "test", "test", "wallonia", _AUGUST, "resa")
+    assert (
+        nearer_card_not_read(hass, "test", "test", "wallonia", _AUGUST, "resa") is None
+    )
 
 
 async def test_a_card_with_no_network_table_is_not_searched_around(
@@ -416,8 +423,11 @@ async def test_a_card_with_no_network_table_is_not_searched_around(
                 entry,
             )
             assert card is not _NO_CARD and "ores" not in card.dsos
-            assert not month_card_failed(
-                hass, "engie", "engie_easy_fixed", "wallonia", month, "ores"
+            assert (
+                nearer_card_not_read(
+                    hass, "engie", "engie_easy_fixed", "wallonia", month, "ores"
+                )
+                is None
             )
 
     with patch.object(snapshot_months, "_archived_card_from_github", archive):

@@ -598,17 +598,10 @@ def _month_card_retrievable(
 
 
 def month_card_failed(
-    hass: HomeAssistant,
-    supplier: str,
-    contract: str,
-    region: str,
-    year_month: date,
-    dso: str = "",
+    hass: HomeAssistant, supplier: str, contract: str, region: str, year_month: date
 ) -> bool:
     """Whether ``_snapshot_for_month`` last handed back the current card for
-    this month because reading the month's own card failed, or, given the
-    entry's network area ``dso``, a card short of it because reading a
-    nearer card of its year failed (``_with_nearest_area``).
+    this month because reading the month's own card failed.
 
     It hands back the very same object when no archive holds the month, which
     is a fact about the month, and while a failed read waits out its marker,
@@ -616,29 +609,42 @@ def month_card_failed(
     walk heals on its own next tick; a caller that keeps what it priced (the
     backfill) must tell the two apart, and only the caches can. A cached row,
     a card or ``None``, is an answer; a fresh failure marker with no row is a
-    failed read. The short card is the same: the backfill stored the month
-    without its network for good, where it now waits for that read.
+    failed read.
     """
     key = _month_key(supplier, contract, region, year_month)
-    cache = _monthly_snapshots(hass)
-    if key not in cache:
-        failed_at = _monthly_failed_fetches(hass).get(key)
-        return (
-            failed_at is not None
-            and dt_util.utcnow() - failed_at < _MONTHLY_FAILURE_TTL
-        )
-    card = cache[key]
-    if card is None or not _short_of(card, dso):
+    if key in _monthly_snapshots(hass):
         return False
+    failed_at = _monthly_failed_fetches(hass).get(key)
+    return failed_at is not None and dt_util.utcnow() - failed_at < _MONTHLY_FAILURE_TTL
+
+
+def nearer_card_not_read(
+    hass: HomeAssistant,
+    supplier: str,
+    contract: str,
+    region: str,
+    year_month: date,
+    dso: str,
+) -> date | None:
+    """The month of its year whose failed read stopped the search for ``dso``
+    around this month's short card (``_with_nearest_area``), or None: the
+    month waits for that read as for its own (``month_card_failed``)."""
+    card = _monthly_snapshots(hass).get(
+        _month_key(supplier, contract, region, year_month)
+    )
+    if card is None or not _short_of(card, dso):
+        return None
     stopped = _search_end(
         dso,
         year_month,
         dt_util.now().date().replace(day=1),
         partial(_month_held, hass, supplier, contract, region),
     )
-    return stopped is not None and month_card_failed(
+    if stopped is None or not month_card_failed(
         hass, supplier, contract, region, stopped
-    )
+    ):
+        return None
+    return stopped
 
 
 def month_card_cached(

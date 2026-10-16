@@ -3795,7 +3795,10 @@ async def test_a_month_short_of_its_area_waits_for_a_nearer_card_that_failed(
     assert [(first, last, failed) for first, last, _why, failed in spans] == [
         (date(2026, 6, 1), date(2026, 6, 30), True)
     ]
-    assert "has no row for ores" in spans[0][2]
+    assert spans[0][2] == (
+        "the eneco card of 2026-06 has no row for ores, and the card of 2026-05,"
+        " the nearest of 2026 that may print it, could not be read"
+    )
 
 
 # The day the register pair tests are frozen on, whose reading has not

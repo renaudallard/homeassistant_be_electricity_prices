@@ -82,7 +82,12 @@ from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
 from .providers._rates import InjectionRates
 from .providers.base import SupplierSnapshot
-from .snapshot_months import _snapshot_for_month, month_card, month_card_failed
+from .snapshot_months import (
+    _snapshot_for_month,
+    month_card,
+    month_card_failed,
+    nearer_card_not_read,
+)
 from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
 from .synergrid import RlpWeights, SppWeights
@@ -633,10 +638,13 @@ async def _months_not_read(
         why = None
         if await failed(month):
             why = f"the {extractor.id} card of {month:%Y-%m} could not be read"
-        elif month_card_failed(hass, extractor.id, contract, region, month, dso):
+        elif stopped := nearer_card_not_read(
+            hass, extractor.id, contract, region, month, dso
+        ):
             why = (
                 f"the {extractor.id} card of {month:%Y-%m} has no row for {dso},"
-                f" and a card of {month.year} nearer to it could not be read"
+                f" and the card of {stopped:%Y-%m}, the nearest of {month.year}"
+                " that may print it, could not be read"
             )
         if why is not None:
             spans.append(

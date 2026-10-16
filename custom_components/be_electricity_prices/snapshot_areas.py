@@ -89,7 +89,7 @@ def _search_end(
 ) -> date | None:
     """The month the search for ``dso`` stopped on, over what the month cache
     holds once ``_with_nearest_area`` has run, or None where it found no card
-    of the year printing the area. ``month_card_failed`` reads it to tell a
+    of the year printing the area. ``nearer_card_not_read`` reads it to tell a
     search that stopped on a failed read."""
     return next(
         (m for m in _nearest_months(year_month, last) if _ends_search(dso, held(m))),
@@ -121,7 +121,7 @@ async def _with_nearest_area(
     fetch, ends the search with the card as it is: a farther card taken there
     would bill the month differently once the nearer one is read, so the
     month is dropped as before until a walk can read it, and
-    ``month_card_failed`` reports the failed read as the month's own.
+    ``nearer_card_not_read`` names the month whose read failed.
     """
     if not _short_of(card, dso):
         return card
