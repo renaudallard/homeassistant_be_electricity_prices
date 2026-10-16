@@ -1317,7 +1317,12 @@ It pins Python 3.13 and installs the toolchain from `requirements-dev.txt`
 `pytest-homeassistant-custom-component==0.13.316`, `ruff==0.16.0`, `pytest-freezer==0.4.9`,
 `pypdf`, `pdfplumber`, `defusedxml` and `pyxlsb`, so an upstream HA-core, test-shim or linter
 release cannot silently turn the suite red on `main`. The live check and the endpoint probe take
-their versions from that same file with pip's `-c`, so a version is written down once. The lint
+their versions from that same file with pip's `-c`, so a version is written down once. The
+other side of the pin: the manifest asks only for a floor (`pypdf>=6.7.1`), so a fresh install
+gets the newest pypdf, which no workflow reads a card with until the pin moves to it. pypdf
+6.20.0 changed how plain text breaks its lines (headings and their hours run together on
+Luminus's Wallonia cards) while every workflow was still on 6.18.0, and only a suite run on the
+new release showed it. The lint
 rule set is itself
 pinned in `pyproject.toml` (`[tool.ruff.lint] select`: pycodestyle, pyflakes, isort, pyupgrade
 for Python 3.13, bugbear, simplify and ruff's own rules, the set the gas integration lints for,
