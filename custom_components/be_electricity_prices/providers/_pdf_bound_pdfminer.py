@@ -464,8 +464,8 @@ def bounded_pdfminer() -> Iterator[None]:
     :data:`_MAX_TOKEN_BYTES`, which it grows a byte or a buffer at a time,
     builds no more than :data:`_MAX_FONT_ENTRIES` entries of a card's
     fonts, and loads no more than :data:`_MAX_CMAPS` CMaps of its own,
-    which it keeps for good. pdfplumber's ``dedupe_chars`` finds each glyph it keeps at once,
-    where it looked each one up in the page's list.
+    which it keeps for good. pdfplumber's ``dedupe_chars`` finds each
+    glyph it keeps at once, where it looked each one up in the page's list.
     """
     _hold_pdfminer_to_the_bound()
     with _held_to_the_bound():

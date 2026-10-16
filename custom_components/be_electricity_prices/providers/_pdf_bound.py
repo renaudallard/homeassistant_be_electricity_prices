@@ -27,8 +27,9 @@
 what a reader may parse of it and build of its fonts, how many steps
 pdfminer may take, how long a token or line it may gather and what it may
 lay out and hold of it, and how many lines pypdf may read backwards, held
-to while pypdf, or pdfminer under pdfplumber, reads it. What pdfminer is held to on top of this, and the wrappers
-holding it, are in :mod:`._pdf_bound_pdfminer`."""
+to while pypdf, or pdfminer under pdfplumber, reads it. What pdfminer is
+held to on top of this, and the wrappers holding it, are in
+:mod:`._pdf_bound_pdfminer`."""
 
 from __future__ import annotations
 
@@ -648,9 +649,9 @@ def bounded_pypdf() -> Iterator[None]:
     dictionaries, a content stream's each time it is interpreted, reads
     no more than :data:`_MAX_LINES_BACK` lines backwards from the end of
     the file, and builds no more than :data:`_MAX_FONT_ENTRIES` entries of
-    a card's fonts. A refusal ends the read where it is made: pypdf catches any
-    Exception a form raises and goes on to its next draw, and a refusal is
-    not one.
+    a card's fonts. A refusal ends the read where it is made: pypdf catches
+    any Exception a form raises and goes on to its next draw, and a refusal
+    is not one.
     """
     with _held_to_the_bound():
         yield
