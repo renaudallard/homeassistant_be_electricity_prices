@@ -285,8 +285,10 @@ It uses the published *ex-ante* profile, which is the one the suppliers' own
 settled indices are computed on: measured over January to August 2026 this
 reproduces the Belpex-SPP-M Energy Knights publishes to 0,007%. Three suppliers
 (EBEM, Trevion and Ecopower) weight the quarter-hour prices instead of the hourly
-ones and so publish a value about 1 EUR/MWh lower, the values Elegant publishes as its EPEXDAMSPP; their closed months are settled
-on the figure their own card prints rather than on this mean. It falls back to the plain mean if the profile
+ones and so publish a value about 1 EUR/MWh lower; their closed months are settled
+on the figure their own card prints rather than on this mean. Elegant's EPEXDAMSPP is
+the series EBEM and Trevion publish, and its closed months are settled the same way,
+on the figure its next card prints. It falls back to the plain mean if the profile
 can't be fetched.
 
 ### How often the integration polls
