@@ -535,8 +535,9 @@ class SupplierExtractor:
     fetch_for_month: ArchivedSnapshotFetcher | None = None
     # Whether ``fetch_for_month`` settles a month-indexed month on the card
     # that follows it, and flags it provisional until that card is out
-    # (Aspiravi, Cociter, Eneco, EBEM, Trevion, Mega and Engie), or on the
-    # month's own card where the live capture is not settled (Ecopower).
+    # (Aspiravi, Cociter, Eneco, EBEM, Elegant, Trevion, Mega and Engie), or
+    # on the month's own card where the live capture is not settled
+    # (Ecopower).
     # Luminus, TotalEnergies and Bolt set it too, beside ``settle_month``,
     # which settles the month in place instead. Only for such a supplier is
     # a closed month the card archive caught while it ran worth asking it

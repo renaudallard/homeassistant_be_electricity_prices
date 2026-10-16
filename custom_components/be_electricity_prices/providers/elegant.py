@@ -49,13 +49,27 @@ own monthly mean reproduces. Its EPEXDAMSPP is the series EBEM and Trevion
 publish (79,11 for August 2026, 100,53 for September), which weights each
 quarter-hour by its own solar share and sits about 0,9 EUR/MWh below the
 hourly SPP mean the integration computes.
+
+Past cards come from the archive the site's tarief-archief page queries: the
+tRPC call ``tariefArchief.search`` returns the product offers in force on a
+date, each with a ``tariffChartUrl`` that ``/api/tarief-archief/tariff-chart``
+turns into the PDF. The archive serves the card in force on the first day of
+the month, which matters for Zeker & Vast alone: its price may be reissued
+within a month (March 2026 has offers dated the 1st, the 6th and the 21st).
+The current product keys start on 8 November 2025, so December 2025 is the
+first month read; before it the offers carry other products and a combined
+electricity and gas card. A closed month is settled on the indices the next
+card names for it.
 """
 
 from __future__ import annotations
 
+import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
+from typing import Any
+from urllib.parse import quote
 
 import aiohttp
 
@@ -74,6 +88,7 @@ from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
+    is_transient_fetch_error,
     printed_vat_rate,
 )
 from ._rates import (
@@ -84,7 +99,8 @@ from ._rates import (
     TariffKind,
     VariableRates,
 )
-from ._validity import end_of_month
+from ._settle import settled_energy, settled_injection
+from ._validity import archive_validity_check, end_of_month
 from .base import (
     DsoOverlay,
     ExtractorError,
@@ -94,7 +110,10 @@ from .base import (
 )
 
 _SUPPLIER = "elegant"
-_LISTING_URL = "https://www.elegant.be/tariefkaarten"
+_SITE = "https://www.elegant.be"
+_LISTING_URL = f"{_SITE}/tariefkaarten"
+_ARCHIVE_SEARCH_URL = f"{_SITE}/api/trpc/tariefArchief.search"
+_ARCHIVE_CHART_URL = f"{_SITE}/api/tarief-archief/tariff-chart"
 _CURRENT_URL = "https://cdn.elegant.be/Pricing/TariffCharts/Current"
 _FLANDERS_ONLY = frozenset({REGION_FLANDERS})
 
@@ -107,7 +126,8 @@ class _ContractDef:
     # label the config flow shows.
     name: str
     # The product's key, as the current card's file name and the listing's
-    # links spell it: "<key>_Residential.pdf".
+    # links spell it, "<key>_Residential.pdf", and as the archive's offers
+    # start, "<key>_<YYYYMMDD>".
     key: str
 
 
@@ -219,6 +239,17 @@ _FUND_RE = re.compile(
 # A residential electricity card the listing links: "<Product>Electricity".
 _LISTED_RE = re.compile(r"/Current/([A-Za-z]+Electricity)_Residential\.pdf")
 
+# The indices the card's printed rates were computed on, "namelijk de waarde
+# van september 2026. Deze bedroeg 15,641 c€/kWh voor afname en 10,053
+# c€/kWh voor injectie", or on Zeker & Vast the feed-in one alone, "Deze
+# bedroeg 10,053 c€/kWh.", since only its feed-in is indexed.
+_MONTH = "(?:" + "|".join(NL_MONTHS) + ")"
+_INDEX_RE = re.compile(
+    rf"namelijk\s+de\s+waarde\s+van\s+({_MONTH})\s+(20\d\d)\.\s*Deze\s+bedroeg\s+"
+    rf"{_NUM}\s*c€/kWh(?:\s+voor\s+afname\s+en\s+{_NUM}\s*c€/kWh\s+voor\s+injectie)?",
+    re.IGNORECASE,
+)
+
 
 # ---- public entry points -----------------------------------------------------
 
@@ -252,6 +283,154 @@ async def probe(
     if contract is None or region != REGION_FLANDERS:
         return None
     return await head_freshness_key(session, _current_url(contract))
+
+
+async def fetch_for_month(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+    year_month: date,
+) -> SupplierSnapshot | None:
+    """The card in force on the first day of ``year_month``, settled on the
+    next card, or ``None``.
+
+    A month the archive has no offer for, December 2025 and before, is None;
+    so is a card that names another month. A transient failure raises so the
+    month cache retries it instead of caching it as absent.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None or region != REGION_FLANDERS:
+        return None
+    month = year_month.replace(day=1)
+    try:
+        found = await _archived_card(session, contract, month)
+    except ExtractorError as err:
+        if is_transient_fetch_error(str(err)):
+            raise
+        return None
+    if found is None:
+        return None
+    return await _settle_on_next_card(session, contract, found[0], month)
+
+
+async def _archived_card(
+    session: aiohttp.ClientSession, contract: _ContractDef, month: date
+) -> tuple[SupplierSnapshot, str] | None:
+    """The card the archive serves for the first day of ``month`` and its
+    text, or ``None`` where it has no offer for the product or serves a card
+    of another month."""
+    query = {
+        "date": f"{month:%Y-%m-%d}",
+        "energyType": "Electricity",
+        "customerType": "Residential",
+    }
+    body = await fetch_text(
+        session,
+        _ARCHIVE_SEARCH_URL,
+        params={"batch": "1", "input": json.dumps({"0": query})},
+    )
+    path = _archived_chart_path(body, contract)
+    if path is None:
+        return None
+    url = f"{_ARCHIVE_CHART_URL}?tariffChartPath={quote(path, safe='')}"
+    text = await fetch_pdf_text_layout(session, url)
+    snap = archive_validity_check(
+        parse_snapshot(contract.contract_id, text, url), text, month
+    )
+    return None if snap is None else (snap, text)
+
+
+def _archived_chart_path(body: str, contract: _ContractDef) -> str | None:
+    """The ``tariffChartUrl`` of ``contract`` in an archive search answer, or
+    ``None`` where the date has no offer for it."""
+    try:
+        offers = json.loads(body)[0]["result"]["data"]["productOffers"]
+    except (ValueError, KeyError, IndexError, TypeError) as err:
+        raise ExtractorError("Elegant: unexpected archive search answer") from err
+    if not isinstance(offers, list):
+        raise ExtractorError("Elegant: archive search answer has no offer list")
+    for offer in offers:
+        if not isinstance(offer, dict):
+            continue
+        key = str(offer.get("productOfferKey", "")).split("_", 1)[0]
+        path = offer.get("tariffChartUrl")
+        if key == contract.key and isinstance(path, str):
+            return path
+    return None
+
+
+async def _settle_on_next_card(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    snap: SupplierSnapshot,
+    month: date,
+) -> SupplierSnapshot:
+    """Bill a closed month at the indices the next card names for it.
+
+    The card prints its rates at the month before's EPEXDAMREK and its
+    credit at the month before's EPEXDAMSPP, and the card after it names
+    this month's, with the month spelled out, so both legs are rebuilt on
+    them. The EPEXDAMSPP it names is the one Elegant publishes, which the
+    hourly SPP mean the integration computes overstates by about 0,9
+    EUR/MWh.
+
+    Only indexed legs ask, so a card with neither pays for no second card.
+    While the next card is not out, or names another month or no index for
+    a leg, the month is flagged ``provisional``, so the month cache asks
+    again rather than filing an estimate as a closed month's fact.
+    """
+    energy, injection = snap.energy, snap.injection
+    settles_energy = isinstance(energy, VariableRates) and energy.month_indexed
+    settles_injection = injection is not None and injection.spp_indexed
+    if not settles_energy and not settles_injection:
+        return snap
+    following = date(month.year + (month.month == 12), month.month % 12 + 1, 1)
+    try:
+        found = await _archived_card(session, contract, following)
+    except ExtractorError as err:
+        # A timeout or a 5xx says nothing about the month, so let the month
+        # cache retry it rather than freeze an estimate behind it.
+        if is_transient_fetch_error(str(err)):
+            raise
+        found = None
+    named = None if found is None else published_indices(found[1])
+    changed: dict[str, Any] = {}
+    # The month is checked, not assumed: a card that skipped a month would
+    # otherwise settle this one on another month's index.
+    if named is not None and named[0] == month:
+        _month, consumption, feed_in = named
+        if settles_energy and consumption is not None:
+            changed["energy"] = settled_energy(energy, consumption)
+        # A lone figure is the feed-in index only on a card that indexes
+        # nothing else; a variable card naming one has dropped a figure.
+        if (
+            injection is not None
+            and settles_injection
+            and (consumption is not None or not settles_energy)
+        ):
+            changed["injection"] = settled_injection(injection, feed_in)
+    if (settles_energy and "energy" not in changed) or (
+        settles_injection and "injection" not in changed
+    ):
+        return replace(snap, provisional=True, **changed)
+    return replace(snap, **changed)
+
+
+def published_indices(text: str) -> tuple[date, float | None, float] | None:
+    """The month a card's printed rates were computed on and the indices it
+    names for that month, EPEXDAMREK and EPEXDAMSPP in EUR/kWh.
+
+    Zeker & Vast names the feed-in index alone, which comes back with no
+    consumption index.
+    """
+    match = _INDEX_RE.search(text)
+    if match is None:
+        return None
+    name, year, first, feed_in = match.groups()
+    month = date(int(year), _MONTH_NUMBERS[name.lower()], 1)
+    if feed_in is None:
+        return month, None, to_float(first) / 100.0
+    return month, to_float(first) / 100.0, to_float(feed_in) / 100.0
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
@@ -488,12 +667,16 @@ EXTRACTOR = SupplierExtractor(
     ),
     fetch=fetch,
     probe=probe,
+    fetch_for_month=fetch_for_month,
+    settles_on_next_card=True,
 )
 
 __all__ = [
     "EXTRACTOR",
     "discover",
     "fetch",
+    "fetch_for_month",
     "parse_snapshot",
     "probe",
+    "published_indices",
 ]

@@ -554,7 +554,7 @@ Eneco's footnote settles the consumption leg. Eneco does it for the credit too:
 the next card footnotes the month's Belpex-injectie beside its Belpex-RLP-M
 ("Belpex-injectie (09/2026: €156,4069/MWh)"), so `eneco.fetch_for_month`
 settles the feed-in leg of every card but Dynamic on it, Fix and Fix One
-included, with the month's own coefficients. Two publish a solar-weighted one.
+included, with the month's own coefficients. Three publish a solar-weighted one.
 Trevion names the
 month in as many words on every card since March 2026, and settles both of its
 legs that way (`docs/providers/trevion.md`). EBEM prints the month just closed
@@ -565,7 +565,12 @@ card's own coefficients, and `_spp_injection_spot` answers that figure before it
 considers any mean. From May 2026 on the two publish identical figures, which is what
 makes them the market's numbers rather than one supplier's; over the three
 months before that they differ by up to 1,3 EUR/MWh, so each is settled on its
-own card and never on the other's.
+own card and never on the other's. Elegant publishes the same series as its
+EPEXDAMSPP from May 2026 on, and EBEM's figure for April, and names the month
+with both of its indices on the next card ("namelijk de waarde van september
+2026. Deze bedroeg 15,641 c€/kWh voor afname en 10,053 c€/kWh voor
+injectie"), so `elegant.fetch_for_month` settles both legs on them, the credit
+alone on Zeker & Vast (`docs/providers/elegant.md`).
 The mean it replaces is not the same number for these two. It weights each
 hour's MEAN price by that hour's solar share, while both of their indices weight
 each quarter by its own, and since PV output and the day-ahead price both move

@@ -278,7 +278,8 @@ def _spp_month_mean(
     0,007%, while EBEM's SPP0 and Trevion's Belpex_SPP_BE weight each quarter
     by its own share and sit about 0,9 EUR/MWh below this in every month.
     Computing at quarter resolution just swaps which family is wrong. Those two
-    publish their settled value on the following card and are settled on it
+    publish their settled value on the following card, as Elegant does for its
+    EPEXDAMSPP, the same series from May 2026 on, and are settled on it
     outright (``InjectionRates.index_realised``), which is why this stays
     hourly for the suppliers that have no published series to settle against.
     """

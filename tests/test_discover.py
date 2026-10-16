@@ -787,6 +787,7 @@ def test_readme_archive_lists_name_every_supplier_that_keeps_one() -> None:
         "dats24": "DATS 24",
         "ebem": "EBEM",
         "ecopower": "Ecopower",
+        "elegant": "Elegant",
         "eneco": "Eneco",
         "energiebe": "energie.be",
         "engie": "Engie",

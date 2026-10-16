@@ -20,6 +20,7 @@ this alongside the framework and pricing references:
 | Region(s) served | Flanders only | `EXTRACTOR`, `elegant.py` |
 | Publication form | One text PDF of two pages per product, read with pdfplumber (`fetch_pdf_text_layout`) | `fetch` |
 | Current card | `https://cdn.elegant.be/Pricing/TariffCharts/Current/<key>_Residential.pdf`, overwritten in place | `_current_url` |
+| Archive | The card in force on the first day of each month, from December 2025, through the site's tariff archive | `fetch_for_month` |
 | Probe | The card's `Last-Modified` | `probe` |
 | Catalog | The residential electricity links on `https://www.elegant.be/tariefkaarten` | `discover` |
 
@@ -71,6 +72,10 @@ were checked against the other suppliers' published indices on 2026-10-16:
   70,89, 62,65, 79,11 and 100,53 EUR/MWh for May to September 2026, and EBEM's
   27,95 for April). It weights each quarter-hour by its own solar share, and
   sits about 0,9 EUR/MWh below the hourly SPP mean the integration computes.
+
+A closed month is settled on the values the next card names for it (see
+[Archive](#archive)), so only the running month bills on the integration's
+own means, with an ENTSO-E key.
 
 ## Energy
 
@@ -133,6 +138,40 @@ meter and is kept as `supplier_prosumer_eur_per_kva_year`; the integration
 bills the compensation regime in Wallonia alone. The card prints no VREG
 maximum tariff, which `resolve_vreg_network_ceiling` supplies.
 
+## Archive
+
+The site's `tarief-archief` page queries the tRPC call
+`api/trpc/tariefArchief.search` with a date, the energy type and the customer
+type, and gets the product offers in force on that date, each keyed
+`<key>_<YYYYMMDD>` and carrying a `tariffChartUrl`; `api/tarief-archief/tariff-chart`
+turns that path into the PDF. `fetch_for_month` asks for the first day of the
+month, so it reads the card in force on the 1st, and passes it through
+`archive_validity_check`, which refuses a card of another month: asked for a
+date ahead, the archive offers the card in force today. The archive's copies
+carry the month after the product's name ("Flex 09.26"), which the heading
+reader allows. The same approach reads Elegant's gas cards in the sibling gas
+integration.
+
+The current product keys start on 8 November 2025. December 2025 is the first
+month whose first day carries them; before it the archive offers the products
+Elegant sold then (`BEGreenFlexStroom` and the like, a combined electricity and
+gas card of another layout), which no contract here matches, so those months
+are `None` and fall back to the proxy. A product's offer can change within a
+month: Zeker & Vast was reissued on 6 and 21 March 2026, and the month is
+billed on the card of the 1st.
+
+A month is then settled on the next card. `published_indices` reads the
+sentence naming the month the printed rates were computed on and its indices,
+EPEXDAMREK and EPEXDAMSPP, or on Zeker & Vast the feed-in one alone. When the
+next month's card names this month, Flex and ComfortFlex rebuild every register
+and the credit on them (`settled_energy`, `settled_injection`) and Zeker & Vast
+its credit; while that card is not out, or names another month, or a variable
+card names a single figure that could be either index, the month comes back
+`provisional`. Checked on 2026-10-16, every month from December 2025 to
+September 2026 of all three products settles on the values Elegant publishes
+at `elegant.be/indexatie`, to the rounding of the three decimals the card
+prints.
+
 ## Tests
 
 `tests/test_elegant.py` runs against four cards:
@@ -144,3 +183,7 @@ maximum tariff, which `resolve_vreg_network_ceiling` supplies.
 - `elegant_flex_2025-12.pdf`: the December 2025 card as the archive serves it,
   with the month after the product's name, the volume table of the excise and
   the energy contribution still printed.
+- `elegant_flex_2026-09.pdf` and `elegant_zeker_vast_2026-09.pdf`: the
+  September 2026 cards as the archive serves them, settled on the indices the
+  October cards name, the running month left provisional, and a next card
+  naming another month, or no index, settling nothing.

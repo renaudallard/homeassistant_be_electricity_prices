@@ -61,15 +61,17 @@ def settled_injection(inj: InjectionRates, index: float) -> InjectionRates:
     suppliers. It weights each hour's MEAN price by the hour's solar share,
     while EBEM's SPP0 and Trevion's Belpex_SPP_BE weight each QUARTER by its
     own, and over January to August 2026 the computed one ran about
-    0,9 EUR/MWh above both published series in every month. It is not a bug in
-    the mean: Energy Knights defines its Belpex-SPP-M on the hourly quotation
-    and the same computation reproduces its published series to 0,007%, so the
-    resolution is a property of the card. See ``spot_stats._spp_month_mean``.
+    0,9 EUR/MWh above both published series in every month, and Elegant's
+    EPEXDAMSPP is the same series as theirs from May 2026 on. It is not a bug
+    in the mean: Energy Knights defines its Belpex-SPP-M on the hourly
+    quotation and the same computation reproduces its published series to
+    0,007%, so the resolution is a property of the card. See
+    ``spot_stats._spp_month_mean``.
 
     Shared by every provider whose card publishes the settled value: EBEM
-    names it as "vorige maand", Trevion and Engie name the month outright.
-    A leg priced per time-of-use slot (Engie Empower Flextime) has each slot
-    rebuilt from its own pair the same way.
+    names it as "vorige maand", Trevion, Engie and Elegant name the month
+    outright. A leg priced per time-of-use slot (Engie Empower Flextime) has
+    each slot rebuilt from its own pair the same way.
     """
     slots: dict[str, Any] = {
         slot: factor * index + base

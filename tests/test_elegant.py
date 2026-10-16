@@ -23,12 +23,15 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Elegant extractor tests against its October 2026 and December 2025 cards."""
+"""Elegant extractor tests against its cards of October, September and December."""
 
 from __future__ import annotations
 
+import json
 from datetime import date
+from typing import Any
 from unittest.mock import AsyncMock
+from urllib.parse import quote
 
 import pytest
 
@@ -310,3 +313,285 @@ async def test_discover_names_the_residential_electricity_cards() -> None:
     assert await elegant.discover(make_text_session(html)) == {_FLEX, _COMFORT, _VAST}
     new = html + f'<a href="{_CURRENT}/GroenFlexElectricity_Residential.pdf">x</a>'
     assert "GroenFlexElectricity" in await elegant.discover(make_text_session(new))
+
+
+# ---- the tariff archive ------------------------------------------------------
+
+_KEYS = {
+    _FLEX: "FlexElectricity",
+    _COMFORT: "ComfortFlexElectricity",
+    _VAST: "ZekerVastElectricity",
+}
+_CHART = "https://www.elegant.be/api/tarief-archief/tariff-chart?tariffChartPath="
+
+
+def _path(key: str, month: str) -> str:
+    return f"/api/v1/tariff-charts?productOfferKey={key}_{month}01&archive=true"
+
+
+def _offers(month: str, *keys: str) -> str:
+    """An archive search answer offering ``keys`` from the first of
+    ``month`` ("202609")."""
+    offers = [
+        {
+            "productOfferKey": f"{key}_{month}01",
+            "name": key,
+            "tariffChartUrl": _path(key, month),
+        }
+        for key in keys
+    ]
+    return json.dumps([{"result": {"data": {"productOffers": offers}}}])
+
+
+def _archive(
+    monkeypatch: pytest.MonkeyPatch, answers: dict[str, str], cards: dict[str, str]
+) -> list[str]:
+    """Serve ``answers`` (search answer by date) and ``cards`` (card text by
+    chart URL) to the archive reader; returns the dates asked for."""
+    asked: list[str] = []
+
+    async def search(_session: Any, url: str, *, params: dict[str, str]) -> str:
+        assert url == "https://www.elegant.be/api/trpc/tariefArchief.search"
+        query = json.loads(params["input"])["0"]
+        assert query["energyType"] == "Electricity"
+        assert query["customerType"] == "Residential"
+        asked.append(query["date"])
+        return answers[query["date"]]
+
+    async def render(_session: Any, url: str) -> str:
+        return cards[url]
+
+    monkeypatch.setattr(elegant, "fetch_text", search)
+    monkeypatch.setattr(elegant, "fetch_pdf_text_layout", render)
+    return asked
+
+
+def _chart(contract_id: str, month: str) -> str:
+    return _CHART + quote(_path(_KEYS[contract_id], month), safe="")
+
+
+async def test_a_closed_month_settles_on_the_indices_the_next_card_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """September's card prints August's indices; October's names
+    September's, 15,641 and 10,053 c€/kWh, and every register and the
+    credit are rebuilt on them."""
+    keys = tuple(_KEYS.values())
+    asked = _archive(
+        monkeypatch,
+        {
+            "2026-09-01": _offers("202609", *keys),
+            "2026-10-01": _offers("202610", *keys),
+        },
+        {
+            _chart(_FLEX, "202609"): _card("elegant_flex_2026-09.pdf"),
+            _chart(_FLEX, "202610"): _card("elegant_flex_2026-10.pdf"),
+        },
+    )
+    snap = await elegant.fetch_for_month(
+        make_text_session(""), _FLEX, REGION_FLANDERS, date(2026, 9, 14)
+    )
+    assert asked == ["2026-09-01", "2026-10-01"]
+    assert snap is not None
+    assert not snap.provisional
+    assert snap.source_url == _chart(_FLEX, "202609")
+    assert snap.publication_label == "september 2026"
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.index_realised == pytest.approx(0.15641)
+    assert energy.current == pytest.approx(1.1448 * 0.15641 + 0.01961)
+    assert energy.peak == pytest.approx(1.092 * 1.06 * 0.15641 + 0.01961)
+    assert energy.offpeak == pytest.approx(1.068 * 1.06 * 0.15641 + 0.01961)
+    assert energy.exclusive_night == energy.offpeak
+    injection = snap.injection
+    assert injection is not None
+    assert injection.index_realised == pytest.approx(0.10053)
+    assert injection.current == pytest.approx(0.85 * 0.10053 - 0.015)
+
+
+async def test_zeker_vast_settles_its_credit_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Its card names the feed-in index alone, and its energy is fixed."""
+    _archive(
+        monkeypatch,
+        {
+            "2026-09-01": _offers("202609", _KEYS[_VAST]),
+            "2026-10-01": _offers("202610", _KEYS[_VAST]),
+        },
+        {
+            _chart(_VAST, "202609"): _card("elegant_zeker_vast_2026-09.pdf"),
+            _chart(_VAST, "202610"): _card("elegant_zeker_vast_2026-10.pdf"),
+        },
+    )
+    snap = await elegant.fetch_for_month(
+        make_text_session(""), _VAST, REGION_FLANDERS, date(2026, 9, 1)
+    )
+    assert snap is not None
+    assert not snap.provisional
+    energy = snap.energy
+    assert isinstance(energy, FixedRates)
+    assert energy.single == pytest.approx(0.1688)
+    injection = snap.injection
+    assert injection is not None
+    assert injection.index_realised == pytest.approx(0.10053)
+    assert injection.current == pytest.approx(0.85 * 0.10053 - 0.015)
+
+
+async def test_the_running_month_stays_provisional(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Asked for a date ahead, the archive offers the card in force today,
+    October's, which is no November card: October keeps its printed rates
+    and is asked again."""
+    answer = _offers("202610", _KEYS[_FLEX])
+    _archive(
+        monkeypatch,
+        {"2026-10-01": answer, "2026-11-01": answer},
+        {_chart(_FLEX, "202610"): _card("elegant_flex_2026-10.pdf")},
+    )
+    session = make_text_session("")
+    snap = await elegant.fetch_for_month(
+        session, _FLEX, REGION_FLANDERS, date(2026, 10, 1)
+    )
+    assert snap is not None and snap.provisional
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.current == pytest.approx(0.1987)
+    assert energy.index_realised is None
+    assert snap.injection is not None and snap.injection.index_realised is None
+    # A card of another month is no card for the month asked.
+    assert (
+        await elegant.fetch_for_month(
+            session, _FLEX, REGION_FLANDERS, date(2026, 11, 1)
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "following",
+    [
+        # October's card naming August's indices, as a card that skipped a
+        # month would.
+        lambda: _card("elegant_flex_2026-10.pdf").replace(
+            "de waarde van september 2026", "de waarde van augustus 2026"
+        ),
+        # An October card printing no index sentence at all.
+        lambda: _card("elegant_flex_2026-10.pdf").replace("namelijk de waarde", ""),
+    ],
+    ids=["another month", "no index"],
+)
+async def test_a_next_card_not_naming_the_month_settles_nothing(
+    monkeypatch: pytest.MonkeyPatch, following: Any
+) -> None:
+    _archive(
+        monkeypatch,
+        {
+            "2026-09-01": _offers("202609", _KEYS[_FLEX]),
+            "2026-10-01": _offers("202610", _KEYS[_FLEX]),
+        },
+        {
+            _chart(_FLEX, "202609"): _card("elegant_flex_2026-09.pdf"),
+            _chart(_FLEX, "202610"): following(),
+        },
+    )
+    snap = await elegant.fetch_for_month(
+        make_text_session(""), _FLEX, REGION_FLANDERS, date(2026, 9, 1)
+    )
+    assert snap is not None and snap.provisional
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.index_realised is None
+    assert energy.current == pytest.approx(0.1677)
+    assert snap.injection is not None and snap.injection.index_realised is None
+
+
+async def test_an_unreadable_archive_answer_is_no_card(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Refused rather than raised: the month falls back to the proxy, and a
+    month whose next card does not read is asked again."""
+    _archive(
+        monkeypatch,
+        {
+            "2026-08-01": "<html>maintenance</html>",
+            "2026-09-01": _offers("202609", _KEYS[_FLEX]),
+            "2026-10-01": "[]",
+        },
+        {_chart(_FLEX, "202609"): _card("elegant_flex_2026-09.pdf")},
+    )
+    session = make_text_session("")
+    assert (
+        await elegant.fetch_for_month(session, _FLEX, REGION_FLANDERS, date(2026, 8, 1))
+        is None
+    )
+    snap = await elegant.fetch_for_month(
+        session, _FLEX, REGION_FLANDERS, date(2026, 9, 1)
+    )
+    assert snap is not None and snap.provisional
+
+
+def test_published_indices_read_both_forms() -> None:
+    flex = elegant.published_indices(_card("elegant_flex_2026-10.pdf"))
+    assert flex is not None
+    month, consumption, feed_in = flex
+    assert month == date(2026, 9, 1)
+    assert consumption == pytest.approx(0.15641)
+    assert feed_in == pytest.approx(0.10053)
+    vast = elegant.published_indices(_card("elegant_zeker_vast_2026-10.pdf"))
+    assert vast is not None
+    assert vast[0] == date(2026, 9, 1)
+    assert vast[1] is None
+    assert vast[2] == pytest.approx(0.10053)
+
+
+async def test_a_variable_card_naming_one_index_settles_neither_leg(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On a Flex card a lone figure could be either index, so neither leg is
+    settled on it."""
+    following = _card("elegant_flex_2026-10.pdf").replace(
+        "15,641 c€/kWh voor afname en 10,053 c€/kWh voor injectie", "10,053 c€/kWh"
+    )
+    _archive(
+        monkeypatch,
+        {
+            "2026-09-01": _offers("202609", _KEYS[_FLEX]),
+            "2026-10-01": _offers("202610", _KEYS[_FLEX]),
+        },
+        {
+            _chart(_FLEX, "202609"): _card("elegant_flex_2026-09.pdf"),
+            _chart(_FLEX, "202610"): following,
+        },
+    )
+    snap = await elegant.fetch_for_month(
+        make_text_session(""), _FLEX, REGION_FLANDERS, date(2026, 9, 1)
+    )
+    assert snap is not None and snap.provisional
+    assert snap.injection is not None and snap.injection.index_realised is None
+
+
+async def test_a_month_without_the_product_is_not_archived(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Before December 2025 the archive offers the products Elegant sold
+    then, under other keys."""
+    asked = _archive(
+        monkeypatch,
+        {"2025-11-01": _offers("202111", "BEGreenFlexStroom", "BEComfortFlexStroom")},
+        {},
+    )
+    session = make_text_session("")
+    assert (
+        await elegant.fetch_for_month(
+            session, _FLEX, REGION_FLANDERS, date(2025, 11, 1)
+        )
+        is None
+    )
+    assert asked == ["2025-11-01"]
+    assert (
+        await elegant.fetch_for_month(session, _FLEX, "brussels", date(2025, 11, 1))
+        is None
+    )
+    assert asked == ["2025-11-01"]
