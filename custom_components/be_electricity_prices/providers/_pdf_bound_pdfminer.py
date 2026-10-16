@@ -304,7 +304,11 @@ def _hold_pdfminer_to_the_bound() -> None:
         def backwards(self: PSBaseParser) -> Iterator[bytes]:
             # pdfminer's, which reads the lines a buffer at a time, putting
             # each in front of the rest of its line: 16 MB with no line end
-            # took 46,8 s. Found in the file whole, each counted as parsed.
+            # took 46,8 s. Found in the file whole, each counted as parsed,
+            # and each kind of line end looked for again only once the last
+            # one found is taken: looked for afresh for every line, an LF not
+            # there was looked for through the whole file each time, and
+            # 256 kB of CR line ends took 2,4 s, 1 MB 55 s.
             reading = _READING.get()
             if reading is None:
                 yield from revreadlines(self)
@@ -312,14 +316,15 @@ def _hold_pdfminer_to_the_bound() -> None:
             self.fp.seek(0)
             data = self.fp.read()
             end = len(data)
-            while True:
-                lf = data.rfind(b"\n", 0, end)
-                n = max(lf, data.rfind(b"\r", max(lf, 0), end))
-                if n < 0:
-                    return
+            lf, cr = data.rfind(b"\n"), data.rfind(b"\r")
+            while (n := max(lf, cr)) >= 0:
                 reading.parse()
                 yield data[n:end]
                 end = n
+                if n == lf:
+                    lf = data.rfind(b"\n", 0, n)
+                else:
+                    cr = data.rfind(b"\r", 0, n)
 
         get_font = PDFResourceManager.get_font
         unnamed: dict[str, object] = {}

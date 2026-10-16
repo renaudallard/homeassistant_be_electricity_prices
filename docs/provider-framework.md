@@ -767,8 +767,8 @@ Internals worth knowing:
   to `_MAX_TOKEN_BYTES` too, the longest a card reaches being 140 bytes;
   the lines it reads backwards from the end of a file, looking for its
   table, which it grew the same way (16 MB with no line end after its end
-  took 46,8 s), are found in the file whole. pdfminer takes at most
-  `_MAX_STEPS` (8 000 000) steps, a step each time a parser looks at its
+  took 46,8 s), are found in the file whole, in a time linear in it.
+  pdfminer takes at most `_MAX_STEPS` (8 000 000) steps, a step each time a parser looks at its
   buffer again: most make or end a token, but a NUL byte, a lone `>`,
   each escape in a string or a name and each line a parser reads take one
   each, which the parse count does not see

@@ -1832,11 +1832,45 @@ def test_the_lines_read_backwards_are_pdfminer_s() -> None:
         b"a\n",
         b"\n\n",
         b"a\r\nb\rc\n\r",
+        b"a\rb\rc",
+        b"\n\r" * 3 + b"x",
         b"x" * 9000 + b"\r\n" + b"y" * 5000 + b"\n" * 3,
     ):
         expected = list(PSBaseParser(io.BytesIO(data)).revreadlines())
         with _pdf_bound_pdfminer.bounded_pdfminer():
             assert list(PSBaseParser(io.BytesIO(data)).revreadlines()) == expected
+
+
+def test_the_lines_read_backwards_are_found_in_a_time_linear_in_the_file() -> None:
+    """Each line end was looked for afresh for every line, an LF not there
+    through the whole file each time: 256 kB of CR line ends took 2,4 s on
+    a Raspberry Pi and 1 MB 55 s. What is looked through is counted here,
+    no more than twice the file whatever its line ends."""
+    import io
+
+    from pdfminer.psparser import PSBaseParser
+
+    looked = 0
+
+    class Looked(bytes):
+        def rfind(self, sub: Any, start: Any = 0, end: Any = None) -> int:  # type: ignore[override]
+            nonlocal looked
+            end = len(self) if end is None else end
+            found = super().rfind(sub, start, end)
+            looked += end - max(found, start)
+            return found
+
+    class File(io.BytesIO):
+        def read(self, size: int | None = -1) -> bytes:
+            return Looked(super().read(size))
+
+    for line in (b"a\r", b"a\n", b"a\r\n", b"\n\r"):
+        data = line * 20_000
+        looked = 0
+        with _pdf_bound_pdfminer.bounded_pdfminer():
+            lines = list(PSBaseParser(File(data)).revreadlines())
+        assert lines == list(PSBaseParser(io.BytesIO(data)).revreadlines())
+        assert looked <= 2 * len(data), (line, looked)
 
 
 def _drawn_pdf(content: bytes, form: bytes, *, fonts: int = 1) -> bytes:
