@@ -29,6 +29,7 @@ and November 2025."""
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import date
 from typing import Any
 from unittest.mock import AsyncMock
@@ -396,10 +397,13 @@ def _offers(month: str, *keys: str, day: str = "01") -> str:
 
 
 def _archive(
-    monkeypatch: pytest.MonkeyPatch, answers: dict[str, str], cards: dict[str, str]
+    monkeypatch: pytest.MonkeyPatch,
+    answers: Mapping[str, str | ExtractorError],
+    cards: dict[str, str],
 ) -> list[str]:
-    """Serve ``answers`` (search answer by date) and ``cards`` (card text by
-    chart URL) to the archive reader; returns the dates asked for."""
+    """Serve ``answers`` (search answer by date, or the error the search
+    raises) and ``cards`` (card text by chart URL) to the archive reader;
+    returns the dates asked for."""
     asked: list[str] = []
 
     async def search(_session: Any, url: str, *, params: dict[str, str]) -> str:
@@ -408,7 +412,10 @@ def _archive(
         assert query["energyType"] == "Electricity"
         assert query["customerType"] == "Residential"
         asked.append(query["date"])
-        return answers[query["date"]]
+        answer = answers[query["date"]]
+        if isinstance(answer, ExtractorError):
+            raise answer
+        return answer
 
     async def render(_session: Any, url: str) -> str:
         return cards[url]
@@ -625,6 +632,65 @@ async def test_a_past_month_keeps_a_short_network_table(
         await elegant.fetch_for_month(session, _FLEX, REGION_FLANDERS, date(2026, 9, 1))
         is None
     )
+
+
+_SEARCH = "https://www.elegant.be/api/trpc/tariefArchief.search"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [f"network error fetching {_SEARCH}: timeout", f"HTTP 503 fetching {_SEARCH}"],
+)
+@pytest.mark.parametrize("failing", ["2026-09-01", "2026-10-01"])
+async def test_a_transient_archive_failure_is_raised(
+    monkeypatch: pytest.MonkeyPatch, error: str, failing: str
+) -> None:
+    """A timeout or a 5xx on the month's own search or on the next card's
+    says nothing about the month, so it is raised for the month cache to
+    retry instead of filing the month as absent or as an estimate."""
+    answers: dict[str, str | ExtractorError] = {
+        "2026-09-01": _offers("202609", _KEYS[_FLEX]),
+        "2026-10-01": _offers("202610", _KEYS[_FLEX]),
+    }
+    failure = answers[failing] = ExtractorError(error)
+    _archive(
+        monkeypatch,
+        answers,
+        {
+            _chart(_FLEX, "202609"): _card("elegant_flex_2026-09.pdf"),
+            _chart(_FLEX, "202610"): _card("elegant_flex_2026-10.pdf"),
+        },
+    )
+    with pytest.raises(ExtractorError) as caught:
+        await elegant.fetch_for_month(
+            make_text_session(""), _FLEX, REGION_FLANDERS, date(2026, 9, 1)
+        )
+    assert caught.value is failure
+
+
+@pytest.mark.parametrize("failing", ["2026-09-01", "2026-10-01"])
+async def test_a_missing_archive_answer_is_not_raised(
+    monkeypatch: pytest.MonkeyPatch, failing: str
+) -> None:
+    """A 404 is no blip: the month's own search failing is no card, the next
+    card's leaves the month provisional."""
+    answers: dict[str, str | ExtractorError] = {
+        "2026-09-01": _offers("202609", _KEYS[_FLEX]),
+        "2026-10-01": _offers("202610", _KEYS[_FLEX]),
+    }
+    answers[failing] = ExtractorError(f"HTTP 404 fetching {_SEARCH}")
+    _archive(
+        monkeypatch,
+        answers,
+        {_chart(_FLEX, "202609"): _card("elegant_flex_2026-09.pdf")},
+    )
+    snap = await elegant.fetch_for_month(
+        make_text_session(""), _FLEX, REGION_FLANDERS, date(2026, 9, 1)
+    )
+    if failing == "2026-09-01":
+        assert snap is None
+    else:
+        assert snap is not None and snap.provisional
 
 
 def test_published_indices_read_both_forms() -> None:
