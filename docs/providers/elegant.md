@@ -156,12 +156,14 @@ type, and gets the product offers in force on that date, each keyed
 `<key>_<YYYYMMDD>` and carrying a `tariffChartUrl`; `api/tarief-archief/tariff-chart`
 turns that path into the PDF. `fetch_for_month` asks for the first day of the
 month, so it reads the card in force on the 1st, and passes it through
-`archive_validity_check`, which refuses a card of another month: asked for a
-date ahead, the archive offers the card in force today. The archive's copies
-carry the month after the product's name ("Flex 09.26"), or on the launch
-cards the day the offer started ("Flex 08/11/2025"), which the heading reader
-allows. The same approach reads Elegant's gas cards in the sibling gas
-integration.
+`archive_validity_check`, which refuses a card of another month. Asked for a
+month that has not started, the archive offers nothing (`{"productOffers":[]}`
+for 1 November 2026 and 1 March 2027, checked on 2026-10-16), so the running
+month stays provisional until its next card is out; a later day of the
+running month offers the card in force today. The archive's copies carry the
+month after the product's name ("Flex 09.26"), or on the launch cards the day
+the offer started ("Flex 08/11/2025"), which the heading reader allows. The
+same approach reads Elegant's gas cards in the sibling gas integration.
 
 The current product keys start on 8 November 2025. On 1 November the archive
 still offers the products Elegant sold before (`BEGreenFlexStroom` and the

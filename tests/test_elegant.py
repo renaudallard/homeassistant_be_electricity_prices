@@ -500,13 +500,17 @@ async def test_zeker_vast_settles_its_credit_alone(
 async def test_the_running_month_stays_provisional(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Asked for a date ahead, the archive offers the card in force today,
-    October's, which is no November card: October keeps its printed rates
-    and is asked again."""
-    answer = _offers("202610", _KEYS[_FLEX])
-    _archive(
+    """Asked for a month that has not started, the archive offers nothing,
+    as it answered for 1 November on 2026-10-16: October keeps its printed
+    rates and is asked again, and November has no card."""
+    nothing = _offers("202611")
+    asked = _archive(
         monkeypatch,
-        {"2026-10-01": answer, "2026-11-01": answer},
+        {
+            "2026-10-01": _offers("202610", _KEYS[_FLEX]),
+            "2026-11-01": nothing,
+            "2026-11-30": nothing,
+        },
         {_chart(_FLEX, "202610"): _card("elegant_flex_2026-10.pdf")},
     )
     session = make_text_session("")
@@ -519,13 +523,21 @@ async def test_the_running_month_stays_provisional(
     assert energy.current == pytest.approx(0.1987)
     assert energy.index_realised is None
     assert snap.injection is not None and snap.injection.index_realised is None
-    # A card of another month is no card for the month asked.
     assert (
         await elegant.fetch_for_month(
             session, _FLEX, REGION_FLANDERS, date(2026, 11, 1)
         )
         is None
     )
+    # October asks for November's card to settle it, and the first day of
+    # November and its last both answer with no offer.
+    assert asked == [
+        "2026-10-01",
+        "2026-11-01",
+        "2026-11-30",
+        "2026-11-01",
+        "2026-11-30",
+    ]
 
 
 @pytest.mark.parametrize(
