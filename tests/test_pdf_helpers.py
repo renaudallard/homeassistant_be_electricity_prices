@@ -944,8 +944,7 @@ def test_a_font_counts_each_time_pypdf_loads_it(
     the same dictionary is read to a font once."""
     import zlib
 
-    from pypdf import _font
-
+    _font = _pdf_bound.pypdf_font
     monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
     form = zlib.compress(b" ")
     with pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"):
@@ -955,7 +954,7 @@ def test_a_font_counts_each_time_pypdf_loads_it(
 
     def counted(font: object) -> object:
         loads.append(font)
-        return encode(font)  # type: ignore[arg-type]
+        return encode(font)
 
     monkeypatch.setattr(_font, "get_encoding", counted)
     with pytest.raises(CardNotReadableError, match="no text layer"):

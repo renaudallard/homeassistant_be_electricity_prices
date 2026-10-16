@@ -815,7 +815,9 @@ Internals worth knowing:
   The manifest asks for pypdf 6.7.1 or later, the first release that maps
   at most 100 000 codes for a font, which the bound counts once the map is
   built; 6.6.0 was the first whose text extraction loads its fonts through
-  `Font.from_font_resource`, which the bound counts too.
+  `Font.from_font_resource`, which the bound counts too. pypdf 6.20.0 moved
+  its font module into its `generic` package, and the bound takes it from
+  either place.
 - `_require_https` (`_pdf.py`) refuses to fetch a card or page whose address
   is not https, before any request. Most links are read off a supplier's page
   and only energie.be checked their scheme, so a plain http link was fetched

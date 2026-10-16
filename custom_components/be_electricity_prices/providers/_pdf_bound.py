@@ -33,6 +33,7 @@ held to on top of this, and the wrappers holding it, are in
 
 from __future__ import annotations
 
+import importlib
 import sys
 import threading
 import zlib
@@ -44,15 +45,20 @@ from typing import Any, SupportsIndex
 
 from pypdf import PageObject
 from pypdf import _cmap as pypdf_cmap
-from pypdf import _font as pypdf_font
 from pypdf import _reader as pypdf_reader
 from pypdf import filters as pypdf_filters
-from pypdf._font import Font
 from pypdf.errors import LimitReachedError
 from pypdf.generic import DecodedStreamObject, EncodedStreamObject, StreamObject
 from pypdf.generic import _data_structures as pypdf_structures
 
 from .base import ExtractorError
+
+# pypdf's font module, in its generic package from 6.20.0 and beside its
+# CMaps before.
+try:
+    pypdf_font: Any = importlib.import_module("pypdf.generic._font")
+except ModuleNotFoundError:
+    pypdf_font = importlib.import_module("pypdf._font")
 
 # What every stream of a card may decode to, together, counted as each
 # reader reads it. Across the 179 shipped fixtures pdfminer counts at most
@@ -534,14 +540,15 @@ def _hold_pypdf_to_the_bound() -> None:
             reading.pages += 1
             reading.list_page(reading.pages)
 
-    load = Font.from_font_resource.__func__  # type: ignore[attr-defined]
+    font = pypdf_font.Font
+    load = font.from_font_resource.__func__
 
-    def loaded(cls: type[Font], pdf_font_dict: Any) -> Font:
+    def loaded(cls: Any, pdf_font_dict: Any) -> Any:
         reading = _READING.get()
         if reading is None:
-            return load(cls, pdf_font_dict)  # type: ignore[no-any-return]
+            return load(cls, pdf_font_dict)
         reading.charge(_FONT_LOAD_BYTES)
-        return reading.font(pdf_font_dict, lambda: load(cls, pdf_font_dict))  # type: ignore[no-any-return]
+        return reading.font(pdf_font_dict, lambda: load(cls, pdf_font_dict))
 
     for decoder, label in (
         (pypdf_filters.LZWDecode, "LZW"),
@@ -585,7 +592,7 @@ def _hold_pypdf_to_the_bound() -> None:
     setattr(read_encoded, _MARK, (_READING, _HOLDING))
     EncodedStreamObject.get_data = read_encoded  # type: ignore[method-assign]
     DecodedStreamObject.get_data = read_decoded  # type: ignore[method-assign]
-    Font.from_font_resource = classmethod(loaded)  # type: ignore[assignment]
+    font.from_font_resource = classmethod(loaded)
     PageObject.__init__ = page  # type: ignore[method-assign]
 
 
