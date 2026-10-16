@@ -1057,9 +1057,10 @@ back a contract you left before the year began.
   Per-month tariff cards live in a cache keyed by
   `(supplier, contract, region, YYYY-MM)`, kept in the entry's store
   across restarts for the calendar year so far plus the signing month,
-  and looked up once per month touched by that window. Annual fees are pro-rated to the elapsed
-  fraction of the year, so on Jan 1 the sensor sits at ~0 and grows day
-  by day instead of jumping to the full annual upfront.
+  and looked up once per month the year-to-date walk or a short month's
+  area search touches. Annual fees are pro-rated to the elapsed fraction
+  of the year, so on Jan 1 the sensor sits at ~0 and grows day by day
+  instead of jumping to the full annual upfront.
 - **Startup reads no meter.** Home Assistant waits on each integration's
   first refresh, with 300 s for all of them together, and the meter reads
   behind the costs each cover a year of hours, which on a database on a NAS
