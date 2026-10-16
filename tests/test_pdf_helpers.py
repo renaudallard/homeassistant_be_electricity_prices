@@ -1915,6 +1915,52 @@ def test_the_cmaps_pdfminer_loads_of_its_own_are_held(
     assert "tariff card" in extract(card(b"UniJIS-UCS2-H", b"UniGB-UCS2-H"))
 
 
+@pytest.mark.parametrize("most", [4, 1])
+def test_a_read_leaves_no_cmap_of_pdfminer_s_behind(
+    monkeypatch: pytest.MonkeyPatch, most: int
+) -> None:
+    """pdfminer keeps each CMap of its own it loads under the name the card
+    gives, which it reads the same file for whatever NUL bytes it carries,
+    so each read of a card naming new ones kept 40 MB more. What a read
+    added to its caches is dropped once it ends, refused or not."""
+    from pdfminer.cmapdb import CMapDB
+
+    monkeypatch.setattr(_pdf_bound_pdfminer, "_MAX_CMAPS", most)
+    text = b"BT /F0 12 Tf 72 720 Td (%s) Tj ET" % (b"tariff card text " * 60)
+    unicode = b"begincmap\n/UniJIS-UCS2-H#00 usecmap\nendcmap\n"
+    payload = _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[5 0 R]/Count 1>>",
+            b"<</Length %d>>\nstream\n%s\nendstream" % (len(text), text),
+            b"<</Length %d>>\nstream\n%s\nendstream" % (len(unicode), unicode),
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 3 0 R"
+            b"/Resources<</Font<</F0<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>"
+            b"/F1<</Type/Font/Subtype/Type1/BaseFont/Helvetica/ToUnicode 4 0 R>>"
+            b"/F2<</Type/Font/Subtype/Type0/BaseFont/X/Encoding/Identity-H"
+            b"/DescendantFonts[<</Type/Font/Subtype/CIDFontType2/BaseFont/X"
+            b"/CIDSystemInfo<</Registry(Adobe)/Ordering(Japan1\\000)/Supplement 0>>"
+            b">>]>>>>>>>>",
+        )
+    )
+    kept = (set(CMapDB._cmap_cache), set(CMapDB._umap_cache))
+    load = CMapDB._load_data.__func__  # type: ignore[attr-defined]
+    loads: list[str] = []
+
+    def counted(cls: type[CMapDB], name: str) -> Any:
+        loads.append(name)
+        return load(cls, name)
+
+    monkeypatch.setattr(CMapDB, "_load_data", classmethod(counted))
+    if most > 1:
+        assert "tariff card" in extract_pdf_text_layout(payload)
+    else:
+        with pytest.raises(ExtractorError, match=r"^PDF has pdfminer load more than 1"):
+            extract_pdf_text_layout(payload)
+    assert loads == ["UniJIS-UCS2-H\0", "to-unicode-Adobe-Japan1\0"]
+    assert (set(CMapDB._cmap_cache), set(CMapDB._umap_cache)) == kept
+
+
 def _drawn_pdf(content: bytes, form: bytes, *, fonts: int = 1) -> bytes:
     """A page of ``content`` that may draw the form ``X0`` of ``form``,
     which names no resources of its own, both naming ``fonts`` fonts."""

@@ -784,9 +784,12 @@ Internals worth knowing:
   pointer past up to 1000 end markers repeated; 4096 take about 70 ms. pdfminer
   loads at most `_MAX_CMAPS` (4) of the CMaps it ships for a card, each a
   font's encoding or a map it names, counted by name whether it loaded it
-  for this card or an earlier one: it keeps each for good, up to 7 MB and
-  0,4 s for one, and a 3 kB card naming all 144 took 2,9 s and kept
-  135 MB. No card names one, every font of theirs naming an identity
+  for this card or an earlier one: a load costs up to 7,9 MB, the
+  ToUnicode map of Adobe-GB1, and 0,15 s, and a 3 kB card naming all 144
+  took 2,9 s and held 135 MB. pdfminer keeps each it loads for good, under
+  the name the card gives, which it reads the same file for whatever NUL
+  bytes or path it carries, so what a read added to its caches is dropped
+  once the read ends. No card names one, every font of theirs naming an identity
   encoding pdfminer makes without loading anything. A reader builds at most `_MAX_FONT_ENTRIES`
   (1 000 000) entries of a card's fonts, each code a range of a font's
   ToUnicode map, encoding or widths gives, or its program's own tables,

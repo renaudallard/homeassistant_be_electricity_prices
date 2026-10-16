@@ -242,8 +242,10 @@ class _Reading:
     """What is left of the bound while a card is read, the refusal that
     ended it, for each stream being decoded, innermost last, what its last
     inflate handed back, counted already, under pypdf which stream that is,
-    the fonts built so far, by the dictionary they were built from, and the
-    CMaps of its own pdfminer loaded, by name.
+    the fonts built so far, by the dictionary they were built from, the
+    CMaps of its own pdfminer loaded, by name, and each entry the read
+    added to pdfminer's caches of them, by cache and key, with what it
+    holds.
 
     Every refusal is made here, so it is an error of the copy of this
     module the read was started from, whichever copy put the wrappers in
@@ -262,6 +264,7 @@ class _Reading:
     streams: list[EncodedStreamObject] = field(default_factory=list)
     fonts: dict[int, tuple[Any, Any]] = field(default_factory=dict)
     cmaps: set[str] = field(default_factory=set)
+    cached: list[tuple[dict[str, Any], str, Any]] = field(default_factory=list)
 
     def refuse(self, message: str) -> _Refused:
         if self.refusal is None:
@@ -600,15 +603,15 @@ _hold_pypdf_to_the_bound()
 
 
 @contextmanager
-def _held_to_the_bound() -> Iterator[None]:
+def _held_to_the_bound() -> Iterator[_Reading]:
     """Hold the readers to :data:`_MAX_DECODED_STREAM_BYTES` while the card
-    is read inside this block, and raise the refusal that ended the read
-    whatever a reader made of it. pypdf reaching one of its own limits is
-    refused too, under pypdf's own words for it."""
+    is read inside this block, the read it yields, and raise the refusal
+    that ended the read whatever a reader made of it. pypdf reaching one of
+    its own limits is refused too, under pypdf's own words for it."""
     reading = _Reading(_MAX_DECODED_STREAM_BYTES)
     token = _READING.set(reading)
     try:
-        yield
+        yield reading
     except _Refused:
         pass
     except Exception as err:

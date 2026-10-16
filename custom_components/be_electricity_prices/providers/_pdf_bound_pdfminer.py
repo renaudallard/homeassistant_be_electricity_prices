@@ -71,10 +71,13 @@ _MAX_PATH_SEGMENTS = 450_000
 _RC4_UNIT = 16384
 
 # The most CMaps of its own pdfminer may load for a card, each a font's
-# encoding or a map it names. It keeps each it loads for good, up to 7 MB
-# and 0,4 s of CPU on a Raspberry Pi for one: a 3 kB card naming all 144
-# took 2,9 s and kept 135 MB. No card names one, every font of theirs
-# naming an identity encoding pdfminer makes without loading anything.
+# encoding or a map it names. A load costs up to 7,9 MB, the ToUnicode map
+# of Adobe-GB1, and 0,15 s of CPU on a Raspberry Pi: a 3 kB card naming
+# all 144 took 2,9 s and held 135 MB. pdfminer keeps each it loads for
+# good, under the name the card gives, which it reads the same file for
+# whatever NUL bytes or path it carries, so what a read added is dropped
+# once it ends. No card names one, every font of theirs naming an identity
+# encoding pdfminer makes without loading anything.
 _MAX_CMAPS = 4
 
 
@@ -363,11 +366,13 @@ def _hold_pdfminer_to_the_bound() -> None:
         get_cmap = cmapdb.CMapDB.get_cmap.__func__  # type: ignore[attr-defined]
         get_unicode_map = cmapdb.CMapDB.get_unicode_map.__func__  # type: ignore[attr-defined]
 
-        def loaded(name: str) -> None:
+        def loaded(name: str, cache: dict[str, Any], key: str, new: bool) -> None:
             # Counted by name, whether pdfminer loaded it for this card or
-            # for an earlier one.
+            # for an earlier one, and noted if it is new in the cache.
             reading = _READING.get()
             if reading is not None:
+                if new and key in cache:
+                    reading.cached.append((cache, key, cache[key]))
                 reading.cmaps.add(name)
                 if len(reading.cmaps) > _MAX_CMAPS:
                     raise reading.refuse(
@@ -376,16 +381,20 @@ def _hold_pdfminer_to_the_bound() -> None:
                     )
 
         def cmap(cls: type[cmapdb.CMapDB], name: str) -> Any:
+            cache = cls._cmap_cache
+            new = name not in cache
             found = get_cmap(cls, name)
             if isinstance(found, cmapdb.PyCMap):
-                loaded(name)
+                loaded(name, cache, name, new)
             return found
 
         def unicode_map(
             cls: type[cmapdb.CMapDB], name: str, vertical: bool = False
         ) -> Any:
+            cache = cls._umap_cache
+            new = name not in cache
             found = get_unicode_map(cls, name, vertical)
-            loaded(f"to-unicode-{name}")
+            loaded(f"to-unicode-{name}", cache, name, new)
             return found
 
         names["ascii85decode"] = _ascii85_held(names["ascii85decode"])
@@ -464,9 +473,17 @@ def bounded_pdfminer() -> Iterator[None]:
     :data:`_MAX_TOKEN_BYTES`, which it grows a byte or a buffer at a time,
     builds no more than :data:`_MAX_FONT_ENTRIES` entries of a card's
     fonts, and loads no more than :data:`_MAX_CMAPS` CMaps of its own,
-    which it keeps for good. pdfplumber's ``dedupe_chars`` finds each
-    glyph it keeps at once, where it looked each one up in the page's list.
+    which it keeps for good, those the read added dropped once it ends.
+    pdfplumber's ``dedupe_chars`` finds each glyph it keeps at once, where
+    it looked each one up in the page's list.
     """
     _hold_pdfminer_to_the_bound()
-    with _held_to_the_bound():
-        yield
+    with _held_to_the_bound() as reading:
+        try:
+            yield
+        finally:
+            # Only what this read added and the cache still holds: another
+            # read in another thread may have loaded the same map since.
+            for cache, key, held in reading.cached:
+                if cache.get(key) is held:
+                    cache.pop(key, None)
