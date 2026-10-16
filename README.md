@@ -106,6 +106,7 @@ Each of these has a section of its own further down; this is the scan.
 | **EBEM** | Groen Variabel (BelpexRLP0 monthly, mono / bi / excl. night) · Groen B@sic+ (BelpexRLP0 monthly, single rate, online-only) · Groen Dyn@mic (Belpex 15-min, SMR3) | Flanders only · [`ebem.py`](./custom_components/be_electricity_prices/providers/ebem.py) · [notes](./docs/providers/ebem.md)
 | **Ecofix** ⚠️ *(cards are page images since August 2026, read in CI)* | Motion (quarter-hourly Belpex 15M) · Motion Online (same index, own coefficients and a 10 €/yr standing charge, online-only) · Flexy (BELPEX-RLP-M monthly variable) · Flexy Online (same index, own coefficients and the same 10 €/yr charge, online-only) | Flanders + Wallonia · [`ecofix.py`](./custom_components/be_electricity_prices/providers/ecofix.py) · [notes](./docs/providers/ecofix.md) · **see the note below the table**
 | **Ecopower** | Groene Burgerstroom (50% fixed + 50% Belpex DA, indexed monthly) · Dynamische Burgerstroom *(quarter-hourly EPEX DA)* | Flanders cooperative, Flanders only · [`ecopower.py`](./custom_components/be_electricity_prices/providers/ecopower.py) · [notes](./docs/providers/ecopower.md)
+| **Elegant** | Flex *(open-ended)* · ComfortFlex *(one year)*, both indexed monthly on EPEXDAMREK, the plain Belpex mean, mono / bi / excl. night · Zeker & Vast *(fixed for a year)* · the feed-in credit of all three is indexed monthly on EPEXDAMSPP, the SPP-weighted Belpex mean | Flanders only · [`elegant.py`](./custom_components/be_electricity_prices/providers/elegant.py) · [notes](./docs/providers/elegant.md)
 | **Eneco** | Zon & Wind Vast · Zon & Wind Fix One · Zon & Wind Flex · Zon & Wind Flex One · Zon & Wind Dynamisch | Flanders + Wallonia (Dynamisch since its October 2026 card) · [`eneco.py`](./custom_components/be_electricity_prices/providers/eneco.py) · [notes](./docs/providers/eneco.md)
 | **energie.be** | Dynamisch *(quarter-hourly EPEX)* · Variabel *(monthly Belpex_RLP)* · Vast | Flanders only · [`energiebe.py`](./custom_components/be_electricity_prices/providers/energiebe.py) · [notes](./docs/providers/energiebe.md)
 | **Energy Knights** | Agilior Online *(quarter-hourly Belpex_15)* · Agilis Online *(hourly Belpex_h)* · Essentia Online *(monthly Belpex_RLP)* · all three as **Green** | Flanders only · [`energyknights.py`](./custom_components/be_electricity_prices/providers/energyknights.py) · [notes](./docs/providers/energyknights.md)
@@ -153,7 +154,7 @@ leaving the excise out or billing the household rate would both be wrong.
 
 **Not supported, and why:**
 
-- **Belvus, Dots, Elegant, Sparki** and the six **Energy Together** brands
+- **Belvus, Dots, Sparki** and the six **Energy Together** brands
   (HOA Energy, Servolt Energie, Evident Energie, Power2You, Prijspunten
   Energie, Smappee Smiles) publish electricity tariff cards, and the gas
   integration reads their gas cards, but no reader for their electricity
@@ -568,7 +569,8 @@ dropped rather than billed on the new card.
    the Solar panels step, to every
    contract whose energy is indexed on the delivery month's mean and whose
    card prints last month's figure, on any solar regime — Aspiravi Eco Plus
-   Flex, Cociter Variable and Trihoraire, Ecopower Groene Burgerstroom, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex,
+   Flex, Cociter Variable and Trihoraire, Ecopower Groene Burgerstroom,
+   Elegant Flex and ComfortFlex, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex,
    OCTA+ Smart Variable, Boost Flex, Eco Boost Flex, Basic Online and the
    withdrawn Flux and Eco Flux, Eneco Flex and Flex One, EBEM
    Groen Variabel and B@sic+, the withdrawn DATS 24 Groen Variabel, TotalEnergies Electricité Variable, Impact,
@@ -742,11 +744,11 @@ It is optional everywhere else, but two features use it when present: an
 injection tariff that is itself index-linked — the hourly-spot shape
 (Cociter Variable and Variable Trihoraire, every Bolt fixed and variable
 card) and the monthly-mean shape (energie.be Vast on Belpex_SPP, and most
-other static cards), 75 contracts across 16 suppliers between them, and the
+other static cards), 78 contracts across 17 suppliers between them, and the
 re-price of a month-indexed contract on the delivery month's own mean, cohort
 or not, for which the flow offers the key on every solar regime (Aspiravi
 Eco Plus Flex, Cociter Variable and Trihoraire, Ecopower Groene Burgerstroom,
-Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Variable, Boost Flex, Eco Boost
+Elegant Flex and ComfortFlex, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Variable, Boost Flex, Eco Boost
 Flex, Basic Online and the withdrawn Flux and Eco Flux, Eneco Flex and Flex
 One, EBEM Groen Variabel and B@sic+, the withdrawn DATS 24 Groen Variabel,
 TotalEnergies Electricité Variable, Impact, myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
@@ -903,7 +905,7 @@ opens a menu of four options, five once a supplier switch has been recorded this
   with the table saying when it ran and a box to price it again on the spot.
   Off by default because it fetches tariff cards from suppliers you have no
   relationship with, which is a decision to take rather than one an update
-  makes for you. It is cheap once running: fourteen of the seventeen suppliers
+  makes for you. It is cheap once running: fifteen of the eighteen suppliers
   publish a freshness check, including the two slowest cards, so a day on which
   nothing was republished costs a handful of conditional requests rather than
   the minutes of fetching a cold sweep costs, and tariff cards move about
@@ -1685,8 +1687,8 @@ the supplier's published `exclusive_night` rate. Configure it as a
 
 Energy is billed at the supplier's `exclusive_night` rate; distribution
 uses the DSO's published exclusive-night rate when the supplier's card
-prints it (Aspiravi, Bolt, Cociter, DATS 24, EBEM, Ecofix, Ecopower, Eneco,
-energie.be, Energy Knights, EnergyVision, Engie, Frank, Luminus, Mega,
+prints it (Aspiravi, Bolt, Cociter, DATS 24, EBEM, Ecofix, Ecopower, Elegant,
+Eneco, energie.be, Energy Knights, EnergyVision, Engie, Frank, Luminus, Mega,
 OCTA+, the social tariff, Trevion, and TotalEnergies in Wallonia and Brussels), falling back to the
 DSO's off-peak rate where it does not, and finally to the single day rate
 on a card that publishes neither. TotalEnergies' Flemish cards are that

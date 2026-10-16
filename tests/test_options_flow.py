@@ -6986,12 +6986,14 @@ def test_sweep_candidate_counts_per_cell() -> None:
     expected = {
         # Trevion adds one fixed card and five dynamic/monthly-indexed cards,
         # all residential and Flanders-only. Aspiravi Eco Plus Flex adds one
-        # more, a month-indexed variable card that reads in about 1,3 s.
+        # more, a month-indexed variable card that reads in about 1,3 s, and
+        # Elegant three, two month-indexed variable cards and a fixed one
+        # that read in about 1,6 s each.
         # Eneco Zon & Wind Fix One adds one fixed card in each of Flanders
         # and Wallonia, read in the same listing fetch as Vast, and OCTA+'s
         # October 2026 range adds five in each region, at the 2,2 s an OCTA+
         # card already costs, and takes out the four it replaced.
-        ("flanders", "static", False): 57,
+        ("flanders", "static", False): 60,
         ("flanders", "static", True): 21,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land

@@ -29,6 +29,7 @@ from custom_components.be_electricity_prices.providers import (
     dats24,
     ebem,
     ecopower,
+    elegant,
     eneco,
     engie,
     luminus,
@@ -86,6 +87,21 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
         "aspiravi_eco_plus_flex",
         lambda: aspiravi.parse_snapshot(
             "aspiravi_eco_plus_flex", fixture_text("aspiravi_eco_plus_flex_2026-09.pdf")
+        ),
+    ),
+    (
+        "elegant",
+        "elegant_flex",
+        lambda: elegant.parse_snapshot(
+            "elegant_flex", fixture_text("elegant_flex_2026-10.pdf", layout=True)
+        ),
+    ),
+    (
+        "elegant",
+        "elegant_zeker_vast",
+        lambda: elegant.parse_snapshot(
+            "elegant_zeker_vast",
+            fixture_text("elegant_zeker_vast_2026-10.pdf", layout=True),
         ),
     ),
     (
@@ -403,7 +419,7 @@ def test_registry_flag_matches_what_the_card_parses(
 
 def test_every_supplier_that_flags_a_card_is_in_the_case_list() -> None:
     """The case list above is hand written, so what it does NOT cover is
-    invisible: 35 contracts carry the flag and the list pins eighteen of them.
+    invisible: about half the contracts carrying the flag are pinned here.
 
     Per-contract coverage is not on offer offline, because a fixture is a card
     somebody saved. What is on offer is per SUPPLIER, and that is where this

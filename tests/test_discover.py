@@ -47,6 +47,7 @@ from custom_components.be_electricity_prices.providers import cociter as cociter
 from custom_components.be_electricity_prices.providers import ebem as ebem_mod
 from custom_components.be_electricity_prices.providers import ecofix as ecofix_mod
 from custom_components.be_electricity_prices.providers import ecopower as ecopower_mod
+from custom_components.be_electricity_prices.providers import elegant as elegant_mod
 from custom_components.be_electricity_prices.providers import eneco as eneco_mod
 from custom_components.be_electricity_prices.providers import (
     energyknights as energyknights_mod,
@@ -610,9 +611,10 @@ def test_discover_returns_empty_on_http_error() -> None:
     assert _run(ebem_mod.discover(session)) == set()
     # Frank queries the Sanity CMS; a 5xx raises ExtractorError -> set().
     assert _run(frank_mod.discover(session)) == set()
-    # Energy Knights and EnergyVision both scrape a listing page.
+    # Energy Knights, EnergyVision and Elegant scrape a listing page.
     assert _run(energyknights_mod.discover(session)) == set()
     assert _run(energyvision_mod.discover(session)) == set()
+    assert _run(elegant_mod.discover(session)) == set()
 
 
 def test_readme_counts_the_spot_indexed_injection_contracts_correctly() -> None:

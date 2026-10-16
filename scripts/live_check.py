@@ -100,6 +100,7 @@ _SUPPLIERS: tuple[str, ...] = (
     "energyknights",
     "aspiravi",
     "social",
+    "elegant",
 )
 
 
@@ -686,6 +687,7 @@ _STATES_VAT = frozenset(
         "ebem",
         "ecofix",
         "ecopower",
+        "elegant",
         "eneco",
         "energyknights",
         "energyvision",
@@ -1529,6 +1531,12 @@ async def _check_aspiravi(
     await _check_flanders_supplier(session, aspiravi, "aspiravi")
 
 
+async def _check_elegant(
+    session: aiohttp.ClientSession, elegant: types.ModuleType
+) -> None:
+    await _check_flanders_supplier(session, elegant, "elegant")
+
+
 async def _check_social(
     session: aiohttp.ClientSession, social: types.ModuleType
 ) -> None:
@@ -2346,6 +2354,7 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
     "energyvision": lambda m: set(m.DISCOVER_IDS),
     "energyknights": lambda m: set(m.DISCOVER_IDS),
     "aspiravi": lambda m: {c.id for c in m.EXTRACTOR.contracts},
+    "elegant": lambda m: {c.contract_id for c in m._CONTRACTS},
     "trevion": lambda m: {c.id for c in m._CONTRACTS},
 }
 
@@ -4074,6 +4083,12 @@ _INJECTION_SHAPE: dict[str, str] = {
     # and losing the flag resolves the credit against the wrong monthly mean.
     "energyknights_essentia": "spp",
     "energyknights_essentia_green": "spp",
+    # Elegant indexes the credit of all three cards on EPEXDAMSPP, the
+    # delivery month's SPP-weighted mean, and prints last month's figure;
+    # the fixed Zeker & Vast fixes its energy alone.
+    "elegant_flex": "spp",
+    "elegant_comfortflex": "spp",
+    "elegant_zeker_vast": "spp",
     # Every non-dynamic OCTA+ card prints "Le prix de votre injection est
     # indexe mensuellement sur base du parametre d'indexation de la Epex SPP"
     # and puts its c/kWh figure under a "Prix estimes" heading. The formula is
@@ -5250,6 +5265,7 @@ _CHECKS_BY_SUPPLIER: dict[
     "energyknights": _check_energyknights,
     "aspiravi": _check_aspiravi,
     "social": _check_social,
+    "elegant": _check_elegant,
 }
 assert set(_CHECKS_BY_SUPPLIER) == set(_SUPPLIERS), (
     "live check supplier list and check registry disagree: "

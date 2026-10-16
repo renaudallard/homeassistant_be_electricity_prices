@@ -66,6 +66,7 @@ machinery.
 | `tests/test_ebem.py` | EBEM extractor |
 | `tests/test_ecofix.py` | Ecofix extractor |
 | `tests/test_ecopower.py` | Ecopower extractor |
+| `tests/test_elegant.py` | Elegant extractor |
 | `tests/test_eneco.py` | Eneco extractor |
 | `tests/test_energiebe.py` | energie.be extractor |
 | `tests/test_energyknights.py` | Energy Knights extractor |
@@ -313,7 +314,8 @@ main()                       scripts/live_check.py  asyncio.run(_run()); rc=8 on
       _check_bolt                                         engie, luminus, mega, totalenergies,
       ...                                                 bolt, octaplus, frank, energiebe,
                                                           energyvision, energyknights,
-                                                          trevion, aspiravi, social)
+                                                          trevion, aspiravi, social,
+                                                          elegant)
     _check_catalogs(...)     scripts/live_check.py   run each discover(), flag new and vanished product ids
     _check_card_freshness()  scripts/live_check.py   resolved card == newest advertised
     _fetch_with_retry(...)   scripts/live_check.py   transient-only retry with backoff

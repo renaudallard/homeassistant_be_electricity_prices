@@ -54,6 +54,7 @@ changes, look here" reference tied to the provider's tests and fixtures.
 | EBEM | [providers/ebem.md](providers/ebem.md) |
 | Ecofix | [providers/ecofix.md](providers/ecofix.md) |
 | Ecopower | [providers/ecopower.md](providers/ecopower.md) |
+| Elegant | [providers/elegant.md](providers/elegant.md) |
 | Eneco | [providers/eneco.md](providers/eneco.md) |
 | energie.be | [providers/energiebe.md](providers/energiebe.md) |
 | Energy Knights | [providers/energyknights.md](providers/energyknights.md) |

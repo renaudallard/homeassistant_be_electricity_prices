@@ -860,6 +860,19 @@ def test_the_aspiravi_catalog_baseline_is_its_registered_contracts() -> None:
     assert set(aspiravi._PRODUCT_CODES.values()) <= baseline
 
 
+async def test_the_elegant_catalog_baseline_is_what_its_listing_shows() -> None:
+    """The baseline and discover() are two readings of one registry; held
+    against the saved listing, a product one of them drops is caught here
+    rather than filed as new or gone every night."""
+    from custom_components.be_electricity_prices.providers import elegant
+    from tests import FIXTURES, make_text_session
+
+    baseline = lc._CATALOG_BASELINES["elegant"](elegant)  # type: ignore[arg-type]
+    html = (FIXTURES / "discover" / "elegant.html").read_text(encoding="utf-8")
+    assert await elegant.discover(make_text_session(html)) == baseline
+    assert baseline == {c.id for c in elegant.EXTRACTOR.contracts}
+
+
 def test_every_supplier_that_discovers_has_a_catalog_baseline() -> None:
     """A discover() with no baseline reports every product found as new, so a
     supplier added with one and no baseline files an issue for its own
