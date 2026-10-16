@@ -407,6 +407,9 @@ Band-ordering gotcha: the triplet's order is read from the column headings
 2026 print **ECO | MEDIUM | PIC**, the October 2026 cards turned it round to
 **PIC | MEDIUM | ECO** with the same figures, and a positional read billed every
 ECO hour at the PIC rate. Headings that do not name all three bands raise.
+pypdf 6.20 runs the headings and their hours together with no space
+("Tarif ImpactHeures PIC17h-22h Heures MEDIUM07h-11h22h-01h ..."), so neither
+"Impact" nor a band name is read with a word boundary after it.
 Illustrative
 (`test_comfy_wallonia_fixed_rates_and_dso`): AIEG mono `0.1087`, pleines
 `0.1205`, creuses `0.0666`, transport `0.0274`, prosumer `81.03`.

@@ -131,6 +131,26 @@ def test_dynamic_wallonia_impact_bands_follow_the_headings(
         assert ores.distribution_pic == pytest.approx(pic)
 
 
+def test_dynamic_wallonia_impact_headings_run_together_read_the_same() -> None:
+    """pypdf 6.20 runs the headings and their hours into one line with no
+    space between them, which a word boundary after "Impact" or a band name
+    refused. The fixture is read in whichever form the installed pypdf
+    prints, then put in each."""
+    split = (
+        "Tarif Impact\nHeures PIC\n17h-22h\nHeures MEDIUM\n07h-11h\n22h-01h\n"
+        "Heures ECO\n01h-07h\n11h-17h\nExclusif nuit"
+    )
+    joined = (
+        "Tarif ImpactHeures PIC17h-22h Heures MEDIUM07h-11h22h-01h "
+        "Heures ECO01h-07h11h-17h Exclusif nuit"
+    )
+    text = fixture_text("luminus_dynamic_w_oct.pdf").replace(joined, split)
+    assert text.count(split) == 1
+    want = parse_snapshot("luminus_dynamic", text, "wallonia")
+    got = parse_snapshot("luminus_dynamic", text.replace(split, joined), "wallonia")
+    assert got.dsos == want.dsos
+
+
 def test_dynamic_wallonia_without_impact_headings_fails_loud() -> None:
     text = fixture_text("luminus_dynamic_w_oct.pdf").replace("Heures MEDIUM", "")
     with pytest.raises(ExtractorError, match="Impact column headings"):

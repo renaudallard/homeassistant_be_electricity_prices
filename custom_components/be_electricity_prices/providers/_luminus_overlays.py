@@ -329,16 +329,19 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     return out
 
 
-_IMPACT_HEADINGS_RE = re.compile(r"Tarif\s+Impact\b([\s\S]{0,200}?)Exclusif\s+nuit")
-_IMPACT_BAND_RE = re.compile(r"Heures\s+(ECO|MEDIUM|PIC)\b")
+# No word boundary after "Impact" or a band name: pypdf 6.20 joins the
+# headings and their hours with no space between them ("Tarif ImpactHeures
+# PIC17h-22h Heures MEDIUM07h-11h22h-01h").
+_IMPACT_HEADINGS_RE = re.compile(r"Tarif\s+Impact([\s\S]{0,200}?)Exclusif\s+nuit")
+_IMPACT_BAND_RE = re.compile(r"Heures\s+(ECO|MEDIUM|PIC)(?![A-Za-z])")
 
 
 def _impact_order(text: str) -> tuple[str, ...]:
     """Return the Impact bands in the order the card prints their columns.
 
-    Each heading may be followed by its hours on lines of their own
-    ("Heures PIC / 17h-22h / Heures MEDIUM / ..."), so only the band
-    names between "Tarif Impact" and the next column heading count.
+    Each heading may be followed by its hours, on lines of their own or
+    run into it ("Heures PIC / 17h-22h / Heures MEDIUM / ..."), so only the
+    band names between "Tarif Impact" and the next column heading count.
     """
     head = _IMPACT_HEADINGS_RE.search(text)
     order = (
