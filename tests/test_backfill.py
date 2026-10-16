@@ -3711,6 +3711,51 @@ async def test_a_signing_month_read_that_failed_leaves_the_whole_contract_out(
     assert "2026-03" in spans[0][2]
 
 
+async def test_a_short_signing_card_is_read_without_its_year(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The signing month's card is read for its energy and credit, which bill
+    no network. Read through the billing path, a signing card short of the
+    household's area searched the rest of its year for it: eleven more
+    archive reads and as many supplier lookups, again after every restart,
+    since another year's cards are not kept on disk."""
+    freezer.move_to("2026-08-02 12:00:00+02:00")
+    entry = make_entry(contract_start_date="2025-12-10")
+    full = _fixed_snapshot()
+    short = dataclasses.replace(full, dsos={"resa": full.dsos["ores"]})
+    archive_asked: list[date] = []
+    supplier_asked: list[date] = []
+
+    async def archive(*args: Any) -> ArchivedCard | None:
+        month = args[4]
+        archive_asked.append(month)
+        if month.year == 2025:
+            if month != date(2025, 12, 1):
+                return None
+            return ArchivedCard(snapshot=short, read_by_ocr=False)
+        return ArchivedCard(snapshot=full, read_by_ocr=False)
+
+    async def supplier_archive(*args: Any) -> None:
+        supplier_asked.append(args[3])
+
+    eneco = dataclasses.replace(EXTRACTORS["eneco"], fetch_for_month=supplier_archive)
+    with (
+        patch.object(backfill_window, "get_extractor", lambda _id: eneco),
+        patch.object(snapshot_months, "_archived_card_from_github", new=archive),
+    ):
+        spans = await backfill_window._months_not_read(
+            hass,
+            None,  # type: ignore[arg-type]
+            entry,
+            full,
+            date(2026, 6, 1),
+            date(2026, 7, 31),
+        )
+    assert spans == []
+    assert archive_asked == [date(2025, 12, 1), date(2026, 6, 1), date(2026, 7, 1)]
+    assert supplier_asked == []
+
+
 async def test_a_month_short_of_its_area_waits_for_a_nearer_card_that_failed(
     hass: HomeAssistant, freezer: Any
 ) -> None:

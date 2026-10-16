@@ -517,7 +517,8 @@ backfill counts a failed read there as the month's own and runs again for it.
 Each lookup goes through the same month cache, so the walk fetches no month twice.
 Only the callers billing a month ask for this (`nearest_area`, `month_card`): a
 cohort reads its signing month's card for the energy and a credit, which bill no
-network, and does not look around it.
+network, and does not look around it, nor does the backfill when it checks that
+card could be read (`_months_not_read`, `backfill_window.py`).
 For each hour, the code converts the UTC hour to local time, picks that month's
 snapshot, looks up the hour's spot (or `None`), and calls
 `compute_breakdown(snap, dso, region, local, spot, meter, dso_mode)`

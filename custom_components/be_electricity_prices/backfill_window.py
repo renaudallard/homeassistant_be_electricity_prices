@@ -82,7 +82,7 @@ from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
 from .providers._rates import InjectionRates
 from .providers.base import SupplierSnapshot
-from .snapshot_months import _snapshot_for_month, month_card_failed
+from .snapshot_months import _snapshot_for_month, month_card, month_card_failed
 from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
 from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
 from .synergrid import RlpWeights, SppWeights
@@ -611,16 +611,20 @@ async def _months_not_read(
         return month_card_failed(hass, extractor.id, contract, region, month)
 
     signing = _tariff_card_month(entry)
-    if signing is not None and signing < this_month and await failed(signing):
-        return [
-            (
-                first,
-                last,
-                f"the {extractor.id} card of {signing:%Y-%m}, the month the"
-                " contract was signed, could not be read",
-                True,
-            )
-        ]
+    if signing is not None and signing < this_month:
+        # Read as _cohort_legs reads it, for its energy and credit: a network
+        # area it lacks bills nothing, and looking for it fetched its year.
+        await month_card(hass, session, extractor, contract, region, signing, entry)
+        if month_card_failed(hass, extractor.id, contract, region, signing):
+            return [
+                (
+                    first,
+                    last,
+                    f"the {extractor.id} card of {signing:%Y-%m}, the month the"
+                    " contract was signed, could not be read",
+                    True,
+                )
+            ]
     dso = str(entry.data.get(CONF_DSO, ""))
     spans: list[tuple[date, date, str, bool]] = []
     month = first.replace(day=1)
