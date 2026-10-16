@@ -77,29 +77,25 @@ echo "gating $SHA in $WORKTREE"
 
 # The local checks run on whatever the venv holds, and a pin moved in
 # requirements-dev.txt without the venv following passed here on versions
-# CI no longer runs. Each pin of the commit gated must be what is installed.
-stale=$("$PYTHON" - "$WORKTREE/requirements-dev.txt" <<'EOF'
-import sys
-from importlib.metadata import PackageNotFoundError, version
-
-with open(sys.argv[1], encoding="utf-8") as pins:
-    for line in pins:
-        pin = line.split("#", 1)[0].strip()
-        if "==" not in pin:
-            continue
-        name, want = (part.strip() for part in pin.split("==", 1))
-        try:
-            have = version(name)
-        except PackageNotFoundError:
-            have = "not installed"
-        if have != want:
-            print(f"   {name} {have}, pinned {want}")
-EOF
-) || exit 1
+# CI no longer runs. pip reads the file, as it does in CI, in a dry run
+# that may look nothing up: it fails on a requirement the venv does not
+# meet, and its report lists anything it would still install. A copy of
+# pip's reading of the file kept missing cases pip itself handles.
+stale=""
+if "$PYTHON" -m pip install --dry-run --no-index --quiet \
+  --report "$LOGS/pins.json" -r "$WORKTREE/requirements-dev.txt" \
+  > "$LOGS/pins.log" 2>&1; then
+  stale=$("$PYTHON" -c 'import json, sys
+for item in json.load(open(sys.argv[1]))["install"]:
+    print("would install", item["metadata"]["name"], item["metadata"]["version"])' \
+    "$LOGS/pins.json" 2>&1) || stale="pip's report could not be read: $stale"
+else
+  stale=$(cat "$LOGS/pins.log")
+  [ -n "$stale" ] || stale="pip failed and said nothing"
+fi
 if [ -n "$stale" ]; then
-  echo "the venv at $ROOT/.venv does not match requirements-dev.txt:"
-  echo "$stale"
-  echo "   $PYTHON -m pip install -r requirements-dev.txt"
+  echo "the venv at $ROOT/.venv does not hold what requirements-dev.txt asks for:"
+  echo "$stale" | sed 's/^/   /'
   exit 1
 fi
 

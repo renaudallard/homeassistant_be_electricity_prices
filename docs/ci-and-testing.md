@@ -1741,9 +1741,12 @@ disagreed. Editing while it runs now cannot reach it, and what it verifies is wh
 publish. The consequence is that uncommitted work is NOT tested: commit first, then gate. The
 interpreter, `tmp/actionlint` and the installed plugins come from the real tree, since the
 worktree holds tracked files only; without the actionlint binary that one check is skipped and
-says so. The gate refuses to start when a package `requirements-dev.txt` pins is installed at
-another version in `.venv`, naming each one: a pin moved without the venv following would
-otherwise pass here on versions CI no longer runs.
+says so. The gate refuses to start unless pip, reading `requirements-dev.txt` in a dry run that
+may look nothing up (`pip install --dry-run --no-index`), finds every requirement met by `.venv`
+and nothing to install, and prints what pip found when it does not. A pin moved without the
+venv following would otherwise pass here on versions CI no longer runs. pip reads the file
+itself because a copy of its reading kept missing cases it handles, a comment running on into
+the next line or a line separator other than a newline among them.
 
 Every check starts at once. pytest spreads over all the cores and the others take one each, so
 run one after the other they left three of a Pi's four cores idle for about four minutes; each

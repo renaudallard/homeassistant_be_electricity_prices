@@ -1722,13 +1722,13 @@ python scripts/archive_cards.py --out tmp/archive   # stores today's cards there
 once (not the live check or the archive walk, so it contacts no supplier),
 plus actionlint when
 `tmp/actionlint` exists, against a throwaway worktree of HEAD, so commit
-first. It refuses to start when `.venv` holds another version of a package
-`requirements-dev.txt` pins. When `GATE_REMOTE` names a host that answers
-over ssh (it needs a venv at `~/be_gate/.venv`), pytest runs there on the
-same snapshot while the rest runs locally: about 6 minutes with an
-eight-thread Mac, against 13 on a Raspberry Pi alone. Unset, everything runs
-locally. Pass a test file (`scripts/gate.sh tests/test_ebem.py`) for a quick
-pass.
+first. It refuses to start unless pip, reading `requirements-dev.txt` in a
+dry run that looks nothing up, finds nothing to install in `.venv`, and
+prints what pip found. When `GATE_REMOTE` names a host that answers over ssh
+(it needs a venv at `~/be_gate/.venv`), pytest runs there on the same
+snapshot while the rest runs locally: about 6 minutes with an eight-thread
+Mac, against 13 on a Raspberry Pi alone. Unset, everything runs locally.
+Pass a test file (`scripts/gate.sh tests/test_ebem.py`) for a quick pass.
 
 Tests run against fixture PDFs and HTML snippets in
 [`tests/fixtures/`](./tests/fixtures/) (real supplier cards from June 2025 on,
