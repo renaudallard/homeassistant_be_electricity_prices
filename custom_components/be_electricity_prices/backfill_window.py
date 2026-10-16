@@ -590,8 +590,9 @@ async def _months_not_read(
     last: date,
 ) -> list[tuple[date, date, str, bool]]:
     """The closed months in ``[first, last]`` whose own card could not be read
-    just now (``month_card_failed``), for one contract, as
-    ``_stand_in_spans`` lists them.
+    just now (``month_card_failed``), or whose card lacks the entry's network
+    area while a nearer card of its year could not be (``_with_nearest_area``),
+    for one contract, as ``_stand_in_spans`` lists them.
 
     All of them when the contract's signing month is one: its card is what
     every month's energy is re-priced from (``_cohort_legs``) and the welcome
@@ -620,16 +621,25 @@ async def _months_not_read(
                 True,
             )
         ]
+    dso = str(entry.data.get(CONF_DSO, ""))
     spans: list[tuple[date, date, str, bool]] = []
     month = first.replace(day=1)
     while month <= last and month < this_month:
         following = (month + timedelta(days=31)).replace(day=1)
+        why = None
         if await failed(month):
+            why = f"the {extractor.id} card of {month:%Y-%m} could not be read"
+        elif month_card_failed(hass, extractor.id, contract, region, month, dso):
+            why = (
+                f"the {extractor.id} card of {month:%Y-%m} has no row for {dso},"
+                f" and a card of {month.year} nearer to it could not be read"
+            )
+        if why is not None:
             spans.append(
                 (
                     max(first, month),
                     min(last, following - timedelta(days=1)),
-                    f"the {extractor.id} card of {month:%Y-%m} could not be read",
+                    why,
                     True,
                 )
             )

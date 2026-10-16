@@ -45,6 +45,7 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime
+from functools import partial
 from typing import Any
 
 import aiohttp
@@ -69,7 +70,7 @@ from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
 )
-from .snapshot_areas import _with_nearest_area
+from .snapshot_areas import _search_end, _with_nearest_area
 from .snapshot_codec import (
     _DEGRADED_MIN_SCHEMA_VERSION,
     _SNAPSHOT_SCHEMA_VERSION,
@@ -81,6 +82,8 @@ from .snapshot_store import (
     _MONTHLY_FAILURE_TTL,
     _MONTHLY_PROVISIONAL_TTL,
     _month_generation,
+    _month_held,
+    _month_key,
     _month_row_is_provisional,
     _monthly_archive_skipped,
     _monthly_failed_fetches,
@@ -595,10 +598,17 @@ def _month_card_retrievable(
 
 
 def month_card_failed(
-    hass: HomeAssistant, supplier: str, contract: str, region: str, year_month: date
+    hass: HomeAssistant,
+    supplier: str,
+    contract: str,
+    region: str,
+    year_month: date,
+    dso: str = "",
 ) -> bool:
     """Whether ``_snapshot_for_month`` last handed back the current card for
-    this month because reading the month's own card failed.
+    this month because reading the month's own card failed, or, given the
+    entry's network area ``dso``, a card short of it because reading a
+    nearer card of its year failed (``_with_nearest_area``).
 
     It hands back the very same object when no archive holds the month, which
     is a fact about the month, and while a failed read waits out its marker,
@@ -606,13 +616,29 @@ def month_card_failed(
     walk heals on its own next tick; a caller that keeps what it priced (the
     backfill) must tell the two apart, and only the caches can. A cached row,
     a card or ``None``, is an answer; a fresh failure marker with no row is a
-    failed read.
+    failed read. The short card is the same: the backfill stored the month
+    without its network for good, where it now waits for that read.
     """
     key = _month_key(supplier, contract, region, year_month)
-    if key in _monthly_snapshots(hass):
+    cache = _monthly_snapshots(hass)
+    if key not in cache:
+        failed_at = _monthly_failed_fetches(hass).get(key)
+        return (
+            failed_at is not None
+            and dt_util.utcnow() - failed_at < _MONTHLY_FAILURE_TTL
+        )
+    card = cache[key]
+    if not dso or card is None or dso in card.dsos:
         return False
-    failed_at = _monthly_failed_fetches(hass).get(key)
-    return failed_at is not None and dt_util.utcnow() - failed_at < _MONTHLY_FAILURE_TTL
+    stopped = _search_end(
+        dso,
+        year_month,
+        dt_util.now().date().replace(day=1),
+        partial(_month_held, hass, supplier, contract, region),
+    )
+    return stopped is not None and month_card_failed(
+        hass, supplier, contract, region, stopped
+    )
 
 
 def month_card_cached(
@@ -624,13 +650,6 @@ def month_card_cached(
     return _month_key(supplier, contract, region, year_month) in _monthly_snapshots(
         hass
     )
-
-
-def _month_key(
-    supplier: str, contract: str, region: str, year_month: date
-) -> tuple[str, str, str, str]:
-    """The month cache's key for one contract's card."""
-    return (supplier, contract, region, f"{year_month.year:04d}-{year_month.month:02d}")
 
 
 async def _snapshot_for_month(
@@ -789,9 +808,7 @@ async def month_card(
             str(entry.data.get(CONF_DSO, "")),
             year_month,
             row,
-            lambda month: month_card_cached(
-                hass, extractor.id, contract, region, month
-            ),
+            partial(_month_held, hass, extractor.id, contract, region),
         )
     return _resolve_snapshot(entry, snap, delivery_month=year_month)
 

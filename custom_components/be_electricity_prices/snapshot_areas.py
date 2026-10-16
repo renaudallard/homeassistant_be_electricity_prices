@@ -60,12 +60,37 @@ def _nearest_months(year_month: date, last: date) -> list[date]:
     return [month for month in months if month <= last]
 
 
+# Whether the month cache holds a row for a month, and the row: None both for
+# a month it does not hold and for one held as having no card.
+type _Held = tuple[bool, SupplierSnapshot | None]
+
+
+def _ends_search(dso: str, held: _Held) -> bool:
+    """Whether the search for ``dso`` stops on a month: one not held once
+    asked, or one whose card prints the area."""
+    known, row = held
+    return not known or (row is not None and dso in row.dsos)
+
+
+def _search_end(
+    dso: str, year_month: date, last: date, held: Callable[[date], _Held]
+) -> date | None:
+    """The month the search for ``dso`` stopped on, over what the month cache
+    holds once ``_with_nearest_area`` has run, or None where it found no card
+    of the year printing the area. ``month_card_failed`` reads it to tell a
+    search that stopped on a failed read."""
+    return next(
+        (m for m in _nearest_months(year_month, last) if _ends_search(dso, held(m))),
+        None,
+    )
+
+
 async def _with_nearest_area(
     card: SupplierSnapshot,
     dso: str,
     year_month: date,
     row: Callable[[date], Awaitable[SupplierSnapshot | None]],
-    held: Callable[[date], bool],
+    held: Callable[[date], _Held],
 ) -> SupplierSnapshot:
     """``card`` with the network figures of ``dso`` taken from the nearest
     month's card that prints them, where its own table lacks the area.
@@ -77,26 +102,31 @@ async def _with_nearest_area(
     same calendar year, and where no card of that year prints the area the
     month is still dropped.
 
-    The months are asked in a fixed order (``_nearest_months``). One whose
-    row is not held once asked, a failed read or a month ``cached_only`` may
-    not fetch, ends the search with the card as it is: a farther card taken
-    there would bill the month differently once the nearer one is read, so
-    the month is dropped as before until a walk can read it.
+    The months are asked in a fixed order (``_nearest_months``), each
+    through the month cache, which decides what it asks again. One whose row
+    is not held once asked, a failed read or a month ``cached_only`` may not
+    fetch, ends the search with the card as it is: a farther card taken there
+    would bill the month differently once the nearer one is read, so the
+    month is dropped as before until a walk can read it, and
+    ``month_card_failed`` reports the failed read as the month's own.
     """
     if not dso or dso in card.dsos:
         return card
     for month in _nearest_months(year_month, dt_util.now().date().replace(day=1)):
-        other = await row(month)
-        if not held(month):
+        await row(month)
+        ended = held(month)
+        if not _ends_search(dso, ended):
+            continue
+        other = ended[1]
+        if other is None:
             return card
-        if other is not None and dso in other.dsos:
-            _LOGGER.debug(
-                "the %s/%s card for %s has no row for %s; billed on %s's",
-                card.supplier,
-                card.contract,
-                year_month,
-                dso,
-                month,
-            )
-            return replace(card, dsos={**card.dsos, dso: other.dsos[dso]})
+        _LOGGER.debug(
+            "the %s/%s card for %s has no row for %s; billed on %s's",
+            card.supplier,
+            card.contract,
+            year_month,
+            dso,
+            month,
+        )
+        return replace(card, dsos={**card.dsos, dso: other.dsos[dso]})
     return card

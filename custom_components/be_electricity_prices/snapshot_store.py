@@ -578,8 +578,26 @@ def cached_month_card(
 ) -> SupplierSnapshot | None:
     """The archived card the cache holds for that month, without fetching;
     None when the month was never resolved or resolved to nothing."""
-    key = (supplier, contract, region, f"{year_month:%Y-%m}")
-    return _monthly_snapshots(hass).get(key)
+    return _monthly_snapshots(hass).get(
+        _month_key(supplier, contract, region, year_month)
+    )
+
+
+def _month_held(
+    hass: HomeAssistant, supplier: str, contract: str, region: str, year_month: date
+) -> tuple[bool, SupplierSnapshot | None]:
+    """Whether the month cache holds an answer for this month, and the
+    answer: what ``_with_nearest_area`` reads around a short card."""
+    key = _month_key(supplier, contract, region, year_month)
+    cache = _monthly_snapshots(hass)
+    return key in cache, cache.get(key)
+
+
+def _month_key(
+    supplier: str, contract: str, region: str, year_month: date
+) -> tuple[str, str, str, str]:
+    """The month cache's key for one contract's card."""
+    return (supplier, contract, region, f"{year_month.year:04d}-{year_month.month:02d}")
 
 
 def _monthly_fetched_at(

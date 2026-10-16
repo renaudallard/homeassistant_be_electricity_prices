@@ -3711,6 +3711,48 @@ async def test_a_signing_month_read_that_failed_leaves_the_whole_contract_out(
     assert "2026-03" in spans[0][2]
 
 
+async def test_a_month_short_of_its_area_waits_for_a_nearer_card_that_failed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """June's card lacks the household's network area and May's, the nearest
+    card of the year, could not be read just now: June stays out of the
+    bill rather than take July's area, and the backfill stored it that way
+    for good. It is a failed read like the month's own, so the run leaves
+    June out and comes back for it."""
+    freezer.move_to("2026-08-02 12:00:00+02:00")
+    entry = make_entry()
+    full = _fixed_snapshot()
+    short = dataclasses.replace(full, dsos={})
+
+    async def archive(*args: Any) -> ArchivedCard:
+        month = args[4]
+        if month == date(2026, 5, 1):
+            raise ExtractorError("HTTP 503 from raw.githubusercontent.com")
+        card = short if month == date(2026, 6, 1) else full
+        return ArchivedCard(snapshot=card, read_by_ocr=False)
+
+    async def supplier_archive(*_a: Any) -> None:
+        return None
+
+    eneco = dataclasses.replace(EXTRACTORS["eneco"], fetch_for_month=supplier_archive)
+    with (
+        patch.object(backfill_window, "get_extractor", lambda _id: eneco),
+        patch.object(snapshot_months, "_archived_card_from_github", new=archive),
+    ):
+        spans = await backfill_window._months_not_read(
+            hass,
+            None,  # type: ignore[arg-type]
+            entry,
+            full,
+            date(2026, 6, 1),
+            date(2026, 7, 31),
+        )
+    assert [(first, last, failed) for first, last, _why, failed in spans] == [
+        (date(2026, 6, 1), date(2026, 6, 30), True)
+    ]
+    assert "has no row for ores" in spans[0][2]
+
+
 # The day the register pair tests are frozen on, whose reading has not
 # arrived yet.
 _PAIR_TODAY = date(2026, 4, 30)

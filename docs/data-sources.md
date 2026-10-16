@@ -507,7 +507,8 @@ tariffs change on 1 January, and Wallonia's of 2026 are not even shaped like tho
 of 2025, so where no card of the year prints the area the month is still dropped.
 The order is fixed, and a nearer month not read yet (a failed read, or one the
 first tick's `cached_only` may not fetch) ends the search with the card short, so
-the month is left out until it is read rather than billed on a farther card.
+the month is left out until it is read rather than billed on a farther card; the
+backfill counts a failed read there as the month's own and runs again for it.
 Each lookup goes through the same month cache, so the walk fetches no month twice.
 Only the callers billing a month ask for this (`nearest_area`, `month_card`): a
 cohort reads its signing month's card for the energy and a credit, which bill no
@@ -597,9 +598,13 @@ cost. Two rules enforce this:
   (`backfill_window.py`) names, before either pass runs, the days no card of
   their own can be had for: an earlier contract whose supplier's cards cannot
   be read, a closed month whose card read failed and is waiting out its
-  marker, and every month of a contract whose signing month is one
-  (`month_card_failed`, `snapshot_months.py`, which tells a failed read from a
-  month no archive holds, since `month_card` answers None for both). An
+  marker, a closed month whose card lacks the entry's network area while a
+  nearer card of its year failed to read, so the search for it
+  (`_with_nearest_area`, `snapshot_areas.py`) stopped there, and every month of
+  a contract whose signing month is one (`month_card_failed`,
+  `snapshot_months.py`, which tells a failed read from a month no archive
+  holds, since `month_card` answers None for both, and given the area tells a
+  search stopped on a failed read from one that found no card of the year). An
   earlier contract no archive kept is priced on the stand-in the live walk
   uses, imported at once so the anchor probe finds its
   row on the next restart; the response lists it under `stand_in` and a
