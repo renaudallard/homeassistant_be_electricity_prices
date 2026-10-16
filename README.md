@@ -1724,7 +1724,7 @@ plus actionlint when
 `tmp/actionlint` exists, against a throwaway worktree of HEAD, so commit
 first. It refuses to start unless pip, reading `requirements-dev.txt` in a
 dry run that looks nothing up, finds nothing to install in `.venv`, and
-prints what pip found. When `GATE_REMOTE` names a host that answers over ssh
+prints what pip found; a URL or editable line there would still be fetched. When `GATE_REMOTE` names a host that answers over ssh
 (it needs a venv at `~/be_gate/.venv`), pytest runs there on the same
 snapshot while the rest runs locally: about 6 minutes with an eight-thread
 Mac, against 13 on a Raspberry Pi alone. Unset, everything runs locally.

@@ -80,11 +80,17 @@ echo "gating $SHA in $WORKTREE"
 # CI no longer runs. pip reads the file, as it does in CI, in a dry run
 # that may look nothing up: it fails on a requirement the venv does not
 # meet, and its report lists anything it would still install. A copy of
-# pip's reading of the file kept missing cases pip itself handles.
+# pip's reading of the file kept missing cases pip itself handles. pip runs
+# without the PIP_ variables and config files of whoever runs the gate:
+# one naming another interpreter, or no dependencies, turned a refusal
+# into a pass, and --isolated does not keep them out.
 stale=""
-if "$PYTHON" -m pip install --dry-run --no-index --quiet \
-  --report "$LOGS/pins.json" -r "$WORKTREE/requirements-dev.txt" \
-  > "$LOGS/pins.log" 2>&1; then
+if (
+  for v in $(compgen -e | grep '^PIP_'); do unset "$v"; done
+  PIP_CONFIG_FILE=/dev/null exec "$PYTHON" -m pip install --dry-run \
+    --no-index --quiet --report "$LOGS/pins.json" \
+    -r "$WORKTREE/requirements-dev.txt"
+) > "$LOGS/pins.log" 2>&1; then
   stale=$("$PYTHON" -c 'import json, sys
 for item in json.load(open(sys.argv[1]))["install"]:
     print("would install", item["metadata"]["name"], item["metadata"]["version"])' \

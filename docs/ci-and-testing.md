@@ -1746,7 +1746,10 @@ may look nothing up (`pip install --dry-run --no-index`), finds every requiremen
 and nothing to install, and prints what pip found when it does not. A pin moved without the
 venv following would otherwise pass here on versions CI no longer runs. pip reads the file
 itself because a copy of its reading kept missing cases it handles, a comment running on into
-the next line or a line separator other than a newline among them.
+the next line or a line separator other than a newline among them. It runs without the `PIP_`
+variables and pip config files of whoever runs the gate, since one naming another interpreter
+or turning dependencies off made a refusal pass. `--no-index` keeps it off the package index
+only: a URL, VCS or editable line in the file would still be fetched, so the file holds none.
 
 Every check starts at once. pytest spreads over all the cores and the others take one each, so
 run one after the other they left three of a Pi's four cores idle for about four minutes; each
