@@ -23,8 +23,8 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""A closed month's card short of the entry's network area, completed from
-the nearest month's card that prints it (``_with_nearest_area`` in
+"""A month's card short of the entry's network area, completed from the
+nearest card of its year that prints it (``_with_nearest_area`` in
 ``snapshot_areas.py``, applied by ``month_card``)."""
 
 from __future__ import annotations

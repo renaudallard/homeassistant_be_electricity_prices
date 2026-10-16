@@ -23,8 +23,8 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""A network area a closed month's card lacks, from the nearest card that
-prints it (``_with_nearest_area``, applied by ``snapshot_months.month_card``).
+"""A network area a month's card lacks, from the nearest card of its year
+that prints it (``_with_nearest_area``, applied by ``snapshot_months.month_card``).
 """
 
 from __future__ import annotations
@@ -114,6 +114,15 @@ async def _with_nearest_area(
     missing area. Only that area's overlay comes from the other card, of the
     same calendar year, and where no card of that year prints the area the
     month is still dropped.
+
+    The running month takes part both ways. Its own card, where the month
+    walk reads it short (Bolt's Walloon card can lose a row; the suppliers
+    on ``running_month_short_of_an_area`` refuse it), takes the area from a
+    closed card of its year, while the price of the current hour still
+    comes from the live card as fetched, which nothing here completes. And
+    it lends its area to a closed month, though it is never written to the
+    store, so the first tick after a restart drops that month until the
+    warm-up refresh.
 
     The months are asked in a fixed order (``_nearest_months``), each
     through the month cache, which decides what it asks again. One whose row

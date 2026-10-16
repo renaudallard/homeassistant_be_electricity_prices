@@ -85,7 +85,7 @@ relative to that package directory.
 | `snapshot_codec.py` | Snapshot serialization to and from `.storage`, `_SNAPSHOT_SCHEMA_VERSION` and the schema-version gate, and the Store that drops a blob written under an older storage version. |
 | `snapshot_resolve.py` | `_resolve_snapshot`: the per-entry VAT, excise-band, settlement-grid and direct-debit resolution applied to a parsed card on load. |
 | `snapshot_months.py` | One month's card: the archive reader, the per-month cache it fills and the blob those rows persist to. |
-| `snapshot_areas.py` | `_with_nearest_area`: a closed month's card short of the entry's network area, completed from the nearest card of the same calendar year that prints it, for the callers billing that month (`nearest_area`, `month_card`). |
+| `snapshot_areas.py` | `_with_nearest_area`: a month's card short of the entry's network area, completed from the nearest card of the same calendar year that prints it, for the callers billing that month (`nearest_area`, `month_card`). |
 | `snapshot_stand_ins.py` | The archive's row of an earlier month for an entry left with no card: a withdrawn product's last month (`card_of_month_before`) and the newest row held (`newest_archived_card`). |
 | `cohort.py` | Signing-cohort pricing: retrieves the archived signing-month card and splices its energy leg onto the delivery month's overlays. |
 | `cohort_legs.py` | The legs a cohort is priced on: the typed signing rate, the energy and injection legs of the archived card, and a month-indexed leg re-priced on its delivery month. |

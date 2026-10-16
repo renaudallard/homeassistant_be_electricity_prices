@@ -499,7 +499,7 @@ archives into), then the extractor's `fetch_for_month` archive for a month the p
 hold or holds only as the estimate a month-indexed card printed while it ran (see
 [provider-framework.md](provider-framework.md)), and falls back to the current live snapshot only
 when neither holds the month, with the federal levies that month owes (`_proxy_for_month`).
-A closed month's card whose network table lacks the entry's area while printing
+A month's card whose network table lacks the entry's area while printing
 others (`_short_of`) keeps its own energy, taxes and fees and takes that one
 area's overlay from the nearest card of the same calendar year that prints it
 (`_with_nearest_area`, `snapshot_areas.py`), the earlier of two equally near
@@ -510,6 +510,15 @@ A card with no network table at all is not searched for and its month is dropped
 as before: the Walloon cards of October to December 2025 were read before their
 layout was, and the search asked the supplier's archive for every month of 2025
 before them, nine downloads for an Engie October, to bill a network never read.
+The running month takes part both ways. Its own card, where the walk reads it
+short, receives the area from a closed card of its year: Bolt's Walloon card can
+lose a row and keeps the rest, so that month to date is billed at the full-card
+figure rather than dropped (the suppliers on `require_every_area` refuse a short
+running card instead, `running_month_short_of_an_area`). The price of the current
+hour is untouched: it comes from the live card as fetched, which this search never
+completes. And the running month lends its area to a closed month whose nearer
+cards lack it, but its card is never written to the store, so the first tick
+after a restart drops that month until the warm-up refresh reads it again.
 The order is fixed, and a nearer month not read yet (a failed read, or one the
 first tick's `cached_only` may not fetch) ends the search with the card short, so
 the month is left out until it is read rather than billed on a farther card; the

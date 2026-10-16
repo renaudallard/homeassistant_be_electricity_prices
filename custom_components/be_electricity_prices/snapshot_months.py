@@ -777,7 +777,7 @@ async def month_card(
 
     The cache is shared across entries, so it holds archived cards exactly as parsed and
     each caller's own VAT / consumption facts are applied on the way out, and
-    so is the network area a closed month's card lacks when ``nearest_area``
+    so is the network area a month's card lacks when ``nearest_area``
     asks for it (``_with_nearest_area``): a caller billing the month does, one
     reading a card for its energy or a credit has no use for the area and
     would only fetch the months around it.

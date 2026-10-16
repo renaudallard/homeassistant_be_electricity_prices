@@ -1497,7 +1497,14 @@ searching for:
   is not, and its month stays out. Never
   from another year's card: network tariffs change on 1 January, so it
   would bill the month on a network it was never charged. While a nearer
-  card cannot be read yet, the month stays out until it can.
+  card cannot be read yet, the month stays out until it can. The running
+  month is part of this both ways: its card, when read short (Bolt's
+  Walloon card can lose a row), takes the area from an earlier card of the
+  year, so the month so far is billed in full while the price of the
+  current hour still comes from the live card as published; and it can
+  lend its area to an earlier month, which the first update after a
+  restart then leaves out until the cards are fetched again a moment
+  later.
 
 If the consumption meter stops (renamed, replaced, or a sensor with no
 `state_class`) while the injection meter carries on, the days after it
