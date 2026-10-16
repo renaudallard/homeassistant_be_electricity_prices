@@ -46,7 +46,15 @@ from datetime import date
 import aiohttp
 
 from ..const import FLUVIUS_CARD_LABELS, REGION_FLANDERS
-from ._parse import SIGN_CHARS, numeric_row, parse_sign, regional_tax_overlay, to_float
+from ._parse import (
+    SIGN_CHARS,
+    numeric_row,
+    parse_sign,
+    regional_tax_overlay,
+    require_every_area,
+    running_month_short_of_an_area,
+    to_float,
+)
 from ._pdf import (
     NL_MONTHS,
     fetch_pdf_text,
@@ -181,7 +189,10 @@ async def fetch(
     if contract_id != _CONTRACT_ID:
         raise ExtractorError(f"unknown Aspiravi contract {contract_id!r}")
     url = await _current_card_url(session)
-    return parse_snapshot(contract_id, await fetch_pdf_text(session, url), url)
+    snap = parse_snapshot(contract_id, await fetch_pdf_text(session, url), url)
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("Aspiravi", snap.dsos, FLUVIUS_CARD_LABELS.values())
+    return snap
 
 
 async def probe(
@@ -228,7 +239,9 @@ async def fetch_for_month(
         return None
     month = year_month.replace(day=1)
     found = await _card_for_month(session, page, month)
-    if found is None:
+    if found is None or running_month_short_of_an_area(
+        found[0].dsos, FLUVIUS_CARD_LABELS.values(), month
+    ):
         return None
     return await _settle_on_next_card(session, page, month, found[0])
 
@@ -342,7 +355,7 @@ def parse_snapshot(
             contract=contract_id,
             energy=_extract_energy(text, _printed_rates(text), vat),
             injection=_extract_injection(text),
-            dsos=_extract_dsos(text, card_month),
+            dsos=_extract_dsos(text),
             # The card prints its green power and WKK costs before VAT, unlike
             # the rest of the block.
             taxes=replace(taxes, flanders_renewables=taxes.flanders_renewables * vat),
@@ -471,14 +484,7 @@ def _extract_injection(text: str) -> InjectionRates:
     )
 
 
-# The first card month printing the eight Fluvius areas of today. Every card
-# from January 2025 on does, and every one from April to December 2024 the
-# ten areas of that year instead, five of which read as one of today's: the
-# archive read back to April 2024 on 2026-10-14.
-_EIGHT_AREAS_FROM = date(2025, 1, 1)
-
-
-def _extract_dsos(text: str, card_month: date) -> dict[str, DsoOverlay]:
+def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     """The digital-meter half of the network table.
 
     A row reads "Fluvius (Imewo)" then the data management fee, the digital
@@ -486,23 +492,19 @@ def _extract_dsos(text: str, card_month: date) -> dict[str, DsoOverlay]:
     the classic meter's four columns, of which only the prosumer rate is
     used.
 
-    A card from :data:`_EIGHT_AREAS_FROM` on has to yield all eight areas. A
-    2024 card leaves out an area it does not print, since it names the areas
-    of that year. On either, an area it prints and this cannot read is a
-    layout change, and so is a table nothing could be read from. All of
-    these raise, because a partial table is worse than none: the card would
-    be adopted and an entry on the missing area would fail every tick until
-    the next good card. A relabelled row on a current card is missing from
-    the text under its old name, so only the eight-area rule catches it.
+    An area whose row does not read is left out, as is one a 2024 card does
+    not print, since those name the areas of that year. ``fetch`` refuses a
+    live card short of an area and ``fetch_for_month`` the running month's
+    (``require_every_area``), while a past month's card keeps its energy and
+    the month cache bills the missing area on the nearest card of the same
+    calendar year that prints it. A table nothing could be read from is a
+    layout change and raises.
     """
-    every_area = card_month >= _EIGHT_AREAS_FROM
     out: dict[str, DsoOverlay] = {}
     for label, key in FLUVIUS_CARD_LABELS.items():
         printed = label.replace("Fluvius ", "Fluvius (", 1) + ")"
         row = numeric_row(text, printed, 8)
         if row is None:
-            if every_area or printed in text:
-                raise ExtractorError(f"Aspiravi: network row {printed!r} not read")
             continue
         data, single, excl_night, capacity, _, _, prosumer, _ = (
             to_float(value) for value in row

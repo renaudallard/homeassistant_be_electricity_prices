@@ -38,6 +38,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 
 from custom_components.be_electricity_prices.providers import (
+    aspiravi,
     cociter,
     ebem,
     elegant,
@@ -141,6 +142,8 @@ def test_the_months_asked_run_nearest_first_within_the_calendar_year() -> None:
 
 
 def _parsed(supplier: str, text: str) -> SupplierSnapshot:
+    if supplier == "aspiravi":
+        return aspiravi.parse_snapshot("aspiravi_eco_plus_flex", text)
     if supplier == "cociter":
         return cociter.parse_snapshot(text, "cociter_variable", "test://", "2026-04")
     if supplier == "ebem":
@@ -155,6 +158,12 @@ def _parsed(supplier: str, text: str) -> SupplierSnapshot:
 # Per supplier: the contract and region, the card, the row relabelled so it
 # no longer reads, and the area that leaves out.
 _SHORT_CARDS = {
+    "aspiravi": (
+        ("aspiravi_eco_plus_flex", "flanders"),
+        lambda: fixture_text("aspiravi_eco_plus_flex_2026-09.pdf"),
+        ("Fluvius (Imewo)", "Fluvius (Gent)"),
+        "fluvius_imewo",
+    ),
     "cociter": (
         ("cociter_variable", "wallonia"),
         lambda: fixture_text("cociter_var_2604.pdf"),

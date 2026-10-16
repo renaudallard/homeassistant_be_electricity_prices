@@ -187,23 +187,12 @@ def test_an_exclusive_night_fee_of_its_own_is_kept() -> None:
     assert energy.yearly_fixed_fee_exclusive_night == pytest.approx(30.0)
 
 
-@pytest.mark.parametrize(
-    ("old", "new"),
-    [
-        # One column more on one row: the card prints the area and the row no
-        # longer reads.
-        ("Fluvius (West) 18,92", "Fluvius (West) 0,00 18,92"),
-        # Every area relabelled: nothing reads at all.
-        ("Fluvius (", "Netgebied ("),
-    ],
-)
-def test_a_network_table_that_does_not_read_is_refused(old: str, new: str) -> None:
-    """A partial table would be adopted as the card and an entry on a missing
-    area would fail every tick until the next good one."""
+def test_a_network_table_that_does_not_read_is_refused() -> None:
+    """Every area relabelled: nothing reads at all, which is a layout change
+    rather than a row gone missing."""
     text = fixture_text(_SEPTEMBER)
-    assert old in text
-    with pytest.raises(ExtractorError, match="network row"):
-        aspiravi.parse_snapshot(_CID, text.replace(old, new))
+    with pytest.raises(ExtractorError, match="no network row read"):
+        aspiravi.parse_snapshot(_CID, text.replace("Fluvius (", "Netgebied ("))
 
 
 def test_an_area_a_2024_card_does_not_print_is_left_out() -> None:
@@ -217,20 +206,72 @@ def test_an_area_a_2024_card_does_not_print_is_left_out() -> None:
 
 
 @pytest.mark.parametrize(
-    ("old", "new"),
+    ("old", "new", "area"),
     [
-        ("Fluvius (Imewo)", "Fluvius (Gent)"),
-        ("Fluvius (West)", "Fluvius (West-Vlaanderen)"),
+        ("Fluvius (Imewo)", "Fluvius (Gent)", "fluvius_imewo"),
+        ("Fluvius (West)", "Fluvius (West-Vlaanderen)", "fluvius_west"),
+        # One column more on one row: the card prints the area and the row no
+        # longer reads.
+        ("Fluvius (West) 18,92", "Fluvius (West) 0,00 18,92", "fluvius_west"),
     ],
 )
-def test_a_current_card_with_an_area_relabelled_is_refused(old: str, new: str) -> None:
-    """A relabelled row is not in the text under its old name, so the card
-    was adopted with seven areas and the entry on the eighth left with no
+async def test_a_current_card_with_an_area_relabelled_is_refused(
+    monkeypatch: pytest.MonkeyPatch, old: str, new: str, area: str
+) -> None:
+    """A row that does not read leaves its area out, and a relabelled one is
+    not in the text under its old name. The live card is refused for it,
+    since adopted with seven areas it left the entry on the eighth with no
     network overlay."""
     text = fixture_text(_SEPTEMBER)
     assert old in text
-    with pytest.raises(ExtractorError, match="network row"):
-        aspiravi.parse_snapshot(_CID, text.replace(old, new))
+    short = text.replace(old, new)
+    assert set(aspiravi.parse_snapshot(_CID, short).dsos) == FLUVIUS_KEYS - {area}
+    monkeypatch.setattr(aspiravi, "fetch_pdf_text", AsyncMock(return_value=short))
+    page = _link("2026/09/900027_card.pdf", "Huidige tariefkaart")
+    with pytest.raises(ExtractorError, match=rf"DSO rows not found for \['{area}'\]"):
+        await aspiravi.fetch(make_text_session(page), _CID, REGION_FLANDERS)
+
+
+async def test_a_past_month_keeps_a_short_network_table(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A past month's card is what the month is billed on, so a table short
+    of an area keeps the card and settles it; the month cache bills the
+    missing area on the nearest card printing it. The reader refused it, and
+    the month fell back to today's card for every area. As the running
+    month's card it is refused, as ``fetch`` refuses it. A short table on
+    the next card does not hold back the settlement, which reads only its
+    mean."""
+    full = {name: fixture_text(name) for name in (_AUGUST, _SEPTEMBER)}
+    short = {
+        name: text.replace("Fluvius (Imewo)", "Fluvius (Gent)")
+        for name, text in full.items()
+    }
+    assert short != full
+    session = make_text_session(
+        _link("2026/09/sep.pdf", "900027 eco plus flex (huishoudelijk) sep 26")
+        + _link("2026/08/aug.pdf", "900027 eco plus flex (huishoudelijk) aug 26")
+    )
+    freezer.move_to("2026-10-16 12:00:00+02:00")
+    for august, september in ((short, full), (full, short)):
+        texts = {
+            f"{_UPLOADS}/2026/08/aug.pdf": august[_AUGUST],
+            f"{_UPLOADS}/2026/09/sep.pdf": september[_SEPTEMBER],
+        }
+        render = AsyncMock(side_effect=lambda _s, url, texts=texts: texts[url])
+        monkeypatch.setattr(aspiravi, "fetch_pdf_text", render)
+        snap = await aspiravi.fetch_for_month(
+            session, _CID, REGION_FLANDERS, date(2026, 8, 1)
+        )
+        assert snap is not None and not snap.provisional
+        assert isinstance(snap.energy, VariableRates)
+        assert snap.energy.index_realised == pytest.approx(0.12932)
+        assert ("fluvius_imewo" in snap.dsos) == (august is full)
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    assert (
+        await aspiravi.fetch_for_month(session, _CID, REGION_FLANDERS, date(2026, 9, 1))
+        is None
+    )
 
 
 async def test_fetch_reads_the_card_linked_as_current(
