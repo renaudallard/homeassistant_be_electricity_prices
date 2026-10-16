@@ -243,9 +243,10 @@ class _Reading:
     ended it, for each stream being decoded, innermost last, what its last
     inflate handed back, counted already, under pypdf which stream that is,
     the fonts built so far, by the dictionary they were built from, the
-    CMaps of its own pdfminer loaded, by name, and each entry the read
-    added to pdfminer's caches of them, by cache and key, with what it
-    holds.
+    CMaps of its own pdfminer loaded, by name, each entry the read added
+    to pdfminer's caches of them, by cache and key, with what it holds,
+    and the names and keywords pdfminer made for the read, by the kind
+    it made and the name.
 
     Every refusal is made here, so it is an error of the copy of this
     module the read was started from, whichever copy put the wrappers in
@@ -265,6 +266,7 @@ class _Reading:
     fonts: dict[int, tuple[Any, Any]] = field(default_factory=dict)
     cmaps: set[str] = field(default_factory=set)
     cached: list[tuple[dict[str, Any], str, Any]] = field(default_factory=list)
+    symbols: dict[tuple[Any, Any], Any] = field(default_factory=dict)
 
     def refuse(self, message: str) -> _Refused:
         if self.refusal is None:

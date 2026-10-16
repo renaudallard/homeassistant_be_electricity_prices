@@ -25,8 +25,9 @@
 
 """What pdfminer, under pdfplumber, is held to while a card is read, on
 top of the bound :mod:`._pdf_bound` counts: the wrappers holding it to
-that bound, what it may hold at once laying a page out, and how many of
-its own CMaps it may load."""
+that bound, what it may hold at once laying a page out, how many of its
+own CMaps it may load, and how many names and keywords it may make for a
+card, which it keeps for the read alone."""
 
 from __future__ import annotations
 
@@ -80,6 +81,19 @@ _RC4_UNIT = 16384
 # encoding pdfminer makes without loading anything.
 _MAX_CMAPS = 4
 
+# The most names and keywords pdfminer may make for a card, those its
+# tables of them lack. It makes each once and keeps it for good, so that
+# one read twice is the same object: each card naming new ones grew the
+# tables, 100 000 of them by about 20 MB, refused or not, and 2,9 million by
+# about 500 MB. Those a read makes are kept with the read alone, made once
+# for it, and go once it ends, the tables holding only what pdfminer made
+# importing its modules. Measured on 2026-10-16 as pdfplumber reads them,
+# across the 181 shipped fixtures and the 2488 cards the archive held: at
+# most 893 on a card, all but 35 of them names, energie.be's dynamic card
+# for Flanders of September 2026, and at most 17 no other card names. This
+# is about ten times that, each held costing about 200 bytes.
+_MAX_SYMBOLS = 10_000
+
 
 class _BoundedZlib:
     """``zlib`` as pdfminer's stream decoding sees it: while a card is read,
@@ -101,6 +115,39 @@ class _BoundedZlib:
             return out
         reading.charge(_damaged(len(out), len(data)))
         raise zlib.error("stream cut short or failing its checksum")
+
+
+class _Symbols(dict[Any, Any]):
+    """One of pdfminer's tables of the names or keywords it has read, each
+    made once, so that one read twice is the same object, which it
+    compares them by. While a card is read, one the table lacks is made
+    once for the read and kept with it, rather than in the table, which
+    grows only outside a read: a card naming new ones each time grew it
+    without limit."""
+
+    def __init__(self, table: Any) -> None:
+        super().__init__(table.dict)
+        self.make = table.klass
+
+    def made(self, name: Any) -> Any:
+        """``name`` made for the read, or outside one for the table, which
+        pdfminer puts it in next."""
+        reading = _READING.get()
+        if reading is None:
+            return self.make(name)
+        key = (self.make, name)
+        if key not in reading.symbols:
+            if len(reading.symbols) >= _MAX_SYMBOLS:
+                raise reading.refuse(
+                    f"PDF has pdfminer make more than {_MAX_SYMBOLS} names "
+                    "and keywords; refusing to read it"
+                )
+            reading.symbols[key] = self.make(name)
+        return reading.symbols[key]
+
+    def __setitem__(self, name: Any, symbol: Any) -> None:
+        if _READING.get() is None:
+            super().__setitem__(name, symbol)
 
 
 def _built(method: Any) -> Any:
@@ -183,9 +230,10 @@ def _hold_pdfminer_to_the_bound() -> None:
     or a form drawn through ``init_resources``, every font it builds through
     ``PDFResourceManager.get_font``, every CMap of its own it loads through
     ``CMapDB.get_cmap`` and ``get_unicode_map``, and every loop building a
-    font through its font modules' ``range``. Done once whatever the copy of
-    this module."""
-    from pdfminer import cmapdb, pdffont, pdftypes
+    font through its font modules' ``range``, and every name and keyword it
+    makes through its tables of them. Done once whatever the copy of this
+    module."""
+    from pdfminer import cmapdb, pdffont, pdftypes, psparser
     from pdfminer.arcfour import Arcfour
     from pdfminer.pdfinterp import (
         PDFContentParser,
@@ -430,6 +478,10 @@ def _hold_pdfminer_to_the_bound() -> None:
         for module in (cmapdb, pdffont):
             vars(module)["range"] = _font_range
         names["zlib"] = _BoundedZlib()
+        for table in (psparser.PSLiteralTable, psparser.PSKeywordTable):
+            symbols = _Symbols(table)
+            table.dict = symbols
+            table.klass = symbols.made  # type: ignore[assignment]
 
 
 @contextmanager
@@ -472,8 +524,10 @@ def bounded_pdfminer() -> Iterator[None]:
     gathers no token, comment, line or inline image longer than
     :data:`_MAX_TOKEN_BYTES`, which it grows a byte or a buffer at a time,
     builds no more than :data:`_MAX_FONT_ENTRIES` entries of a card's
-    fonts, and loads no more than :data:`_MAX_CMAPS` CMaps of its own,
-    which it keeps for good, those the read added dropped once it ends.
+    fonts, loads no more than :data:`_MAX_CMAPS` CMaps of its own,
+    which it keeps for good, those the read added dropped once it ends,
+    and makes no more than :data:`_MAX_SYMBOLS` names and keywords its
+    tables lack, which it keeps with the read alone.
     pdfplumber's ``dedupe_chars`` finds each glyph it keeps at once, where
     it looked each one up in the page's list.
     """

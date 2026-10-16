@@ -1987,6 +1987,49 @@ def test_a_read_leaves_no_cmap_of_pdfminer_s_behind(
     assert (set(CMapDB._cmap_cache), set(CMapDB._umap_cache)) == kept
 
 
+def _named_pdf(names: int, tag: bytes) -> bytes:
+    """A card of text followed by ``names`` names and as many keywords, each
+    new, ``tag`` telling them from another card's."""
+    named = b"".join(b" /%s%d %s%d" % (tag, n, tag.lower(), n) for n in range(names))
+    text = b"BT /F1 12 Tf 72 720 Td (%s) Tj ET" % (b"tariff card text " * 60)
+    return _pdf_of(text + named, attrs=b"")
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_a_read_leaves_no_name_of_pdfminer_s_behind(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer keeps each name and keyword it makes for good, so that one
+    read twice is the same object: each card naming new ones grew its
+    tables, 100 000 of them by about 20 MB, refused or not. Those a read
+    makes are kept with the read alone, at most _MAX_SYMBOLS."""
+    from pdfminer.psparser import PSKeywordTable, PSLiteralTable
+
+    _pdf_bound_pdfminer._hold_pdfminer_to_the_bound()
+    kept = (set(PSLiteralTable.dict), set(PSKeywordTable.dict))
+    monkeypatch.setattr(_pdf_bound_pdfminer, "_MAX_SYMBOLS", 1000)
+    assert "tariff card" in extract(_named_pdf(300, b"Kept"))
+    with pytest.raises(ExtractorError, match=r"^PDF has pdfminer make more than 1000"):
+        extract(_named_pdf(600, b"Refused"))
+    assert (set(PSLiteralTable.dict), set(PSKeywordTable.dict)) == kept
+
+
+def test_pdfminer_makes_a_name_once_a_read() -> None:
+    """pdfminer compares names and keywords by identity, those it makes as
+    it reads with those it makes in its code, as the keyword after a
+    file's cross-reference table, so a name a read makes is the same
+    object all through it, and made again for the next."""
+    from pdfminer.psparser import KWD, LIT, PSLiteralTable
+
+    with _pdf_bound_pdfminer.bounded_pdfminer():
+        made = LIT("Made once a read")
+        assert LIT("Made once a read") is made
+        assert KWD(b"Made once a read") is not LIT(b"Made once a read")
+    with _pdf_bound_pdfminer.bounded_pdfminer():
+        assert LIT("Made once a read") is not made
+    assert "Made once a read" not in PSLiteralTable.dict
+
+
 def _drawn_pdf(content: bytes, form: bytes, *, fonts: int = 1) -> bytes:
     """A page of ``content`` that may draw the form ``X0`` of ``form``,
     which names no resources of its own, both naming ``fonts`` fonts."""
@@ -2320,6 +2363,7 @@ def test_a_second_copy_of_the_bound_reads_through_the_same_wrappers(
     import pdfplumber
     import pypdf
     from pdfminer.pdftypes import PDFStream
+    from pdfminer.psparser import PSLiteralTable
     from pypdf.generic import EncodedStreamObject
 
     _pdf_bound_pdfminer._hold_pdfminer_to_the_bound()
@@ -2342,6 +2386,8 @@ def test_a_second_copy_of_the_bound_reads_through_the_same_wrappers(
         miner = load(_pdf_bound_pdfminer)
     miner._hold_pdfminer_to_the_bound()
     assert (PDFStream.get_data, EncodedStreamObject.get_data) == wrapped
+    assert type(PSLiteralTable.dict) is _pdf_bound_pdfminer._Symbols
+    assert PSLiteralTable.klass == PSLiteralTable.dict.made
     assert miner._READING is copy._READING is _pdf_bound._READING
     monkeypatch.setattr(copy, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
     payload = _inflating_pdf(2 << 20)

@@ -790,7 +790,17 @@ Internals worth knowing:
   the name the card gives, which it reads the same file for whatever NUL
   bytes or path it carries, so what a read added to its caches is dropped
   once the read ends. No card names one, every font of theirs naming an identity
-  encoding pdfminer makes without loading anything. A reader builds at most `_MAX_FONT_ENTRIES`
+  encoding pdfminer makes without loading anything. pdfminer makes each
+  name and keyword it reads once and keeps it for good, so that one read
+  twice is the same object, which it compares them by: each card naming
+  new ones grew its tables, 100 000 of them by about 20 MB, refused or
+  not, and 2,9 million by about 500 MB. While a card is read, one its tables lack
+  is made once for the read and kept with it rather than in the tables,
+  which hold only what pdfminer made importing its modules, and it makes
+  at most `_MAX_SYMBOLS` (10 000) for a card. The most a card makes is
+  893, all but 35 of them names, on energie.be's dynamic card for Flanders
+  of September 2026, and at most 17 are named by no other card; each held
+  costs about 200 bytes. A reader builds at most `_MAX_FONT_ENTRIES`
   (1 000 000) entries of a card's fonts, each code a range of a font's
   ToUnicode map, encoding or widths gives, or its program's own tables,
   counted before the range is gone through, and under pypdf each code of
@@ -812,7 +822,7 @@ Internals worth knowing:
   it wrapped them again and had each read counted once for every copy.
   The checks only count, and what they change (a font a reader builds once,
   the paths pdfminer no longer paints, a page let go of once read, a glyph
-  found at once) leaves the text as it was, so a card under the bound
+  found at once, a name made for the read alone) leaves the text as it was, so a card under the bound
   renders to the same text as before, and only these refuse: a file a
   reader cannot open is left to it to fail on.
   The manifest asks for pypdf 6.7.1 or later, the first release that maps
