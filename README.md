@@ -1722,7 +1722,8 @@ python scripts/archive_cards.py --out tmp/archive   # stores today's cards there
 once (not the live check or the archive walk, so it contacts no supplier),
 plus actionlint when
 `tmp/actionlint` exists, against a throwaway worktree of HEAD, so commit
-first. When the `GATE_REMOTE` host (`maci7` by default; it needs a venv at
+first. It refuses to start when `.venv` holds another version of a package
+`requirements-dev.txt` pins. When the `GATE_REMOTE` host (`maci7` by default; it needs a venv at
 `~/be_gate/.venv`) answers over ssh, pytest runs there on the same snapshot
 while the rest runs locally: about 6 minutes,
 against 13 on a Raspberry Pi alone. Set `GATE_REMOTE=` to keep everything

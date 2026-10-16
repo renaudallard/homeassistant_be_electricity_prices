@@ -75,6 +75,34 @@ mkdir -p "$LOGS"
 git worktree add --detach --quiet "$WORKTREE" "$FULL_SHA" || exit 1
 echo "gating $SHA in $WORKTREE"
 
+# The local checks run on whatever the venv holds, and a pin moved in
+# requirements-dev.txt without the venv following passed here on versions
+# CI no longer runs. Each pin of the commit gated must be what is installed.
+stale=$("$PYTHON" - "$WORKTREE/requirements-dev.txt" <<'EOF'
+import sys
+from importlib.metadata import PackageNotFoundError, version
+
+with open(sys.argv[1], encoding="utf-8") as pins:
+    for line in pins:
+        pin = line.split("#", 1)[0].strip()
+        if "==" not in pin:
+            continue
+        name, want = (part.strip() for part in pin.split("==", 1))
+        try:
+            have = version(name)
+        except PackageNotFoundError:
+            have = "not installed"
+        if have != want:
+            print(f"   {name} {have}, pinned {want}")
+EOF
+) || exit 1
+if [ -n "$stale" ]; then
+  echo "the venv at $ROOT/.venv does not match requirements-dev.txt:"
+  echo "$stale"
+  echo "   $PYTHON -m pip install -r requirements-dev.txt"
+  exit 1
+fi
+
 # Ship the snapshot and bring the remote venv in step with the pins. Any
 # failure leaves pytest local.
 remote_ready() {
