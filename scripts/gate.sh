@@ -13,10 +13,10 @@
 #
 # Every check starts at once. pytest spreads over all the cores; the others
 # run on one core each, and one after the other they left three of a Pi's
-# four idle for four minutes. When the GATE_REMOTE host (maci7 by default)
-# answers, pytest runs there instead, on the same snapshot shipped with git
-# archive, while the rest runs here: about 6 minutes against 13 on a Pi alone.
-# Set GATE_REMOTE= to keep everything local. The remote needs a venv at
+# four idle for four minutes. When GATE_REMOTE names a host that answers,
+# pytest runs there instead, on the same snapshot shipped with git archive,
+# while the rest runs here: with an eight-thread Mac, about 6 minutes against
+# 13 on a Pi alone. Unset, everything runs here. The remote needs a venv at
 # ~/be_gate/.venv, refreshed here with uv whenever requirements-dev.txt moves,
 # and GNU date first in its PATH for the CI issue script's tests. A remote
 # that cannot be reached, or drops mid-run, costs a local pytest, never a
@@ -43,7 +43,7 @@ FULL_SHA=$(git rev-parse HEAD) || exit 1
 SHA=$(git rev-parse --short "$FULL_SHA")
 WORKTREE="$ROOT/tmp/gate/$SHA.$$"
 LOGS="$ROOT/tmp/gate/$SHA.$$.logs"
-REMOTE=${GATE_REMOTE-maci7}
+REMOTE=${GATE_REMOTE-}
 REMOTE_DIR="be_gate/gate-$SHA.$$"
 # The keepalive notices a remote that went away without closing the
 # connection, a Mac put to sleep for one, within about 15 s; without it ssh

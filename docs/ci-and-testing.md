@@ -1729,7 +1729,7 @@ maintainer.
 `scripts/gate.sh` runs all of them in one go and is what to use before a push:
 
 ```
-scripts/gate.sh                     # the whole suite, about 6 minutes with maci7, 13 on a Pi alone
+scripts/gate.sh                     # the whole suite, about 13 minutes on a Pi alone
 scripts/gate.sh tests/test_ebem.py  # one file, for a quick pass
 ```
 
@@ -1748,9 +1748,9 @@ otherwise pass here on versions CI no longer runs.
 Every check starts at once. pytest spreads over all the cores and the others take one each, so
 run one after the other they left three of a Pi's four cores idle for about four minutes; each
 mypy pass gets its own cache directory, since two processes writing one cache can corrupt it.
-When the `GATE_REMOTE` host (`maci7` by default) answers, pytest runs there instead, on the same
-snapshot shipped with `git archive`, while the rest runs locally. Measured on 2026-09-26 against
-one commit, cold caches:
+When `GATE_REMOTE` names a host that answers, pytest runs there instead, on the same snapshot
+shipped with `git archive`, while the rest runs locally. Measured on 2026-09-26 against one
+commit, cold caches, with maci7, an eight-thread Intel MacBook Air, as the remote:
 
 | | Pi 4 | maci7 |
 | --- | --- | --- |
@@ -1758,7 +1758,7 @@ one commit, cold caches:
 | everything at once | 763 s | 547 s |
 | pytest on maci7, the rest on the Pi at the same time | about 365 s | |
 
-`GATE_REMOTE=` keeps everything local. The remote needs a venv at `~/be_gate/.venv`, which the
+Unset, everything runs locally. The remote needs a venv at `~/be_gate/.venv`, which the
 gate refreshes with uv whenever `requirements-dev.txt` changes, and GNU `date` first in its
 `PATH` for the tests of `scripts/file_ci_issue.sh`. A remote that cannot be reached, or drops
 mid-run, costs a local pytest, never a gate result. An ssh keepalive notices a remote that went
