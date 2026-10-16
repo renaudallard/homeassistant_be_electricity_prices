@@ -25,7 +25,8 @@
 
 """What pdfminer, under pdfplumber, is held to while a card is read, on
 top of the bound :mod:`._pdf_bound` counts: the wrappers holding it to
-that bound, and what it may hold at once laying a page out."""
+that bound, what it may hold at once laying a page out, and how many of
+its own CMaps it may load."""
 
 from __future__ import annotations
 
@@ -68,6 +69,13 @@ _MAX_PATH_SEGMENTS = 450_000
 # counts its length times itself over this many bytes, before it runs, as a
 # damaged inflate does. Every encrypted card is AES.
 _RC4_UNIT = 16384
+
+# The most CMaps of its own pdfminer may load for a card, each a font's
+# encoding or a map it names. It keeps each it loads for good, up to 7 MB
+# and 0,4 s of CPU on a Raspberry Pi for one: a 3 kB card naming all 144
+# took 2,9 s and kept 135 MB. No card names one, every font of theirs
+# naming an identity encoding pdfminer makes without loading anything.
+_MAX_CMAPS = 4
 
 
 class _BoundedZlib:
@@ -170,9 +178,10 @@ def _hold_pdfminer_to_the_bound() -> None:
     and a content parser's ``get_inline_data``, every line it reads
     backwards through ``revreadlines``, the resources it walks for a page
     or a form drawn through ``init_resources``, every font it builds through
-    ``PDFResourceManager.get_font``, and every loop building a font through
-    its font modules' ``range``. Done once whatever the copy of this
-    module."""
+    ``PDFResourceManager.get_font``, every CMap of its own it loads through
+    ``CMapDB.get_cmap`` and ``get_unicode_map``, and every loop building a
+    font through its font modules' ``range``. Done once whatever the copy of
+    this module."""
     from pdfminer import cmapdb, pdffont, pdftypes
     from pdfminer.arcfour import Arcfour
     from pdfminer.pdfinterp import (
@@ -351,6 +360,34 @@ def _hold_pdfminer_to_the_bound() -> None:
                     reading.list_page(count)
                 yield page
 
+        get_cmap = cmapdb.CMapDB.get_cmap.__func__  # type: ignore[attr-defined]
+        get_unicode_map = cmapdb.CMapDB.get_unicode_map.__func__  # type: ignore[attr-defined]
+
+        def loaded(name: str) -> None:
+            # Counted by name, whether pdfminer loaded it for this card or
+            # for an earlier one.
+            reading = _READING.get()
+            if reading is not None:
+                reading.cmaps.add(name)
+                if len(reading.cmaps) > _MAX_CMAPS:
+                    raise reading.refuse(
+                        f"PDF has pdfminer load more than {_MAX_CMAPS} of its "
+                        "CMaps; refusing to read it"
+                    )
+
+        def cmap(cls: type[cmapdb.CMapDB], name: str) -> Any:
+            found = get_cmap(cls, name)
+            if isinstance(found, cmapdb.PyCMap):
+                loaded(name)
+            return found
+
+        def unicode_map(
+            cls: type[cmapdb.CMapDB], name: str, vertical: bool = False
+        ) -> Any:
+            found = get_unicode_map(cls, name, vertical)
+            loaded(f"to-unicode-{name}")
+            return found
+
         names["ascii85decode"] = _ascii85_held(names["ascii85decode"])
         names["apply_png_predictor"] = predicted
         setattr(measured, _MARK, True)
@@ -367,6 +404,8 @@ def _hold_pdfminer_to_the_bound() -> None:
         PDFContentParser.start_type = nested  # type: ignore[method-assign]
         PDFPage.create_pages = staticmethod(paged)  # type: ignore[method-assign]
         PDFResourceManager.get_font = font  # type: ignore[method-assign]
+        cmapdb.CMapDB.get_cmap = classmethod(cmap)  # type: ignore[assignment]
+        cmapdb.CMapDB.get_unicode_map = classmethod(unicode_map)  # type: ignore[assignment]
         PDFPageInterpreter.init_resources = walked  # type: ignore[method-assign]
         PSBaseParser.nexttoken = _parsed(PSBaseParser.nexttoken)  # type: ignore[method-assign]
         # An object that is a reference to itself, or a ring of them, has
@@ -423,8 +462,9 @@ def bounded_pdfminer() -> Iterator[None]:
     form's for each draw, takes no more than :data:`_MAX_STEPS` steps,
     gathers no token, comment, line or inline image longer than
     :data:`_MAX_TOKEN_BYTES`, which it grows a byte or a buffer at a time,
-    and builds no more than :data:`_MAX_FONT_ENTRIES` entries of a card's
-    fonts. pdfplumber's ``dedupe_chars`` finds each glyph it keeps at once,
+    builds no more than :data:`_MAX_FONT_ENTRIES` entries of a card's
+    fonts, and loads no more than :data:`_MAX_CMAPS` CMaps of its own,
+    which it keeps for good. pdfplumber's ``dedupe_chars`` finds each glyph it keeps at once,
     where it looked each one up in the page's list.
     """
     _hold_pdfminer_to_the_bound()

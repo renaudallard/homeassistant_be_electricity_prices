@@ -1886,6 +1886,36 @@ def test_the_lines_pypdf_reads_backwards_are_held(
     assert "tariff card" in extract_pdf_text(_lined_pdf(b"", b"x\n" * 50))
 
 
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_the_cmaps_pdfminer_loads_of_its_own_are_held(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer keeps each CMap of its own it loads for good: a 3 kB card
+    whose ToUnicode map named all 144 took 2,9 s and kept 135 MB. Each one
+    named counts, loaded already or not."""
+    monkeypatch.setattr(_pdf_bound_pdfminer, "_MAX_CMAPS", 2)
+    text = b"BT /F1 12 Tf 72 720 Td (%s) Tj ET" % (b"tariff card text " * 60)
+
+    def card(*cmaps: bytes) -> bytes:
+        used = b"".join(b"/%s usecmap\n" % name for name in cmaps)
+        unicode = b"begincmap\n%sendcmap\n" % used
+        return _pdf_from(
+            (
+                b"<</Type/Catalog/Pages 2 0 R>>",
+                b"<</Type/Pages/Kids[5 0 R]/Count 1>>",
+                b"<</Length %d>>\nstream\n%s\nendstream" % (len(text), text),
+                b"<</Length %d>>\nstream\n%s\nendstream" % (len(unicode), unicode),
+                b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 3 0 R"
+                b"/Resources<</Font<</F1<</Type/Font/Subtype/Type1"
+                b"/BaseFont/Helvetica/ToUnicode 4 0 R>>>>>>>>",
+            )
+        )
+
+    with pytest.raises(ExtractorError, match=r"^PDF has pdfminer load more than 2"):
+        extract(card(b"UniJIS-UCS2-H", b"UniGB-UCS2-H", b"UniKS-UCS2-H"))
+    assert "tariff card" in extract(card(b"UniJIS-UCS2-H", b"UniGB-UCS2-H"))
+
+
 def _drawn_pdf(content: bytes, form: bytes, *, fonts: int = 1) -> bytes:
     """A page of ``content`` that may draw the form ``X0`` of ``form``,
     which names no resources of its own, both naming ``fonts`` fonts."""

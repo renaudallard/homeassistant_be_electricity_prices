@@ -235,7 +235,8 @@ class _Reading:
     """What is left of the bound while a card is read, the refusal that
     ended it, for each stream being decoded, innermost last, what its last
     inflate handed back, counted already, under pypdf which stream that is,
-    and the fonts built so far, by the dictionary they were built from.
+    the fonts built so far, by the dictionary they were built from, and the
+    CMaps of its own pdfminer loaded, by name.
 
     Every refusal is made here, so it is an error of the copy of this
     module the read was started from, whichever copy put the wrappers in
@@ -253,6 +254,7 @@ class _Reading:
     inflated: list[int] = field(default_factory=list)
     streams: list[EncodedStreamObject] = field(default_factory=list)
     fonts: dict[int, tuple[Any, Any]] = field(default_factory=dict)
+    cmaps: set[str] = field(default_factory=set)
 
     def refuse(self, message: str) -> _Refused:
         if self.refusal is None:

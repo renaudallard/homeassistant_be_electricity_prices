@@ -146,7 +146,7 @@ relative to that package directory.
 | `providers/__init__.py` | The supplier registry: imports each module's `EXTRACTOR`, exposes the `EXTRACTORS` dict, and the `get()` / `all_extractors()` lookups. |
 | `providers/_pdf.py` | Fetching a card and getting text out of it: the HTTP layer, transient-error classification via `is_transient_fetch_error`, plain and column-aligned extraction, and the per-tick memo. |
 | `providers/_pdf_bound.py` | What a card's streams may decode to, how many pages it has, what the readers parse of it and build of its fonts, how many steps pdfminer takes, how long a token or line it gathers and what it lays out and holds of it, and how many lines pypdf reads backwards, held to while pypdf (`bounded_pypdf`), or pdfminer under pdfplumber (`bounded_pdfminer`), reads it: the decode bound, counted on each reader as it reads. |
-| `providers/_pdf_bound_pdfminer.py` | The wrappers holding pdfminer to that bound while a card is read (`bounded_pdfminer`), and what it may hold at once laying a page out. |
+| `providers/_pdf_bound_pdfminer.py` | The wrappers holding pdfminer to that bound while a card is read (`bounded_pdfminer`), what it may hold at once laying a page out, and how many of its own CMaps it may load. |
 | `providers/_parse.py` | Reading a figure off a line of that text: the number formats Belgian cards print in, the sign words, the DSO table columns and the regional tax overlay. |
 | `providers/_validity.py` | Which month a card is for and until when it is good: the validity sentences, the month-name headings and the archive's date check. |
 
