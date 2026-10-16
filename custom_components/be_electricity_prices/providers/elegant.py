@@ -53,11 +53,12 @@ hourly SPP mean the integration computes.
 Past cards come from the archive the site's tarief-archief page queries: the
 tRPC call ``tariefArchief.search`` returns the product offers in force on a
 date, each with a ``tariffChartUrl`` that ``/api/tarief-archief/tariff-chart``
-turns into the PDF. The archive serves the card in force on the first day of
-the month, which matters for Zeker & Vast alone: its price may be reissued
-within a month (March 2026 has offers dated the 1st, the 6th and the 21st).
-The current product keys start on 8 November 2025, so December 2025 is the
-first month read; before it the offers carry other products and a combined
+turns into the PDF. A month is read on the card in force on its first day,
+which matters for Zeker & Vast alone: its price may be reissued within a
+month (March 2026 has offers dated the 1st, the 6th and the 21st). The
+current products were launched on 8 November 2025, so November's first day
+carries none of them, and that month is read on the first day that carries
+the product; before it the offers carry other products and a combined
 electricity and gas card. A closed month is settled on the indices the next
 card names for it.
 """
@@ -149,9 +150,12 @@ _H = r"[^\S\n]"
 #   Tariefkaart Elektriciteit
 #   Flex
 #   Variabel Onbepaalde duur Versie oktober 2026 Particulier Prijzen ...
-# The archive's copy follows the product with its month, "Flex 09.26".
+# The archive's copy follows the product with its month, "Flex 09.26", or on
+# the cards of 8 November 2025 with the day the offer started, "Flex
+# 08/11/2025".
 _HEADING_RE = re.compile(
-    r"Tariefkaart\s+Elektriciteit\s*\n(?P<name>[^\n]+?)(?:\s+\d{2}\.\d{2})?\s*\n"
+    r"Tariefkaart\s+Elektriciteit\s*\n(?P<name>[^\n]+?)"
+    r"(?:\s+(?:\d{2}\.\d{2}|\d{2}/\d{2}/\d{4}))?\s*\n"
     r"[^\n]*?\bVersie\s+(?P<month>[A-Za-z]+)\s+(?P<year>\d{4})\s+(?P<segment>\w+)",
     re.IGNORECASE,
 )
@@ -291,10 +295,11 @@ async def fetch_for_month(
     region: str,
     year_month: date,
 ) -> SupplierSnapshot | None:
-    """The card in force on the first day of ``year_month``, settled on the
-    next card, or ``None``.
+    """The card in force on the first day of ``year_month``, or on the first
+    day of it that has an offer for the product, settled on the next card,
+    or ``None``.
 
-    A month the archive has no offer for, December 2025 and before, is None;
+    A month the archive has no offer for, October 2025 and before, is None;
     so is a card that names another month. A transient failure raises so the
     month cache retries it instead of caching it as absent.
     """
@@ -316,20 +321,10 @@ async def fetch_for_month(
 async def _archived_card(
     session: aiohttp.ClientSession, contract: _ContractDef, month: date
 ) -> tuple[SupplierSnapshot, str] | None:
-    """The card the archive serves for the first day of ``month`` and its
-    text, or ``None`` where it has no offer for the product or serves a card
-    of another month."""
-    query = {
-        "date": f"{month:%Y-%m-%d}",
-        "energyType": "Electricity",
-        "customerType": "Residential",
-    }
-    body = await fetch_text(
-        session,
-        _ARCHIVE_SEARCH_URL,
-        params={"batch": "1", "input": json.dumps({"0": query})},
-    )
-    path = _archived_chart_path(body, contract)
+    """The card of the product's first offer in ``month`` and its text, or
+    ``None`` where the month has no offer for the product or the archive
+    serves a card of another month."""
+    path = await _first_offer_in(session, contract, month)
     if path is None:
         return None
     url = f"{_ARCHIVE_CHART_URL}?tariffChartPath={quote(path, safe='')}"
@@ -338,6 +333,56 @@ async def _archived_card(
         parse_snapshot(contract.contract_id, text, url), text, month
     )
     return None if snap is None else (snap, text)
+
+
+async def _first_offer_in(
+    session: aiohttp.ClientSession, contract: _ContractDef, month: date
+) -> str | None:
+    """The ``tariffChartUrl`` of the product's offer on the first day of
+    ``month`` that has one, or ``None`` where no day of it has.
+
+    The 1st answers for every month but the one a product is launched in:
+    the current three start on 8 November 2025, when the 1st still offers
+    the products sold before. Once out, a product stays on offer, so the
+    month's last day tells whether it was launched within the month, and
+    halving the days between finds the first that offers it in at most five
+    more searches.
+    """
+    path = await _offer_on(session, contract, month)
+    if path is not None:
+        return path
+    last = end_of_month(month.year, month.month)
+    path = await _offer_on(session, contract, last)
+    if path is None:
+        return None
+    # Day ``low`` has no offer, day ``high`` has ``path``.
+    low, high = 1, last.day
+    while high - low > 1:
+        middle = (low + high) // 2
+        found = await _offer_on(session, contract, month.replace(day=middle))
+        if found is None:
+            low = middle
+        else:
+            high, path = middle, found
+    return path
+
+
+async def _offer_on(
+    session: aiohttp.ClientSession, contract: _ContractDef, day: date
+) -> str | None:
+    """The ``tariffChartUrl`` of the product's offer in force on ``day``, or
+    ``None``."""
+    query = {
+        "date": f"{day:%Y-%m-%d}",
+        "energyType": "Electricity",
+        "customerType": "Residential",
+    }
+    body = await fetch_text(
+        session,
+        _ARCHIVE_SEARCH_URL,
+        params={"batch": "1", "input": json.dumps({"0": query})},
+    )
+    return _archived_chart_path(body, contract)
 
 
 def _archived_chart_path(body: str, contract: _ContractDef) -> str | None:

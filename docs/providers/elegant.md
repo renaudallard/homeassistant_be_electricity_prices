@@ -20,7 +20,7 @@ this alongside the framework and pricing references:
 | Region(s) served | Flanders only | `EXTRACTOR`, `elegant.py` |
 | Publication form | One text PDF of two pages per product, read with pdfplumber (`fetch_pdf_text_layout`) | `fetch` |
 | Current card | `https://cdn.elegant.be/Pricing/TariffCharts/Current/<key>_Residential.pdf`, overwritten in place | `_current_url` |
-| Archive | The card in force on the first day of each month, from December 2025, through the site's tariff archive | `fetch_for_month` |
+| Archive | The card in force on the first day of each month, from November 2025 (the launch day, 8 November, for that month), through the site's tariff archive | `fetch_for_month` |
 | Probe | The card's `Last-Modified` | `probe` |
 | Catalog | The residential electricity links on `https://www.elegant.be/tariefkaarten` | `discover` |
 
@@ -46,8 +46,9 @@ are the previous month's.
 
 Because Flex and ComfortFlex print identical figures, the card's heading is
 checked: its second line names the product ("Flex", "ComfortFlex", "Zeker &
-Vast", followed by the card's month as "09.26" on the archive's copies) and the
-third the segment ("Particulier"). A card for another product or for the
+Vast", followed on the archive's copies by the card's month as "09.26", or on
+the cards of 8 November 2025 by that day as "08/11/2025") and the third the
+segment ("Particulier"). A card for another product or for the
 professional edition is refused.
 
 ## The indices
@@ -148,17 +149,24 @@ turns that path into the PDF. `fetch_for_month` asks for the first day of the
 month, so it reads the card in force on the 1st, and passes it through
 `archive_validity_check`, which refuses a card of another month: asked for a
 date ahead, the archive offers the card in force today. The archive's copies
-carry the month after the product's name ("Flex 09.26"), which the heading
-reader allows. The same approach reads Elegant's gas cards in the sibling gas
+carry the month after the product's name ("Flex 09.26"), or on the launch
+cards the day the offer started ("Flex 08/11/2025"), which the heading reader
+allows. The same approach reads Elegant's gas cards in the sibling gas
 integration.
 
-The current product keys start on 8 November 2025. December 2025 is the first
-month whose first day carries them; before it the archive offers the products
-Elegant sold then (`BEGreenFlexStroom` and the like, a combined electricity and
-gas card of another layout), which no contract here matches, so those months
-are `None` and fall back to the proxy. A product's offer can change within a
-month: Zeker & Vast was reissued on 6 and 21 March 2026, and the month is
-billed on the card of the 1st.
+The current product keys start on 8 November 2025. On 1 November the archive
+still offers the products Elegant sold before (`BEGreenFlexStroom` and the
+like, a combined electricity and gas card of another layout), which no
+contract here matches, and on the 30th the three current ones alone. So where
+the 1st has no offer for the product, `_first_offer_in` asks about the month's
+last day and, when that has one, halves the days between to find the first day
+that offers it: at most seven searches, and November 2025 is read on the cards
+of the 8th (`FlexElectricity_20251108` and its two siblings). A contract
+signed later that month is billed on them rather than on each month's card.
+The months before November 2025 offer none of the current products on either
+day, are `None` and fall back to the proxy. A product's offer can change
+within a month: Zeker & Vast was reissued on 6 and 21 March 2026, and the
+month is billed on the card of the 1st.
 
 A month is then settled on the next card. `published_indices` reads the
 sentence naming the month the printed rates were computed on and its indices,
@@ -167,7 +175,7 @@ next month's card names this month, Flex and ComfortFlex rebuild every register
 and the credit on them (`settled_energy`, `settled_injection`) and Zeker & Vast
 its credit; while that card is not out, or names another month, or a variable
 card names a single figure that could be either index, the month comes back
-`provisional`. Checked on 2026-10-16, every month from December 2025 to
+`provisional`. Checked on 2026-10-16, every month from November 2025 to
 September 2026 of all three products settles on the values Elegant publishes
 at `elegant.be/indexatie`, to the rounding of the three decimals the card
 prints.
@@ -180,6 +188,10 @@ prints.
   `elegant_zeker_vast_2026-10.pdf`: the October 2026 cards, every field read,
   and the formulas reproducing the rates the Flex card prints at September's
   indices.
+- `elegant_flex_2025-11.pdf` and `elegant_zeker_vast_2025-11.pdf`: the cards
+  of 8 November 2025, when the current products were launched, with the day
+  after the product's name, and the launch month read on them and settled on
+  the indices the December card names.
 - `elegant_flex_2025-12.pdf`: the December 2025 card as the archive serves it,
   with the month after the product's name, the volume table of the excise and
   the energy contribution still printed.

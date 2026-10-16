@@ -23,7 +23,8 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Elegant extractor tests against its cards of October, September and December."""
+"""Elegant extractor tests against its cards of October, September, December
+and November 2025."""
 
 from __future__ import annotations
 
@@ -226,6 +227,50 @@ def test_a_card_from_before_the_august_levies() -> None:
     assert snap.valid_until == date(2025, 12, 31)
 
 
+def test_the_cards_of_the_launch_day() -> None:
+    """The cards of 8 November 2025, when the current products started, as
+    the archive serves them: the product carries the day its offer started
+    ("Flex 08/11/2025") and the rates are printed at October's indices,
+    7,507 and 6,621 c€/kWh."""
+    text = _card("elegant_flex_2025-11.pdf")
+    assert "Flex 08/11/2025" in text
+    snap = elegant.parse_snapshot(_FLEX, text)
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.current == pytest.approx(0.1119)
+    assert energy.peak == pytest.approx(0.1136)
+    assert energy.offpeak == pytest.approx(0.1102)
+    assert energy.exclusive_night == pytest.approx(0.1102)
+    assert energy.formula_factor == pytest.approx(1.1419 * 1.06)
+    assert energy.formula_base == pytest.approx(0.01987 * 1.06)
+    assert energy.formula_factor is not None and energy.formula_base is not None
+    assert energy.formula_factor * 0.07507 + energy.formula_base == pytest.approx(
+        energy.current, abs=5e-5
+    )
+    injection = snap.injection
+    assert injection is not None
+    assert injection.current == pytest.approx(0.0363)
+    assert injection.factor == pytest.approx(0.85)
+    assert injection.base == pytest.approx(-0.02)
+    assert snap.publication_label == "november 2025"
+    assert snap.valid_until == date(2025, 11, 30)
+    text = _card("elegant_zeker_vast_2025-11.pdf")
+    assert "Zeker & Vast 08/11/2025" in text
+    snap = elegant.parse_snapshot(_VAST, text)
+    fixed = snap.energy
+    assert isinstance(fixed, FixedRates)
+    assert fixed.single == pytest.approx(0.1630)
+    assert fixed.peak == pytest.approx(0.1874)
+    assert fixed.offpeak == pytest.approx(0.1385)
+    assert fixed.exclusive_night == pytest.approx(0.1385)
+    assert fixed.yearly_fixed_fee == pytest.approx(120.0)
+    injection = snap.injection
+    assert injection is not None
+    assert injection.current == pytest.approx(0.0363)
+    assert injection.base == pytest.approx(-0.02)
+    assert snap.publication_label == "november 2025"
+
+
 def test_a_card_for_another_product_is_refused() -> None:
     """Flex and ComfortFlex print the same figures, so only the heading tells
     the two cards apart, and the professional edition prints the same
@@ -325,18 +370,18 @@ _KEYS = {
 _CHART = "https://www.elegant.be/api/tarief-archief/tariff-chart?tariffChartPath="
 
 
-def _path(key: str, month: str) -> str:
-    return f"/api/v1/tariff-charts?productOfferKey={key}_{month}01&archive=true"
+def _path(key: str, month: str, day: str = "01") -> str:
+    return f"/api/v1/tariff-charts?productOfferKey={key}_{month}{day}&archive=true"
 
 
-def _offers(month: str, *keys: str) -> str:
-    """An archive search answer offering ``keys`` from the first of
-    ``month`` ("202609")."""
+def _offers(month: str, *keys: str, day: str = "01") -> str:
+    """An archive search answer offering ``keys`` from ``day`` of ``month``
+    ("202609")."""
     offers = [
         {
-            "productOfferKey": f"{key}_{month}01",
+            "productOfferKey": f"{key}_{month}{day}",
             "name": key,
-            "tariffChartUrl": _path(key, month),
+            "tariffChartUrl": _path(key, month, day),
         }
         for key in keys
     ]
@@ -366,8 +411,8 @@ def _archive(
     return asked
 
 
-def _chart(contract_id: str, month: str) -> str:
-    return _CHART + quote(_path(_KEYS[contract_id], month), safe="")
+def _chart(contract_id: str, month: str, day: str = "01") -> str:
+    return _CHART + quote(_path(_KEYS[contract_id], month, day), safe="")
 
 
 async def test_a_closed_month_settles_on_the_indices_the_next_card_names(
@@ -575,23 +620,67 @@ async def test_a_variable_card_naming_one_index_settles_neither_leg(
 async def test_a_month_without_the_product_is_not_archived(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Before December 2025 the archive offers the products Elegant sold
-    then, under other keys."""
-    asked = _archive(
-        monkeypatch,
-        {"2025-11-01": _offers("202111", "BEGreenFlexStroom", "BEComfortFlexStroom")},
-        {},
-    )
+    """Before November 2025 the archive offers the products Elegant sold
+    then, under other keys, from the first of the month to its last."""
+    old = _offers("202111", "BEGreenFlexStroom", "BEComfortFlexStroom")
+    asked = _archive(monkeypatch, {"2025-10-01": old, "2025-10-31": old}, {})
     session = make_text_session("")
     assert (
         await elegant.fetch_for_month(
-            session, _FLEX, REGION_FLANDERS, date(2025, 11, 1)
+            session, _FLEX, REGION_FLANDERS, date(2025, 10, 1)
         )
         is None
     )
-    assert asked == ["2025-11-01"]
+    assert asked == ["2025-10-01", "2025-10-31"]
     assert (
-        await elegant.fetch_for_month(session, _FLEX, "brussels", date(2025, 11, 1))
+        await elegant.fetch_for_month(session, _FLEX, "brussels", date(2025, 10, 1))
         is None
     )
-    assert asked == ["2025-11-01"]
+    assert asked == ["2025-10-01", "2025-10-31"]
+
+
+async def test_the_launch_month_reads_the_first_day_with_the_product(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The current products start on 8 November 2025, when the 1st still
+    offers the old ones. A contract signed later that month is billed on
+    the card of the 8th, settled on the 8,619 and 7,889 c€/kWh December's
+    card names for November."""
+    old = _offers("202111", "BEGreenFlexStroom", "BEComfortFlexStroom")
+    new = _offers("202511", *_KEYS.values(), day="08")
+    answers = {f"2025-11-{day:02d}": old if day < 8 else new for day in range(1, 31)}
+    answers["2025-12-01"] = _offers("202512", *_KEYS.values())
+    asked = _archive(
+        monkeypatch,
+        answers,
+        {
+            _chart(_FLEX, "202511", "08"): _card("elegant_flex_2025-11.pdf"),
+            _chart(_FLEX, "202512"): _card("elegant_flex_2025-12.pdf"),
+        },
+    )
+    snap = await elegant.fetch_for_month(
+        make_text_session(""), _FLEX, REGION_FLANDERS, date(2025, 11, 20)
+    )
+    # The 1st, the last day, then halving the days between down to the 8th.
+    assert asked == [
+        "2025-11-01",
+        "2025-11-30",
+        "2025-11-15",
+        "2025-11-08",
+        "2025-11-04",
+        "2025-11-06",
+        "2025-11-07",
+        "2025-12-01",
+    ]
+    assert snap is not None
+    assert not snap.provisional
+    assert snap.source_url == _chart(_FLEX, "202511", "08")
+    assert snap.publication_label == "november 2025"
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.index_realised == pytest.approx(0.08619)
+    assert energy.current == pytest.approx(1.1419 * 1.06 * 0.08619 + 0.01987 * 1.06)
+    injection = snap.injection
+    assert injection is not None
+    assert injection.index_realised == pytest.approx(0.07889)
+    assert injection.current == pytest.approx(0.85 * 0.07889 - 0.02)
