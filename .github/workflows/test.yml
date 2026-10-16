@@ -68,7 +68,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: tmp/fixture_text
-          key: fixture-text-${{ hashFiles('tests/fixtures/*.pdf', 'custom_components/be_electricity_prices/providers/_pdf.py', 'custom_components/be_electricity_prices/providers/_pdf_bound.py', 'requirements-dev.txt') }}
+          key: fixture-text-${{ hashFiles('tests/fixtures/*.pdf', 'custom_components/be_electricity_prices/providers/_pdf.py', 'custom_components/be_electricity_prices/providers/_pdf_bound.py', 'custom_components/be_electricity_prices/providers/_pdf_bound_pdfminer.py', 'requirements-dev.txt') }}
           restore-keys: fixture-text-
       - name: Tests
         # Split across the runner's cores by file, so a file's fixtures are

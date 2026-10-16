@@ -647,7 +647,8 @@ Internals worth knowing:
   `UnicodeDecodeError`. The ENTSO-E and energy-charts answers, the Brugel
   sheets, the CREG rate file and Synergrid's download page are read through
   them too.
-- The decode bound (`_pdf_bound.py`) holds what a card's streams may decode
+- The decode bound (`_pdf_bound.py`, pdfminer's wrappers in
+  `_pdf_bound_pdfminer.py`) holds what a card's streams may decode
   to, counted on each reader as it reads the card. `read_capped` bounds the
   download, not what it inflates to. pypdf limits each stream (from 6.0.0) but
   not what a whole document decodes to, and pdfminer decompresses with no
@@ -791,7 +792,7 @@ Internals worth knowing:
   catches any error a form raises and goes on to its next draw, logging
   each, 99 984 lines for one file. pypdf reaching one of its own limits is
   refused too, under pypdf's own words for it. The readers are wrapped
-  once per process: a second copy of `_pdf_bound.py`, as the live check
+  once per process: a second copy of the two modules, as the live check
   loads under a package of its own, finds the wrappers in place by a
   marker they carry and reads through them, held to its own bound, where
   it wrapped them again and had each read counted once for every copy.

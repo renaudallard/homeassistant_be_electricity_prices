@@ -73,14 +73,15 @@ def _text_cache_dir() -> Path:
     """Where ``fixture_text`` keeps what it extracted, across runs.
 
     One directory per extractor: the digest covers ``providers/_pdf.py``,
-    ``providers/_pdf_bound.py`` and the pypdf and pdfplumber versions, so a
-    change to any of them reads every card afresh instead of serving text the
-    current code would not produce, or would refuse. Under
+    the decode bound in ``providers/_pdf_bound.py`` and
+    ``providers/_pdf_bound_pdfminer.py`` and the pypdf and pdfplumber
+    versions, so a change to any of them reads every card afresh instead of
+    serving text the current code would not produce, or would refuse. Under
     ``tmp/`` by default, which git ignores; ``BE_FIXTURE_TEXT_CACHE`` moves
     it, which the gate does so its throwaway worktree reuses the main one's.
     """
     extractor = hashlib.sha256()
-    for code in ("_pdf.py", "_pdf_bound.py"):
+    for code in ("_pdf.py", "_pdf_bound.py", "_pdf_bound_pdfminer.py"):
         extractor.update((PACKAGE / "providers" / code).read_bytes())
     for dist in ("pypdf", "pdfplumber"):
         extractor.update(f"{dist} {version(dist)}".encode())

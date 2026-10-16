@@ -40,7 +40,11 @@ _PROVIDERS = (
     / "be_electricity_prices"
     / "providers"
 )
-_RENDER_CODE = (_PROVIDERS / "_pdf.py", _PROVIDERS / "_pdf_bound.py")
+_RENDER_CODE = (
+    _PROVIDERS / "_pdf.py",
+    _PROVIDERS / "_pdf_bound.py",
+    _PROVIDERS / "_pdf_bound_pdfminer.py",
+)
 # The engine that reads a card published as page images, and what it reads
 # with: pypdfium2 renders the pages, numpy matches the glyphs and pdfplumber
 # lays out the words, all installed beside it unpinned, so one of them moving

@@ -37,7 +37,11 @@ from typing import Any
 import aiohttp
 import pytest
 
-from custom_components.be_electricity_prices.providers import _pdf, _pdf_bound
+from custom_components.be_electricity_prices.providers import (
+    _pdf,
+    _pdf_bound,
+    _pdf_bound_pdfminer,
+)
 from custom_components.be_electricity_prices.providers._parse import (
     numeric_row,
     parse_brussels_osp,
@@ -1426,12 +1430,12 @@ def test_an_rc4_decryption_counts_before_it_runs(
     from pdfminer.arcfour import Arcfour
 
     monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
-    with _pdf_bound.bounded_pdfminer():
+    with _pdf_bound_pdfminer.bounded_pdfminer():
         for _ in range(3):
             assert len(Arcfour(b"key").decrypt(b"\0" * (64 << 10))) == 64 << 10
     with (
         pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"),
-        _pdf_bound.bounded_pdfminer(),
+        _pdf_bound_pdfminer.bounded_pdfminer(),
     ):
         for _ in range(5):
             Arcfour(b"key").decrypt(b"\0" * (64 << 10))
@@ -1439,7 +1443,7 @@ def test_an_rc4_decryption_counts_before_it_runs(
     assert len(Arcfour(b"key").decrypt(b"\0" * (64 << 10))) == 64 << 10
     with (
         pytest.raises(ExtractorError, match=r"^PDF streams decode to more than"),
-        _pdf_bound.bounded_pdfminer(),
+        _pdf_bound_pdfminer.bounded_pdfminer(),
     ):
         Arcfour(b"key").decrypt(b"\0" * big)
 
@@ -1726,9 +1730,9 @@ def test_what_pdfminer_holds_at_once_is_held(
     not yet painted, each growing with the bytes drawing it: 2 MB of saved
     states held 552 MB, and 400 kB of operands left waiting, each operator
     then copying the rest, took 157 s."""
-    monkeypatch.setattr(_pdf_bound, "_MAX_STACK", 50)
-    monkeypatch.setattr(_pdf_bound, "_MAX_NESTING", 3)
-    monkeypatch.setattr(_pdf_bound, "_MAX_PATH_SEGMENTS", 100)
+    monkeypatch.setattr(_pdf_bound_pdfminer, "_MAX_STACK", 50)
+    monkeypatch.setattr(_pdf_bound_pdfminer, "_MAX_NESTING", 3)
+    monkeypatch.setattr(_pdf_bound_pdfminer, "_MAX_PATH_SEGMENTS", 100)
 
     def shapes(n: int, depth: int) -> tuple[bytes, ...]:
         return (
@@ -1821,7 +1825,7 @@ def test_the_lines_read_backwards_are_pdfminer_s() -> None:
 
     from pdfminer.psparser import PSBaseParser
 
-    _pdf_bound._hold_pdfminer_to_the_bound()
+    _pdf_bound_pdfminer._hold_pdfminer_to_the_bound()
     for data in (
         b"",
         b"a",
@@ -1831,7 +1835,7 @@ def test_the_lines_read_backwards_are_pdfminer_s() -> None:
         b"x" * 9000 + b"\r\n" + b"y" * 5000 + b"\n" * 3,
     ):
         expected = list(PSBaseParser(io.BytesIO(data)).revreadlines())
-        with _pdf_bound.bounded_pdfminer():
+        with _pdf_bound_pdfminer.bounded_pdfminer():
             assert list(PSBaseParser(io.BytesIO(data)).revreadlines()) == expected
 
 
@@ -2105,7 +2109,7 @@ def test_a_card_is_held_to_a_page_count(
     from pypdf import PageObject
 
     # Held first, so the counting below wraps the hold, not the reverse.
-    _pdf_bound._hold_pdfminer_to_the_bound()
+    _pdf_bound_pdfminer._hold_pdfminer_to_the_bound()
     monkeypatch.setattr(_pdf_bound, "_MAX_PAGES", 3)
     pages: list[object] = []
     page_object = PageObject.__init__
@@ -2139,7 +2143,10 @@ def test_pdfminer_lays_out_no_paths_while_a_card_is_read() -> None:
     import pdfplumber
 
     payload = _pdf_of(b"0 0 m 10 10 l S 0 0 10 10 re f", attrs=b"")
-    with _pdf_bound.bounded_pdfminer(), pdfplumber.open(io.BytesIO(payload)) as pdf:
+    with (
+        _pdf_bound_pdfminer.bounded_pdfminer(),
+        pdfplumber.open(io.BytesIO(payload)) as pdf,
+    ):
         assert not pdf.pages[0].lines and not pdf.pages[0].rects
     with pdfplumber.open(io.BytesIO(payload)) as pdf:
         assert pdf.pages[0].lines and pdf.pages[0].rects
@@ -2162,16 +2169,27 @@ def test_a_second_copy_of_the_bound_reads_through_the_same_wrappers(
     from pdfminer.pdftypes import PDFStream
     from pypdf.generic import EncodedStreamObject
 
-    _pdf_bound._hold_pdfminer_to_the_bound()
+    _pdf_bound_pdfminer._hold_pdfminer_to_the_bound()
     wrapped = (PDFStream.get_data, EncodedStreamObject.get_data)
-    name = f"{_pdf_bound.__package__}._pdf_bound_copy"
-    spec = importlib.util.spec_from_file_location(name, _pdf_bound.__file__)
-    assert spec is not None and spec.loader is not None
-    copy = importlib.util.module_from_spec(spec)
-    monkeypatch.setitem(sys.modules, name, copy)
-    spec.loader.exec_module(copy)
-    copy._hold_pdfminer_to_the_bound()
+
+    def load(module: Any) -> Any:
+        name = f"{module.__name__}_copy"
+        spec = importlib.util.spec_from_file_location(name, module.__file__)
+        assert spec is not None and spec.loader is not None
+        copy = importlib.util.module_from_spec(spec)
+        monkeypatch.setitem(sys.modules, name, copy)
+        spec.loader.exec_module(copy)
+        return copy
+
+    copy = load(_pdf_bound)
+    # The copy of pdfminer's wrappers imports the copy of the bound, as in
+    # a package loaded again.
+    with monkeypatch.context() as patch:
+        patch.setitem(sys.modules, _pdf_bound.__name__, copy)
+        miner = load(_pdf_bound_pdfminer)
+    miner._hold_pdfminer_to_the_bound()
     assert (PDFStream.get_data, EncodedStreamObject.get_data) == wrapped
+    assert miner._READING is copy._READING is _pdf_bound._READING
     monkeypatch.setattr(copy, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
     payload = _inflating_pdf(2 << 20)
     refused = r"^PDF streams decode to more than 1048576 bytes"
@@ -2179,7 +2197,7 @@ def test_a_second_copy_of_the_bound_reads_through_the_same_wrappers(
         pypdf.PdfReader(io.BytesIO(payload)).pages[0].extract_text()
     with (
         pytest.raises(ExtractorError, match=refused),
-        copy.bounded_pdfminer(),
+        miner.bounded_pdfminer(),
         pdfplumber.open(io.BytesIO(payload)) as pdf,
     ):
         pdf.pages[0].extract_text()
@@ -2252,7 +2270,7 @@ def test_dedupe_finds_each_glyph_kept_at_once() -> None:
     expected = utils.dedupe_chars(glyphs)
     assert _Glyph.compared > 1_000_000
     _Glyph.compared = 0
-    with _pdf_bound.bounded_pdfminer():
+    with _pdf_bound_pdfminer.bounded_pdfminer():
         kept = utils.dedupe_chars(glyphs)
     assert _Glyph.compared < 10_000
     assert len(kept) == 2000

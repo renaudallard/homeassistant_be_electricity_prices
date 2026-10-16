@@ -44,7 +44,8 @@ import pypdf
 from ._parse import (
     to_float,
 )
-from ._pdf_bound import bounded_pdfminer, bounded_pypdf
+from ._pdf_bound import bounded_pypdf
+from ._pdf_bound_pdfminer import bounded_pdfminer
 from .base import (
     CardNotReadableError,
     ExtractorError,

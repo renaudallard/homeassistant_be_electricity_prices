@@ -130,17 +130,19 @@ def test_helpers_keep_bytes_and_digests_intact(tmp_path: Path) -> None:
     assert digest_of("abc") == "abc"
 
 
+@pytest.mark.parametrize("module", ["_pdf_bound.py", "_pdf_bound_pdfminer.py"])
 def test_the_render_stamp_moves_with_the_decode_bound(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, module: str
 ) -> None:
     """The decode bound moved out of providers/_pdf.py into _pdf_bound.py,
-    and a change to it kept serving the texts it would now refuse."""
+    and pdfminer's part of it on into _pdf_bound_pdfminer.py, and a change
+    to it kept serving the texts it would now refuse."""
     before = readers_line()
     read = Path.read_bytes
 
     def edited(path: Path) -> bytes:
         data = read(path)
-        return data + b"\n# edited" if path.name == "_pdf_bound.py" else data
+        return data + b"\n# edited" if path.name == module else data
 
     monkeypatch.setattr(Path, "read_bytes", edited)
     assert readers_line() != before
