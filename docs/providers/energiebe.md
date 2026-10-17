@@ -477,10 +477,17 @@ canonical DSO key:
 Note Kempen -> `fluvius_iveka` and Midden-Vlaanderen -> `fluvius_intergem`: the card's
 regional trade name is not the canonical key. `test_dsos_cover_all_eight_fluvius_subareas`
 asserts all eight are present.
-A card missing any of the eight is refused (`ExtractorError` naming the keys) rather
-than adopted: a partial table would be persisted and shared, and the entry on the missing
-area would fail every tick with no Repairs card while the last good card was gone from
-the cache. `test_a_card_missing_a_fluvius_row_is_refused` drops a row from the real card.
+An area whose row does not read is left out of the table. `fetch` then refuses the live
+card (`ExtractorError` naming the keys) rather than adopt it: a partial table would be
+persisted and shared, and the entry on the missing area would fail every tick with no
+Repairs card while the last good card was gone from the cache (`require_every_area`,
+`_parse.py`). `fetch_for_month` refuses the running month's card the same way
+(`running_month_short_of_an_area`), so the last good card stands in. A past month's card
+keeps its short table: its energy is what the month is billed on, and the month cache
+bills the missing area on the nearest card of the same calendar year that prints it
+(`_with_nearest_area`, `snapshot_areas.py`). A table where no row reads at all raises.
+`test_a_live_card_missing_a_fluvius_row_is_refused` and
+`test_a_past_month_keeps_a_short_network_table` drop a row from the real card.
 
 The parser narrows to the "Nettarieven" section, then for each area reads the
 first four numbers of its row (the digital-meter columns):

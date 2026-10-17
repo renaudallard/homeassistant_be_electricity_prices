@@ -28,6 +28,8 @@
 from __future__ import annotations
 
 from datetime import UTC, date
+from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -113,16 +115,36 @@ def test_dsos_cover_all_eight_fluvius_subareas() -> None:
     assert set(_snap().dsos) == set(FLUVIUS_KEYS)
 
 
-def test_a_card_missing_a_fluvius_row_is_refused() -> None:
-    """A partial table used to be adopted, persisted and shared: the entry on
-    the missing area then hit a KeyError on every tick with no Repairs card,
-    while the last good card was gone from the cache. Energy Knights refused
-    such a card from the start; this card is refused the same way."""
+def _without_limburg() -> str:
     lines = _text().splitlines()
     kept = [line for line in lines if "Fluvius (Limburg" not in line]
     assert len(kept) < len(lines)
-    with pytest.raises(ExtractorError, match="fluvius_limburg"):
-        parse_snapshot("\n".join(kept), "test://energiebe-jul")
+    return "\n".join(kept)
+
+
+async def test_a_live_card_missing_a_fluvius_row_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A partial table used to be adopted, persisted and shared: the entry on
+    the missing area then hit a KeyError on every tick with no Repairs card,
+    while the last good card was gone from the cache. The reader leaves the
+    area out and the live card is refused for it."""
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    short = _without_limburg()
+    snap = parse_snapshot(short, "test://energiebe-jul")
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_limburg"}
+    monkeypatch.setattr(
+        energiebe, "fetch_pdf_text_layout", AsyncMock(return_value=short)
+    )
+    with pytest.raises(
+        ExtractorError, match=r"DSO rows not found for \['fluvius_limburg'\]"
+    ):
+        await energiebe.fetch(
+            None,  # type: ignore[arg-type]
+            "energiebe_dynamic",
+            REGION_FLANDERS,
+        )
 
 
 def test_dso_antwerpen_distribution() -> None:
@@ -1111,6 +1133,42 @@ async def test_archive_resolves_the_months_card_from_the_listing(
     assert snap.energy.base == pytest.approx(0.0050 * 1.06)
     assert snap.injection is not None and snap.injection.factor == pytest.approx(1.0)
     assert len(snap.dsos) == 8
+
+
+async def test_a_past_month_keeps_a_short_network_table(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A past month's card is what the month is billed on, so a table short
+    of an area keeps the card; the month cache bills the missing area on the
+    nearest card printing it. The reader refused it, and the month fell back
+    to today's card for every area. As the running month's card it is
+    refused, as ``fetch`` refuses it."""
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    listing = _listing(("2026/07", "https://blob/Juli_Dynamisch.pdf"))
+    monkeypatch.setattr(energiebe, "fetch_text", AsyncMock(return_value=listing))
+    monkeypatch.setattr(
+        energiebe, "fetch_pdf_text_layout", AsyncMock(return_value=_without_limburg())
+    )
+    freezer.move_to("2026-10-16 12:00:00+02:00")
+    snap = await energiebe.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "energiebe_dynamic",
+        REGION_FLANDERS,
+        date(2026, 7, 1),
+    )
+    assert snap is not None
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_limburg"}
+    freezer.move_to("2026-07-20 12:00:00+02:00")
+    assert (
+        await energiebe.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "energiebe_dynamic",
+            REGION_FLANDERS,
+            date(2026, 7, 1),
+        )
+        is None
+    )
 
 
 async def test_archive_answers_none_for_a_month_the_listing_lacks(

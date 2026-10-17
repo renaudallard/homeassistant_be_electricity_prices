@@ -66,10 +66,19 @@ import aiohttp
 from ..const import (
     FLUVIUS_CARD_LABELS,
     FLUVIUS_CARD_TOKENS,
+    FLUVIUS_KEYS,
     REGION_FLANDERS,
     VAT_RATE_REDUCED,
 )
-from ._parse import SIGN_CHARS, numeric_row, parse_sign, regional_tax_overlay, to_float
+from ._parse import (
+    SIGN_CHARS,
+    numeric_row,
+    parse_sign,
+    regional_tax_overlay,
+    require_every_area,
+    running_month_short_of_an_area,
+    to_float,
+)
 from ._pdf import (
     NL_MONTHS,
     NUM_NO_THOUSANDS,
@@ -278,7 +287,10 @@ async def fetch(
     if contract_id in _TARIFF_TYPE:
         url = await _resolve_card_url(session, _TARIFF_TYPE[contract_id])
     text = await fetch_pdf_text_layout(session, url)
-    return parse_snapshot(text, url, contract_id)
+    snap = parse_snapshot(text, url, contract_id)
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("energie.be", snap.dsos, FLUVIUS_KEYS)
+    return snap
 
 
 async def _resolve_card_url(session: aiohttp.ClientSession, tariff_type: str) -> str:
@@ -400,6 +412,8 @@ async def fetch_for_month(
         # so the month cache retries it instead of caching it as absent.
         if is_transient_fetch_error(str(err)):
             raise
+        return None
+    if running_month_short_of_an_area(snap.dsos, FLUVIUS_KEYS, first):
         return None
     return archive_validity_check(snap, text, first, month_names=NL_MONTHS)
 
@@ -663,6 +677,14 @@ def _extract_taxes(text: str) -> TaxOverlay:
 
 
 def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
+    """The residential network table.
+
+    An area whose row does not read is left out. ``fetch`` refuses a live
+    card short of an area and ``fetch_for_month`` the running month's
+    (``require_every_area``), while a past month's card keeps its energy and
+    the month cache bills the missing area on the nearest card of the same
+    calendar year that prints it. A table nothing could be read from raises.
+    """
     start = text.find("Nettarieven")
     if start < 0:
         raise ExtractorError("could not locate energie.be DSO table")
@@ -706,14 +728,8 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=databeheer,
             network_ceiling_eur_per_kwh=ceiling,
         )
-    missing = [key for _, key in _DSO_ROWS if key not in out]
-    if missing:
-        # A partial table is worse than none: the areas are what every
-        # entry picks its network cost from, and a card missing one would
-        # be adopted, persisted and shared, leaving the entry on that area
-        # with no overlay and every tick failing, while the last good card
-        # is gone from the cache. Refusing keeps that card serving.
-        raise ExtractorError(f"energie.be: DSO rows not found for {sorted(missing)}")
+    if not out:
+        raise ExtractorError("energie.be: no DSO row read")
     return out
 
 

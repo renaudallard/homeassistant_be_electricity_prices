@@ -101,14 +101,14 @@ def require_every_area(
     would let the backfill path silently skip whole months (it swallows the
     resulting KeyError). Refusing keeps the last good card serving.
 
-    Aspiravi, Cociter, EBEM, Elegant, Eneco, Frank, OCTA+ and Trevion ask
-    it of the live card, and hold the running month's card to the same areas through
-    ``running_month_short_of_an_area``. A past month's card keeps a short
-    table: its energy is still what the month and a signing cohort are
-    billed, where refusing the card billed both on today's card, and the
-    month cache takes the missing area's network from the nearest card of
-    the same calendar year that prints it (``_with_nearest_area``,
-    ``snapshot_areas.py``).
+    Aspiravi, Cociter, EBEM, Elegant, Eneco, energie.be, Frank, OCTA+ and
+    Trevion ask it of the live card, and hold the running month's card to
+    the same areas through ``running_month_short_of_an_area``. A past
+    month's card keeps a short table: its energy is still what the month and
+    a signing cohort are billed, where refusing the card billed both on
+    today's card, and the month cache takes the missing area's network from
+    the nearest card of the same calendar year that prints it
+    (``_with_nearest_area``, ``snapshot_areas.py``).
     """
     missing = sorted(key for key in keys if key not in out)
     if missing:
