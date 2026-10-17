@@ -849,7 +849,7 @@ class _HouseholdMixin:
         month is served and both honour the entry's card-archive box.
         """
         from .providers.base import CardNotReadableError
-        from .snapshot_months import card_for_unreadable_month
+        from .snapshot_stand_ins import card_for_unreadable_month
 
         if not isinstance(fetched.error, CardNotReadableError):
             return None

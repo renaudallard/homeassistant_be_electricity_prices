@@ -93,12 +93,9 @@ from .providers.base import (
     SupplierSnapshot,
 )
 from .providers.custom import build_snapshot as build_custom_snapshot
-from .snapshot_months import (
-    card_for_unreadable_month,
-    month_card,
-    month_card_failed,
-)
+from .snapshot_months import month_card, month_card_failed
 from .snapshot_resolve import _resolve_snapshot, entry_annual_kwh
+from .snapshot_stand_ins import card_for_unreadable_month
 from .snapshot_store import fetch_shared
 from .spot_stats import _energy_is_rlp_indexed, _spp_weighting_enabled
 from .ytd_cost import _compute_current_year_cost

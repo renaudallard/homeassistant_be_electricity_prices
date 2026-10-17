@@ -73,12 +73,16 @@ from .snapshot_codec import (
     _SNAPSHOT_SCHEMA_VERSION,
     _snapshot_from_dict,
 )
-from .snapshot_months import ArchivedCard, card_for_unreadable_month
+from .snapshot_months import ArchivedCard
 from .snapshot_resolve import (
     _resolve_snapshot,
     entry_annual_kwh,
 )
-from .snapshot_stand_ins import card_of_month_before, newest_archived_card
+from .snapshot_stand_ins import (
+    card_for_unreadable_month,
+    card_of_month_before,
+    newest_archived_card,
+)
 from .snapshot_store import (
     _shared_failed_fetches,
     _SharedSnapshot,

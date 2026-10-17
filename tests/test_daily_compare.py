@@ -1611,7 +1611,7 @@ async def test_a_card_published_as_images_is_priced_from_the_archive_reading(
         error_message="card has no text layer",
     )
     with patch(
-        "custom_components.be_electricity_prices.snapshot_months"
+        "custom_components.be_electricity_prices.snapshot_stand_ins"
         ".card_for_unreadable_month",
         AsyncMock(return_value=archived),
     ):
@@ -1623,7 +1623,7 @@ async def test_a_card_published_as_images_is_priced_from_the_archive_reading(
     # A supplier that is simply down gets no stale reading.
     down = SimpleNamespace(error=ExtractorError("HTTP 503"), error_message="HTTP 503")
     with patch(
-        "custom_components.be_electricity_prices.snapshot_months"
+        "custom_components.be_electricity_prices.snapshot_stand_ins"
         ".card_for_unreadable_month",
         AsyncMock(side_effect=AssertionError("must not ask the archive")),
     ):

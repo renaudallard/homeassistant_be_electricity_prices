@@ -23,11 +23,12 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""The archive's row of an earlier month, for an entry left with no card.
+"""The archive's row standing in for a card an entry cannot have.
 
-A withdrawn product is priced off the last month it was sold, and an entry
-whose card cannot be had or has gone stale off the newest row the
-repository's card archive holds for it. Both honour the entry's card-archive
+A card published as page images is priced off the archive's row for the
+running month, a withdrawn product off the last month it was sold, and an
+entry whose card cannot be had or has gone stale off the newest row the
+repository's card archive holds for it. All honour the entry's card-archive
 box through ``_archive_allowed``.
 
 The archive is read through ``snapshot_months`` at call time rather than
@@ -48,6 +49,38 @@ from .snapshot_months import ArchivedCard, _archive_allowed
 def month_before(day: date) -> date:
     """The first day of the month before ``day``'s."""
     return (day.replace(day=1) - timedelta(days=1)).replace(day=1)
+
+
+async def card_for_unreadable_month(
+    session: aiohttp.ClientSession,
+    supplier: str,
+    contract: str,
+    region: str,
+    today: date,
+    entry: ConfigEntry | None,
+) -> ArchivedCard | None:
+    """The archive's row for the RUNNING month, for a card nobody can read.
+
+    The last resort, and reached only on a card that downloaded fine and
+    carries no text layer. A supplier publishing page images leaves a parser
+    nothing to work with, but the repository's daily walk reads those with an
+    OCR engine and files what it gets, so the row is the one place a price
+    for this month exists at all.
+
+    Asking for the running month is exactly what ``_card_archive_may_hold``
+    refuses, and rightly: while a card can be read the live parse is the
+    better answer and the archive's copy is a day behind at best. That
+    reasoning runs out when the card cannot be read, which is the only door
+    into this function.
+
+    Honours the entry's card-archive box, which exists so a household can
+    keep the integration from contacting GitHub at all.
+    """
+    if not _archive_allowed(entry):
+        return None
+    return await snapshot_months._archived_card_from_github(
+        session, supplier, contract, region, today.replace(day=1)
+    )
 
 
 async def card_of_month_before(

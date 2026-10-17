@@ -515,38 +515,6 @@ async def _archived_card_from_github(
     )
 
 
-async def card_for_unreadable_month(
-    session: aiohttp.ClientSession,
-    supplier: str,
-    contract: str,
-    region: str,
-    today: date,
-    entry: ConfigEntry | None,
-) -> ArchivedCard | None:
-    """The archive's row for the RUNNING month, for a card nobody can read.
-
-    The last resort, and reached only on a card that downloaded fine and
-    carries no text layer. A supplier publishing page images leaves a parser
-    nothing to work with, but the repository's daily walk reads those with an
-    OCR engine and files what it gets, so the row is the one place a price
-    for this month exists at all.
-
-    Asking for the running month is exactly what ``_card_archive_may_hold``
-    refuses, and rightly: while a card can be read the live parse is the
-    better answer and the archive's copy is a day behind at best. That
-    reasoning runs out when the card cannot be read, which is the only door
-    into this function.
-
-    Honours the entry's card-archive box, which exists so a household can
-    keep the integration from contacting GitHub at all.
-    """
-    if not _archive_allowed(entry):
-        return None
-    return await _archived_card_from_github(
-        session, supplier, contract, region, today.replace(day=1)
-    )
-
-
 def _archive_allowed(entry: ConfigEntry | None) -> bool:
     """Whether the entry lets the integration read the repository's card
     archive. The box exists so a household can keep it from contacting
