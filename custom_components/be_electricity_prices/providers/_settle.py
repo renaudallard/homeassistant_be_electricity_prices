@@ -186,6 +186,45 @@ def _register_indices(energy: VariableRates) -> dict[str, float]:
     }
 
 
+# The feed-in figures a Bolt variable card prints per meter register.
+_SPP_REGISTER_RATES = ("current", "peak", "offpeak")
+
+
+def settled_spp_registers(
+    inj: InjectionRates, indices: Mapping[str, float]
+) -> InjectionRates:
+    """A feed-in leg crediting its variable settlement per meter register
+    (``InjectionRates.spp_redistributed``) rebuilt on ``indices``, each
+    register's SPP-weighted index by the field it prices.
+
+    The formula stays on the leg for the dynamic settlement, and no
+    ``index_realised`` is recorded: on that leg it would stand in for every
+    slot's spot (``spot_stats._spp_injection_spot``). Only the figures the
+    leg carries are rebuilt, so a Walloon leg keeps its single register; a
+    leg with no formula, or ``indices`` lacking one of them, comes back as
+    it was.
+    """
+    carried = [f for f in _SPP_REGISTER_RATES if getattr(inj, f) is not None]
+    if inj.factor is None or inj.base is None or any(f not in indices for f in carried):
+        return inj
+    rates: dict[str, Any] = {
+        field: inj.factor * indices[field] + inj.base for field in carried
+    }
+    return replace(inj, **rates)
+
+
+def _spp_register_indices(inj: InjectionRates) -> dict[str, float]:
+    """The index each register figure of a leg :func:`settled_spp_registers`
+    built stands at, read back through its formula."""
+    if not inj.factor or inj.base is None:
+        return {}
+    return {
+        field: (rate - inj.base) / inj.factor
+        for field in _SPP_REGISTER_RATES
+        if (rate := getattr(inj, field)) is not None
+    }
+
+
 def indexed_energy(energy: object) -> bool:
     """Whether an energy leg is indexed on its delivery month, or on its
     delivery quarter (Bolt's variable cards), and so settles once that has
@@ -246,4 +285,16 @@ def settled_as(snap: SupplierSnapshot, settled: SupplierSnapshot) -> SupplierSna
         and (injection.month_indexed or injection.spp_indexed)
     ):
         injection = settled_injection(injection, held_injection.index_realised)
+    if (
+        index is not None
+        and injection is not None
+        and held_injection is not None
+        and injection.spp_redistributed
+        and held_injection.spp_redistributed
+    ):
+        # Settled with the energy leg, off the same table, and recorded in
+        # the figures alone (``settled_spp_registers``).
+        injection = settled_spp_registers(
+            injection, _spp_register_indices(held_injection)
+        )
     return replace(snap, energy=energy, injection=injection)

@@ -118,10 +118,115 @@ def test_injection_carries_the_quarter_hourly_formula() -> None:
         snap = parse_snapshot(cid, fixture_text(fixture, layout=True), "wallonia")
         inj = snap.injection
         assert inj is not None, cid
-        assert inj.current == pytest.approx(0.0531), cid
+        assert inj.current == pytest.approx(0.0531, abs=5e-5), cid
         assert inj.factor == pytest.approx(0.94), cid
         assert inj.base == pytest.approx(-11.33 / 1000.0), cid
         assert inj.slot_indexed is True, cid
+        assert inj.spp_redistributed is (cid == "bolt_variable"), cid
+
+
+def test_the_variable_settlement_credits_the_spp_figures_per_register() -> None:
+    """The variable card bills the feed-in per quarter-hour on its dynamic
+    settlement only: "En optant pour une facturation variable, nous
+    redistribuerons la consommation ponderee RLP ... Pour l'injection, nous
+    redistribuerons l'injection ponderee SPP". Its index table prints each
+    register's SPP-weighted index, 78,09 / 96,66 / 31,37 EUR/MWh for the third
+    quarter of 2026, and the figures it prints are the formula at each,
+    6,21 / 7,95 / 1,82 c/kWh. Credited per quarter-hour instead, a modelled
+    household exporting 3.246 kWh from January to September 2026, most of it
+    at midday when the price is lowest, was paid 20,87 EUR less."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.injection import (
+        _historical_injection_rate,
+        _injection_price_for_slot,
+    )
+
+    snap = parse_snapshot(
+        "bolt_online",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "flanders",
+    )
+    inj = snap.injection
+    assert inj is not None and inj.spp_redistributed and not inj.bi_hourly
+    printed = {"current": 6.21, "peak": 7.95, "offpeak": 1.82}
+    for field, cents in printed.items():
+        assert getattr(inj, field) == pytest.approx(cents / 100.0, abs=5e-5)
+
+    variable = resolve_settlement_grid(snap, quarter_hourly=False).injection
+    assert variable is not None
+    assert variable.factor is None and variable.base is None
+    assert not variable.slot_indexed and variable.bi_hourly
+    noon = datetime(2026, 8, 12, 13, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    night = datetime(2026, 8, 12, 3, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    for meter, when, field in (
+        ("mono", noon, "current"),
+        ("bi", noon, "peak"),
+        ("bi", night, "offpeak"),
+        ("dynamic", noon, "peak"),
+    ):
+        expected = getattr(inj, field)
+        # Whatever the hour's spot, none reaches the leg.
+        assert _historical_injection_rate(
+            variable,
+            -0.2,
+            energy=snap.energy,
+            when=when,
+            meter=meter,  # type: ignore[arg-type]
+            region="flanders",
+        ) == pytest.approx(expected)
+        assert _injection_price_for_slot(
+            variable,
+            snap.energy,
+            -0.2,
+            when,
+            meter=meter,  # type: ignore[arg-type]
+            region="flanders",
+        ) == pytest.approx(expected)
+
+    dynamic = resolve_settlement_grid(snap, quarter_hourly=True)
+    assert dynamic.injection == inj
+    assert _injection_price_for_slot(
+        inj, dynamic.energy, 0.05, noon, meter="bi", region="flanders"
+    ) == pytest.approx(0.94 * 0.05 - 0.01133)
+
+
+def test_a_walloon_meter_is_credited_the_single_spp_figure() -> None:
+    """The card's day and night SPP indices are means over the Flemish and
+    Brussels registers' hours. Wallonia's night register runs 11:00-17:00 as
+    well since 2026 and holds most of the export, so its two registers are
+    credited the single figure rather than the card's night one, 1,82
+    c/kWh."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.injection import (
+        _historical_injection_rate,
+    )
+
+    snap = parse_snapshot(
+        "bolt_online",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "wallonia",
+    )
+    inj = snap.injection
+    assert inj is not None and inj.spp_redistributed
+    assert inj.peak is None and inj.offpeak is None
+    assert inj.current == pytest.approx(0.0621, abs=5e-5)
+    variable = resolve_settlement_grid(snap, quarter_hourly=False).injection
+    assert variable is not None and not variable.bi_hourly
+    noon = datetime(2026, 8, 12, 13, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    assert _historical_injection_rate(
+        variable, -0.2, energy=snap.energy, when=noon, meter="bi", region="wallonia"
+    ) == pytest.approx(inj.current)
+
+
+def test_a_fixed_card_keeps_its_quarter_hourly_feed_in() -> None:
+    """The fixed card bills the feed-in per quarter-hour whatever settles the
+    consumption, so neither reading moves it."""
+    snap = parse_snapshot(
+        "bolt_fix", fixture_text("bolt_fix.pdf", layout=True), "wallonia"
+    )
+    assert resolve_settlement_grid(snap, quarter_hourly=False) is snap
 
 
 def test_a_slot_indexed_credit_beats_its_printed_figure() -> None:
@@ -452,14 +557,14 @@ def test_ticking_the_settlement_box_yields_the_dynamic_leg() -> None:
     assert moved.energy.factor == pytest.approx(1.1192 * 1.06)
     assert moved.energy.base == pytest.approx(13.94 / 1000.0 * 1.06)
     assert moved.energy.yearly_fixed_fee == snap.energy.yearly_fixed_fee
-    # Injection does not move with it: the card bills the feed-in per
-    # quarter-hour on either settlement, so both readings share this leg.
+    # The feed-in leg is parsed as the dynamic settlement credits it, per
+    # quarter-hour, so ticking the box leaves it as it was.
     assert moved.injection == snap.injection
     assert moved.injection is not None
     assert moved.injection.factor == pytest.approx(0.94)
 
 
-def test_injection_is_read_the_same_way_on_either_settlement() -> None:
+def test_the_injection_formula_is_the_row_below_one() -> None:
     """The injection row is the Belpex formula whose factor is < 1 (Bolt
     redistributes a fraction of the spot). Even when the card prints
     per-meter-type consumption rows with DIFFERING factors, the parser must
@@ -1865,6 +1970,15 @@ async def test_a_closed_quarter_s_month_settles_on_the_next_quarter_s_table() ->
     for field in bands:
         assert getattr(energy, field) == pytest.approx(getattr(october, field))
     assert settled.dsos == held.dsos and settled.taxes == held.taxes
+    # The feed-in figure settles off the same table, on its SPP-weighted
+    # single-register row: August's card stands at the second quarter's,
+    # 3,40 c/kWh, October's at the third's, 6,21. A Walloon leg carries no
+    # register pair, and settling gives it none.
+    assert held.injection is not None and settled.injection is not None
+    assert held.injection.current == pytest.approx(0.0340, abs=5e-5)
+    assert settled.injection.current == pytest.approx(0.0621, abs=5e-5)
+    assert settled.injection.peak is None and settled.injection.offpeak is None
+    assert settled.injection.index_realised is None
 
     leg = _cohort_energy_from_archived(settled)
     assert isinstance(leg, SpotMonthlyRates)
@@ -1886,6 +2000,23 @@ async def test_a_closed_quarter_s_month_settles_on_the_next_quarter_s_table() ->
             region="wallonia",
             dso_tariff_mode=mode,  # type: ignore[arg-type]
         ) == pytest.approx(getattr(energy, field))
+
+
+async def test_a_replayed_month_keeps_the_feed_in_it_settled_at() -> None:
+    """The card archive re-reads a settled month's own card after a parser
+    change and puts back what it settled at, read off the stored row: the
+    feed-in figures too, which settle off the same table as the energy."""
+    from custom_components.be_electricity_prices.providers._settle import settled_as
+
+    held, settled, _fetched = await _settle_august(
+        date(2026, 10, 15), "bolt_online_oct_reissue.pdf"
+    )
+    replayed = settled_as(held, settled)
+    assert replayed.injection is not None and settled.injection is not None
+    assert held.injection is not None
+    assert replayed.injection.current == pytest.approx(settled.injection.current)
+    assert replayed.injection.current != pytest.approx(held.injection.current)
+    assert replayed.injection.factor == pytest.approx(0.94)
 
 
 @pytest.mark.parametrize(

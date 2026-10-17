@@ -216,8 +216,8 @@ def _injection_needs_spot(snapshot: SupplierSnapshot, entry: ConfigEntry) -> boo
     The case is a static-energy card (Fixed / Variable / TOU) whose
     injection is a per-slot spot formula (``factor``/``base``), either with
     no printed indicative at all (Cociter Variable) or with one the card
-    labels an illustration (``slot_indexed``: every Bolt fixed and variable
-    card). Such a card doesn't fetch ENTSO-E spots through the DynamicRates
+    labels an illustration (``slot_indexed``: every Bolt fixed card, and a
+    Bolt variable card billed per quarter-hour). Such a card doesn't fetch ENTSO-E spots through the DynamicRates
     energy path, so the coordinator must fetch spots for it too (and the
     config flow must collect an API key) to credit the injection.
     DynamicRates contracts already fetch spots via the energy
@@ -486,7 +486,8 @@ def _injection_replays_hourly_spot(inj: InjectionRates) -> bool:
     Two shapes reach it, the same pair ``_injection_needs_spot`` collects an
     ENTSO-E key for: a card that prints no indicative at all (Cociter Tarif
     Variable) and one whose indicative it calls an illustration
-    (``slot_indexed``: every Bolt fixed and variable card). For the first the
+    (``slot_indexed``: every Bolt fixed card, and a Bolt variable card billed
+    per quarter-hour). For the first the
     walk already credited nothing, because there was nothing to credit; for
     the second it credited a figure the card says is not the rate, while the
     injection_price sensor beside it billed the formula. Bolt's printed

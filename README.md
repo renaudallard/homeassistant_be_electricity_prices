@@ -100,7 +100,7 @@ Each of these has a section of its own further down; this is the scan.
 | Supplier | Contracts | Source |
 | --- | --- | --- |
 | **Aspiravi Energy** | Eco Plus Flex *(monthly Belpex mean, mono / bi / excl. night, for members of its partner cooperatives)* · a closed month settles on the mean the next card prints for it, energy and feed-in | Flanders only · [`aspiravi.py`](./custom_components/be_electricity_prices/providers/aspiravi.py) · [notes](./docs/providers/aspiravi.md)
-| **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty Variable · Bolt Online · Bolt Plenty Online · all six as **pro** contracts · the variable cards index quarterly on the RLP-weighted Belpex, re-priced on the delivery quarter with an ENTSO-E key, or settled per quarter-hour on request, and a closed quarter's months, key or not, settle on the indices the next quarter's card prints, and a card whose quarterly index table does not give back its own monthly price is refused, so the card held before keeps billing · the Plenty cards run an offer for contracts signed in their month, a lump with a feed-in bonus until September 2026 and a cut per kWh with one since October (9 c€/kWh on the residential cards and 10 c€/kWh before VAT on the professional Plenty Fixe card, whose VAT basis is read off its Dutch edition, Plenty Fixe in Flanders only), credited at the first year's settlement off the card of the month you signed and to no contract signed in another | [`bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) · [notes](./docs/providers/bolt.md)
+| **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty Variable · Bolt Online · Bolt Plenty Online · all six as **pro** contracts · the variable cards index quarterly on the RLP-weighted Belpex, re-priced on the delivery quarter with an ENTSO-E key, or settled per quarter-hour on request, and a closed quarter's months, key or not, settle on the indices the next quarter's card prints, and a card whose quarterly index table does not give back its own monthly price is refused, so the card held before keeps billing · the fixed cards credit the feed-in per quarter-hour, and so does a variable card on its quarter-hourly settlement; on its variable one it is credited at the SPP-weighted figures the card prints per meter register (the single one in Wallonia, whose night register runs 11:00-17:00 as well), settled like the consumption on the next quarter's card · the Plenty cards run an offer for contracts signed in their month, a lump with a feed-in bonus until September 2026 and a cut per kWh with one since October (9 c€/kWh on the residential cards and 10 c€/kWh before VAT on the professional Plenty Fixe card, whose VAT basis is read off its Dutch edition, Plenty Fixe in Flanders only), credited at the first year's settlement off the card of the month you signed and to no contract signed in another | [`bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) · [notes](./docs/providers/bolt.md)
 | **Cociter** | Tarif Variable (BELIX) · Tarif Variable Trihoraire *(BELIX on the CWaPE 3-band schedule)* · Tarif Dynamique (quarter-hourly BELPEX) | Wallonia only · [`cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) · [notes](./docs/providers/cociter.md)
 | **DATS 24** *(withdrawn 2026-08-31)* | Elektriciteit Groen Variabel (BE_spotRLP-indexed monthly) | Flanders + Wallonia · [`dats24.py`](./custom_components/be_electricity_prices/providers/dats24.py) · [notes](./docs/providers/dats24.md)
 | **EBEM** | Groen Variabel (BelpexRLP0 monthly, mono / bi / excl. night) · Groen B@sic+ (BelpexRLP0 monthly, single rate, online-only) · Groen Dyn@mic (Belpex 15-min, SMR3) | Flanders only · [`ebem.py`](./custom_components/be_electricity_prices/providers/ebem.py) · [notes](./docs/providers/ebem.md)
@@ -580,7 +580,8 @@ dropped rather than billed on the new card.
    card, and Bolt's variable cards on the delivery quarter's mean — and on
    the injection regime for a contract whose injection is itself
    index-linked, which is most static cards and not the handful it once was
-   — every Bolt card and both Cociter variable cards index it per slot, while
+   — every Bolt fixed card, a Bolt variable card billed per quarter-hour and
+   both Cociter variable cards index it per slot, while
    energie.be Vast and most of the rest index it on a monthly mean)* —
    validated against the real ENTSO-E endpoint at
    submission; bad keys are rejected before the entry is saved. If ENTSO-E is
@@ -744,8 +745,8 @@ Flex, FlexiO Max and the withdrawn LifePowr, and the custom supplier's monthly-a
 for it as a mandatory, validated field.
 It is optional everywhere else, but two features use it when present: an
 injection tariff that is itself index-linked — the hourly-spot shape
-(Cociter Variable and Variable Trihoraire, every Bolt fixed and variable
-card) and the monthly-mean shape (energie.be Vast on Belpex_SPP, and most
+(Cociter Variable and Variable Trihoraire, every Bolt fixed card, and a Bolt
+variable card billed per quarter-hour) and the monthly-mean shape (energie.be Vast on Belpex_SPP, and most
 other static cards), 78 contracts across 17 suppliers between them, and the
 re-price of a month-indexed contract on the delivery month's own mean, cohort
 or not, for which the flow offers the key on every solar regime (Aspiravi
@@ -1532,7 +1533,8 @@ hour with no cached spot price is billed without its energy term, and a
 month dropped as above is not billed at all.
 
 On the injection regime, a feed-in credit that follows the hour's spot
-price (Bolt fixed and variable, Cociter Variable and trihoraire) cannot be
+price (Bolt fixed, Bolt variable billed per quarter-hour, Cociter Variable
+and trihoraire) cannot be
 credited for an hour the day-ahead cache holds no price for. Those hours
 are credited nothing rather than a guess, and `injection_hours_uncredited`
 appears and counts them, so the bill reads high by their feed-in. Past
@@ -1685,8 +1687,10 @@ series:
 
 The bars can dip below zero at low spot, where you pay to inject. The
 curve moves during the day on every dynamic contract, both Cociter variable
-cards, every Bolt fixed and variable card, Engie Empower Flextime, and Trevion
-Groene Energie Vast on a bi-hourly or dynamic meter; on a flat, fixed or
+cards, every Bolt fixed card, a Bolt variable card billed per quarter-hour,
+Engie Empower Flextime, and Trevion Groene Energie Vast, or a Bolt variable
+card billed on its variable settlement in Flanders or Brussels, on a
+bi-hourly or dynamic meter; on a flat, fixed or
 monthly-indexed feed-in every bar shows the same credit, the one the sensor
 reads. The chart stays empty only on a card that prints no feed-in price.
 

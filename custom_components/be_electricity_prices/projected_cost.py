@@ -220,7 +220,8 @@ async def _compute_projected_year_cost(
 
     ``spots`` is the day-ahead history the coordinator holds, read and never
     written. A static card whose feed-in follows the spot price per slot
-    (every Bolt fixed and variable card) is credited on its closed days of
+    (every Bolt fixed card, and a Bolt variable card billed per quarter-hour)
+    is credited on its closed days of
     the past year, each hour weighted by what the household exported in it
     (``compare_inputs._credit_year``), which is what the compare page's
     annual row credits the same contract at. Short of a full year of both

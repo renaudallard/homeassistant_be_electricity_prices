@@ -24,7 +24,9 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 """The settlement grid a household chose, for a supplier that sells one card
-on two (``resolve_settlement_grid``).
+on two (``resolve_settlement_grid``): the formula of a dynamic card moved
+to the quarter-hours, and Bolt's variable card read as either of its
+settlements, the feed-in included.
 """
 
 from __future__ import annotations
@@ -76,9 +78,17 @@ def resolve_settlement_grid(
     Note this changes the leg's TYPE, which is why the contract's effective
     kind has to move with it: see ``offers_quarter_hourly`` and
     ``effective_kind``.
+
+    The feed-in leg moves the other way. Bolt's variable card credits it per
+    quarter-hour on the dynamic settlement and, on the variable one, at the
+    SPP-weighted figures it prints per meter register
+    (``InjectionRates.spp_redistributed``). The leg is parsed as the
+    per-slot one, so a household left unticked has it turned into those
+    register rates here, with the formula dropped so that no spot reaches
+    it.
     """
     if not quarter_hourly:
-        return snapshot
+        return _spp_redistributed(snapshot)
     energy = snapshot.energy
     if isinstance(energy, DynamicRates):
         if energy.quarter_hourly:
@@ -95,3 +105,23 @@ def resolve_settlement_grid(
             ),
         )
     return snapshot
+
+
+def _spp_redistributed(snapshot: SupplierSnapshot) -> SupplierSnapshot:
+    """``snapshot`` with a feed-in leg the card credits per register on its
+    variable settlement turned into those register rates: ``current`` for a
+    single register, ``peak`` and ``offpeak`` read by register for a meter
+    that has two (``bi_hourly``)."""
+    inj = snapshot.injection
+    if inj is None or not inj.spp_redistributed or not inj.slot_indexed:
+        return snapshot
+    return replace(
+        snapshot,
+        injection=replace(
+            inj,
+            factor=None,
+            base=None,
+            slot_indexed=False,
+            bi_hourly=inj.peak is not None and inj.offpeak is not None,
+        ),
+    )

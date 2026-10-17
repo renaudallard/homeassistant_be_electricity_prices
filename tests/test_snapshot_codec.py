@@ -268,6 +268,28 @@ def test_a_stated_settlement_is_written_only_where_a_month_has_one() -> None:
         assert rebuilt.injection == settled.injection
 
 
+def test_the_spp_redistributed_flag_is_written_only_where_a_card_sets_it() -> None:
+    """Bolt's variable cards credit their variable settlement per register;
+    every other row leaves the flag out and stays byte-identical, and a
+    flagged one reads back as written."""
+    plain = make_snapshot(injection=InjectionRates(current=0.05))
+    assert "spp_redistributed" not in _snapshot_to_dict(plain, NOW)["injection"]
+    flagged = make_snapshot(
+        injection=InjectionRates(
+            current=0.0621,
+            peak=0.0795,
+            offpeak=0.0182,
+            factor=0.94,
+            base=-0.01133,
+            slot_indexed=True,
+            spp_redistributed=True,
+        )
+    )
+    row = _snapshot_to_dict(flagged, NOW)
+    assert row["injection"]["spp_redistributed"] is True
+    assert _snapshot_from_dict(row).injection == flagged.injection
+
+
 def test_the_codec_writes_every_snapshot_field() -> None:
     """The encoder names the top-level fields by hand, and nothing held the
     list to the dataclass: a field added to SupplierSnapshot without a line

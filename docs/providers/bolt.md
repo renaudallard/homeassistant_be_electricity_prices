@@ -64,7 +64,9 @@ all three regions still live inside that one French document. The listing page
 
 Bolt declares six residential-electricity contracts and a professional edition of each, twelve
 in all (`bolt.py`). All are region-unrestricted (default `regions` = all three). Two are
-fixed and four are variable, and every one of them bills injection per quarter-hour off Belpex.
+fixed and four are variable. The fixed cards bill injection per quarter-hour off Belpex; a variable
+card does on its dynamic settlement and, on its variable one, credits the SPP-weighted figures it
+prints per meter register (see the injection block below).
 
 ### One card, two settlements
 
@@ -449,7 +451,7 @@ newline is expected, replacing them with `\n` so one set of regexes covers every
 | Snapshot field | Extractor | Notes |
 | --- | --- | --- |
 | `energy` | `_extract_energy` (`_bolt_cards.py`) | `FixedRates` or `VariableRates` |
-| `injection` | `_extract_injection` | printed figure PLUS the quarter-hourly `factor`/`base`, flagged `slot_indexed`, on every card and either settlement |
+| `injection` | `_extract_injection`, `with_spp_registers` (`_bolt_cards.py`) | printed figure PLUS the quarter-hourly `factor`/`base`, flagged `slot_indexed`, on every card; a variable card adds the SPP-weighted figures per register its variable settlement credits, flagged `spp_redistributed` |
 | `publication_label` | `_extract_publication_month` (`bolt.py`) | `<Month> <Year>` header. The accent classes span the whole Latin-1 range rather than the accents French month names actually use: Bolt's August 2026 fixed card prints "Aôut 2026" (circumflex on the wrong vowel) and an exact class blanked the label on that typo. Besides the display label, it checks that a card and the index card it is priced on are the same month's and names the quarter its index table should be (`check_quarter_table`), so a blank label can refuse a card a misspelt one reads; a misspelling is kept verbatim and its accents folded where the month is needed. |
 | `taxes.federal_excise`, `energy_contribution`, `region_connection_fee` | `_extract_taxes` (`_bolt_overlays.py`) | 3-column FL/WAL/BX rows, sliced by region |
 | `taxes.energy_fund_eur_per_month` | `_extract_energy_fund` (`_bolt_overlays.py`) | Flanders only. The card prints both categories: a domiciled residential connection pays the `résidentiel` row, which is `-` (0); a **professional** contract pays the `non-résidentiel` row (10,07 EUR/month on the August 2026 card). The two rows need separate patterns, since the residential value sits after a U+2028 and the non-residential values are inline on the label line |
@@ -504,12 +506,12 @@ an exclusive-night meter through it.
 
 ### Injection block (`_extract_injection`)
 
-Every Bolt card, dynamic or not, bills injection PER QUARTER-HOUR off the Belpex index, and the
-non-dynamic cards say so in the same paragraph as the figure: *"Le tableau ci-dessus indique le prix
-de vente basé sur la valeur Belpex la plus récente. Dans la facturation, l'injection par quart
-d'heure est multipliée par la valeur Belpex pour ce quart d'heure."* The fixed card is blunter
-still: *"Contrairement au prix fixe de consommation pour l'électricité, le prix pour l'injection est
-quant à lui variable selon l'indice Belpex."*
+The fixed card bills injection PER QUARTER-HOUR off the Belpex index, and says so in the same
+paragraph as the figure: *"Le tableau ci-dessus indique le prix de vente basé sur la valeur Belpex
+la plus récente. Dans la facturation, l'injection par quart d'heure est multipliée par la valeur
+Belpex pour ce quart d'heure."* It is blunter still: *"Contrairement au prix fixe de consommation
+pour l'électricité, le prix pour l'injection est quant à lui variable selon l'indice Belpex."* A
+variable card says it of its dynamic settlement only (see below).
 
 So the `Prix mensuel 5,31 4,03` figure under the `Injection` header is an illustration at the latest
 QUARTERLY index, not a rate. The archive shows it standing still while the market does not: 202604,
@@ -538,6 +540,40 @@ Two land mines are baked into the anchor (`_bolt_cards.py`):
 `test_injection_carries_the_quarter_hourly_formula` checks both fix and variable
 cards yield `current` = 5,31 c/kWh (illustrative) beside the printed Belpex
 coefficients (`factor` 0,94, `base` -0,01133 EUR/kWh) and `slot_indexed` set.
+
+**The variable settlement credits the SPP figures.** Every variable card since the first quarter of
+2026 says, in both languages, *"Dans le cadre d'une facturation dynamique, la consommation ou
+l'injection enregistrée est multipliée, pour chaque quart d'heure, par la valeur Belpex
+correspondante pour ce même quart d'heure. En optant pour une facturation variable, nous
+redistribuerons la consommation pondérée RLP (publication par Synergrid). Pour l'injection, nous
+redistribuerons l'injection pondérée SPP (publication par Synergrid)."* ("Bij injectie zullen we de
+injectie SPP-gewogen (publicatie door Synergrid) herverdelen.") Its index table prints the feed-in
+side too, `Injectie simple 78,09 €/MWh`, `Injection jour 96,66`, `Injection nuit 31,37` on the
+October 2026 cards, and the injection figures it prints are the formula at those indices, 6,21,
+7,95 and 1,82 c/kWh. They are the third quarter's SPP-weighted Belpex means per register: weighting
+it by Synergrid's SPP profile on the Flemish weekday 07:00-22:00 day gives 79,08, 97,68 and 32,29
+by the hour, the card's figures plus the 1 EUR/MWh an hourly weighting sits above a quarter-hourly
+one (`spot_stats._spp_month_mean`). Up to 0.39.1 the variable settlement credited the feed-in per
+quarter-hour as well, which pays a household less than the card does, its export being heaviest at
+midday when the price is lowest: 20,87 EUR from January to September 2026 on a modelled 3.246 kWh
+exported (4.750 kWh produced, 3.500 used), 25,60 on a household using 6.000 kWh.
+
+`with_spp_registers` (`_bolt_cards.py`) reads those rows (`quarter_injection_indices`) and puts the
+figures on the leg, `current` for a single register and `peak` / `offpeak` for the day and night
+ones, flagged `spp_redistributed`; the per-slot formula stays beside them for the dynamic
+settlement, and the pair is not read while `bi_hourly` is off. `resolve_settlement_grid`
+(`_settlement_grid.py`) turns the leg into those register rates, with no formula, for an entry on
+the variable settlement, and leaves it per slot for one on the dynamic settlement. The day and night
+indices are means over the Flemish and Brussels registers' hours. Wallonia's night register also
+runs 11:00-17:00 since 2026 and holds most of a household's export, so the card's night figure is
+not its register's mean there (1,82 c/kWh against about 4,4 over those hours in the third quarter):
+a Walloon card carries the single figure alone and a two-register meter is credited it, within 3%
+of the mean over its own registers' hours. A closed quarter's months settle the figures with the
+energy on the next quarter's table (`settle_month`, `settled_spp_registers`, `_settle.py`), and a
+replay puts them back (`settled_as`). The running quarter stands at the previous quarter's figures,
+as the card prints them, key or not
+(`test_the_variable_settlement_credits_the_spp_figures_per_register`,
+`test_a_walloon_meter_is_credited_the_single_spp_figure`, `tests/test_bolt.py`).
 
 ### Tax block (`_extract_taxes`)
 
@@ -908,5 +944,6 @@ read on a Raspberry Pi, and the cohort lookup reaches it inside setup. Once the 
 later quarter's, the card archive's row, settled by the daily run while the next quarter's card
 was served, holds the month, and an unsettled one is handed back as it is. A replay after a
 parser change puts each register's index back on the re-parsed card (`settled_as`, `_settle.py`).
-The feed-in leg is credited per quarter-hour, or at its printed indicative without a key, and is
-not settled.
+The feed-in leg settles on the same table, on its SPP-weighted rows, for an entry on the variable
+settlement; on the dynamic one it is credited per quarter-hour, or at its printed indicative
+without a key.

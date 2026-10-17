@@ -472,7 +472,9 @@ class _MigratingStore(Store[dict[str, Any]]):
 # EnergyVision Brussels cards read their energy contribution, the social card
 # holds to its own month, and four suppliers refuse a live or running month's
 # card whose network table misses an area.
-_SNAPSHOT_SCHEMA_VERSION = 82
+# v83: Bolt's variable cards carry the feed-in figures their variable
+# settlement credits per meter register, at the quarter's SPP-weighted index.
+_SNAPSHOT_SCHEMA_VERSION = 83
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
@@ -498,8 +500,14 @@ _DEGRADED_MIN_SCHEMA_VERSION = 16
 # ``index_realised`` joined the list when the EBEM and Trevion settlements
 # added it: measured on the 1.686 stored rows, 1.683 carry an injection leg
 # and every one of them would have been rewritten with the field at null.
-# ``settled_as_stated`` joined both lists for Mega's stated settlements.
-_INJECTION_OPTIONAL_KEYS = ("bi_hourly", "index_realised", "settled_as_stated")
+# ``settled_as_stated`` joined both lists for Mega's stated settlements, and
+# ``spp_redistributed`` for Bolt's variable cards.
+_INJECTION_OPTIONAL_KEYS = (
+    "bi_hourly",
+    "index_realised",
+    "settled_as_stated",
+    "spp_redistributed",
+)
 _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
 # The same rule for the tax overlay, from v73.
 # And on the tax overlay, for the same reason: only a social tariff card the

@@ -276,9 +276,10 @@ automation can rank the day's injection hours ahead of time and a chart can draw
 the feed-in (`_split_injection_today_tomorrow`). The coordinator fills
 `data.injection_hourly` for every contract on the injection regime whose card
 prices the feed-in. It varies across the day on every dynamic contract, both
-Cociter variable cards and every Bolt fixed and variable card (spot-indexed
-`factor*spot+base`), Engie Empower Flextime (a TOU schedule, each slot credit
-re-indexed on the month) and Trevion Groene Energie Vast on a bi-hourly or
+Cociter variable cards, every Bolt fixed card and a Bolt variable card billed
+per quarter-hour (spot-indexed `factor*spot+base`), Engie Empower Flextime (a TOU schedule, each slot credit
+re-indexed on the month) and Trevion Groene Energie Vast, or a Bolt variable
+card on its variable settlement in Flanders or Brussels, on a bi-hourly or
 dynamic meter (a day and a night feed-in price, one per register). A flat,
 fixed or monthly-indexed feed-in repeats the one figure the sensor shows, the way
 `current_price` repeats a fixed card's price, which is what keeps the README's

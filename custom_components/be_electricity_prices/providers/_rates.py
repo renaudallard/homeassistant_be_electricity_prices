@@ -792,12 +792,13 @@ class InjectionRates:
     settled_as_stated: bool = False
     # True when the card bills the credit PER SETTLEMENT SLOT whatever the
     # energy leg does, so the printed figure is an illustration rather than the
-    # rate. Bolt's fixed and variable cards say it outright: *"Le tableau
-    # ci-dessus indique le prix de vente base sur la valeur Belpex la plus
-    # recente. Dans la facturation, l'injection par quart d'heure est
-    # multipliee par la valeur Belpex pour ce quart d'heure"*, and, on the
-    # FIXED card, *"Contrairement au prix fixe de consommation ..., le prix
-    # pour l'injection est quant a lui variable selon l'indice Belpex"*.
+    # rate. Bolt's fixed cards say it outright: *"Le tableau ci-dessus indique
+    # le prix de vente base sur la valeur Belpex la plus recente. Dans la
+    # facturation, l'injection par quart d'heure est multipliee par la valeur
+    # Belpex pour ce quart d'heure"* and *"Contrairement au prix fixe de
+    # consommation ..., le prix pour l'injection est quant a lui variable
+    # selon l'indice Belpex"*. Its variable cards say it of the dynamic
+    # settlement alone (``spp_redistributed``).
     #
     # Without it the engine prefers a printed ``current`` on any card whose
     # ENERGY is static, which is right for the cards that publish a realized
@@ -806,6 +807,20 @@ class InjectionRates:
     # ``month_indexed`` / ``spp_indexed``: a credit settles per slot or per
     # month, never both.
     slot_indexed: bool = False
+    # True when the card credits the feed-in per slot on its quarter-hourly
+    # settlement and, on the other, at the figures it prints per meter
+    # register: ``current`` for a single register, ``peak`` and ``offpeak``
+    # for the day and night ones, each its formula at the quarter's
+    # SPP-weighted index of that register. Bolt's variable cards: *"Dans le
+    # cadre d'une facturation dynamique, la consommation ou l'injection
+    # enregistree est multipliee, pour chaque quart d'heure, par la valeur
+    # Belpex correspondante ... En optant pour une facturation variable, nous
+    # redistribuerons la consommation ponderee RLP ... Pour l'injection, nous
+    # redistribuerons l'injection ponderee SPP"*. The leg is parsed as the
+    # per-slot one with the register pair beside it, which nothing reads
+    # while ``bi_hourly`` is off, and ``resolve_settlement_grid`` turns it into
+    # the register rates for an entry on the variable settlement.
+    spp_redistributed: bool = False
     # An explicit guaranteed minimum in EUR/kWh, for a card that promises more
     # than "never negative". EnergyVision guarantees 1 c/kWh: *"Als de
     # berekening van onze formule lager zou uitkomen dan 1 EURcent/kWh, dan

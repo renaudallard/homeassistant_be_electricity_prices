@@ -430,6 +430,71 @@ def quarter_indices(text: str) -> tuple[str, dict[str, float]] | None:
     return " ".join(head.group(1).split()), indices
 
 
+def quarter_injection_indices(text: str) -> tuple[str, dict[str, float]] | None:
+    """The quarter a variable card's index table names, and the feed-in
+    indices it prints, in EUR/kWh, or ``None``.
+
+    The table's injection rows, "Injectie simple 78,09 €/MWh", "Injection
+    jour 96,66 €/MWh" and "Injection nuit 31,37 €/MWh", are the quarter's
+    SPP-weighted Belpex means of each meter register's hours: weighting the
+    third quarter of 2026 by Synergrid's SPP profile gives 79,08, 97,68 and
+    32,29 by the hour, the hour-against-quarter gap of
+    ``spot_stats._spp_month_mean``, where the consumption rows are RLP-weighted.
+    Keyed ``current``, ``peak`` and ``offpeak`` as the leg carries them;
+    ``None`` unless all three read.
+    """
+    head = _QUARTER_MONO_INDEX_RE.search(text)
+    if head is None:
+        return None
+    table = text[head.start() :]
+    indices: dict[str, float] = {}
+    for field, label in _INJECTION_REGISTER_ROWS:
+        row = re.search(rf"Inject(?:ie|ion)\s+{label}\s+([\d.,]+)\s*€/MWh", table)
+        if row is None:
+            return None
+        indices[field] = to_float(row.group(1)) / 1000.0
+    return " ".join(head.group(1).split()), indices
+
+
+def with_spp_registers(
+    injection: InjectionRates, text: str, *, registers: bool
+) -> InjectionRates:
+    """A variable card's feed-in leg carrying the figures the card bills on
+    its variable settlement, beside the per-slot formula of its dynamic one
+    (``InjectionRates.spp_redistributed``).
+
+    Each register's figure is the formula at that register's SPP index,
+    which is what the card prints: 6,21, 7,95 and 1,82 c/kWh on the October
+    2026 cards, at 78,09, 96,66 and 31,37 EUR/MWh. A card whose table does
+    not read keeps its printed single-register figure alone.
+
+    The day and night indices are means over the Flemish and Brussels
+    registers' hours, the weekday 07:00-22:00 day: over the third quarter of
+    2026 they come to 97,68 and 32,29 on that schedule, the card's 96,66 and
+    31,37 less the same 1 EUR/MWh as its single index. Wallonia's night
+    register has also run 11:00-17:00 since 2026, which holds most of a
+    household's export, so the card's night figure is not its register's
+    mean there: 1,82 c/kWh against about 4,4 over those hours. Without
+    ``registers`` a two-register meter is credited the single figure, which
+    is within 3% of that mean over the quarter.
+    """
+    injection = replace(injection, spp_redistributed=True)
+    table = quarter_injection_indices(text)
+    if table is None or injection.factor is None or injection.base is None:
+        return injection
+    factor, base = injection.factor, injection.base
+    indices = table[1]
+    current = factor * indices["current"] + base
+    if not registers:
+        return replace(injection, current=current)
+    return replace(
+        injection,
+        current=current,
+        peak=factor * indices["peak"] + base,
+        offpeak=factor * indices["offpeak"] + base,
+    )
+
+
 def _impact_energy_bands(text: str, vat: float) -> dict[str, float]:
     """The three CWaPE supplier-energy rates, or ``{}``.
 
@@ -457,12 +522,14 @@ def _with_slot_formula(text: str, current: float) -> InjectionRates:
     quarter-hourly formula stated beside it.
 
     Bolt's fixed and variable cards carry the same Belpex formula table the
-    dynamic card does, and say the printed column is only an illustration:
-    *"Le tableau ci-dessus indique le prix de vente base sur la valeur Belpex
-    la plus recente. Dans la facturation, l'injection par quart d'heure est
-    multipliee par la valeur Belpex pour ce quart d'heure."* The FIXED card
-    adds *"Contrairement au prix fixe de consommation pour l'electricite, le
-    prix pour l'injection est quant a lui variable selon l'indice Belpex."*
+    dynamic card does. The fixed card says the printed column is only an
+    illustration: *"Le tableau ci-dessus indique le prix de vente base sur
+    la valeur Belpex la plus recente. Dans la facturation, l'injection par
+    quart d'heure est multipliee par la valeur Belpex pour ce quart
+    d'heure."* and *"Contrairement au prix fixe de consommation pour
+    l'electricite, le prix pour l'injection est quant a lui variable selon
+    l'indice Belpex."* The variable card says the same of its dynamic
+    settlement only (``with_spp_registers``).
 
     That printed value moves only when the QUARTERLY index does, and the
     archive shows it: 202604, 202605 and 202606 all print 5,31; 202607 and
@@ -492,14 +559,16 @@ def _with_slot_formula(text: str, current: float) -> InjectionRates:
 
 
 def _extract_injection(text: str) -> InjectionRates | None:
-    """The feed-in leg, which is the same on either settlement.
+    """The feed-in leg as the fixed card bills it, per quarter-hour.
 
-    Bolt's card says the injection formula is applied per quarter-hour
-    whatever the consumption side settles on ("la consommation ou l'injection
-    enregistree est multipliee, pour chaque quart d'heure"), so there is one
-    reading here and no branch on the contract kind. ``_with_slot_formula``
-    keeps both halves: the printed indicative, which is the fallback for an
-    entry with no ENTSO-E key, and the formula that is actually billed.
+    The fixed card applies the injection formula per quarter-hour ("Dans la
+    facturation, l'injection par quart d'heure est multipliee par la valeur
+    Belpex pour ce quart d'heure"), and so does a variable card on its
+    dynamic settlement; on its variable one it credits the SPP-weighted
+    figures it prints per register, which ``with_spp_registers`` puts beside
+    this reading. ``_with_slot_formula`` keeps both halves: the printed
+    indicative, which is the fallback for an entry with no ENTSO-E key, and
+    the formula that is actually billed.
 
     Injection is a flat monthly indicative ("Prix mensuel 5,31 4,03")
     in the block that follows the "Injection" header, on both fix and
@@ -563,6 +632,12 @@ _QUARTER_MONO_INDEX_RE = re.compile(
 # "Jour 147,78", "Nuit 132,12" and "Exclusif nuit 132,12" on the October 2026
 # card, each label at the start of its line, which keeps the injection rows
 # ("Injection jour") out.
+# The feed-in rows of the same table, by the field each prices.
+_INJECTION_REGISTER_ROWS = (
+    ("current", "simple"),
+    ("peak", "jour"),
+    ("offpeak", "nuit"),
+)
 _REGISTER_ROWS = (
     ("current", "Simple"),
     ("peak", "Jour"),

@@ -81,6 +81,8 @@ from ._bolt_cards import (
     _with_index_card_formula,
     check_quarter_table,
     quarter_indices,
+    quarter_injection_indices,
+    with_spp_registers,
 )
 from ._bolt_overlays import (
     _FLANDERS_LABELS,
@@ -113,7 +115,7 @@ from ._rates import (
     VariableRates,
     vat_basis,
 )
-from ._settle import settled_registers
+from ._settle import settled_registers, settled_spp_registers
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
@@ -610,7 +612,9 @@ async def settle_month(
     EUR/MWh, where the third quarter's 139,36 gives 19,05. The cards of the
     quarter after print that quarter's table, one index per meter register
     and CWaPE band (``quarter_indices``), and every rate is rebuilt on the
-    month's own formula at its index (``settled_registers``).
+    month's own formula at its index (``settled_registers``). The feed-in
+    figures the variable settlement credits are rebuilt the same way, on the
+    SPP-weighted rows of that table (``quarter_injection_indices``).
 
     In place, as at TotalEnergies: the variable folder addresses no card by
     month, so the next quarter's card is only ever the live one. Before the
@@ -636,13 +640,27 @@ async def settle_month(
         if is_transient_fetch_error(str(err)):
             raise
         return replace(held, provisional=True)
-    table = quarter_indices(text.replace("\u2028", "\n"))
+    text = text.replace("\u2028", "\n")
+    table = quarter_indices(text)
+    named = f"Q{quarter + 1} {year_month.year}"
     settled = None
-    if table is not None and table[0] == f"Q{quarter + 1} {year_month.year}":
+    if table is not None and table[0] == named:
         settled = settled_registers(energy, table[1])
     if settled is None:
         return replace(held, provisional=True)
-    return replace(held, energy=settled)
+    # The feed-in rows of the same table, which the variable settlement
+    # credits per register; a card that does not print them leaves the
+    # held figures.
+    injection = held.injection
+    feed_in = quarter_injection_indices(text)
+    if (
+        injection is not None
+        and injection.spp_redistributed
+        and feed_in is not None
+        and feed_in[0] == named
+    ):
+        injection = settled_spp_registers(injection, feed_in[1])
+    return replace(held, energy=settled, injection=injection)
 
 
 def parse_snapshot(
@@ -708,6 +726,10 @@ def parse_snapshot(
     table_text = index_text if contract.index_slug is not None and index_text else text
     check_quarter_table(table_text, energy, _extract_publication_month(table_text))
     injection = _extract_injection(text)
+    if contract.settlement and injection is not None:
+        injection = with_spp_registers(
+            injection, text, registers=region != REGION_WALLONIA
+        )
     if professional and injection is not None:
         injection = replace(injection, vat_applies=True)
     publication_label = _extract_publication_month(text)

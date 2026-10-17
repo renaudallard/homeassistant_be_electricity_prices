@@ -466,7 +466,8 @@ def _compare_injection_credit(
     cost would reflect different instants. Three shapes qualify: any
     dynamic-energy contract, a card that prints no indicative at all (Cociter
     Variable), and a card that prints one but settles per slot anyway, which
-    is every Bolt fixed and variable card.
+    is every Bolt fixed card, and a Bolt variable card billed per
+    quarter-hour.
 
     ``credit_year`` is the past year of day-ahead and of the household's
     export (``compare_inputs._credit_year``). A static card's spot-indexed
@@ -581,7 +582,7 @@ def _compare_injection_credit(
             # A card that settles per slot prints its indicative as an
             # illustration, so the formula wins over it here just as it does
             # in ``_injection_is_spot_formula``, which this branch mirrors.
-            # Without the clause every Bolt fixed and variable card fell past
+            # Without the clause every Bolt fixed card fell past
             # this branch into the live helper at the bottom, which resolves
             # the credit at whichever slot the dialog happened to open in and
             # so valued a whole year of export at one hour's spot.

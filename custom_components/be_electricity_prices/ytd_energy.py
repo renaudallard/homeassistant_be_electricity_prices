@@ -329,7 +329,8 @@ async def _ytd_hourly_energy(
     hours_seen = 0
     hours_priced = 0
     # And how much of the feed-in went uncredited: an hour whose credit follows
-    # the spot (Bolt fixed and variable, Cociter Variable) has no rate without
+    # the spot (Bolt fixed, Bolt variable per quarter-hour, Cociter Variable)
+    # has no rate without
     # one, and its energy side can still be fully priced, so hours_priced says
     # nothing about it.
     injection_uncredited = 0
@@ -638,7 +639,8 @@ async def _ytd_spot_injection_credit(
     instead: the credit is not guessed, but the bill says it is short.
 
     The second of those shapes is the card that prints an indicative and
-    calls it an illustration (every Bolt fixed and variable card). It used to
+    calls it an illustration (every Bolt fixed card, and a Bolt variable card
+    billed per quarter-hour). It used to
     be excluded here on the printed figure alone, so the walk credited that
     figure while the injection_price sensor, the backfill and the compare
     page all billed the Belpex formula. The two guards move together with the
