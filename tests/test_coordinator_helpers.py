@@ -164,7 +164,7 @@ from custom_components.be_electricity_prices.ytd_legs import (
     _days_through,
     _ytd_static_fees,
 )
-from tests import make_snapshot, make_stub_extractor
+from tests import make_entry, make_snapshot, make_stub_extractor
 
 
 def _snapshot(
@@ -6280,6 +6280,30 @@ async def test_archived_card_from_github_reads_down_to_the_degraded_schema() -> 
     assert await _read(below) is None
     assert await _read("<html>not json</html>") is None
     assert await _read(json_dumps({"_schema_version": 99, "supplier": "acme"})) is None
+
+
+async def test_a_stand_in_row_must_print_the_entrys_area() -> None:
+    """The page-image and withdrawn-product stand-ins answer None for a row
+    lacking the entry's network area, which would leave the entry with no
+    network figures; one with no entry in hand, or no area, takes the row."""
+    from custom_components.be_electricity_prices import snapshot_stand_ins
+
+    card = make_snapshot(
+        dsos={"resa": DsoOverlay(distribution_single=0.1, transport=0.0)}
+    )
+    read = AsyncMock(return_value=snapshot_months.ArchivedCard(card, read_by_ocr=False))
+    day = date(2026, 10, 20)
+    with patch.object(snapshot_months, "_archived_card_from_github", read):
+        for stand_in in (
+            snapshot_stand_ins.card_for_unreadable_month,
+            snapshot_stand_ins.card_of_month_before,
+        ):
+            args = (MagicMock(), "acme", "acme_fix", "wallonia", day)
+            assert await stand_in(*args, make_entry(dso="ores")) is None
+            found = await stand_in(*args, make_entry(dso="resa"))
+            assert found is not None and found.snapshot is card
+            assert await stand_in(*args, None) is not None
+            assert await stand_in(*args, make_entry(dso="")) is not None
 
 
 @pytest.mark.parametrize("kind", ["static", "dynamic"])

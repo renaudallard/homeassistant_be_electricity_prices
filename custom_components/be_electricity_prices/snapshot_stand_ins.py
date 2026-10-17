@@ -43,12 +43,40 @@ import aiohttp
 from homeassistant.config_entries import ConfigEntry
 
 from . import snapshot_months
+from .const import CONF_DSO
 from .snapshot_months import ArchivedCard, _archive_allowed
 
 
 def month_before(day: date) -> date:
     """The first day of the month before ``day``'s."""
     return (day.replace(day=1) - timedelta(days=1)).replace(day=1)
+
+
+async def _stand_in(
+    session: aiohttp.ClientSession,
+    supplier: str,
+    contract: str,
+    region: str,
+    month: date,
+    entry: ConfigEntry | None,
+) -> ArchivedCard | None:
+    """The archive's row for ``month`` where it prints the entry's network
+    area, or None.
+
+    A closed month's row may be short of an area, since its card is still
+    what that month is billed on and the month cache takes the area from
+    another card of its year (``_with_nearest_area``). Standing in for the
+    entry's own card it would leave an entry on that area with no network
+    figures, and every tick failing on it, where the stale card held still
+    prices it.
+    """
+    archived = await snapshot_months._archived_card_from_github(
+        session, supplier, contract, region, month
+    )
+    dso = entry.data.get(CONF_DSO, "") if entry is not None else ""
+    if archived is not None and dso and dso not in archived.snapshot.dsos:
+        return None
+    return archived
 
 
 async def card_for_unreadable_month(
@@ -78,8 +106,8 @@ async def card_for_unreadable_month(
     """
     if not _archive_allowed(entry):
         return None
-    return await snapshot_months._archived_card_from_github(
-        session, supplier, contract, region, today.replace(day=1)
+    return await _stand_in(
+        session, supplier, contract, region, today.replace(day=1), entry
     )
 
 
@@ -100,8 +128,8 @@ async def card_of_month_before(
     """
     if not _archive_allowed(entry):
         return None
-    return await snapshot_months._archived_card_from_github(
-        session, supplier, contract, region, month_before(day)
+    return await _stand_in(
+        session, supplier, contract, region, month_before(day), entry
     )
 
 
@@ -121,7 +149,7 @@ async def newest_archived_card(
     """The newest row the archive holds for this card, and its month.
 
     This month's row first, then back a month at a time, stopping at the
-    first one that holds a card. For an entry whose supplier's card cannot be
+    first one that holds a card printing the entry's network area. For an entry whose supplier's card cannot be
     had or has gone stale: the archive walks every supplier daily, and its
     row may well be newer than what the supplier answered this entry. A
     transient failure propagates, since a month it could not read may still
@@ -131,9 +159,7 @@ async def newest_archived_card(
         return None
     month = today.replace(day=1)
     for _ in range(_ARCHIVE_MONTHS_BACK):
-        archived = await snapshot_months._archived_card_from_github(
-            session, supplier, contract, region, month
-        )
+        archived = await _stand_in(session, supplier, contract, region, month, entry)
         if archived is not None:
             return month, archived
         month = month_before(month)

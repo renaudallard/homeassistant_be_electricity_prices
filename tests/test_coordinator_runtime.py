@@ -8805,6 +8805,34 @@ async def test_the_archive_is_walked_back_and_only_a_later_card_taken(
     assert coord._snapshot_raw.valid_until == date(2026, 9, 30)
 
 
+@pytest.mark.freeze_time("2026-10-20 12:00:00+02:00")
+async def test_an_archive_row_short_of_the_entrys_area_does_not_stand_in(
+    hass: HomeAssistant,
+) -> None:
+    """A closed month's row may lack an area, its card still being what
+    the month is billed on. Standing in for the entry's card it left an
+    entry on that area with no network figures, so the walk goes on to the
+    newest row printing the area."""
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    july = make_snapshot(valid_until=date(2026, 7, 31))
+    august = make_snapshot(valid_until=date(2026, 8, 31))
+    september = make_snapshot(
+        valid_until=date(2026, 9, 30),
+        dsos={"resa": DsoOverlay(distribution_single=0.10, transport=0.0145)},
+    )
+    archive = _archive_holding({date(2026, 9, 1): september, date(2026, 8, 1): august})
+
+    await _refresh_serving(coord, july, archive)
+    asked = [call.args[-1] for call in archive.await_args_list]
+    assert asked == [date(2026, 10, 1), date(2026, 9, 1), date(2026, 8, 1)]
+    assert coord._snapshot_raw is not None
+    assert coord._snapshot_raw.valid_until == date(2026, 8, 31)
+
+
 async def test_the_archive_card_waits_for_the_archive_box_and_the_entrys_own(
     hass: HomeAssistant,
 ) -> None:
