@@ -173,7 +173,7 @@ async def fetch(
     snap = parse_snapshot(contract_id, text, region, url)
     # Here and not in the reader: a card read for its own month keeps a
     # short table.
-    require_every_area("Ecofix", snap.dsos, _areas(region))
+    require_every_area("Ecofix", snap, _areas(region))
     return snap
 
 

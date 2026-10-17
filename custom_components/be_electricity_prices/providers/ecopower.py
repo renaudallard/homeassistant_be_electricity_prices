@@ -192,7 +192,7 @@ async def fetch(
     else:
         raise ExtractorError(f"unknown Ecopower contract {contract_id!r}")
     # Here and not in the reader: a past month's card keeps a short table.
-    require_every_area("Ecopower", snap.dsos, _DSO_LABELS.values(), block=block)
+    require_every_area("Ecopower", snap, _DSO_LABELS.values(), block=block)
     return snap
 
 

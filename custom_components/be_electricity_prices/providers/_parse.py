@@ -43,7 +43,14 @@ from typing import TypeVar
 from homeassistant.util import dt as dt_util
 
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
-from .base import DsoOverlay, ExtractorError, TaxOverlay, brussels_sibelga_overlay
+from .base import (
+    DsoOverlay,
+    ExtractorError,
+    ShortNetworkTableError,
+    SupplierSnapshot,
+    TaxOverlay,
+    brussels_sibelga_overlay,
+)
 
 
 def fold_accents(text: str) -> str:
@@ -87,7 +94,7 @@ def parse_prosumer_column(
 
 def require_every_area(
     supplier: str,
-    out: Mapping[str, DsoOverlay],
+    card: SupplierSnapshot,
     keys: Iterable[str],
     *,
     block: str | None = None,
@@ -111,11 +118,15 @@ def require_every_area(
     the same calendar year that prints it (``_with_nearest_area``,
     ``snapshot_areas.py``). Ecofix keeps no archive of its own and asks it
     of the live card alone.
+
+    The error carries the card, which the card archive keeps for its month.
     """
-    missing = sorted(key for key in keys if key not in out)
+    missing = sorted(key for key in keys if key not in card.dsos)
     if missing:
         where = f" in the {block} block" if block else ""
-        raise ExtractorError(f"{supplier}: DSO rows not found for {missing}{where}")
+        raise ShortNetworkTableError(
+            f"{supplier}: DSO rows not found for {missing}{where}", card
+        )
 
 
 def running_month_short_of_an_area(

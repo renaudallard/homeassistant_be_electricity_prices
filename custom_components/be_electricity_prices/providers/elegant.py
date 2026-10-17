@@ -279,7 +279,7 @@ async def fetch(
     url = _current_url(contract)
     snap = parse_snapshot(contract_id, await fetch_pdf_text_layout(session, url), url)
     # Here and not in the reader: a past month's card keeps a short table.
-    require_every_area("Elegant", snap.dsos, _AREAS.values())
+    require_every_area("Elegant", snap, _AREAS.values())
     return snap
 
 

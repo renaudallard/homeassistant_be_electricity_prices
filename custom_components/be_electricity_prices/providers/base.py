@@ -612,3 +612,17 @@ class CardNotReadableError(ExtractorError):
     the current download actually contains self-heals the moment readable
     cards return, and covers any supplier that starts doing this.
     """
+
+
+class ShortNetworkTableError(ExtractorError):
+    """A live card whose network table lacks one of its region's areas
+    (``require_every_area``), carrying the card as read.
+
+    ``fetch`` refuses it, since an entry on the missing area would be priced
+    with no network figures. The card is still what the supplier published
+    for its month, and the card archive keeps it (``scripts/archive_cards.py``).
+    """
+
+    def __init__(self, message: str, card: SupplierSnapshot) -> None:
+        super().__init__(message)
+        self.card = card

@@ -272,7 +272,7 @@ async def fetch(
     text = await fetch_pdf_text_aligned(session, url, x_join_threshold=1.0)
     snap = parse_snapshot(contract_id, text, region, url)
     # Here and not in the reader: a past month's card keeps a short table.
-    require_every_area("OCTA+", snap.dsos, _areas(region))
+    require_every_area("OCTA+", snap, _areas(region))
     return snap
 
 

@@ -191,7 +191,7 @@ async def fetch(
     url = await _current_card_url(session)
     snap = parse_snapshot(contract_id, await fetch_pdf_text(session, url), url)
     # Here and not in the reader: a past month's card keeps a short table.
-    require_every_area("Aspiravi", snap.dsos, FLUVIUS_CARD_LABELS.values())
+    require_every_area("Aspiravi", snap, FLUVIUS_CARD_LABELS.values())
     return snap
 
 

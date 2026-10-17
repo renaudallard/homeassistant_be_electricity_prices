@@ -1023,6 +1023,16 @@ the `be_price_cards` repository (see `archive_cards.yml` below) and the month ca
 any closed month, before the supplier's own archive (`snapshot_months._archived_card_from_github`,
 see [coordinator.md](coordinator.md)).
 
+One card `fetch` refuses is kept all the same: a live card whose network table lacks one of its
+region's areas. The integration refuses it as its live card, since an entry on the missing area
+would have no network figures (`require_every_area`, `providers/_parse.py`), but it is still the
+card of its month, and for Ecofix, which keeps no archive of its own, the only copy there will
+be. The error carries the card (`ShortNetworkTableError`, `providers/base.py`) and the archive
+files it (`_published`, `scripts/archive_cards.py`). The integration bills a closed month on it,
+taking the missing area from the nearest card of the same year that prints it
+(`_with_nearest_area`, `snapshot_areas.py`), and passes it over where it would stand in for an
+entry's own card (`_stand_in`, `snapshot_stand_ins.py`).
+
 Three design points:
 
 - **A card is filed under the month its label names**, read by `label_month`

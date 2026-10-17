@@ -408,7 +408,7 @@ async def fetch(
     text = await fetch_pdf_text_layout(session, url)
     snap = parse_snapshot(contract_id, text, url, region=region)
     # Here and not in the reader: a past month's card keeps a short table.
-    require_every_area("EnergyVision", snap.dsos, _areas(region))
+    require_every_area("EnergyVision", snap, _areas(region))
     return snap
 
 

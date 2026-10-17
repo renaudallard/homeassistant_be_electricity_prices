@@ -153,6 +153,7 @@ from custom_components.be_electricity_prices.providers.base import (  # noqa: E4
     ArchivedSnapshotFetcher,
     CardNotReadableError,
     MonthSettler,
+    ShortNetworkTableError,
     SupplierExtractor,
     SupplierSnapshot,
 )
@@ -1490,6 +1491,24 @@ async def _fetch_card[T](
     raise AssertionError("unreachable")
 
 
+async def _published(
+    extractor: SupplierExtractor, session: Any, contract: str, region: str
+) -> SupplierSnapshot:
+    """The live card, kept where ``fetch`` refuses it as short of an area.
+
+    The integration refuses it as its live card (``require_every_area``),
+    since an entry on the missing area would have no network figures. It is
+    still the card the supplier published for its month: the integration
+    bills a closed month on it, taking the missing area from another card of
+    its year, and passes it over where it would stand in for an entry's own
+    card. Ecofix keeps no archive of its own, so this is the only copy.
+    """
+    try:
+        return await extractor.fetch(session, contract, region)
+    except ShortNetworkTableError as err:
+        return err.card
+
+
 def _targets(
     extractors: Iterable[SupplierExtractor], only: set[str], today: date
 ) -> list[tuple[SupplierExtractor, str, str]]:
@@ -1769,7 +1788,7 @@ async def _replay_row(
                     return
                 snap = await fetch_for_month(session, contract, region, first)
             else:
-                snap = await extractor.fetch(session, contract, region)
+                snap = await _published(extractor, session, contract, region)
             if snap is not None and extractor.settle_month is not None:
                 # A month settled in place keeps the index it settled at.
                 snap = settled_as(snap, _snapshot_from_dict(row, min_schema_version=0))
@@ -1865,7 +1884,7 @@ async def _retry_unparsed(
             render_through(cards.render),
         ):
             try:
-                snap = await extractor.fetch(session, contract, region)
+                snap = await _published(extractor, session, contract, region)
             except Exception as err:  # still unreadable is the normal answer
                 summary.unreplayable.append(f"{label}: {type(err).__name__}: {err}")
                 continue
@@ -2003,7 +2022,8 @@ async def archive(
                 cards.seen.clear()
                 try:
                     snap = await _fetch_card(
-                        functools.partial(ex.fetch, session, contract, region), sleep
+                        functools.partial(_published, ex, session, contract, region),
+                        sleep,
                     )
                 except Exception as err:  # one card must not stop the walk
                     line = f"{label}: {type(err).__name__}: {err}"

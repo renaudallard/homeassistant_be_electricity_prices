@@ -29,6 +29,7 @@ from custom_components.be_electricity_prices.const import (
     SUPPLIER_SOCIAL,
 )
 from custom_components.be_electricity_prices.providers import _pdf
+from custom_components.be_electricity_prices.providers._parse import require_every_area
 from custom_components.be_electricity_prices.providers._pdf import fetch_text
 from custom_components.be_electricity_prices.providers._rates import (
     Contract,
@@ -359,6 +360,29 @@ async def test_transient_failures_are_retried_and_permanent_ones_are_not(
     assert summary.failed == [
         f"beta/acme_fix/wallonia: ExtractorError: HTTP 404 fetching {CARD_URL}"
     ]
+
+
+async def test_a_live_card_short_of_an_area_is_kept(tmp_path: Path) -> None:
+    """``fetch`` refuses a live card whose network table lacks an area, since
+    the integration would price an entry on it with no network figures, yet
+    it is the card of its month: the archive keeps it as read, where Ecofix's
+    card would otherwise be lost, Ecofix keeping no archive of its own."""
+    good = _card_fetch("september 2026")
+
+    async def short(session: Any, contract: str, region: str) -> SupplierSnapshot:
+        card = await good(session, contract, region)
+        require_every_area("Acme", card, (*card.dsos, "resa"))
+        return card
+
+    summary = await ac.archive(
+        tmp_path, extractors=[_extractor(short)], now=NOW, sleep=_no_sleep
+    )
+    assert summary.stored == 1
+    assert summary.failed == []
+    row = json.loads(
+        (tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json").read_text()
+    )
+    assert "resa" not in row["dsos"] and row["dsos"]
 
 
 async def test_backfill_mirrors_the_supplier_archive_for_months_not_held(
