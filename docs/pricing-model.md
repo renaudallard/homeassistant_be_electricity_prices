@@ -485,9 +485,10 @@ solved through their own formulas for the BELPEXM_RLP and Belpex_M they were
 printed at; it keeps no archive, so that card is only ever the live one, and the
 daily card archive run settles the rows it caught while it is served. Until the
 next card is out the month stays `provisional`, and at TotalEnergies also while
-its feed-in card still names the month before, a card's monthly block is not
-read, or no other card of the range is printed at the energy's index or two
-disagree (`_range_agrees`), the other leg settling meanwhile. Bolt's variable
+its feed-in card still names the month before or its monthly block is not
+read, or no two cards of the range are printed at one index (`_range_index`),
+the other leg settling meanwhile; a card misprinted or with its block unread
+settles its energy on the index two other cards agree on. Bolt's variable
 cards settle a quarter at a time: the next quarter's card prints that quarter's
 index for each meter register and Impact band, each rate is rebuilt on the
 month's formula at its own index (`settled_registers`), and the mono index is

@@ -695,27 +695,32 @@ def _heard_lately(
     return heard[1], heard[2]
 
 
-async def _range_agrees(
+async def _range_index(
     session: aiohttp.ClientSession,
     contract: _ContractDef,
     region: str,
     titled: date | None,
-    index: float,
-) -> bool:
-    """Whether the rest of the range prints its rates at ``index`` too.
+    own: float | None,
+) -> float | None:
+    """The index the range of variable cards titled for ``titled`` prints
+    its rates at, or ``None`` while it cannot be told.
 
     Every variable card of a month is printed at the same index, one figure
     for the country, so a card printed at another is misprinted. The
     Electricité Variable card in Brussels of the afternoon of 1 October 2026
     printed myComfort's block under its own bases and solves to 159,9
     EUR/MWh, where every other card of the range solves to 164,4 to 164,7;
-    settled on it, September would have kept 159,9 for good. So ``index``
-    stands once one other card titled for the same month agrees within the
-    fit of a card's own columns, and falls once two disagree. Where no other
-    card titled for the month prints its block, the rest of the range still
-    carrying last month's title or its block unread, the index cannot be
-    checked and falls until one does. The cards heard within the hour are
-    asked first, costing nothing (``_heard``), then the region's.
+    settled on it, September would have kept 159,9 for good. So ``own``,
+    this card's index, stands once one other card titled for the same month
+    agrees within the fit of a card's own columns. Where two other cards
+    agree with each other and not with ``own``, or this card's block is
+    unread (``own`` is ``None``), the month is billed at the index those two
+    print: left waiting for a card corrected within the month, it stayed at
+    its estimate for good once the next month's card replaced it. Where no
+    two cards titled for the month agree, the rest of the range still
+    carrying last month's title or its block unread, there is nothing to
+    settle on yet. The cards heard within the hour are asked first, costing
+    nothing (``_heard``), then the region's.
     """
     regions = (region, *(r for r in _REGION_TO_CODE if r != region))
     others = [
@@ -727,7 +732,7 @@ async def _range_agrees(
         and where in other.regions
     ]
     others.sort(key=lambda pair: _heard_lately(pair[0].contract_id, pair[1]) is None)
-    disagree = 0
+    seen: list[float] = []
     for other, where in others:
         said = _heard_lately(other.contract_id, where)
         if said is None:
@@ -741,12 +746,13 @@ async def _range_agrees(
         month, printed = said
         if month != titled or printed is None:
             continue
-        if abs(printed - index) <= _INDEX_FIT:
-            return True
-        disagree += 1
-        if disagree == 2:
-            return False
-    return False
+        if own is not None and abs(printed - own) <= _INDEX_FIT:
+            return own
+        agreed = next((i for i in seen if abs(i - printed) <= _INDEX_FIT), None)
+        if agreed is not None:
+            return (agreed + printed) / 2
+        seen.append(printed)
+    return None
 
 
 async def settle_month(
@@ -780,8 +786,10 @@ async def settle_month(
     (Electricité Fixe in Flanders still said September on 5 and 14 October
     2026), so only the one titled like it settles the feed-in. A leg the next
     card gives no index for is left as held, and the month stays
-    ``provisional`` while the other leg settles, as does the energy of a card
-    no other card of the range is printed like yet (``_range_agrees``).
+    ``provisional`` while the other leg settles. The energy settles on the
+    index the range of variable cards agrees on (``_range_index``): this
+    card's once another card prints it too, or the one two other cards print
+    where this card is misprinted or its block unread.
     """
     first = date(year_month.year, year_month.month, 1)
     following = date(first.year + (first.month == 12), first.month % 12 + 1, 1)
@@ -820,11 +828,7 @@ async def settle_month(
     energy, injection = held.energy, held.injection
     pending = False
     if getattr(energy, "month_indexed", False):
-        index = printed
-        if index is not None and not await _range_agrees(
-            session, contract, region, titled, index
-        ):
-            index = None
+        index = await _range_index(session, contract, region, titled, printed)
         pending = index is None
         if index is not None:
             energy = settled_energy(energy, index)

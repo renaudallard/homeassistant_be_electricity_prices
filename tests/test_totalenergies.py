@@ -1578,8 +1578,9 @@ async def test_a_closed_month_settles_on_the_rates_the_next_card_prints(
 async def test_a_month_left_unsettled_is_logged_when_nothing_can_settle_it(
     monkeypatch: pytest.MonkeyPatch, freezer: Any, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """September's index never agreed across the range while October's card
-    was served (a misprint never corrected). From November no card settles
+    """No two cards of the range agreed on September's index while October's
+    card was served (the rest of the range unread all month, say). From
+    November no card settles
     it, and the archive's row comes back final at its estimate, which is
     logged rather than kept silently."""
     from datetime import date
@@ -1772,17 +1773,69 @@ async def test_a_card_billing_its_table_row_does_not_settle_the_energy(
     assert out == replace(held, provisional=True)
 
 
-async def test_a_card_the_range_is_not_printed_like_does_not_settle_the_energy(
+async def test_a_card_billing_its_table_row_settles_on_the_ranges_index(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """The same Electricité Variable card in Flanders, its block printed as
+    the formula's bases, says nothing of September's index, but every
+    variable card of a month is printed at one: myEssential in Brussels and
+    myComfort in Wallonia solve to 164,7, and the energy settles there
+    rather than keep its estimate for good once November's card is served."""
+    from datetime import date
+
+    from custom_components.be_electricity_prices.providers import totalenergies
+
+    held = parse_snapshot(
+        "totalenergies_mycomfort",
+        fixture_text("totalenergies_mycomfort_v.pdf", layout=True),
+        "flanders",
+    )
+    monkeypatch.setattr(
+        totalenergies,
+        "fetch_pdf_text_layout",
+        _serve(
+            {
+                "ELECTRICITE-VARIABLE_ELECTRICITY_VL_FR.pdf": (
+                    "totalenergies_electricite_variable_v_2026-10.pdf"
+                ),
+                "INJECTION_ELECTRICITE-VARIABLE_ELECTRICITY_VL_FR.pdf": (
+                    "totalenergies_injection_mycomfort_v_2026-10.pdf"
+                ),
+                "MYESSENTIAL_ELECTRICITY_BXL_FR.pdf": (
+                    "totalenergies_myessential_b_2026-10.pdf"
+                ),
+                "MYCOMFORT_ELECTRICITY_WAL_FR.pdf": (
+                    "totalenergies_mycomfort_w_2026-10_nl.pdf"
+                ),
+            }
+        ),
+    )
+    freezer.move_to("2026-10-14 12:00:00+02:00")
+    out = await totalenergies.settle_month(
+        None,  # type: ignore[arg-type]
+        "totalenergies_electricite_variable",
+        "flanders",
+        date(2026, 9, 1),
+        held,
+    )
+    assert isinstance(out.energy, VariableRates)
+    assert out.energy.index_realised == pytest.approx(0.16472, abs=0.00002)
+    assert out.injection is not None and out.injection.index_realised is not None
+    assert not out.provisional
+
+
+async def test_a_card_the_range_is_not_printed_like_settles_on_the_ranges_index(
     monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:
     """The Electricité Variable card in Brussels of the afternoon of 1
     October 2026 printed myComfort's block under its own bases, and solves to
     159,9 EUR/MWh where myEssential beside it and myComfort in Wallonia solve
-    to 164,7. Settled on it, September kept 159,9 for good; the energy now
-    waits for a card the range agrees with. myEssential, a good card heard
-    after that one, still settles on its own index, as it did before. The
-    myComfort card in Brussels was still the morning's, its block unread,
-    and says nothing either way."""
+    to 164,7. Settled on it, September kept 159,9 for good; left to wait for
+    a corrected card, it kept its estimate for good once November's card was
+    served. It settles at the index the two others agree on. myEssential, a
+    good card heard after that one, still settles on its own index, as it did
+    before. The myComfort card in Brussels was still the morning's, its block
+    unread, and says nothing either way."""
     from dataclasses import replace
     from datetime import date
 
@@ -1824,7 +1877,12 @@ async def test_a_card_the_range_is_not_printed_like_does_not_settle_the_energy(
         date(2026, 9, 1),
         held,
     )
-    assert out == replace(held, provisional=True)
+    assert is_settled(out)
+    assert isinstance(out.energy, VariableRates)
+    assert out.energy.index_realised == pytest.approx(0.16472, abs=0.00002)
+    assert replace(out, energy=held.energy, injection=held.injection) == replace(
+        held, provisional=out.provisional
+    )
 
     held = parse_snapshot(
         "totalenergies_myessential",
@@ -1937,7 +1995,7 @@ async def test_a_refresh_reads_each_card_of_the_range_once(
         "totalenergies_electricite_variable",
         "totalenergies_electricite_variable_b_2026-10.pdf",
     )
-    assert misprinted.provisional
+    assert is_settled(misprinted)
     assert "MYCOMFORT_ELECTRICITY_WAL_FR.pdf" in read
     read.clear()
     good = await settle(

@@ -379,7 +379,7 @@ bases, 7.52 against 7.01, so it solved about 5 EUR/MWh below the rest of the
 range and billed keyless entries 0,54 c/kWh low, as printed, until TotalEnergies
 reprinted the card with myComfort's bases by 5 October. The live check fails on
 such a block (`_expect_indicatives_at_the_range_index`, `scripts/live_check.py`),
-and a closed month does not settle on it (`_range_agrees`, below).
+and a closed month does not settle on it (`_range_index`, below).
 A card stating its contribution in a footnote always prints the formula, so one
 that does not is refused rather than billed unchecked. The block also no longer has an injection column, and
 `_realized_monthly_injection` only reads a block headed `Injection`: the last
@@ -487,31 +487,38 @@ the feed-in, and until it is out the energy settles and the month stays provisio
 the card archive writes the row with its energy settled and asks it again daily, so
 the leg that settled outlives the next card being the live one.
 The energy settles only on an index the rest of the range is printed at
-(`_range_agrees`, `totalenergies.py`): every variable card of a month is printed
+(`_range_index`, `totalenergies.py`): every variable card of a month is printed
 at the same one, and the Brussels Electricité Variable card of the afternoon of
 1 October 2026, myComfort's block under its own bases, solves to 159,9 EUR/MWh,
 which would have settled September 4,8 below the 164,7 of the rest for good. The
 other variable cards titled for the same month are read, the region's first, and
-the index stands once one solves within `_INDEX_FIT` (1,3 EUR/MWh, the fit of a
-card's own columns) of it; once two disagree, or none agrees, the energy waits
-and the month stays provisional. With no other card titled for the month printing
-its block, the rest of the range still carrying last month's title or its block
-unread, the index cannot be checked and waits too, so a misprinted card heard
-first never settles alone. Settling reads at least one card more for that, 10 to
-13 s of CPU each on a Raspberry Pi, and up to 12 while the range still carries last
-month's title, so what each card said is kept for an hour (`_RANGE_HEARD`), the
+the card's own index stands once one solves within `_INDEX_FIT` (1,3 EUR/MWh, the
+fit of a card's own columns) of it. Where two other cards solve within that of
+each other and not of it, the card is the misprinted one, and the month settles
+at the mean of those two; so does a card whose block is not read. Left to wait for
+a card corrected within the month, such a month stayed at its estimate for good
+once the next month's card replaced it, about 10 EUR a month on 3500 kWh a year
+with September 2026's index 29,6 EUR/MWh above August's. With no two cards titled
+for the month agreeing, the rest of the range still carrying last month's title or
+its block unread, the energy waits and the month stays provisional, so a
+misprinted card heard first never settles alone. Settling reads at least one card
+more for that, 10 to 13 s of CPU each on a Raspberry Pi, and up to 12 while the
+range still carries last month's title, so what each card said is kept for an hour (`_RANGE_HEARD`), the
 card a settlement reads for itself included: the contracts and regions settling in
 one refresh read each card once, the cards already heard asked first, and a month
 still provisional the next day reads them afresh.
-Only a rate read off a card's "prix mensuels" block settles anything
+Only a rate read off a card's "prix mensuels" block is an index
 (`monthly_rates_printed`, `_totalenergies_cards.py`): where the block is not read
 the parser bills the table row, the regulator's annual estimate, which on the
 October 2026 Electricité Variable edition in Flanders that printed its block as the
-bases solves to 161,9 EUR/MWh. Once the live card has moved past the next one, the card
+bases solves to 161,9 EUR/MWh. Such a card's energy settles on the index the rest
+of the range agrees on, and its feed-in waits for a feed-in card whose block is
+read. Once the live card has moved past the next one, the card
 archive's row, which the daily run settled while the next card was served, holds the
 month; there are no rows before September 2026, and those months keep the hourly
-estimate. A row no run settled while the next card was served (the range never
-agreed on a misprint that was never corrected, say) stays as it is for good: a
+estimate. A row no run settled while the next card was served (no two cards of the
+range agreed for the whole month, or the feed-in card never carried the month)
+stays as it is for good: a
 keyless entry bills the index its own card printed, the month before's, and a keyed
 one the engine's hourly mean, and a warning in the log names the month
 (`settle_month`). The daily archive run asks only last month's row, so it does not
