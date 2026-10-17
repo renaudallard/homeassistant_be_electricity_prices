@@ -43,7 +43,7 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     VAT_RATE_REDUCED,
 )
-from ._parse import excise_tier_bands, numeric_row, require_every_area, to_float
+from ._parse import excise_tier_bands, numeric_row, to_float
 from ._pdf import printed_vat_rate
 from .base import (
     DsoOverlay,
@@ -68,6 +68,13 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     residential is on post-2024-mandatory-rollout. Analog-meter users
     can still see realistic prices because Ecopower bills them at the
     SAME ENERGY rate, only the network costs differ.
+
+    An area whose row does not read is left out, here and on the dynamic
+    card (``_extract_dbs_dsos``). ``fetch`` refuses a live card short of an
+    area and ``fetch_for_month`` the running month's
+    (``require_every_area``), while a past month's card keeps its energy and
+    the month cache bills the missing area on the nearest card of the same
+    calendar year that prints it. A table nothing could be read from raises.
     """
     section = _slice_between(text, "DIGITALE METER", "ANALOGE METER")
     if section is None:
@@ -116,7 +123,8 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=databeheer,
             network_ceiling_eur_per_kwh=(to_float(row[4]) if len(row) > 4 else None),
         )
-    require_every_area("Ecopower", out, _DSO_LABELS.values(), block="digital")
+    if not out:
+        raise ExtractorError("Ecopower: no DSO row read in the digital block")
     return out
 
 
@@ -173,7 +181,8 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
             capacity_eur_per_kw_year=to_float(row[1]),
             data_management_per_year=to_float(row[0]),
         )
-    require_every_area("Ecopower", out, _DSO_LABELS.values(), block="dynamic")
+    if not out:
+        raise ExtractorError("Ecopower: no DSO row read in the dynamic block")
     return out
 
 

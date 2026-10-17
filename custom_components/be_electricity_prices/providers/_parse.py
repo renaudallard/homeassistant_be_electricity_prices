@@ -101,9 +101,9 @@ def require_every_area(
     would let the backfill path silently skip whole months (it swallows the
     resulting KeyError). Refusing keeps the last good card serving.
 
-    Aspiravi, Cociter, EBEM, Elegant, Eneco, energie.be, Energy Knights,
-    EnergyVision, Frank, OCTA+ and Trevion ask it of the live card, and hold
-    the running month's card to the same areas through
+    Aspiravi, Cociter, EBEM, Ecopower, Elegant, Eneco, energie.be, Energy
+    Knights, EnergyVision, Frank, OCTA+ and Trevion ask it of the live card,
+    and hold the running month's card to the same areas through
     ``running_month_short_of_an_area``. A past month's card keeps a short
     table: its energy is still what the month and a signing cohort are
     billed, where refusing the card billed both on today's card, and the

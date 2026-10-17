@@ -87,10 +87,12 @@ from ._ecopower_cards import (
     printed_spp_index,
 )
 from ._ecopower_overlays import (
+    _DSO_LABELS,
     _extract_dbs_dsos,
     _extract_dsos,
     _extract_taxes,
 )
+from ._parse import require_every_area, running_month_short_of_an_area
 from ._pdf import (
     extract_pdf_text_layout,
     fetch_pdf_text_layout,
@@ -180,12 +182,18 @@ async def fetch(
     if contract_id == _CONTRACT_ID:
         pdf_url, label = await _resolve_latest_pdf(session)
         text = await fetch_pdf_text_layout(session, pdf_url)
-        return parse_snapshot(text, pdf_url, label)
-    if contract_id == _DBS_CONTRACT_ID:
+        snap = parse_snapshot(text, pdf_url, label)
+        block = "digital"
+    elif contract_id == _DBS_CONTRACT_ID:
         pdf_url, label = await _resolve_latest_dbs_pdf(session)
         text = await fetch_pdf_text_layout(session, pdf_url)
-        return parse_dbs_snapshot(text, pdf_url, label)
-    raise ExtractorError(f"unknown Ecopower contract {contract_id!r}")
+        snap = parse_dbs_snapshot(text, pdf_url, label)
+        block = "dynamic"
+    else:
+        raise ExtractorError(f"unknown Ecopower contract {contract_id!r}")
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("Ecopower", snap.dsos, _DSO_LABELS.values(), block=block)
+    return snap
 
 
 async def fetch_for_month(
@@ -244,7 +252,11 @@ async def fetch_for_month(
     # the validity / title check rejects it instead of mis-billing past
     # consumption at current rates.
     checked = archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
-    return None if checked is None else _settled(checked, text, year_month)
+    if checked is None or running_month_short_of_an_area(
+        checked.dsos, _DSO_LABELS.values(), year_month
+    ):
+        return None
+    return _settled(checked, text, year_month)
 
 
 def _settled(snap: SupplierSnapshot, text: str, year_month: date) -> SupplierSnapshot:
@@ -487,13 +499,16 @@ async def _fetch_dbs_for_month(
     _sort_key, yyyymm, url = eligible[-1]
     try:
         text = await fetch_pdf_text_layout(session, url)
-        return parse_dbs_snapshot(text, url, f"{yyyymm[:4]}-{yyyymm[4:]}")
+        snap = parse_dbs_snapshot(text, url, f"{yyyymm[:4]}-{yyyymm[4:]}")
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
         # so the month cache retries it instead of caching it as absent.
         if is_transient_fetch_error(str(err)):
             raise
         return None
+    if running_month_short_of_an_area(snap.dsos, _DSO_LABELS.values(), year_month):
+        return None
+    return snap
 
 
 # Re-export the layout extractor for fixture-based tests so they can

@@ -77,25 +77,85 @@ def test_empty_dso_overlay_is_fatal() -> None:
     # Section header present but no DSO row parses (label drift) -> raise,
     # so the backfill path can't silently skip the month.
     text = _text("ecopower_burgerstroom_apr.pdf").replace("Fluvius", "XXX")
-    with pytest.raises(ExtractorError, match="DSO rows not found"):
+    with pytest.raises(ExtractorError, match="no DSO row read in the digital block"):
         parse_snapshot(text, "test://ecopower-apr", "april 2026")
 
 
-@pytest.mark.parametrize(
-    ("fixture", "parse"),
-    [
-        ("ecopower_burgerstroom_jul.pdf", parse_snapshot),
-        ("ecopower_dynamische_burgerstroom_jan.pdf", parse_dbs_snapshot),
-    ],
-)
-def test_a_card_with_one_area_unread_is_refused(fixture: str, parse: Any) -> None:
-    """One relabelled row dropped its area, and the card was adopted with
-    seven: the entry on Fluvius West was left with no network overlay."""
+# Per card: the contract, the fixture, its reader and the block it reads.
+_CARDS = [
+    (
+        "ecopower_burgerstroom",
+        "ecopower_burgerstroom_jul.pdf",
+        parse_snapshot,
+        "digital",
+    ),
+    (
+        "ecopower_dynamische_burgerstroom",
+        "ecopower_dynamische_burgerstroom_jan.pdf",
+        parse_dbs_snapshot,
+        "dynamic",
+    ),
+]
+
+
+def _without_west(fixture: str) -> str:
     text = _text(fixture)
-    assert len(parse(text, "test://ecopower", "2026").dsos) == len(FLUVIUS_KEYS)
     relabelled = text.replace("Fluvius West", "Fluvius West-Vlaanderen")
-    with pytest.raises(ExtractorError, match="fluvius_west"):
-        parse(relabelled, "test://ecopower", "2026")
+    assert relabelled != text
+    return relabelled
+
+
+@pytest.mark.parametrize(("contract_id", "fixture", "parse", "block"), _CARDS)
+async def test_a_live_card_with_one_area_unread_is_refused(
+    contract_id: str, fixture: str, parse: Any, block: str
+) -> None:
+    """One relabelled row dropped its area, and the card was adopted with
+    seven: the entry on Fluvius West was left with no network overlay. The
+    reader leaves the area out and the live card is refused for it."""
+    assert len(parse(_text(fixture), "test://ecopower", "2026").dsos) == len(
+        FLUVIUS_KEYS
+    )
+    short = _without_west(fixture)
+    assert set(parse(short, "test://ecopower", "2026").dsos) == FLUVIUS_KEYS - {
+        "fluvius_west"
+    }
+    resolved = AsyncMock(return_value=("test://ecopower", "2026"))
+    with (
+        patch.object(ecopower, "_resolve_latest_pdf", resolved),
+        patch.object(ecopower, "_resolve_latest_dbs_pdf", resolved),
+        patch.object(ecopower, "fetch_pdf_text_layout", AsyncMock(return_value=short)),
+        pytest.raises(
+            ExtractorError,
+            match=rf"DSO rows not found for \['fluvius_west'\] in the {block} block",
+        ),
+    ):
+        await ecopower.fetch(None, contract_id, "flanders")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(("contract_id", "fixture", "parse", "block"), _CARDS)
+async def test_a_past_month_keeps_a_short_network_table(
+    freezer: Any, contract_id: str, fixture: str, parse: Any, block: str
+) -> None:
+    """A past month's card is what the month is billed on, so a table short
+    of an area keeps the card; the month cache bills the missing area on the
+    nearest card printing it. The reader refused it, and the month fell back
+    to today's card for every area. As the running month's card it is
+    refused, as ``fetch`` refuses it."""
+    month = date(2026, 7, 1) if block == "digital" else date(2026, 1, 1)
+    kind = "gbs" if block == "digital" else "dbs"
+    listing = f'<a href="https://cdn.example/{month:%Y%m}_{kind}_tariefkaart.pdf">x</a>'
+    session = make_text_session(listing)
+    with patch.object(
+        ecopower,
+        "fetch_pdf_text_layout",
+        AsyncMock(return_value=_without_west(fixture)),
+    ):
+        freezer.move_to("2026-10-16 12:00:00+02:00")
+        snap = await fetch_for_month(session, contract_id, "flanders", month)
+        assert snap is not None
+        assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_west"}
+        freezer.move_to(f"{month:%Y-%m}-20 12:00:00+02:00")
+        assert await fetch_for_month(session, contract_id, "flanders", month) is None
 
 
 def test_missing_gsc_or_wkk_surcharge_is_fatal() -> None:

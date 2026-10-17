@@ -312,13 +312,19 @@ longest label `Fluvius Midden-Vlaanderen` across three lines (`Fluvius Midden-` 
 lookup sees one line. Tests assert the stitched row keeps its real rates
 (`test_ecopower.py`).
 
-Both DSO parsers **fail loud** with `ExtractorError("Ecopower: DSO rows not found for ...")` unless
-every one of the eight Fluvius areas reads (`require_every_area`, `_parse.py`). A
-relabelled or reshaped row used to drop its area quietly: the card was adopted with seven, and the
-entry on the missing area was left with no network overlay while the last good card was gone from
-the cache. Returning `{}` would let the backfill path silently skip whole months (it swallows the
-resulting KeyError). `test_empty_dso_overlay_is_fatal` renames `Fluvius` to `XXX` and
-`test_a_card_with_one_area_unread_is_refused` relabels `Fluvius West` on both cards
+Both DSO parsers leave out an area whose row does not read, and `fetch` refuses a live card
+short of one of the eight Fluvius areas with `ExtractorError("Ecopower: DSO rows not found
+for ...")` (`require_every_area`, `_parse.py`). A relabelled or reshaped row used to drop its
+area quietly: the card was adopted with seven, and the entry on the missing area was left with
+no network overlay while the last good card was gone from the cache. `fetch_for_month` refuses
+the running month's card the same way on both cards (`running_month_short_of_an_area`), so the
+last good card stands in. A past month's card keeps its short table: its energy is what the
+month is billed on, and the month cache bills the missing area on the nearest card of the same
+calendar year that prints it (`_with_nearest_area`, `snapshot_areas.py`). A table where no row
+reads at all raises `no DSO row read`, since returning `{}` would let the backfill path silently
+skip whole months (it swallows the resulting KeyError). `test_empty_dso_overlay_is_fatal`
+renames `Fluvius` to `XXX`, and `test_a_live_card_with_one_area_unread_is_refused` and
+`test_a_past_month_keeps_a_short_network_table` relabel `Fluvius West` on both cards
 (`test_ecopower.py`).
 
 ### Tax parsing
@@ -530,7 +536,8 @@ Ranked by likelihood of breaking when Ecopower re-renders a card:
    so a miss shows as an unavailable injection sensor, not a hard error (watch for silent loss).
 3. **DSO table column shuffle or new sub-area label** -> `_DSO_LABELS` (`_ecopower_overlays.py`),
    the gbs row widths (`_ecopower_overlays.py`), the dbs row widths + `_DBS_WRAPPED_LABEL_RE`
-   (`_ecopower_overlays.py`). Symptom: `Ecopower: DSO rows not found for [...]`.
+   (`_ecopower_overlays.py`). Symptom: `Ecopower: DSO rows not found for [...]` on the live
+   card, `Ecopower: no DSO row read` on any.
 4. **Tax row relabelled** -> `_extract_taxes` regexes (`_ecopower_overlays.py`). Symptom: `could not
    parse Ecopower federal tax block` or `GSC/WKK renewable surcharge`.
 5. **Card filename family or price-page structure changed** -> `_CARD_RE`, `_DBS_CARD_RE`

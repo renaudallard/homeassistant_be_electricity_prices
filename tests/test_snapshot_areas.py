@@ -43,6 +43,7 @@ from custom_components.be_electricity_prices.providers import (
     aspiravi,
     cociter,
     ebem,
+    ecopower,
     elegant,
     eneco,
     energiebe,
@@ -164,6 +165,8 @@ def _parsed(supplier: str, text: str) -> SupplierSnapshot:
         return elegant.parse_snapshot("elegant_zeker_vast", text)
     if supplier == "eneco":
         return eneco.parse_snapshot(text, "power_fix", "test://", "wallonia")
+    if supplier == "ecopower":
+        return ecopower.parse_snapshot(text, "test://", "2026-07")
     if supplier == "energiebe":
         return energiebe.parse_snapshot(text, "test://")
     if supplier == "energyknights":
@@ -196,6 +199,12 @@ _SHORT_CARDS = {
         ("ebem_variable", "flanders"),
         lambda: fixture_text("ebem_variable_2026-05.pdf", layout=True),
         ("Fluvius West", "Fluvius W."),
+        "fluvius_west",
+    ),
+    "ecopower": (
+        ("ecopower_burgerstroom", "flanders"),
+        lambda: fixture_text("ecopower_burgerstroom_jul.pdf", layout=True),
+        ("Fluvius West", "Fluvius West-Vlaanderen"),
         "fluvius_west",
     ),
     "elegant": (
