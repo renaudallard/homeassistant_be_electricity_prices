@@ -626,11 +626,24 @@ supplier's PDF. After parsing, a runtime sanity check enforces the invariant tha
 every card parsed). The check uses a process-wide `_RESA_REW_LOGGED` latch (`_bolt_overlays.py`) so it
 rings HA's notification bell at most once per boot. Three outcomes (`_bolt_overlays.py`):
 
-- Both rows missing: stay quiet (the parser already raised on the wider drift).
+- Both rows missing: stay quiet (the table read nothing, or `fetch` refuses the card below).
 - Only one row parsed: log at ERROR once (the surviving row may now carry the other DSO's values
   with nothing to compare against).
 - Both parsed but the inequality flipped: log at ERROR once, meaning Bolt likely fixed the upstream
   layout and the compensating swap now inverts correct values, so it should be removed.
+
+**A table short of an area.** Each region's reader leaves an area whose row does not read out of
+the card. `fetch` refuses a live card short of one of its region's areas, the eight Fluvius ones,
+the five Walloon ones or Sibelga (`require_every_area`, `_areas` in `bolt.py`), so the card held
+before keeps serving, and `fetch_for_month` answers None for the running month's card short of one
+(`running_month_short_of_an_area`). A past month keeps its own card, and the month cache bills the
+missing area on the nearest card of the same calendar year that prints it (`_with_nearest_area`,
+`snapshot_areas.py`). Up to 0.39.1 a short live card was adopted as it stood and an entry on the
+missing area failed every tick with no network figures. A table nothing could be read from stays
+empty rather than raising: the Walloon cards of October to December 2025 print seven columns per
+row, before the Impact bands, which the ten-column reader does not read, and those months stay out
+of the bill as before (`test_a_live_card_short_of_an_area_is_refused`,
+`test_a_past_fix_month_keeps_a_short_network_table`, `tests/test_bolt.py`).
 
 The swap needs manual re-validation at least every 6 months (last done 2026-05, next due 2026-11,
 `_bolt_overlays.py`). `test_resa_is_cheaper_than_rew_after_label_swap` (`tests/test_bolt.py`) guards

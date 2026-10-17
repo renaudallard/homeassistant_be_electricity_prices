@@ -401,6 +401,16 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
 
     mono | jour | nuit | excl_nuit | PIC | MEDIUM | ECO | transport |
     terme_fixe (€/an) | prosumer (€/kVA/an)
+
+    An area whose row does not read is left out, here and in the other two
+    regions' readers. ``fetch`` refuses a live card short of an area and
+    ``fetch_for_month`` the running month's (``require_every_area``), while
+    a past month's card keeps its energy and the month cache bills the
+    missing area on the nearest card of the same calendar year that prints
+    it. A table nothing could be read from is kept empty rather than
+    refused: the Walloon cards of October to December 2025 print the
+    network figures in a layout this does not read, and their months stay
+    out of the bill as they always have.
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
@@ -454,8 +464,10 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
         # Only one of the two parsed: the more dangerous case for
         # the swap, since the surviving row may now be carrying the
         # other DSO's values without anything else to compare it
-        # against. Log at ERROR (once per process) so it surfaces in
-        # HA's notification bell without re-ringing on every snapshot
+        # against. ``fetch`` refuses such a live card, as it refuses
+        # one short of any area (``require_every_area``), while a past
+        # month keeps it. Log at ERROR (once per process) so it surfaces
+        # in HA's notification bell without re-ringing on every snapshot
         # refresh.
         if not _RESA_REW_LOGGED:
             parsed = DSO_RESA if resa is not None else DSO_REW

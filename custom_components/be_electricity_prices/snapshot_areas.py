@@ -116,9 +116,8 @@ async def _with_nearest_area(
     month is still dropped.
 
     The running month takes part both ways. Its own card, where the month
-    walk reads it short (Bolt's Walloon card can lose a row; the suppliers
-    on ``running_month_short_of_an_area`` refuse it), takes the area from a
-    closed card of its year, while the price of the current hour still
+    walk reads it short (the suppliers on ``running_month_short_of_an_area``
+    refuse it), takes the area from a closed card of its year, while the price of the current hour still
     comes from the live card as fetched, which nothing here completes. And
     it lends its area to a closed month, though it is never written to the
     store, so the first tick after a restart drops that month until the

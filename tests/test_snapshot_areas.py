@@ -41,6 +41,7 @@ from homeassistant.core import HomeAssistant
 from custom_components.be_electricity_prices import snapshot_months
 from custom_components.be_electricity_prices.providers import (
     aspiravi,
+    bolt,
     cociter,
     ebem,
     ecopower,
@@ -157,6 +158,8 @@ def test_the_months_asked_run_nearest_first_within_the_calendar_year() -> None:
 def _parsed(supplier: str, text: str) -> SupplierSnapshot:
     if supplier == "aspiravi":
         return aspiravi.parse_snapshot("aspiravi_eco_plus_flex", text)
+    if supplier == "bolt":
+        return bolt.parse_snapshot("bolt_fix", text, "wallonia")
     if supplier == "cociter":
         return cociter.parse_snapshot(text, "cociter_variable", "test://", "2026-04")
     if supplier == "ebem":
@@ -188,6 +191,12 @@ _SHORT_CARDS = {
         lambda: fixture_text("aspiravi_eco_plus_flex_2026-09.pdf"),
         ("Fluvius (Imewo)", "Fluvius (Gent)"),
         "fluvius_imewo",
+    ),
+    "bolt": (
+        ("bolt_fix", "wallonia"),
+        lambda: fixture_text("bolt_fix.pdf", layout=True),
+        ("\nWAVRE ", "\nR.E.W. "),
+        "resa",
     ),
     "cociter": (
         ("cociter_variable", "wallonia"),

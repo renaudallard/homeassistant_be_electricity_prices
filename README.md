@@ -1499,9 +1499,8 @@ searching for:
   from another year's card: network tariffs change on 1 January, so it
   would bill the month on a network it was never charged. While a nearer
   card cannot be read yet, the month stays out until it can. The running
-  month is part of this both ways: its card, when read short (Bolt's
-  Walloon card can lose a row), takes the area from an earlier card of the
-  year, so the month so far is billed in full while the price of the
+  month is part of this both ways: its card, when a supplier's reader
+  keeps it short, takes the area from an earlier card of the year, so the month so far is billed in full while the price of the
   current hour still comes from the live card as published; and it can
   lend its area to an earlier month, which the first update after a
   restart then leaves out until the cards are fetched again a moment

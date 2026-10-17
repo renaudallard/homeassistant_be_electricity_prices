@@ -53,6 +53,7 @@ from custom_components.be_electricity_prices.providers._resolve import (
 from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
     ExtractorError,
+    ShortNetworkTableError,
     SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.bolt import parse_snapshot
@@ -273,6 +274,65 @@ def test_unknown_contract_raises() -> None:
             await EXTRACTORS["bolt"].fetch(None, "bogus", "wallonia")  # type: ignore[arg-type]
 
     asyncio.run(_run())
+
+
+@pytest.mark.parametrize(
+    ("region", "old", "new", "area"),
+    [
+        # The row the label swap files under RESA.
+        ("wallonia", "\nWAVRE ", "\nR.E.W. ", "resa"),
+        ("flanders", "Fluvius West", "Fluvius W.", "fluvius_west"),
+        ("brussels", "Sibelga", "Bruxelles-Capitale", "sibelga"),
+    ],
+)
+async def test_a_live_card_short_of_an_area_is_refused(
+    monkeypatch: pytest.MonkeyPatch, region: str, old: str, new: str, area: str
+) -> None:
+    """A row that does not read leaves its area out of the card, which was
+    adopted as it stood: an entry on that area then failed every tick with
+    no network figures to price from. The live card is refused for it, so
+    the card held before keeps serving, while the card archive keeps the
+    card for its month."""
+    text = fixture_text("bolt_fix.pdf", layout=True)
+    assert old in text
+    short = text.replace(old, new)
+    assert area not in parse_snapshot("bolt_fix", short, region).dsos
+    monkeypatch.setattr(
+        bolt_mod, "_fetch_pdf_text", AsyncMock(return_value=("test://", short))
+    )
+    with pytest.raises(ShortNetworkTableError, match=rf"\['{area}'\]") as err:
+        await bolt_mod.fetch(None, "bolt_fix", region)  # type: ignore[arg-type]
+    assert area not in err.value.card.dsos
+
+
+async def test_a_past_fix_month_keeps_a_short_network_table(freezer: Any) -> None:
+    """A past month's card is what the month and a contract signed then are
+    billed on, so one short of an area is kept, and the month cache bills
+    the missing area on the nearest card of its year that prints it. The
+    running month's card is the live one again and is refused as ``fetch``
+    refuses it, so the card held stands in."""
+    short = fixture_text("bolt_fix.pdf", layout=True).replace("\nWAVRE ", "\nR.E.W. ")
+    freezer.move_to("2026-10-15 10:00:00+02:00")
+    with patch.object(
+        bolt_mod, "fetch_pdf_text_layout", new=AsyncMock(return_value=short)
+    ):
+        past = await bolt_mod.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "bolt_fix",
+            "wallonia",
+            date(2026, 4, 1),
+        )
+        assert past is not None and "resa" not in past.dsos and "rew" in past.dsos
+        freezer.move_to("2026-04-15 10:00:00+02:00")
+        assert (
+            await bolt_mod.fetch_for_month(
+                None,  # type: ignore[arg-type]
+                "bolt_fix",
+                "wallonia",
+                date(2026, 4, 1),
+            )
+            is None
+        )
 
 
 def test_fetch_for_month_rejects_mismatched_month() -> None:

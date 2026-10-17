@@ -511,10 +511,10 @@ as before: the Walloon cards of October to December 2025 were read before their
 layout was, and the search asked the supplier's archive for every month of 2025
 before them, nine downloads for an Engie October, to bill a network never read.
 The running month takes part both ways. Its own card, where the walk reads it
-short, receives the area from a closed card of its year: Bolt's Walloon card can
-lose a row and keeps the rest, so that month to date is billed at the full-card
-figure rather than dropped (the suppliers on `require_every_area` refuse a short
-running card instead, `running_month_short_of_an_area`). The price of the current
+short, receives the area from a closed card of its year, so that month to date is
+billed at the full-card figure rather than dropped (the suppliers on
+`require_every_area` refuse a short running card instead,
+`running_month_short_of_an_area`). The price of the current
 hour is untouched: it comes from the live card as fetched, which this search never
 completes. And the running month lends its area to a closed month whose nearer
 cards lack it, but its card is never written to the store, so the first tick

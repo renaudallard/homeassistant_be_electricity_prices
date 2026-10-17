@@ -64,6 +64,7 @@ import aiohttp
 from homeassistant.util import dt as dt_util
 
 from ..const import (
+    DSO_SIBELGA,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
@@ -82,6 +83,8 @@ from ._bolt_cards import (
     quarter_indices,
 )
 from ._bolt_overlays import (
+    _FLANDERS_LABELS,
+    _WALLONIA_LABELS,
     _extract_brussels_dsos,
     _extract_energy_fund,
     _extract_excise_bands,
@@ -92,6 +95,8 @@ from ._bolt_overlays import (
 )
 from ._parse import (
     require_contract,
+    require_every_area,
+    running_month_short_of_an_area,
 )
 from ._pdf import (
     FR_MONTHS,
@@ -523,9 +528,21 @@ async def fetch(
         None if reference is None else (await _fetch_pdf_text(session, reference))[1]
     )
     dutch_text = await _dutch_edition(session, contract, url, text)
-    return parse_snapshot(
+    snap = parse_snapshot(
         contract_id, text, region, url, index_text=index_text, dutch_text=dutch_text
     )
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("Bolt", snap, _areas(region))
+    return snap
+
+
+def _areas(region: str) -> tuple[str, ...]:
+    """The network areas a card prints a row for in ``region``."""
+    if region == REGION_FLANDERS:
+        return tuple(_FLANDERS_LABELS.values())
+    if region == REGION_WALLONIA:
+        return tuple(_WALLONIA_LABELS.values())
+    return (DSO_SIBELGA,)
 
 
 async def fetch_for_month(
@@ -566,6 +583,8 @@ async def fetch_for_month(
     try:
         snap = parse_snapshot(contract_id, text, region, url, dutch_text=dutch_text)
     except ExtractorError:
+        return None
+    if running_month_short_of_an_area(snap.dsos, _areas(region), year_month):
         return None
     # The month is URL-keyed, but guard against the CDN ever serving a
     # current card under a historical URL: Bolt cards carry no parseable
