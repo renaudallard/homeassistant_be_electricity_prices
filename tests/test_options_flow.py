@@ -1378,7 +1378,8 @@ async def test_compare_branch_spot_injection_target_prompts_for_api_key(
 @pytest.mark.parametrize(
     ("typed", "fetched", "borrowed"),
     [
-        # A key typed and the fetch answering: the window is borrowed fresh.
+        # A key typed and the fetch answering: the window is borrowed fresh
+        # for the target.
         ("TESTKEY", True, True),
         # A key typed but nothing came back: the stale cache is kept.
         ("TESTKEY", False, False),
@@ -1397,8 +1398,8 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
     now counts as none for the target, so a typed key is borrowed for the
     window, and with none typed the target's credit is left out whole, as the
     ranking does and as the token step and the annual note say. The own row
-    keeps the cache unless a typed key brings it up to date: dropping it would
-    zero the household's own credit below its current_year_cost sensor."""
+    keeps the cache whatever is typed, since its current_year_cost sensor
+    bills on it."""
     from dataclasses import replace
     from datetime import UTC, datetime
 
@@ -1503,23 +1504,23 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
     ]
     assert own and target
     expected = {**stale, **fresh} if borrowed else stale
-    assert all(spots == expected for spots in own)
+    # The own row is the sensor's, on the entry's cache whatever is typed.
+    assert all(spots == stale for spots in own)
     assert all(spots == (expected if typed else {}) for spots in target)
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_a_keyless_entry_quoting_itself_prices_both_sides_on_the_typed_key(
+async def test_a_keyless_entry_keeps_its_own_row_on_the_sensor_under_a_typed_key(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """A keyless entry whose feed-in follows the spot per slot credits none of
     it in its current_year_cost sensor, the card printing no rate to fall back
-    on. A key typed on the page fetches the window, and both sides are priced
-    on it, the own contract quoted on the same meter included, so the
-    difference is what the contract changes and never the credit the entry
-    cannot price. The own row then departs from the sensor, which the result
-    page says ("on day-ahead prices fetched for this page that the entry does
-    not hold"). Pricing the own row on the entry's empty cache instead would
-    put that whole credit into every difference."""
+    on. A key typed on the page fetched the window and priced the own row on
+    it too, crediting what the sensor does not: on this stand-in engine the
+    row read 805,75 against a sensor of 1000,00. The own row is now the
+    sensor's figure, priced on the entry's own day-ahead, while the
+    alternative, here the same contract on the same meter, keeps the fetched
+    window."""
     from dataclasses import replace
     from datetime import UTC, datetime
 
@@ -1564,6 +1565,16 @@ async def test_a_keyless_entry_quoting_itself_prices_both_sides_on_the_typed_key
         if api_key:
             self._historical_spots.update(fresh)
 
+    async def _engine(*_args: Any, **kwargs: Any) -> float:
+        # 3000 kWh exported, credited at 0,925 x the window's mean spot: the
+        # one input the two rows can differ on.
+        spots = kwargs.get("historical_spots") or {}
+        mean = sum(spots.values()) / len(spots) if spots else 0.0
+        return 1000.0 - 3000 * 0.925 * mean
+
+    # What the current_year_cost sensor bills: the same engine on the
+    # entry's own day-ahead, which coordinator_costs passes it.
+    sensor = await _engine(historical_spots=coord._historical_spots)
     fake = replace(
         EXTRACTORS["cociter"], fetch=AsyncMock(return_value=card), probe=None
     )
@@ -1572,8 +1583,8 @@ async def test_a_keyless_entry_quoting_itself_prices_both_sides_on_the_typed_key
         patch.object(type(coord), "_ensure_historical_spots", _fake_ensure),
         patch(
             "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
-            AsyncMock(return_value=123.0),
-        ) as engine,
+            AsyncMock(side_effect=_engine),
+        ),
     ):
         result = await hass.config_entries.options.async_init(entry.entry_id)
         result = await hass.config_entries.options.async_configure(
@@ -1595,28 +1606,24 @@ async def test_a_keyless_entry_quoting_itself_prices_both_sides_on_the_typed_key
         )
         assert result["step_id"] == "compare_result"
 
-    sides = [
-        (
-            "contract_override" in c.kwargs,
-            c.kwargs.get("historical_spots"),
-        )
-        for c in engine.call_args_list
-    ]
-    assert {own for own, _ in sides} == {False, True}
-    assert all(spots == fresh for _, spots in sides)
+    shown = result["description_placeholders"]
+    assert shown is not None
+    assert sensor == pytest.approx(1000.0)
+    assert shown["current_ytd"] == f"{sensor:.2f}"
+    assert shown["compare_ytd"] == "805.75"
     # The page never writes what it fetched back into the entry.
     assert not coord._historical_spots
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_compare_prices_the_earlier_contracts_on_the_spots_it_fetched(
+async def test_compare_prices_the_earlier_contracts_on_the_entrys_own_spots(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """After a recorded switch the own row is the current contract plus the
-    earlier ones. When the page fetched day-ahead for its window, the current
-    contract is priced on those spots, and the earlier ones have to be too:
-    read from the entry's daily pricing, they sat on its cache, one row on two
-    sets of spots."""
+    earlier ones, all on the entry's own day-ahead as the current_year_cost
+    sensor prices them. A key typed on the page fetches the window for the
+    alternative alone: the earlier contracts were priced on it too, one row
+    the sensor beside it could not reproduce."""
     from dataclasses import replace
     from datetime import UTC, datetime
 
@@ -1670,7 +1677,15 @@ async def test_compare_prices_the_earlier_contracts_on_the_spots_it_fetched(
         if api_key:
             self._historical_spots.update(fetched)
 
-    earlier = AsyncMock(return_value=[])
+    seen: list[dict[Any, float]] = []
+
+    async def _earlier(
+        _hass: Any, _session: Any, coordinator: Any, *_a: Any, **kw: Any
+    ):
+        seen.append(dict(coordinator._historical_spots))
+        return []
+
+    earlier = AsyncMock(side_effect=_earlier)
     fake = replace(
         EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap), probe=None
     )
@@ -1704,7 +1719,8 @@ async def test_compare_prices_the_earlier_contracts_on_the_spots_it_fetched(
         assert result["step_id"] == "compare_result"
 
     assert earlier.await_args is not None
-    assert earlier.await_args.kwargs["spots"].hours == fetched
+    assert "spots" not in earlier.await_args.kwargs
+    assert seen == [{}]
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

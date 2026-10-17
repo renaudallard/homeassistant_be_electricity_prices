@@ -34,7 +34,6 @@ anything, so it lives away from the steps that do.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import OptionsFlow
@@ -610,7 +609,6 @@ class _PlaceholdersMixin(OptionsFlow):
         #      supplier, a spot-priced side whose spots are missing): the
         #      simple "current rate * ytd_kwh + pro-rated fees" model.
         from .contract_periods import (
-            SpotCaches,
             current_period_start,
             with_previous_contracts,
         )
@@ -619,12 +617,13 @@ class _PlaceholdersMixin(OptionsFlow):
         current_extractor = get_extractor(current[CONF_SUPPLIER])
         own_start = current_period_start(self.config_entry.data, ytd_from)
 
-        async def _own_year(
-            spots: dict[datetime, float], quarters: dict[datetime, list[float]]
-        ) -> float | None:
+        async def _own_year() -> float | None:
             """The household's own year as the current_year_cost sensor prices
             it: the entry's contract from the day it started, plus the
-            contracts it held before it in the window."""
+            contracts it held before it in the window, on the entry's own
+            day-ahead. Never on what the page fetched with a typed key: the
+            sensor cannot see that, and on a keyless entry whose feed-in
+            follows the spot the row would credit what the sensor does not."""
             own = await _compute_current_year_cost(
                 self.hass,
                 session,
@@ -641,8 +640,8 @@ class _PlaceholdersMixin(OptionsFlow):
                 # 29 month-indexed contracts.
                 raw_snapshot,
                 quote_entry,
-                historical_spots=spots,
-                spot_quarters=quarters,
+                historical_spots=coord._historical_spots,
+                spot_quarters=coord._historical_spot_quarters,
                 billed_peak_kw=peak_kw,
                 rlp_weights=_coordinator_rlp_weights(self.config_entry),
                 rlp_index_weights=_coordinator_rlp_index_weights(
@@ -656,13 +655,6 @@ class _PlaceholdersMixin(OptionsFlow):
                 window_start_override=(own_start if own_start != ytd_from else None),
                 snapshot_raw=hh.parsed_snapshot,
             )
-            # The earlier contracts on the same spots as the current one when
-            # the page fetched its own for the window; otherwise the entry's,
-            # which is what the sensor reads and what it already priced them on.
-            fetched = (
-                spots != coord._historical_spots
-                or quarters != coord._historical_spot_quarters
-            )
             return await with_previous_contracts(
                 self.hass,
                 session,
@@ -672,7 +664,6 @@ class _PlaceholdersMixin(OptionsFlow):
                 own,
                 window_start=ytd_from,
                 today=today_local,
-                spots=SpotCaches(spots, quarters) if fetched else None,
             )
 
         # A spot-priced side bills each past hour at factor*spot+base (or the
@@ -713,8 +704,8 @@ class _PlaceholdersMixin(OptionsFlow):
             # feed-in only up to the day that key was removed. The target reads
             # it as no cache, as the ranking's candidates do and as the token
             # step and the annual note say, so with no key typed the credit is
-            # left out whole. The own row keeps it unless a typed key brings it
-            # up to date, since the current_year_cost sensor bills on it.
+            # left out whole. The own row keeps it whatever is typed, since the
+            # current_year_cost sensor bills on it (``_own_year``).
             stale = _keyless_stale_spots(current, hist_spots, ytd_from, today_local)
             typed = bool(self._compare.get(CONF_API_KEY))
             if stale:
@@ -743,15 +734,11 @@ class _PlaceholdersMixin(OptionsFlow):
                 # stale cache covers, and a full one wins wherever both hold.
                 hist_spots = {**coord._historical_spots, **hist_spots}
                 hist_quarters = {**coord._historical_spot_quarters, **hist_quarters}
-            own_spots, own_quarters = hist_spots, hist_quarters
-            if stale and not typed:
-                own_spots = coord._historical_spots
-                own_quarters = coord._historical_spot_quarters
             if spot_priced and not _spots_cover(hist_spots, ytd_from, today_local):
                 archive_capable = False
         if archive_capable and other_card is not None and current_snapshot is not None:
             try:
-                current_ytd_val = await _own_year(own_spots, own_quarters)
+                current_ytd_val = await _own_year()
                 compare_ytd_val = await _compute_current_year_cost(
                     self.hass,
                     session,
@@ -821,9 +808,7 @@ class _PlaceholdersMixin(OptionsFlow):
             # month. Only the quoted side stays the what-if it was.
             current_ytd: float | None
             try:
-                current_ytd = await _own_year(
-                    coord._historical_spots, coord._historical_spot_quarters
-                )
+                current_ytd = await _own_year()
             except Exception:  # degrade to '-'
                 current_ytd = None
             compare_ytd = _annual_bill(

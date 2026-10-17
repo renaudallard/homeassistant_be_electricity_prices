@@ -925,8 +925,10 @@ the spots an earlier key left behind; what it fetches is laid over the stale
 cache, so a fetch that comes back short or empty keeps what the cache covers.
 With no key typed the target reads a stale cache as none, as the ranking's
 candidates do, so its per-slot feed-in credit is left out whole, which is what
-the token step and the annual note say; the household's own row keeps the
-cache, since its current_year_cost sensor bills on it.
+the token step and the annual note say. The household's own row never reads
+what the page fetched: it is priced on the entry's own cache, stale or empty,
+whatever was typed, since its current_year_cost sensor bills on it
+(`_own_year`, `compare_placeholders.py`).
 The builder is in two halves: `_resolve_household` (`compare_household.py`) resolves everything that does not depend on which contract is being quoted -- the meter reads, the recorder walk, the measured hour shapes, the day-ahead window -- and returns a `_HouseholdQuote` (`compare_inputs.py`); the rest of `_build_compare_placeholders` (`compare_placeholders.py`) is the target side, recomputed per contract. The household half is O(1) in the number of contracts compared, which is what makes quoting more than one affordable. Placeholder
 tokens map to `options.step.compare_result.description` (`strings.json`), which
 references `{current_annual}`, `{delta_ytd}`, the ASCII bar charts

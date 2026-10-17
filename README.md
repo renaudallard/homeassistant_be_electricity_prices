@@ -835,7 +835,10 @@ opens a menu of four options, five once a supplier switch has been recorded this
   by month on each supplier's archived cards (today's rate for a
   supplier that keeps no archive, or a spot-priced side whose day-ahead
   prices are missing) with pro-rated annual fees, plus
-  unicode bar charts so the difference reads at a glance. The yearly
+  unicode bar charts so the difference reads at a glance. Your own
+  year-to-date row is the figure your `current_year_cost` sensor bills, on
+  the day-ahead prices your entry holds: an ENTSO-E token typed on this
+  page prices the alternative only. The yearly
   bill is an indication of the order of magnitude and will not match
   your settlement: it holds today's tariffs for twelve months and
   assumes your past consumption repeats, neither of which is a
