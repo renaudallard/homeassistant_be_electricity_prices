@@ -30,16 +30,19 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import date
 from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
 from custom_components.be_electricity_prices import (
     snapshot_resolve,
 )
-from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
+from custom_components.be_electricity_prices.const import FLUVIUS_KEYS, REGION_FLANDERS
 from custom_components.be_electricity_prices.providers import (
     EXTRACTORS,
     effective_kind,
+    frank,
     offers_quarter_hourly,
 )
 from custom_components.be_electricity_prices.providers._rates import (
@@ -119,18 +122,64 @@ def test_dsos_cover_all_eight_fluvius_subareas() -> None:
     assert set(snap.dsos) == expected
 
 
-def test_a_card_missing_a_fluvius_row_is_refused() -> None:
-    """A partial table used to be adopted, persisted and shared: the entry on
-    the missing area then hit a KeyError on every tick with no Repairs card,
-    while the last good card was gone from the cache. Energy Knights refused
-    such a card from the start; this card is refused the same way."""
+def _without_limburg() -> str:
     lines = _text().splitlines()
     kept = [line for line in lines if "Limburg" not in line]
     assert len(kept) < len(lines)
-    with pytest.raises(ExtractorError, match="fluvius_limburg"):
-        parse_snapshot(
-            "\n".join(kept), "test://frank-apr", "frank_dynamic", "april 2026"
+    return "\n".join(kept)
+
+
+def _served(monkeypatch: pytest.MonkeyPatch, text: str) -> None:
+    resolve = AsyncMock(return_value=("test://frank-apr", "april 2026"))
+    monkeypatch.setattr(frank, "_resolve_pdf_url", resolve)
+    monkeypatch.setattr(frank, "fetch_pdf_text_layout", AsyncMock(return_value=text))
+
+
+async def test_a_live_card_missing_a_fluvius_row_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A partial table used to be adopted, persisted and shared: the entry on
+    the missing area then hit a KeyError on every tick with no Repairs card,
+    while the last good card was gone from the cache. The reader leaves the
+    area out and the live card is refused for it."""
+    short = _without_limburg()
+    snap = parse_snapshot(short, "test://frank-apr", "frank_dynamic", "april 2026")
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_limburg"}
+    _served(monkeypatch, short)
+    with pytest.raises(
+        ExtractorError, match=r"DSO rows not found for \['fluvius_limburg'\]"
+    ):
+        await frank.fetch(None, "frank_dynamic", REGION_FLANDERS)  # type: ignore[arg-type]
+
+
+async def test_a_past_month_keeps_a_short_network_table(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A past month's card is what the month is billed on, so a table short
+    of an area keeps the card; the month cache bills the missing area on the
+    nearest card printing it. The reader refused it, and the month fell back
+    to today's card for every area. As the running month's card it is
+    refused, as ``fetch`` refuses it."""
+    _served(monkeypatch, _without_limburg())
+    freezer.move_to("2026-10-16 12:00:00+02:00")
+    snap = await frank.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "frank_dynamic",
+        REGION_FLANDERS,
+        date(2026, 4, 1),
+    )
+    assert snap is not None
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_limburg"}
+    freezer.move_to("2026-04-20 12:00:00+02:00")
+    assert (
+        await frank.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "frank_dynamic",
+            REGION_FLANDERS,
+            date(2026, 4, 1),
         )
+        is None
+    )
 
 
 def test_a_misprinted_zenne_dijle_label_still_reads() -> None:

@@ -86,6 +86,8 @@ from ._parse import (
     parse_sign,
     parse_vreg_network_ceiling,
     regional_tax_overlay,
+    require_every_area,
+    running_month_short_of_an_area,
     to_float,
 )
 from ._pdf import (
@@ -273,7 +275,10 @@ async def fetch(
         raise ExtractorError("Frank Energie only operates in Flanders")
     pdf_url, label = await _resolve_pdf_url(session, contract_id)
     text = await fetch_pdf_text_layout(session, pdf_url)
-    return parse_snapshot(text, pdf_url, contract_id, label)
+    snap = parse_snapshot(text, pdf_url, contract_id, label)
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("Frank Energie", snap.dsos, _FLUVIUS_LABELS.values())
+    return snap
 
 
 async def fetch_for_month(
@@ -295,6 +300,8 @@ async def fetch_for_month(
         # so the month cache retries it instead of caching it as absent.
         if is_transient_fetch_error(str(err)):
             raise
+        return None
+    if running_month_short_of_an_area(snap.dsos, _FLUVIUS_LABELS.values(), year_month):
         return None
     return archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
 
@@ -569,6 +576,14 @@ def _extract_taxes(text: str) -> TaxOverlay:
 
 
 def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
+    """The digital-meter network table.
+
+    An area whose row does not read is left out. ``fetch`` refuses a live
+    card short of an area and ``fetch_for_month`` the running month's
+    (``require_every_area``), while a past month's card keeps its energy and
+    the month cache bills the missing area on the nearest card of the same
+    calendar year that prints it. A table nothing could be read from raises.
+    """
     section_start = text.find("Digitale meter")
     section_end = text.find("Klassieke meter")
     if section_start < 0:
@@ -605,14 +620,8 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             # rather than per area, so every Fluvius overlay carries it.
             network_ceiling_eur_per_kwh=ceiling,
         )
-    missing = [key for key in _FLUVIUS_LABELS.values() if key not in out]
-    if missing:
-        # A partial table is worse than none: the areas are what every
-        # entry picks its network cost from, and a card missing one would
-        # be adopted, persisted and shared, leaving the entry on that area
-        # with no overlay and every tick failing, while the last good card
-        # is gone from the cache. Refusing keeps that card serving.
-        raise ExtractorError(f"Frank Energie: DSO rows not found for {sorted(missing)}")
+    if not out:
+        raise ExtractorError("Frank Energie: no DSO row read")
     return out
 
 

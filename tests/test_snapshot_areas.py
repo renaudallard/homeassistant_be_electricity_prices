@@ -45,6 +45,7 @@ from custom_components.be_electricity_prices.providers import (
     ebem,
     elegant,
     eneco,
+    frank,
     octaplus,
     trevion,
 )
@@ -160,6 +161,8 @@ def _parsed(supplier: str, text: str) -> SupplierSnapshot:
         return elegant.parse_snapshot("elegant_zeker_vast", text)
     if supplier == "eneco":
         return eneco.parse_snapshot(text, "power_fix", "test://", "wallonia")
+    if supplier == "frank":
+        return frank.parse_snapshot(text, "test://", "frank_dynamic", "april 2026")
     if supplier == "trevion":
         return trevion.parse_snapshot("groene_energie_vast", text)
     return octaplus.parse_snapshot("octaplus_fixed", text, "flanders")
@@ -196,6 +199,12 @@ _SHORT_CARDS = {
         ("power_fix", "wallonia"),
         lambda: fixture_text("eneco_fix.pdf"),
         ("FLUVIUS WEST", "FLUVIUS W."),
+        "fluvius_west",
+    ),
+    "frank": (
+        ("frank_dynamic", "flanders"),
+        lambda: fixture_text("frank_dynamic_apr.pdf", layout=True),
+        ("Fluvius (West)", "Fluvius (W.)"),
         "fluvius_west",
     ),
     "octaplus": (
