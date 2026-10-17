@@ -653,11 +653,26 @@ cards of those months and the professional cards from January 2026 print the rig
 terme_fixe (EUR/an), prosumer (EUR/kVA/an). PIC/MEDIUM/ECO populate the CWaPE Tarif Impact band
 columns (`distribution_pic`, `distribution_medium`, `distribution_eco`); `terme_fixe` becomes `data_management_per_year`.
 
+The cards up to December 2025 print seven, the same without the three bands, under the header
+"Coûts de distribution (c€/kWh) Simple Jour Nuit Exclusif nuit | Coûts de transport (c€/kWh) | Tarif
+gestion des données/Activités de mesure et de comptage/Terme fixe GRD (€/an) | Tarif prosumer
+(€/kW/an)", and a card where no ten-column row reads is read that way
+(`_extract_wallonia_2025_dsos`, `_bolt_overlays.py`). Each column is checked against the other
+suppliers' cards of the month: ORES on Bolt's October 2025 card, `10,79 11,46 6,63 5,41 3,20 13,84
+86,96`, is Cociter's and Eneco's row of that month figure for figure, their transport `3,1993` and
+`2,98` beside Bolt's rounded `3,20`; the professional card prints the same figures before VAT
+(`8,92` for AIEG's `9,46`). The seventh number has to end the row, so a 2026 row whose ten columns
+did not read is never taken for its first seven. Up to 0.39.1 none of these rows read, and the
+Walloon months of October to December 2025 were left out of the bill, network, taxes and energy
+alike (`test_a_2025_walloon_card_reads_its_seven_column_table`, `tests/test_bolt.py`).
+
 The Wallonia parser carries the module's single largest land mine, the **RESA/REW label swap**
 (`_bolt_overlays.py`). In Bolt's `pdfplumber` text extraction the rows labeled `TECTEO RESA` and `WAVRE`
 carry each other's values, so `_WALLONIA_LABELS` deliberately maps `TECTEO RESA -> DSO_REW` and
 `WAVRE -> DSO_RESA` to un-swap them. This was verified against the regulator's rates and every other
-supplier's PDF. After parsing, a runtime sanity check enforces the invariant that RESA's
+supplier's PDF. It is a quirk of the 2026 layout: on the seven-column cards of 2025 the
+`TECTEO RESA` row is RESA's own (`10,62 11,99 ... 26,50 85,94`, as Cociter and Eneco print RESA that
+month), so `_WALLONIA_2025_LABELS` reads each row under its own name. After parsing, a runtime sanity check enforces the invariant that RESA's
 `distribution_single` stays strictly cheaper than REW's (a Walloon-tariff pattern that holds for
 every card parsed). The check uses a process-wide `_RESA_REW_LOGGED` latch (`_bolt_overlays.py`) so it
 rings HA's notification bell at most once per boot. Three outcomes (`_bolt_overlays.py`):
@@ -676,9 +691,7 @@ before keeps serving, and `fetch_for_month` answers None for the running month's
 missing area on the nearest card of the same calendar year that prints it (`_with_nearest_area`,
 `snapshot_areas.py`). Up to 0.39.1 a short live card was adopted as it stood and an entry on the
 missing area failed every tick with no network figures. A table nothing could be read from stays
-empty rather than raising: the Walloon cards of October to December 2025 print seven columns per
-row, before the Impact bands, which the ten-column reader does not read, and those months stay out
-of the bill as before (`test_a_live_card_short_of_an_area_is_refused`,
+empty rather than raising (`test_a_live_card_short_of_an_area_is_refused`,
 `test_a_past_fix_month_keeps_a_short_network_table`, `tests/test_bolt.py`).
 
 The swap needs manual re-validation at least every 6 months (last done 2026-05, next due 2026-11,

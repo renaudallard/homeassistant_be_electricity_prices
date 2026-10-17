@@ -408,9 +408,9 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     a past month's card keeps its energy and the month cache bills the
     missing area on the nearest card of the same calendar year that prints
     it. A table nothing could be read from is kept empty rather than
-    refused: the Walloon cards of October to December 2025 print the
-    network figures in a layout this does not read, and their months stay
-    out of the bill as they always have.
+    refused. A card where no row of ten columns reads is read as the seven
+    columns printed before the Impact bands, up to December 2025
+    (``_extract_wallonia_2025_dsos``).
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
@@ -445,6 +445,8 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             terme_fixe=terme_fixe,
             prosumer=prosumer,
         )
+    if not out:
+        out = _extract_wallonia_2025_dsos(text)
     # Sanity check: under the swap, RESA's distribution_single must
     # remain strictly cheaper than REW's (regulator pattern that holds
     # for every Walloon tariff card we've parsed). If the inequality
@@ -490,6 +492,50 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             rew.distribution_single,
         )
         _RESA_REW_LOGGED = True
+    return out
+
+
+def _extract_wallonia_2025_dsos(text: str) -> dict[str, DsoOverlay]:
+    """The Walloon rows of a card from before the Impact bands.
+
+    The cards up to December 2025 print seven numbers under the header
+    "Coûts de distribution (c€/kWh) Simple Jour Nuit Exclusif nuit | Coûts
+    de transport (c€/kWh) | Tarif gestion des données/Activités de mesure et
+    de comptage/Terme fixe GRD (€/an) | Tarif prosumer (€/kW/an)": the ten
+    columns of 2026 without the three bands. ORES on the October 2025 card,
+    10,79 11,46 6,63 5,41 3,20 13,84 86,96, is Cociter's and Eneco's row of
+    that month column for column, their transport 3,1993 and 2,98 beside
+    Bolt's rounded 3,20. The seventh number has to end where the row does,
+    with no digit after it and no other number, so a longer row never reads
+    as its first seven.
+
+    Its labels are the rows' own (``_WALLONIA_2025_LABELS``): the label swap
+    ``_WALLONIA_LABELS`` compensates for is a quirk of the 2026 layout, and
+    TECTEO RESA's 2025 row, 10,62 11,99 ... 26,50 85,94, is RESA's on the
+    other cards of that month.
+    """
+    out: dict[str, DsoOverlay] = {}
+    for label, key in _WALLONIA_2025_LABELS.items():
+        match = re.search(
+            rf"{re.escape(label)}\s+"
+            + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
+            + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)(?![\d.,])(?!\s*\d)",
+            text,
+        )
+        if match is None:
+            continue
+        mono, peak, offpeak, excl_night, transport, terme_fixe, prosumer = (
+            to_float(value) for value in match.groups()
+        )
+        out[key] = DsoOverlay(
+            distribution_single=mono / 100.0,
+            distribution_peak=peak / 100.0,
+            distribution_offpeak=offpeak / 100.0,
+            distribution_exclusive_night=excl_night / 100.0,
+            transport=transport / 100.0,
+            data_management_per_year=terme_fixe,
+            prosumer_eur_per_kva_year=prosumer,
+        )
     return out
 
 
@@ -561,6 +607,17 @@ _WALLONIA_LABELS: dict[str, str] = {
     "ORES (Brabant Wallon)": DSO_ORES,
     "TECTEO RESA": DSO_REW,
     "WAVRE": DSO_RESA,
+}
+
+
+# The same rows on a card from before the Impact bands, each under its own
+# name: the 2025 layout carries no swap (``_extract_wallonia_2025_dsos``).
+_WALLONIA_2025_LABELS: dict[str, str] = {
+    "AIEG": DSO_AIEG,
+    "AIESH": DSO_AIESH,
+    "ORES (Brabant Wallon)": DSO_ORES,
+    "TECTEO RESA": DSO_RESA,
+    "WAVRE": DSO_REW,
 }
 
 

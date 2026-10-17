@@ -331,6 +331,44 @@ def test_wallonia_dso_handles_vertical_layout() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.03)
 
 
+def test_a_2025_walloon_card_reads_its_seven_column_table() -> None:
+    """The cards up to December 2025 print seven Walloon columns, the 2026
+    ten without the Impact bands, and none of their rows read: every Walloon
+    month from October to December 2025 was left out of the bill. Each
+    column is the other suppliers' figure of that month: ORES 10,79 11,46
+    6,63 5,41 on Cociter's and Eneco's October 2025 cards, 13,84 EUR/yr and
+    86,96 EUR/kW/yr, their transport 3,1993 and 2,98 beside Bolt's 3,20.
+    The 2026 layout's label swap does not apply: TECTEO RESA's row is RESA's
+    on those cards too."""
+    snap = parse_snapshot(
+        "bolt_fix", fixture_text("bolt_fix_oct_2025.pdf", layout=True), "wallonia"
+    )
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    ores = snap.dsos["ores"]
+    assert ores.distribution_single == pytest.approx(0.1079)
+    assert ores.distribution_peak == pytest.approx(0.1146)
+    assert ores.distribution_offpeak == pytest.approx(0.0663)
+    assert ores.distribution_exclusive_night == pytest.approx(0.0541)
+    assert ores.transport == pytest.approx(0.0320)
+    assert ores.data_management_per_year == pytest.approx(13.84)
+    assert ores.prosumer_eur_per_kva_year == pytest.approx(86.96)
+    assert ores.distribution_pic is None
+    assert snap.dsos["resa"].distribution_single == pytest.approx(0.1062)
+    assert snap.dsos["resa"].data_management_per_year == pytest.approx(26.50)
+    assert snap.dsos["rew"].distribution_single == pytest.approx(0.1148)
+    assert snap.dsos["aieg"].distribution_single == pytest.approx(0.0946)
+
+
+def test_a_2026_walloon_row_never_reads_as_seven_columns() -> None:
+    """The seven-column reader stops on a row that goes on, so a 2026 row
+    whose ten columns did not read is not taken for its first seven."""
+    from custom_components.be_electricity_prices.providers._bolt_overlays import (
+        _extract_wallonia_2025_dsos,
+    )
+
+    assert _extract_wallonia_2025_dsos(fixture_text("bolt_fix.pdf", layout=True)) == {}
+
+
 def test_resa_is_cheaper_than_rew_after_label_swap() -> None:
     # Bolt's PDF renders the Liege (RESA / TECTEO) and Wavre (REW /
     # Régie de Wavre) rows under swapped labels in pdfplumber's text
