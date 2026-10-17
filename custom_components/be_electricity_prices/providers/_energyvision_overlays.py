@@ -96,6 +96,14 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
 
 
 def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
+    """The digital-meter network table of a Flemish card.
+
+    An area whose row does not read is left out. ``fetch`` refuses a live
+    card short of an area and ``fetch_for_month`` the running month's
+    (``require_every_area``), while a past month's card keeps its energy and
+    the month cache bills the missing area on the nearest card of the same
+    calendar year that prints it. A table nothing could be read from raises.
+    """
     start = text.find(_DIGITAL_MARKER)
     if start < 0:
         raise ExtractorError("EnergyVision: digital-meter DSO table not found")
@@ -114,14 +122,8 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=to_float(row[3]),
             network_ceiling_eur_per_kwh=to_float(row[4]) / 100.0,
         )
-    missing = [key for _, key in _DSO_ROWS if key not in out]
-    if missing:
-        # A partial table is worse than none: the areas are what every
-        # entry picks its network cost from, and a card missing one would
-        # be adopted, persisted and shared, leaving the entry on that area
-        # with no overlay and every tick failing, while the last good card
-        # is gone from the cache. Refusing keeps that card serving.
-        raise ExtractorError(f"EnergyVision: DSO rows not found for {sorted(missing)}")
+    if not out:
+        raise ExtractorError("EnergyVision: no DSO row read")
     return out
 
 

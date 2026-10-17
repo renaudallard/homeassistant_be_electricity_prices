@@ -338,10 +338,19 @@ case** ("FLUVIUS ANTWERPEN", "FLUVIUS KEMPEN", ...), so the shared Title-case
 Note Kempen -> `fluvius_iveka` and Midden-Vlaanderen -> `fluvius_intergem`: the card's
 regional trade name is not the canonical key. `test_dsos_cover_all_eight_fluvius_subareas`
 asserts all eight are present on both cards.
-A card missing any of the eight, or the Walloon card missing one of its five, is refused
-(`ExtractorError` naming the keys) rather than adopted: a partial table would be persisted
-and shared, and the entry on the missing area would fail every tick with no Repairs card
-while the last good card was gone from the cache. Two tests drop a row from the real cards.
+An area whose row does not read is left out of the table, on the Flemish and the Walloon
+card alike. `fetch` then refuses a live card missing any of the eight, or a Walloon one
+missing one of its five (`ExtractorError` naming the keys), rather than adopt it: a partial
+table would be persisted and shared, and the entry on the missing area would fail every
+tick with no Repairs card while the last good card was gone from the cache
+(`require_every_area`, `_parse.py`). `fetch_for_month` holds the running month's card to
+the same areas (`running_month_short_of_an_area`) and passes over one short of an area as
+it passes over a card that does not read. A past month's card keeps its short table: its
+energy is what the month is billed on, and the month cache bills the missing area on the
+nearest card of the same calendar year that prints it (`_with_nearest_area`,
+`snapshot_areas.py`). A table where no row reads at all raises, and so does a Brussels
+card with no Sibelga row, its only area. `test_a_live_card_missing_a_dso_row_is_refused`
+and `test_a_past_month_keeps_a_short_network_table` drop a row from the real cards.
 
 The card prints two meter tables (`Vlaams Gewest Digitale Meter` then
 `Vlaams Gewest Analoge Meter`); the parser slices to the **digital-meter** block between

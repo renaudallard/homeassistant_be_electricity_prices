@@ -34,7 +34,15 @@ from typing import Any
 import pytest
 
 from custom_components.be_electricity_prices import snapshot_resolve
-from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
+from custom_components.be_electricity_prices.const import (
+    DSO_AIEG,
+    DSO_AIESH,
+    DSO_ORES,
+    DSO_RESA,
+    DSO_REW,
+    DSO_SIBELGA,
+    FLUVIUS_KEYS,
+)
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
@@ -70,6 +78,15 @@ def _dyn() -> SupplierSnapshot:
 
 def _fixed() -> SupplierSnapshot:
     return parse_snapshot(_FIXED, _fixed_text(), "test://ev-fixed-jul")
+
+
+class _Card(str):
+    """A stand-in for a parsed card, named for what it was read from, whose
+    network table prints every area of every region."""
+
+    dsos = dict.fromkeys(
+        (*FLUVIUS_KEYS, DSO_SIBELGA, DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW)
+    )
 
 
 def _wal_text() -> str:
@@ -260,25 +277,96 @@ def test_dsos_cover_all_eight_fluvius_subareas(snap_fn) -> None:  # type: ignore
     assert set(snap_fn().dsos) == set(FLUVIUS_KEYS)
 
 
-def test_a_card_missing_a_fluvius_row_is_refused() -> None:
-    """A partial table used to be adopted, persisted and shared: the entry on
-    the missing area then hit a KeyError on every tick with no Repairs card,
-    while the last good card was gone from the cache. Energy Knights refused
-    such a card from the start; both of this supplier's tables now do."""
-    text = fixture_text("energyvision_dynamic_jul.pdf", layout=True)
-    lines = text.splitlines()
+def _without_limburg() -> str:
+    lines = _dyn_text().splitlines()
     kept = [line for line in lines if "FLUVIUS LIMBURG" not in line]
     assert len(kept) < len(lines)
-    with pytest.raises(ExtractorError, match="fluvius_limburg"):
-        parse_snapshot("energyvision_dynamic", "\n".join(kept), "test://ev")
+    return "\n".join(kept)
 
 
-def test_a_walloon_card_missing_a_dso_row_is_refused() -> None:
+def _without_resa() -> str:
     lines = _wal_text().splitlines()
     kept = [line for line in lines if not line.startswith("TECTEO RESA")]
     assert len(kept) < len(lines)
-    with pytest.raises(ExtractorError, match="resa"):
-        parse_snapshot("energyvision_fixed_1y", "\n".join(kept), "test://ev-wal")
+    return "\n".join(kept)
+
+
+@pytest.mark.parametrize(
+    ("contract_id", "region", "text", "missing"),
+    [
+        (_DYNAMIC, "flanders", _without_limburg, "fluvius_limburg"),
+        (_FIXED_WAL, "wallonia", _without_resa, "resa"),
+    ],
+)
+async def test_a_live_card_missing_a_dso_row_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+    contract_id: str,
+    region: str,
+    text: Any,
+    missing: str,
+) -> None:
+    """A partial table used to be adopted, persisted and shared: the entry on
+    the missing area then hit a KeyError on every tick with no Repairs card,
+    while the last good card was gone from the cache. Both of this
+    supplier's tables leave the area out, and the live card is refused for
+    it."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    short = text()
+    snap = parse_snapshot(contract_id, short, "test://ev", region=region)
+    assert missing not in snap.dsos and len(snap.dsos) > 1
+
+    async def resolve(*_args: Any) -> str:
+        return "test://ev"
+
+    async def read(_session: Any, _url: str) -> str:
+        return short
+
+    monkeypatch.setattr(ev, "_resolve_card_url", resolve)
+    monkeypatch.setattr(ev, "fetch_pdf_text_layout", read)
+    with pytest.raises(
+        ExtractorError, match=rf"DSO rows not found for \['{missing}'\]"
+    ):
+        await ev.fetch(None, contract_id, region)  # type: ignore[arg-type]
+
+
+async def test_a_past_month_keeps_a_short_network_table(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A past month's card is what the month is billed on, so a table short
+    of an area keeps the card; the month cache bills the missing area on the
+    nearest card printing it. The reader refused it, and the month fell back
+    to today's card for every area. As the running month's card it is
+    refused, as ``fetch`` refuses it."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    async def uploads(_session: Any, url: str, _first: date) -> list[str]:
+        return [url]
+
+    async def read(_session: Any, _url: str) -> str:
+        return _without_limburg()
+
+    monkeypatch.setattr(ev, "_uploads_newest_first", uploads)
+    monkeypatch.setattr(ev, "fetch_pdf_text_layout", read)
+    freezer.move_to("2026-10-16 12:00:00+02:00")
+    snap = await ev.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        _DYNAMIC,
+        "flanders",
+        date(2026, 7, 1),
+    )
+    assert snap is not None
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_limburg"}
+    freezer.move_to("2026-07-20 12:00:00+02:00")
+    assert (
+        await ev.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            _DYNAMIC,
+            "flanders",
+            date(2026, 7, 1),
+        )
+        is None
+    )
 
 
 def test_dso_antwerpen_digital_meter_columns() -> None:
@@ -1082,7 +1170,7 @@ async def test_an_archived_month_reads_the_newest_upload(
 
     monkeypatch.setattr(ev, "head_or_raise", head)
     monkeypatch.setattr(ev, "fetch_pdf_text_layout", text)
-    monkeypatch.setattr(ev, "parse_snapshot", lambda _c, t, *_a, **_k: t)
+    monkeypatch.setattr(ev, "parse_snapshot", lambda _c, t, *_a, **_k: _Card(t))
     monkeypatch.setattr(ev, "archive_validity_check", lambda snap, *_a: snap)
     snap = await ev.fetch_for_month(
         None,  # type: ignore[arg-type]
@@ -1119,7 +1207,7 @@ async def test_a_reupload_of_another_month_falls_back_to_the_older_one(
 
     monkeypatch.setattr(ev, "head_or_raise", head)
     monkeypatch.setattr(ev, "fetch_pdf_text_layout", text)
-    monkeypatch.setattr(ev, "parse_snapshot", lambda _c, t, *_a, **_k: t)
+    monkeypatch.setattr(ev, "parse_snapshot", lambda _c, t, *_a, **_k: _Card(t))
     monkeypatch.setattr(
         ev,
         "archive_validity_check",
@@ -1238,7 +1326,7 @@ async def test_a_page_lagging_the_upload_is_read_past(
     monkeypatch.setattr(ev, "_resolve_card_url", resolve)
     monkeypatch.setattr(ev, "_archived_card", archived)
     monkeypatch.setattr(ev, "fetch_pdf_text_layout", text)
-    monkeypatch.setattr(ev, "parse_snapshot", lambda *_a, **_k: "linked")
+    monkeypatch.setattr(ev, "parse_snapshot", lambda *_a, **_k: _Card("linked"))
     snap = await ev.fetch(None, _GRS, "brussels")  # type: ignore[arg-type]
     assert snap == served
     assert asked == ([] if linked.startswith("EV-1026") else [date(2026, 10, 1)])

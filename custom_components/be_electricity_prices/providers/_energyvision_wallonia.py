@@ -201,6 +201,9 @@ def _extract_dsos_fr(text: str) -> dict[str, DsoOverlay]:
     regulated numbers. Reusing that positional mapping would swap the peak
     and off-peak bands and mis-price every Walloon Impact user, so the
     ordering is asserted in the tests by value (eco < medium < pic).
+
+    An area whose row does not read is left out, as on the Flemish card
+    (``_extract_dsos``), and a table nothing could be read from raises.
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in _DSO_ROWS_FR:
@@ -226,14 +229,8 @@ def _extract_dsos_fr(text: str) -> dict[str, DsoOverlay]:
             terme_fixe=to_float(row.group(9)),
             prosumer=to_float(row.group(10)),
         )
-    missing = [key for _, key in _DSO_ROWS_FR if key not in out]
-    if missing:
-        # A partial table is worse than none: the areas are what every
-        # entry picks its network cost from, and a card missing one would
-        # be adopted, persisted and shared, leaving the entry on that area
-        # with no overlay and every tick failing, while the last good card
-        # is gone from the cache. Refusing keeps that card serving.
-        raise ExtractorError(f"EnergyVision: DSO rows not found for {sorted(missing)}")
+    if not out:
+        raise ExtractorError("EnergyVision: no DSO row read")
     return out
 
 

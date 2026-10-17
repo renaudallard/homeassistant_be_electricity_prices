@@ -47,6 +47,7 @@ from custom_components.be_electricity_prices.providers import (
     eneco,
     energiebe,
     energyknights,
+    energyvision,
     frank,
     octaplus,
     trevion,
@@ -167,6 +168,8 @@ def _parsed(supplier: str, text: str) -> SupplierSnapshot:
         return energiebe.parse_snapshot(text, "test://")
     if supplier == "energyknights":
         return energyknights.parse_snapshot("energyknights_agilior", text, "test://")
+    if supplier == "energyvision":
+        return energyvision.parse_snapshot("energyvision_dynamic", text, "test://")
     if supplier == "frank":
         return frank.parse_snapshot(text, "test://", "frank_dynamic", "april 2026")
     if supplier == "trevion":
@@ -218,6 +221,12 @@ _SHORT_CARDS = {
         lambda: fixture_text("energyknights_agilior_aug.pdf", layout=True),
         ("Fluvius (Kempen)", "Fluvius (Elders)"),
         "fluvius_iveka",
+    ),
+    "energyvision": (
+        ("energyvision_dynamic", "flanders"),
+        lambda: fixture_text("energyvision_dynamic_jul.pdf", layout=True),
+        ("FLUVIUS LIMBURG", "NETGEBIED HASSELT"),
+        "fluvius_limburg",
     ),
     "frank": (
         ("frank_dynamic", "flanders"),

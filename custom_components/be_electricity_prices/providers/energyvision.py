@@ -92,6 +92,7 @@ import aiohttp
 from homeassistant.util import dt as dt_util
 
 from ..const import (
+    DSO_SIBELGA,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
@@ -104,15 +105,19 @@ from ._energyvision_cards import (
     _extract_tiered,
 )
 from ._energyvision_overlays import (
+    _DSO_ROWS,
     _extract_brussels_dsos,
     _extract_brussels_taxes,
     _extract_dsos,
     _extract_taxes,
 )
 from ._energyvision_wallonia import (
+    _DSO_ROWS_FR,
     _parse_wallonia,
 )
 from ._parse import (
+    require_every_area,
+    running_month_short_of_an_area,
     to_float,
 )
 from ._pdf import (
@@ -401,7 +406,18 @@ async def fetch(
         if newer is not None:
             return newer
     text = await fetch_pdf_text_layout(session, url)
-    return parse_snapshot(contract_id, text, url, region=region)
+    snap = parse_snapshot(contract_id, text, url, region=region)
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("EnergyVision", snap.dsos, _areas(region))
+    return snap
+
+
+def _areas(region: str) -> tuple[str, ...]:
+    """The network areas a card of ``region`` prints a row for."""
+    if region == REGION_BRUSSELS:
+        return (DSO_SIBELGA,)
+    rows = _DSO_ROWS_FR if region == REGION_WALLONIA else _DSO_ROWS
+    return tuple(key for _, key in rows)
 
 
 # The pricing month every card's file name starts with: "EV-0926-..." is
@@ -486,8 +502,14 @@ async def _archived_card(
             # not the end of the search: try the next one before giving the
             # month up.
             checked = archive_validity_check(snap, text, first)
-            if checked is not None:
-                return checked
+            if checked is None:
+                continue
+            # The running month's card is held to every area, as ``fetch``
+            # holds the live one, and an earlier upload of it is tried as a
+            # card that did not read would be.
+            if running_month_short_of_an_area(checked.dsos, _areas(region), first):
+                continue
+            return checked
     return None
 
 
