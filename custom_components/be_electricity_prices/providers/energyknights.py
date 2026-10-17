@@ -101,9 +101,17 @@ import aiohttp
 
 from ..const import (
     FLUVIUS_CARD_TOKENS,
+    FLUVIUS_KEYS,
     REGION_FLANDERS,
 )
-from ._parse import SIGN_CHARS, parse_sign, regional_tax_overlay, to_float
+from ._parse import (
+    SIGN_CHARS,
+    parse_sign,
+    regional_tax_overlay,
+    require_every_area,
+    running_month_short_of_an_area,
+    to_float,
+)
 from ._pdf import (
     NUM_NO_THOUSANDS,
     fetch_pdf_text_layout,
@@ -487,7 +495,10 @@ async def fetch(
         raise ExtractorError("Energy Knights only operates in Flanders")
     url = _card_url(contract)
     text = await fetch_pdf_text_layout(session, url)
-    return parse_snapshot(contract_id, text, url)
+    snap = parse_snapshot(contract_id, text, url)
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("Energy Knights", snap.dsos, FLUVIUS_KEYS)
+    return snap
 
 
 async def probe(
@@ -557,6 +568,8 @@ async def fetch_for_month(
         message = str(err)
         if is_transient_fetch_error(message) or message.startswith("HTTP "):
             raise
+        return None
+    if running_month_short_of_an_area(snap.dsos, FLUVIUS_KEYS, first):
         return None
     # The card carries its own "geldig van ... tot en met ..." range, so the
     # authoritative tier of the cross-check always applies and the textual
@@ -875,6 +888,12 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     is not cosmetic. Every Energy Knights product is sold as "100% digitaal"
     and the dynamic ones bill on meetregime 3 quarter values, which only a
     digital meter produces.
+
+    An area whose row does not read is left out. ``fetch`` refuses a live
+    card short of an area and ``fetch_for_month`` the running month's
+    (``require_every_area``), while a past month's card keeps its energy and
+    the month cache bills the missing area on the nearest card of the same
+    calendar year that prints it. A table nothing could be read from raises.
     """
     head = _DIGITAL_RE.search(text)
     if head is None:
@@ -903,14 +922,8 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=to_float(row.group(4)),
             capacity_eur_per_kw_year=to_float(row.group(5)),
         )
-    missing = [key for _, key in _DSO_ROWS if key not in out]
-    if missing:
-        # A partial table is worse than none: the eight areas are what every
-        # Flemish entry picks its network cost from, and a missing one would
-        # leave that user with no distribution charge at all.
-        raise ExtractorError(
-            f"Energy Knights: DSO rows not found for {sorted(missing)}"
-        )
+    if not out:
+        raise ExtractorError("Energy Knights: no DSO row read")
     return out
 
 

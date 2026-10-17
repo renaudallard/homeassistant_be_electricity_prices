@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -551,7 +552,7 @@ def test_the_standing_charge_is_not_the_coin_rebate() -> None:
 
 
 def test_a_dso_row_cannot_inherit_the_next_row_figures() -> None:
-    """A row that loses its figures must fail, not borrow its neighbour's.
+    """A row that loses its figures is left out, not handed its neighbour's.
 
     Dropping Midden-Vlaanderen's numbers used to hand it Fluvius West's,
     which is 27% more distribution and 14% more capacity, reported silently.
@@ -561,8 +562,8 @@ def test_a_dso_row_cannot_inherit_the_next_row_figures() -> None:
         "Fluvius (Midden-Vlaanderen) 5,28 4,78 18,92 18,92 53,13",
         "Fluvius (Midden-Vlaanderen)",
     )
-    with pytest.raises(ExtractorError, match="fluvius_intergem"):
-        parse_snapshot(_AGILIOR, text, "test://ek-wrapped")
+    snap = parse_snapshot(_AGILIOR, text, "test://ek-wrapped")
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_intergem"}
 
 
 def test_the_classic_meter_table_cannot_leak_in() -> None:
@@ -591,12 +592,66 @@ def test_the_classic_meter_table_cannot_leak_in() -> None:
     assert dso.capacity_eur_per_kw_year == pytest.approx(52.37)
 
 
-def test_a_missing_dso_row_raises() -> None:
-    # A partial network table would leave that area's users with no
-    # distribution charge at all, which prices lower than the truth.
+def _without_kempen() -> str:
     text = _agilior_text().replace("Fluvius (Kempen)", "Fluvius (Elders)")
-    with pytest.raises(ExtractorError, match="fluvius_iveka"):
-        parse_snapshot(_AGILIOR, text, "test://ek")
+    assert text != _agilior_text()
+    return text
+
+
+async def test_a_live_card_missing_a_dso_row_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A partial network table would leave that area's users with no
+    distribution charge at all, which prices lower than the truth. The
+    reader leaves the area out and the live card is refused for it."""
+    from custom_components.be_electricity_prices.providers import energyknights
+
+    short = _without_kempen()
+    snap = parse_snapshot(_AGILIOR, short, "test://ek")
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_iveka"}
+    monkeypatch.setattr(
+        energyknights, "fetch_pdf_text_layout", AsyncMock(return_value=short)
+    )
+    with pytest.raises(
+        ExtractorError, match=r"DSO rows not found for \['fluvius_iveka'\]"
+    ):
+        await energyknights.fetch(None, _AGILIOR, "flanders")  # type: ignore[arg-type]
+
+
+async def test_a_past_month_keeps_a_short_network_table(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A past month's card is what the month is billed on, so a table short
+    of an area keeps the card; the month cache bills the missing area on the
+    nearest card printing it. The reader refused it, and the month fell back
+    to today's card for every area. As the running month's card it is
+    refused, as ``fetch`` refuses it."""
+    from custom_components.be_electricity_prices.providers import energyknights
+
+    monkeypatch.setattr(
+        energyknights,
+        "fetch_pdf_text_layout",
+        AsyncMock(return_value=_without_kempen()),
+    )
+    freezer.move_to("2026-10-16 12:00:00+02:00")
+    snap = await energyknights.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        _AGILIOR,
+        "flanders",
+        date(2026, 8, 1),
+    )
+    assert snap is not None
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_iveka"}
+    freezer.move_to("2026-08-20 12:00:00+02:00")
+    assert (
+        await energyknights.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            _AGILIOR,
+            "flanders",
+            date(2026, 8, 1),
+        )
+        is None
+    )
 
 
 def test_a_missing_dso_table_raises() -> None:

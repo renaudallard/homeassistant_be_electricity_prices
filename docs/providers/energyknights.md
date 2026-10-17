@@ -309,8 +309,16 @@ databeheer SMR3, capaciteitstarief. SMR3 is taken. Energy Knights has printed th
 databeheer columns at the same value on every card since January 2025, so the column choice has never mattered in practice. Should they ever
 diverge, that is the decision to revisit.
 
-A missing row raises rather than being skipped: a partial table would leave that area's
-users with no distribution charge at all, which prices lower than the truth.
+An area whose row does not read is left out of the table, never handed the next row's
+figures. `fetch` then refuses the live card rather than adopt it: a partial table would
+leave that area's users with no distribution charge at all, which prices lower than the
+truth (`require_every_area`, `_parse.py`). `fetch_for_month` refuses the running month's
+card the same way (`running_month_short_of_an_area`), so the last good card stands in. A
+past month's card keeps its short table: its energy is what the month is billed on, and
+the month cache bills the missing area on the nearest card of the same calendar year that
+prints it (`_with_nearest_area`, `snapshot_areas.py`). A table where no row reads at all
+raises (`test_a_live_card_missing_a_dso_row_is_refused`,
+`test_a_past_month_keeps_a_short_network_table`, `tests/test_energyknights.py`).
 
 Two fields the card does not supply:
 
