@@ -143,7 +143,8 @@ relative to that package directory.
 | `diagnostics.py` | The HA download-diagnostics payload for an entry (config, snapshot metadata, last error), redacting the ENTSO-E key and the household's sensor entity ids. |
 | `providers/base.py` | The extractor protocol and what a parsed card amounts to: `SupplierExtractor`, `SupplierSnapshot`, `DsoOverlay`, `TaxOverlay`, and the fetch / probe / archive callable types. |
 | `providers/_rates.py` | The shapes a card can print: `Contract`, the six `EnergyRates` shapes and `InjectionRates`. Data only, so an extractor can build one without reaching into the pricing engine. |
-| `providers/_resolve.py` | Turning a published card into the one a given household is billed on: VAT, the excise band, the direct-debit discount, the VREG ceiling, the Brussels power term, the volume tier and the settlement grid. |
+| `providers/_resolve.py` | Turning a published card into the one a given household is billed on: VAT, the excise band, the direct-debit discount, the VREG ceiling, the Brussels power term and the volume tier. |
+| `providers/_settlement_grid.py` | The settlement a household chose on a card sold on two (`resolve_settlement_grid`): Frank's hourly formula moved to quarter-hours, Bolt's variable card read as its dynamic settlement. |
 | `providers/_settle.py` | Settling a month-indexed card's month on the index the next card names: every rate with a formula behind it rebuilt at that value, energy (`settled_energy`) and feed-in (`settled_injection`). Used by every provider that settles a closed month on a published index. |
 | `providers/__init__.py` | The supplier registry: imports each module's `EXTRACTOR`, exposes the `EXTRACTORS` dict, and the `get()` / `all_extractors()` lookups. |
 | `providers/_pdf.py` | Fetching a card and getting text out of it: the HTTP layer, transient-error classification via `is_transient_fetch_error`, plain and column-aligned extraction, and the per-tick memo. |

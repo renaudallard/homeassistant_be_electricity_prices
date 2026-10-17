@@ -49,7 +49,7 @@ from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     VariableRates,
 )
-from custom_components.be_electricity_prices.providers._resolve import (
+from custom_components.be_electricity_prices.providers._settlement_grid import (
     resolve_settlement_grid,
 )
 from custom_components.be_electricity_prices.providers.base import (

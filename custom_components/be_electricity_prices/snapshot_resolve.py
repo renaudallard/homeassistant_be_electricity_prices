@@ -78,12 +78,12 @@ from .providers._resolve import (
     resolve_excise_band,
     resolve_federal_contribution,
     resolve_federal_excise,
-    resolve_settlement_grid,
     resolve_vat_rate,
     resolve_volume_tier,
     resolve_vreg_network_ceiling,
     resolve_welcome_credit_meter,
 )
+from .providers._settlement_grid import resolve_settlement_grid
 from .providers.base import SupplierSnapshot
 
 # Where a compare-page proxy (``compare_inputs._quote_entry``) freezes the
