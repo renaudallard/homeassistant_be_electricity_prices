@@ -190,10 +190,19 @@ the commodity and feed-in columns as regulated levies.
 current Fluvius labels to the canonical keys. Each row provides capacity tariff,
 single consumption distribution, exclusive-night distribution, and annual data
 management fee. The transport field is zero because the card's distribution
-column already represents the network rate surfaced by Trevion. A table
-missing any of the eight areas is refused like an empty one, the rule Frank,
-energie.be and Energy Knights keep: a partial card would be adopted and
-an entry on the missing area would fail every tick until the next good card.
+column already represents the network rate surfaced by Trevion. An area whose
+row does not read is left out of the table. `fetch` then refuses the live card
+rather than adopt it with a hole in it, since an entry on the missing area would
+fail every tick until the next good one (`require_every_area`, `_parse.py`), and
+`fetch_for_month` refuses the running month's the same way
+(`running_month_short_of_an_area`), so the last good card stands in. A past
+month's card keeps its short table: its energy is what the month is billed on,
+and the month cache bills the missing area on the nearest card of the same
+calendar year that prints it (`_with_nearest_area`, `snapshot_areas.py`). The
+next card a closed month is settled on is read for its indices only. A table
+where no row reads at all raises
+(`test_a_live_card_missing_an_area_is_refused`,
+`test_a_past_month_keeps_a_short_network_table`, `tests/test_trevion.py`).
 
 `_extract_taxes` reads:
 

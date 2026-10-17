@@ -44,7 +44,13 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_FLANDERS,
 )
-from ._parse import SIGN_CHARS, excise_tier_bands, to_float
+from ._parse import (
+    SIGN_CHARS,
+    excise_tier_bands,
+    require_every_area,
+    running_month_short_of_an_area,
+    to_float,
+)
 from ._pdf import (
     NL_MONTHS,
     fetch_pdf_text_layout,
@@ -222,7 +228,10 @@ async def fetch(
         raise ExtractorError(f"unknown or unsupported Trevion contract {contract_id!r}")
     url, label = await _find_card(session, contract)
     text = await fetch_pdf_text_layout(session, url)
-    return parse_snapshot(contract_id, text, url, label)
+    snap = parse_snapshot(contract_id, text, url, label)
+    # Here and not in the reader: a past month's card keeps a short table.
+    require_every_area("Trevion", snap.dsos, _DSOS.values())
+    return snap
 
 
 async def fetch_for_month(
@@ -240,7 +249,9 @@ async def fetch_for_month(
         )
         # None means the check refused the card, a CDN serving some other
         # month's file. Nothing to settle, and nothing to serve.
-        if snap is None:
+        if snap is None or running_month_short_of_an_area(
+            snap.dsos, _DSOS.values(), year_month
+        ):
             return None
         return await _settle_on_published_indices(
             session, contract, snap, year_month, html
@@ -593,6 +604,14 @@ def _extract_dynamic(text: str) -> tuple[DynamicRates, InjectionRates]:
 
 
 def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
+    """The digital-meter network table.
+
+    An area whose row does not read is left out. ``fetch`` refuses a live
+    card short of an area and ``fetch_for_month`` the running month's
+    (``require_every_area``), while a past month's card keeps its energy and
+    the month cache bills the missing area on the nearest card of the same
+    calendar year that prints it. A table nothing could be read from raises.
+    """
     start = text.find("Digitale Meter")
     end = text.find("Analoge Meter", start)
     section = text[start : end if end >= 0 else len(text)]
@@ -613,14 +632,6 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             )
     if not out:
         raise ExtractorError("Trevion: digital-meter DSO table not found")
-    missing = [key for key in _DSOS.values() if key not in out]
-    if missing:
-        # A partial table is worse than none: the areas are what every
-        # entry picks its network cost from, and a card missing one would
-        # be adopted, persisted and shared, leaving the entry on that area
-        # with no overlay and every tick failing, while the last good card
-        # is gone from the cache. Refusing keeps that card serving.
-        raise ExtractorError(f"Trevion: DSO rows not found for {sorted(missing)}")
     return out
 
 

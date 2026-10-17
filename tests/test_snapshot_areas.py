@@ -46,6 +46,7 @@ from custom_components.be_electricity_prices.providers import (
     elegant,
     eneco,
     octaplus,
+    trevion,
 )
 from custom_components.be_electricity_prices.providers import get as get_extractor
 from custom_components.be_electricity_prices.providers.base import (
@@ -159,6 +160,8 @@ def _parsed(supplier: str, text: str) -> SupplierSnapshot:
         return elegant.parse_snapshot("elegant_zeker_vast", text)
     if supplier == "eneco":
         return eneco.parse_snapshot(text, "power_fix", "test://", "wallonia")
+    if supplier == "trevion":
+        return trevion.parse_snapshot("groene_energie_vast", text)
     return octaplus.parse_snapshot("octaplus_fixed", text, "flanders")
 
 
@@ -199,6 +202,12 @@ _SHORT_CARDS = {
         ("octaplus_fixed", "flanders"),
         lambda: fixture_text("octaplus_fixed_v.pdf", aligned=True),
         ("Fluvius West", "X."),
+        "fluvius_west",
+    ),
+    "trevion": (
+        ("groene_energie_vast", "flanders"),
+        lambda: fixture_text("trevion_vast_2026-04.pdf", layout=True),
+        ("Fluvius West 60,53", "Fluvius-West 60,53"),
         "fluvius_west",
     ),
 }

@@ -607,17 +607,64 @@ def test_missing_fixed_card_sections_fail_loudly(old: str, message: str) -> None
         parse_snapshot("groene_energie_vast", _layout(_VAST).replace(old, "missing"))
 
 
-def test_a_network_table_missing_an_area_is_refused() -> None:
-    """One relabelled row used to leave seven areas, and the card was adopted:
-    an entry on the eighth then failed every tick with no overlay to price
-    from, while the last good card was gone from the cache."""
+def _listing(*names: str) -> Any:
+    return make_text_session(
+        "\n".join(f'<a href="/tariefkaarten/{n}">{n}</a>' for n in names)
+    )
+
+
+async def test_a_live_card_missing_an_area_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One relabelled row leaves seven areas. The reader leaves the area out,
+    and the live card is refused for it: adopted, an entry on the eighth
+    failed every tick with no overlay to price from, while the last good
+    card was gone from the cache."""
+    from custom_components.be_electricity_prices.providers import trevion
+
     text = _layout("trevion_flex_2026-09.pdf")
     relabelled = text.replace("Fluvius West 60,53", "Fluvius-West 60,53", 1)
     assert relabelled != text
+    snap = parse_snapshot("groene_stroom_flex", relabelled)
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_west"}
+    monkeypatch.setattr(
+        trevion, "fetch_pdf_text_layout", AsyncMock(return_value=relabelled)
+    )
+    session = _listing("Trevion-tariefkaart-Groene-stroom-FLEX-particulier-202609.pdf")
     with pytest.raises(
         ExtractorError, match=r"DSO rows not found for \['fluvius_west'\]"
     ):
-        parse_snapshot("groene_stroom_flex", relabelled)
+        await trevion.fetch(session, "groene_stroom_flex", REGION_FLANDERS)
+
+
+async def test_a_past_month_keeps_a_short_network_table(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A past month's card is what the month is billed on, so a table short
+    of an area keeps the card; the month cache bills the missing area on the
+    nearest card printing it. The reader refused it, and the month fell back
+    to today's card for every area. As the running month's card it is
+    refused, as ``fetch`` refuses it."""
+    from custom_components.be_electricity_prices.providers import trevion
+
+    text = _layout(_VAST_APRIL)
+    short = text.replace("Fluvius West 60,53", "Fluvius-West 60,53", 1)
+    assert short != text
+    monkeypatch.setattr(trevion, "fetch_pdf_text_layout", AsyncMock(return_value=short))
+    session = _listing("Trevion-tariefkaart-Groene-energie-VAST-particulier-202604.pdf")
+    freezer.move_to("2026-10-16 12:00:00+02:00")
+    snap = await fetch_for_month(
+        session, "groene_energie_vast", REGION_FLANDERS, date(2026, 4, 1)
+    )
+    assert snap is not None
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_west"}
+    freezer.move_to("2026-04-20 12:00:00+02:00")
+    assert (
+        await fetch_for_month(
+            session, "groene_energie_vast", REGION_FLANDERS, date(2026, 4, 1)
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(
