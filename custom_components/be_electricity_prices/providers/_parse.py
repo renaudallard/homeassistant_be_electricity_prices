@@ -109,7 +109,8 @@ def require_every_area(
     billed, where refusing the card billed both on today's card, and the
     month cache takes the missing area's network from the nearest card of
     the same calendar year that prints it (``_with_nearest_area``,
-    ``snapshot_areas.py``).
+    ``snapshot_areas.py``). Ecofix keeps no archive of its own and asks it
+    of the live card alone.
     """
     missing = sorted(key for key in keys if key not in out)
     if missing:

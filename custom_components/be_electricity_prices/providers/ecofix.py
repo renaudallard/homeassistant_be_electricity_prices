@@ -170,7 +170,18 @@ async def fetch(
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Ecofix")
     url = _document_url(contract)
     text = await fetch_pdf_text_layout(session, url)
-    return parse_snapshot(contract_id, text, region, url)
+    snap = parse_snapshot(contract_id, text, region, url)
+    # Here and not in the reader: a card read for its own month keeps a
+    # short table.
+    require_every_area("Ecofix", snap.dsos, _areas(region))
+    return snap
+
+
+def _areas(region: str) -> tuple[str, ...]:
+    """The network areas a card of ``region`` prints a row for."""
+    if region == REGION_WALLONIA:
+        return (*(key for _, key in _WALLONIA_LABELS), DSO_ORES)
+    return tuple(_FLANDERS_LABELS.values())
 
 
 async def probe(
@@ -754,7 +765,8 @@ def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]
             capacity_eur_per_kw_year=capacity,
             prosumer_eur_per_kva_year=prosumer_by_key.get(key),
         )
-    require_every_area("Ecofix", out, _FLANDERS_LABELS.values())
+    if not out:
+        raise ExtractorError("Ecofix: no DSO row read in the Flanders table")
     return out
 
 
@@ -808,7 +820,8 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     ores = _extract_ores(text)
     if ores is not None:
         out[DSO_ORES] = ores
-    require_every_area("Ecofix", out, (*(k for _, k in _WALLONIA_LABELS), DSO_ORES))
+    if not out:
+        raise ExtractorError("Ecofix: no DSO row read in the Wallonia table")
     return out
 
 

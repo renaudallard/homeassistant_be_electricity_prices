@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -37,7 +38,7 @@ from custom_components.be_electricity_prices.const import (
     FLUVIUS_CARD_LABELS,
     FLUVIUS_KEYS,
 )
-from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import EXTRACTORS, ecofix
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     VariableRates,
@@ -453,17 +454,36 @@ def _without_rows(text: str, *prefixes: str) -> str:
         ("wallonia", ("ORES",), "ores"),
     ],
 )
-def test_a_network_table_missing_an_area_is_refused(
-    region: str, prefixes: tuple[str, ...], missing: str
+async def test_a_live_card_missing_an_area_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+    region: str,
+    prefixes: tuple[str, ...],
+    missing: str,
 ) -> None:
-    """A row that stopped reading used to leave the area out and the card was
-    adopted anyway: an entry on that area then failed every tick with no
-    overlay to price from. ORES counts as one of the Walloon areas, so losing
-    all nine of its rows is refused too."""
+    """A row that stops reading leaves its area out of the card, which a
+    card read for its own month keeps. The live card is refused for it: an
+    entry on that area would fail every tick with no overlay to price from.
+    ORES counts as one of the Walloon areas, so losing all nine of its rows
+    is refused too."""
     text = _without_rows(_layout(_MOTION), *prefixes)
+    snap = parse_snapshot("ecofix_motion", text, region, "x")
+    assert missing not in snap.dsos and snap.dsos
+    monkeypatch.setattr(ecofix, "fetch_pdf_text_layout", AsyncMock(return_value=text))
     with pytest.raises(
         ExtractorError, match=rf"DSO rows not found for \['{missing}'\]"
     ):
+        await ecofix.fetch(MagicMock(), "ecofix_motion", region)
+
+
+@pytest.mark.parametrize("region", ["flanders", "wallonia"])
+def test_a_network_table_with_no_row_read_is_refused(region: str) -> None:
+    """Every row relabelled: nothing reads at all, which is a layout change
+    rather than a row gone missing."""
+    text = _layout(_MOTION).replace("Fluvius ", "Netgebied ")
+    text = text.replace("ORES (", "Netgebied (")
+    for label in ("AIEG", "AIESH", "WAVRE", "TECTEO - RESA"):
+        text = text.replace(label, "Netgebied")
+    with pytest.raises(ExtractorError, match="no DSO row read"):
         parse_snapshot("ecofix_motion", text, region, "x")
 
 
