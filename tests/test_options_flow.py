@@ -1508,6 +1508,107 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_keyless_entry_quoting_itself_prices_both_sides_on_the_typed_key(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A keyless entry whose feed-in follows the spot per slot credits none of
+    it in its current_year_cost sensor, the card printing no rate to fall back
+    on. A key typed on the page fetches the window, and both sides are priced
+    on it, the own contract quoted on the same meter included, so the
+    difference is what the contract changes and never the credit the entry
+    cannot price. The own row then departs from the sensor, which the result
+    page says ("on day-ahead prices fetched for this page that the entry does
+    not hold"). Pricing the own row on the entry's empty cache instead would
+    put that whole credit into every difference."""
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    freezer.move_to("2026-06-15 12:00:00+02:00")
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        VariableRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_variable",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+        },
+        title="Cociter Variable, keyless",
+    )
+    entry.add_to_hass(hass)
+    card = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.925, base=-0.0125),
+        source_url="test://stub",
+        publication_label="june 2026",
+    )
+    coord = _real_coordinator(hass, entry, card)
+    assert not coord._historical_spots
+    entry.runtime_data = coord
+    fresh = {datetime(2026, 6, 1, 11, tzinfo=UTC): 0.07}
+
+    async def _fake_ensure(
+        self: Any, start: Any, end: Any, api_key: Any = None
+    ) -> None:
+        if api_key:
+            self._historical_spots.update(fresh)
+
+    fake = replace(
+        EXTRACTORS["cociter"], fetch=AsyncMock(return_value=card), probe=None
+    )
+    with (
+        patch.dict(EXTRACTORS, {"cociter": fake}),
+        patch.object(type(coord), "_ensure_historical_spots", _fake_ensure),
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+            AsyncMock(return_value=123.0),
+        ) as engine,
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_variable"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        result = await _pass_compare_solar(hass, entry, result)
+        assert result["step_id"] == "compare_api_key"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"api_key": "TESTKEY"}
+        )
+        assert result["step_id"] == "compare_result"
+
+    sides = [
+        (
+            "contract_override" in c.kwargs,
+            c.kwargs.get("historical_spots"),
+        )
+        for c in engine.call_args_list
+    ]
+    assert {own for own, _ in sides} == {False, True}
+    assert all(spots == fresh for _, spots in sides)
+    # The page never writes what it fetched back into the entry.
+    assert not coord._historical_spots
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_prices_the_earlier_contracts_on_the_spots_it_fetched(
     hass: HomeAssistant, freezer: Any
 ) -> None:
