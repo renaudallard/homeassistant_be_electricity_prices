@@ -38,11 +38,10 @@ capacity tariff billed on the monthly peak.
 
 Energy prices are fetched **live** from each supplier's own published
 tariff card. **No supplier EUR value is hardcoded in the source**: the only
-EUR rates in it are regulated ones no live source prints: the Flemish
-network ceiling, which replaces a card's out-of-date figure for the months
-it is known for, and the protected customer's excise before August 2026,
-which the law's current text no longer states. The household excise is read
-from the law itself. A supplier is one
+EUR rate in it is a regulated one no live source prints, the protected
+customer's excise before August 2026, which the law's current text no longer
+states. The household excise is read from the law itself, and the Flemish
+network ceiling from Fluvius's yearly tariff sheet. A supplier is one
 Python module, split into a few helpers for the larger ones, that knows where
 to find that supplier's publication and how to read it. If yours is missing,
 **open an issue asking for it** rather than
@@ -400,8 +399,9 @@ The network rows are compared the same way, per DSO: distribution, transport,
 metering, capacity and prosumer figures are set by the regulators, so a card
 printing another figure than the rest is reported. Unlike the federal levies,
 network figures are billed as each card prints them, with two exceptions taken
-from the regulator instead: the VREG network ceiling in Flanders, and Sibelga's
-power term in Brussels where a card leaves it out. The report names the cards
+from the regulator instead: the VREG network ceiling in Flanders, read off
+Fluvius's tariff sheet of the year, and Sibelga's power term in Brussels where
+a card leaves it out. The report names the cards
 whose households pay a figure the others do not.
 
 ## Sensors
@@ -435,7 +435,7 @@ All sensors share one device per config entry.
 
 | Sensor | Created when | Description |
 | --- | --- | --- |
-| `capacity_cost` | Region = Flanders | Current monthly capacity cost in EUR (`billed_peak_kw × DSO_capacity_rate / 12`). In 2026 it is capped at the VREG network ceiling: capacity plus the per-kWh network term never costs more than that ceiling times your yearly volume, though the capacity charge never drops below its 2.5 kW minimum. `billed_peak_kw` is the mean of your last twelve monthly peaks, each floored at 2.5 kW first, which is what Fluvius charges on, so this stays steady through the year rather than tracking whichever month you are in. This charge also accrues into `current_year_cost`, so the two are consistent rather than the capacity term being invisible in the running bill. Carries `billed_peak_kw` and `months_counted` attributes; `months_counted` reaches 12 after a full year of history, and until then the mean covers only the months measured so far. With a fixed peak, `billed_peak_kw` is the value you entered (at least 2.5 kW) and `months_counted` reads 0, since no mean is taken. |
+| `capacity_cost` | Region = Flanders | Current monthly capacity cost in EUR (`billed_peak_kw × DSO_capacity_rate / 12`). It is capped at the VREG network ceiling of the year, read off Fluvius's tariff sheet: capacity plus the per-kWh network term never costs more than that ceiling times your yearly volume, though the capacity charge never drops below its 2.5 kW minimum. `billed_peak_kw` is the mean of your last twelve monthly peaks, each floored at 2.5 kW first, which is what Fluvius charges on, so this stays steady through the year rather than tracking whichever month you are in. This charge also accrues into `current_year_cost`, so the two are consistent rather than the capacity term being invisible in the running bill. Carries `billed_peak_kw` and `months_counted` attributes; `months_counted` reaches 12 after a full year of history, and until then the mean covers only the months measured so far. With a fixed peak, `billed_peak_kw` is the value you entered (at least 2.5 kW) and `months_counted` reads 0, since no mean is taken. |
 | `monthly_peak_kw` | Region = Flanders | Running monthly peak power in kW (resets the 1st), reported as measured, so it reads 0 with a fixed peak, which measures nothing and adds no month to the history. The months measured before stay, and count again when you return to the sensor. Version 0.28.5 and earlier banked the fixed value into each month as if measured; the first start after upgrading drops the months holding exactly your fixed value. If you changed the fixed value since, the months at the older one stay: press **Reset monthly peak** once to clear them. The 2.5 kW regulated minimum is a billing rule and is applied to `capacity_cost` instead, so a quiet household now reads its true peak here rather than 2.5. State class is `MEASUREMENT` (mandated by HA for the POWER device class), so the long-term-statistics graph defaults to the **mean** aggregation. To see the true monthly peaks, switch the statistic-graph card to **Max** under Developer Tools → Statistics. The month's last day gets one more reading a minute before midnight, so a peak set in its final hour is still banked. A diagnostic **Reset monthly peak** button on the device page drops the rolling max so the next tick rebuilds it, and clears the monthly peaks banked so far, so the twelve-month mean behind `capacity_cost` starts over (use after a misconfigured sensor inflated the peak). |
 | `prosumer_cost` | Wallonia, compensation regime + `solar_kva > 0` | Monthly compensation fee in EUR (`solar_kva × (DSO_prosumer_rate + supplier_forfait) / 12`). Most suppliers bill only the regulated DSO rate; Cociter Tarif Variable and Variable Trihoraire, Mega and OCTA+ add a supplier-side PV forfait (already TVAC) on top. Only valid for Walloon installations certified before 2024-01-01; ends 2030-12-31. |
 | `price_peak` / `price_offpeak` | Bi-hourly meter, or digital (smart) meter on a fixed, variable or monthly-indexed card | The contract's **constant** day and night all-in rates, both readable at once. `current_price` follows the clock and holds whichever band applies now, which the Home Assistant energy dashboard cannot use: configuring a grid source with two tariffs asks for one price entity per tariff, permanently. These are those two. A card priced on the month's index has one rate per band for the whole month, so these show it at the month's mean. Unavailable on a contract with no constant band rate, which is every dynamic and time-of-use one. Not created on the Walloon *Tarif Impact* DSO tariff, whose distribution follows the CWaPE bands and has no day or night rate, except on an *Expert: custom formula* entry. |
@@ -1806,8 +1806,8 @@ changed since the morning's archive walk is rendered again:
 - **Cross-checks**: a supplier whose fetch blows its latency or size budget
   files `[live-check] supplier drift detected`, and a card whose federal tax
   block, stated VAT rate, Flemish network ceiling or regulated network figure
-  disagrees with the month's other cards files its own issue, as does the
-  VREG ceiling constant when its known window is about to lapse. A TotalEnergies card
+  disagrees with the month's other cards files its own issue, as does a
+  Fluvius tariff sheet the ceiling can no longer be read from. A TotalEnergies card
   whose Dutch edition reads differently from the French one, or stands in for
   a French card that does not read, files one too.
 

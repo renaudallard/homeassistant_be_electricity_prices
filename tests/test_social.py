@@ -40,7 +40,7 @@ from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
     SupplierSnapshot,
 )
-from tests import fixture_text
+from tests import FLUVIUS_CEILINGS, fixture_text
 
 BRUSSELS = ZoneInfo("Europe/Brussels")
 OCT = date(2026, 10, 1)
@@ -237,7 +237,8 @@ def test_the_network_rules_of_the_operators_do_not_reach_it() -> None:
         connection_fee=None,
         source_url="t://",
     )
-    assert resolve_vreg_network_ceiling(flanders, OCT) is flanders
+    ceiling = FLUVIUS_CEILINGS[2026]
+    assert resolve_vreg_network_ceiling(flanders, OCT, ceiling) is flanders
     brussels = social.build_snapshot(
         social.CONTRACT_OTHER,
         REGION_BRUSSELS,

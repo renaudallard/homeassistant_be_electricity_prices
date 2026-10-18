@@ -48,9 +48,6 @@ from ..const import (
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     SUPPLIER_SOCIAL,
-    VREG_NETWORK_CEILING_HTVA,
-    VREG_NETWORK_CEILING_KNOWN_FROM,
-    VREG_NETWORK_CEILING_KNOWN_UNTIL,
 )
 from ..excise_law import protected_excise, standard_excise
 from ..vat_rates import residential_vat, standard_vat
@@ -611,7 +608,7 @@ def without_welcome_credit(snapshot: SupplierSnapshot) -> SupplierSnapshot:
 
 
 def resolve_vreg_network_ceiling(
-    snapshot: SupplierSnapshot, delivery_month: date
+    snapshot: SupplierSnapshot, delivery_month: date, ceiling: float | None
 ) -> SupplierSnapshot:
     """Bill the VREG's maximumtarief, not a stale card's copy of it.
 
@@ -633,28 +630,28 @@ def resolve_vreg_network_ceiling(
     as the regulator publishes it. Same treatment, and for the same reason, as
     :func:`resolve_brussels_power_term`.
 
-    Identity outside the window the constants name, and identity on a card
-    already stating the figure, which four suppliers do (energie.be,
-    EnergyVision, Frank and Luminus); it fills the figure for the ten that
-    print none. Counted over the September 2026 Flanders cards. The two that
-    print a DIFFERENT figure, Mega and Bolt, are a third case and are
-    overwritten rather than filled.
+    ``ceiling`` is the delivery year's figure off Fluvius's tariff sheet,
+    EUR/kWh excluding VAT, from :mod:`..fluvius`. ``None`` leaves the card
+    exactly as it was, which is what happens before the sheet has been read
+    and if it cannot be read at all. Identity too on a card already stating
+    the figure, which four suppliers do (energie.be, EnergyVision, Frank and
+    Luminus); it fills the figure for the ten that print none. Counted over
+    the September 2026 Flanders cards. The two that print a DIFFERENT figure,
+    Mega and Bolt, are a third case and are overwritten rather than filled:
+    they print the ceiling of 2023 and 2024 (0,1920264, or 0,2035480 with
+    VAT).
 
     It moves a bill only where the cap binds, which is a low-volume connection
     on a high peak, and never at the 2,5 kW floor: see
     :func:`_capped_capacity_annual` for where that is and why the floor makes
     it so.
     """
-    month = (delivery_month.year, delivery_month.month)
-    if not (
-        VREG_NETWORK_CEILING_KNOWN_FROM <= month < VREG_NETWORK_CEILING_KNOWN_UNTIL
-    ):
+    if ceiling is None:
         return snapshot
     if snapshot.supplier == SUPPLIER_SOCIAL:
         # The CREG's network component replaces the operator's tariffs and
         # carries no capacity term for the ceiling to cap.
         return snapshot
-    ceiling = VREG_NETWORK_CEILING_HTVA
     if snapshot.taxes.vat_rate <= 0.0:
         # A VAT-inclusive card, so the regulator's ex-VAT figure is grossed,
         # at the rate the card states or else the month's.

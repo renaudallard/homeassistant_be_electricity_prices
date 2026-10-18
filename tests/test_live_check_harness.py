@@ -56,6 +56,7 @@ import pytest
 from homeassistant.util import dt as dt_util
 
 from custom_components.be_electricity_prices.providers._rates import SpotMonthlyRates
+from tests import FLUVIUS_CEILINGS
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -1910,7 +1911,8 @@ def _drive_run(
     monkeypatch.setattr(lc, "_SUPPLIERS", ())
     phases: dict[str, Callable[..., Any]] = {
         "_check_catalogs": _async_no_op,
-        "_check_vreg_ceiling_window": _sync_no_op,
+        "_fluvius_ceilings": _async_no_op,
+        "_check_fluvius_sheet": _sync_no_op,
         "_check_vreg_ceiling_consensus": _sync_no_op,
         "_check_federal_tax_consensus": _sync_no_op,
         "_check_vat_consensus": _sync_no_op,
@@ -2008,11 +2010,7 @@ async def _async_crash(*_args: Any) -> None:
     ("phase", "stub", "label"),
     [
         ("_check_catalogs", _async_crash, "_catalog: probe crashed"),
-        (
-            "_check_vreg_ceiling_window",
-            _crash,
-            "_federal: VREG ceiling window check crashed",
-        ),
+        ("_fluvius_ceilings", _async_crash, "_federal: Fluvius sheet check crashed"),
         (
             "_check_vreg_ceiling_consensus",
             _crash,
@@ -2159,23 +2157,23 @@ def test_the_extractor_issue_names_the_rows_an_earlier_attempt_passed(
 
 
 def test_the_tax_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
-    """From 6 November 2026 the VREG window reminder fails every night, and it
-    filed as "a supplier's federal tax block disagrees", which sends the
-    triager looking for a card printing a wrong levy."""
+    """An unreadable Fluvius sheet is a reader to fix here, and filed as "a
+    supplier's federal tax block disagrees" it would send the triager looking
+    for a card printing a wrong levy."""
     step = "Open or update tax-block issue"
-    reminders = tmp_path / "reminders"
-    reminders.mkdir()
+    sheet = tmp_path / "sheet"
+    sheet.mkdir()
     assert _file_catalog_issue(
-        reminders,
-        "_federal: the VREG ceiling window needs extending\n",
+        sheet,
+        "_federal: Fluvius 2026 tariff sheet unreadable\n",
         step,
         "tax",
-    ) == ("[live-check] a federal constant window needs extending")
+    ) == ("[live-check] the Fluvius tariff sheet can no longer be read")
     supplier = tmp_path / "supplier"
     supplier.mkdir()
     assert _file_catalog_issue(
         supplier,
-        "_federal: the VREG ceiling window needs extending\n"
+        "_federal: Fluvius 2026 tariff sheet unreadable\n"
         "mega/VREG ceiling disagrees for 2026-11\n",
         step,
         "tax",
@@ -2206,7 +2204,7 @@ def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
         (
             "Open or update tax-block issue",
             "tax",
-            "_federal: the VREG ceiling window needs extending\n",
+            "_federal: Fluvius 2026 tariff sheet unreadable\n",
         ),
         (
             "Open or update tax-block issue",
@@ -3830,20 +3828,46 @@ def test_a_known_vreg_ceiling_is_allowed_and_expires() -> None:
     assert lc._vreg_ceiling_allowance("bolt", 0.2035480, date(2027, 1, 1)) is None
 
 
-def test_every_vreg_ceiling_allowance_expires_with_the_constant() -> None:
-    """The constant is only applied inside its own window, so past that every
-    card is read as printed again and each allowance has to be looked at
-    afresh. An allowance outliving the window would be asserting something
-    about a period the code no longer takes a view on."""
-    from custom_components.be_electricity_prices.const import (
-        VREG_NETWORK_CEILING_KNOWN_UNTIL,
-    )
-
-    lapses = date(*VREG_NETWORK_CEILING_KNOWN_UNTIL, 1)
+def test_every_vreg_ceiling_allowance_expires_with_the_tariff_year() -> None:
+    """The ceiling is set per calendar year and every card is reprinted in
+    January, so none may outlive the next one."""
     assert lc._KNOWN_VREG_CEILINGS, "no allowance to check"
     for (supplier, printed), (expires, why) in lc._KNOWN_VREG_CEILINGS.items():
-        assert expires <= lapses, f"{supplier} {printed} outlives the window"
+        assert expires <= date(2027, 1, 1), f"{supplier} {printed} outlives the year"
         assert why.strip(), f"{supplier} {printed} carries no reason"
+
+
+def test_an_unreadable_fluvius_sheet_is_reported(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
+    """Without this year's sheet the integration bills each card's own
+    ceiling and nothing else would say the reader broke. A month whose year is
+    not held is not compared against anything."""
+    today = date(2026, 10, 19)
+    lc._check_fluvius_sheet({2025: 0.3276168, 2026: 0.3276168}, today)
+    assert lc.CHECKS == []
+    lc._check_fluvius_sheet({2025: 0.3276168, 2026: None}, today)
+    (row,) = lc.CHECKS
+    assert row.label == "_federal: Fluvius 2026 tariff sheet unreadable"
+    assert not row.ok and row.kind == "tax"
+
+    lc.CHECKS.clear()
+    text = tmp_path / "texts" / "2026-09" / "bolt.txt"
+    text.parent.mkdir(parents=True)
+    text.write_text("Un tarif maximal de 0,2035480 € s'applique", encoding="utf-8")
+    row = tmp_path / "cards" / "bolt" / "bolt_fix" / "flanders" / "2026-09.json"
+    row.parent.mkdir(parents=True)
+    row.write_text(
+        json.dumps({"_sources": [{"text": "texts/2026-09/bolt.txt"}]}), encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        lc, "_CONTRACTS_BY_ID", {"bolt_fix": SimpleNamespace(professional=False)}
+    )
+    monkeypatch.setattr(lc, "_parse_vreg_ceiling", _read_ceiling)
+    lc._check_vreg_ceiling_consensus(tmp_path, {2026: None}, today)
+    assert lc.CHECKS == []
+    lc._check_vreg_ceiling_consensus(tmp_path, FLUVIUS_CEILINGS, today)
+    assert [c.label for c in lc.CHECKS] == ["bolt/VREG ceiling disagrees for 2026-09"]
 
 
 def test_the_ceiling_consensus_uses_the_allowance(
@@ -3887,7 +3911,7 @@ def test_the_ceiling_consensus_uses_the_allowance(
     )
     monkeypatch.setattr(lc, "_parse_vreg_ceiling", _read_ceiling)
 
-    lc._check_vreg_ceiling_consensus(archive, date(2026, 9, 21))
+    lc._check_vreg_ceiling_consensus(archive, FLUVIUS_CEILINGS, date(2026, 9, 21))
     rows = _rows("bolt/VREG ceiling")
     assert len(rows) == 1, [c.label for c in lc.CHECKS]
     assert rows[0].expected is True, (
@@ -3897,7 +3921,7 @@ def test_the_ceiling_consensus_uses_the_allowance(
 
     # And past the expiry the same card is a real failure again.
     lc.CHECKS.clear()
-    lc._check_vreg_ceiling_consensus(archive, date(2027, 1, 2))
+    lc._check_vreg_ceiling_consensus(archive, FLUVIUS_CEILINGS, date(2027, 1, 2))
     assert _rows("bolt/VREG ceiling")[0].expected is False
 
 
@@ -4362,13 +4386,13 @@ def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) ->
         )
         monkeypatch.setattr(lc, "_parse_vreg_ceiling", _read_ceiling)
         lc.CHECKS.clear()
-        lc._check_vreg_ceiling_consensus(archive, date(2026, 9, 21))
+        lc._check_vreg_ceiling_consensus(archive, FLUVIUS_CEILINGS, date(2026, 9, 21))
 
     # One stale card and nothing to compare it against: no fleet, so no verdict
     # about the constant. The per-supplier row still files, which is the claim
     # the evidence supports.
     _run({"bolt": "0,2035480"})
-    assert not _rows("_federal: the VREG ceiling constant disagrees")
+    assert not _rows("_federal: Fluvius's VREG ceiling disagrees")
     assert len(_rows("bolt/VREG ceiling")) == 1
 
     # Two stale against one agreeing IS a fleet, and a majority of it says the
@@ -4378,14 +4402,14 @@ def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) ->
     # consistently rather than a separate concession. Bolt prints a figure
     # with no allowance here: its allowed one is not a vote (below).
     _run({"bolt": "0,1920264", "mega": "0,1920264", "luminus": "0,3472738"})
-    assert len(_rows("_federal: the VREG ceiling constant disagrees")) == 1
+    assert len(_rows("_federal: Fluvius's VREG ceiling disagrees")) == 1
 
     # Bolt's allowed figure is a card error somebody looked at, not a sign the
     # regulator moved. With Frank unread and energie.be printing a new figure,
     # its vote made one moved card against one agreeing a majority, and the
     # run asked for the constant to be moved instead of naming energie.be.
     _run({"bolt": "0,2035480", "energiebe": "0,3600000", "luminus": "0,3472738"})
-    assert not _rows("_federal: the VREG ceiling constant disagrees")
+    assert not _rows("_federal: Fluvius's VREG ceiling disagrees")
     (energiebe,) = _rows("energiebe/VREG ceiling")
     assert not energiebe.expected
     assert _rows("bolt/VREG ceiling")[0].expected
@@ -4399,7 +4423,7 @@ def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) ->
             "frank": "0,4100000",
         }
     )
-    (fleet,) = _rows("_federal: the VREG ceiling constant disagrees")
+    (fleet,) = _rows("_federal: Fluvius's VREG ceiling disagrees")
     assert fleet.detail.startswith("3 of 3 ")
 
     # The case the gate exists for and the one it used to suppress: every card
@@ -4413,7 +4437,7 @@ def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) ->
             "frank": "0,4100000",
         }
     )
-    assert len(_rows("_federal: the VREG ceiling constant disagrees")) == 1
+    assert len(_rows("_federal: Fluvius's VREG ceiling disagrees")) == 1
 
     # Three stale against the two that agree: the constant is the minority
     # reading and a human should look at the regulator's sheet.
@@ -4426,7 +4450,7 @@ def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) ->
             "frank": "0,3472738",
         }
     )
-    assert len(_rows("_federal: the VREG ceiling constant disagrees")) == 1
+    assert len(_rows("_federal: Fluvius's VREG ceiling disagrees")) == 1
 
 
 def _read_ceiling(text: str) -> float | None:

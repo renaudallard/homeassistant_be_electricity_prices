@@ -164,7 +164,7 @@ from custom_components.be_electricity_prices.ytd_legs import (
     _days_through,
     _ytd_static_fees,
 )
-from tests import make_entry, make_snapshot, make_stub_extractor
+from tests import FLUVIUS_CEILINGS, make_entry, make_snapshot, make_stub_extractor
 
 
 def _snapshot(
@@ -359,9 +359,9 @@ def test_the_vreg_ceiling_is_the_regulators_figure_not_a_cards_copy() -> None:
     energie.be) or 0,3276168 excluding it (energie.be's professional card and
     Ecopower), and DATS 24 settles that it is not a per-DSO term by printing
     it as a COLUMN of its DSO table with eight identical copies, one per
-    Fluvius area. Mega and Bolt print 0,2035480, which would cap about 1,7
-    times too tight and UNDER-bill; Bolt prints it on its Wallonia and
-    Brussels cards too, where no VREG tariff exists.
+    Fluvius area. Mega and Bolt print 0,2035480, the 2023 and 2024 ceiling,
+    which would cap about 1,7 times too tight and UNDER-bill; Bolt prints it
+    on its Wallonia and Brussels cards too, where no VREG tariff exists.
 
     Ten other suppliers print no ceiling at all, so the cap simply never bound
     for their Flemish entries.
@@ -370,13 +370,13 @@ def test_the_vreg_ceiling_is_the_regulators_figure_not_a_cards_copy() -> None:
         DSO_FLUVIUS_ANTWERPEN,
         DSO_ORES,
         DSO_SIBELGA,
-        VREG_NETWORK_CEILING_HTVA,
     )
     from custom_components.be_electricity_prices.providers._resolve import (
         resolve_vreg_network_ceiling,
     )
 
-    tvac = VREG_NETWORK_CEILING_HTVA * 1.06
+    sheet = FLUVIUS_CEILINGS[2026]
+    tvac = sheet * 1.06
 
     def _card(ceiling: float | None, *, vat_rate: float = 0.0) -> Any:
         return make_snapshot(
@@ -399,19 +399,19 @@ def test_the_vreg_ceiling_is_the_regulators_figure_not_a_cards_copy() -> None:
     inside = date(2026, 9, 1)
 
     # A card printing none is filled, on its own VAT basis.
-    filled = resolve_vreg_network_ceiling(_card(None), inside)
+    filled = resolve_vreg_network_ceiling(_card(None), inside, sheet)
     assert filled.dsos[DSO_FLUVIUS_ANTWERPEN].network_ceiling_eur_per_kwh == (
         pytest.approx(tvac)
     )
     # An ex-VAT card takes the figure as the regulator publishes it, because
     # the ceiling is compared against distribution_single as printed.
-    pro = resolve_vreg_network_ceiling(_card(None, vat_rate=0.21), inside)
+    pro = resolve_vreg_network_ceiling(_card(None, vat_rate=0.21), inside, sheet)
     assert pro.dsos[DSO_FLUVIUS_ANTWERPEN].network_ceiling_eur_per_kwh == (
-        pytest.approx(VREG_NETWORK_CEILING_HTVA)
+        pytest.approx(sheet)
     )
 
     # Mega's and Bolt's figure is corrected, which is the whole point.
-    corrected = resolve_vreg_network_ceiling(_card(0.2035480), inside)
+    corrected = resolve_vreg_network_ceiling(_card(0.2035480), inside, sheet)
     assert corrected.dsos[DSO_FLUVIUS_ANTWERPEN].network_ceiling_eur_per_kwh == (
         pytest.approx(tvac)
     )
@@ -424,13 +424,11 @@ def test_the_vreg_ceiling_is_the_regulators_figure_not_a_cards_copy() -> None:
     # A card already stating it is identity, not a copy, so this is free for
     # the five suppliers that read it correctly.
     agrees = _card(tvac)
-    assert resolve_vreg_network_ceiling(agrees, inside) is agrees
+    assert resolve_vreg_network_ceiling(agrees, inside, sheet) is agrees
 
-    # Outside the window the card is read as before, the way the excise
-    # constant beside it stops at the end of its own.
-    for outside in (date(2025, 12, 1), date(2027, 1, 1)):
-        untouched = _card(None)
-        assert resolve_vreg_network_ceiling(untouched, outside) is untouched
+    # Without the year's sheet the card is read as before.
+    untouched = _card(None)
+    assert resolve_vreg_network_ceiling(untouched, inside, None) is untouched
 
 
 def test_the_entry_resolver_applies_the_vreg_ceiling() -> None:
@@ -442,15 +440,19 @@ def test_the_entry_resolver_applies_the_vreg_ceiling() -> None:
     ex-VAT figure and a residential one 6% above it. Reverting either the
     call or its position is invisible to a test of the resolver alone, which
     is how this kind of fix has gone wrong before.
+
+    The figure is the DELIVERY year's: 2024 was billed on 0,1920264, and a
+    year whose sheet is not held keeps what the card prints.
     """
     from types import SimpleNamespace
 
-    from custom_components.be_electricity_prices.const import (
-        DSO_FLUVIUS_ANTWERPEN,
-        VREG_NETWORK_CEILING_HTVA,
-    )
+    from custom_components.be_electricity_prices.const import DSO_FLUVIUS_ANTWERPEN
 
-    def _resolved(*, vat_rate: float, include_vat: bool) -> float | None:
+    sheet = FLUVIUS_CEILINGS[2026]
+
+    def _resolved(
+        *, vat_rate: float, include_vat: bool, month: date = date(2026, 9, 1)
+    ) -> float | None:
         card = make_snapshot(
             taxes=TaxOverlay(
                 federal_excise=0.05, energy_contribution=0.0, vat_rate=vat_rate
@@ -475,36 +477,34 @@ def test_the_entry_resolver_applies_the_vreg_ceiling() -> None:
         out = snapshot_resolve._resolve_snapshot(
             entry,  # type: ignore[arg-type]
             card,
-            delivery_month=date(2026, 9, 1),
+            delivery_month=month,
         )
         return out.dsos[DSO_FLUVIUS_ANTWERPEN].network_ceiling_eur_per_kwh
 
     # A residential card prints VAT-inclusive, so the ceiling is grossed.
-    assert _resolved(vat_rate=0.0, include_vat=True) == pytest.approx(
-        VREG_NETWORK_CEILING_HTVA * 1.06
-    )
+    assert _resolved(vat_rate=0.0, include_vat=True) == pytest.approx(sheet * 1.06)
+    assert _resolved(
+        vat_rate=0.0, include_vat=True, month=date(2024, 9, 1)
+    ) == pytest.approx(FLUVIUS_CEILINGS[2024] * 1.06)
+    assert _resolved(vat_rate=0.0, include_vat=True, month=date(2022, 9, 1)) is None
     # A professional card prints ex-VAT and keeps the regulator's own figure,
     # on the same basis as the distribution rate it is measured against.
-    assert _resolved(vat_rate=0.21, include_vat=True) == pytest.approx(
-        VREG_NETWORK_CEILING_HTVA
-    )
+    assert _resolved(vat_rate=0.21, include_vat=True) == pytest.approx(sheet)
     # And the business that DEDUCTS VAT is what pins the position: apply_vat
     # rewrites vat_rate to 0 for that entry, so a resolver running after it
     # would read the ex-VAT card as VAT-inclusive and gross a figure that is
     # already ex-VAT, putting the ceiling 6% above the rate it is compared
     # against.
-    assert _resolved(vat_rate=0.21, include_vat=False) == pytest.approx(
-        VREG_NETWORK_CEILING_HTVA
-    )
+    assert _resolved(vat_rate=0.21, include_vat=False) == pytest.approx(sheet)
 
 
-def test_the_vreg_ceiling_constant_is_what_the_fleet_prints() -> None:
-    """The constant is a number typed into source, so it is held against real
-    cards: two suppliers that read the ceiling off their own footnote must
-    agree with it to the last decimal, or the figure here is wrong."""
-    from custom_components.be_electricity_prices.const import (
-        FLUVIUS_KEYS,
-        VREG_NETWORK_CEILING_HTVA,
+def test_the_fluvius_sheets_ceiling_is_what_the_fleet_prints() -> None:
+    """The regulator's figure as Fluvius's 2026 sheet prints it, held against
+    two suppliers that read the ceiling off their own footnote: they must
+    agree to the last decimal, or the sheet is being read wrong."""
+    from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
+    from custom_components.be_electricity_prices.fluvius import (
+        parse_network_ceiling,
     )
     from custom_components.be_electricity_prices.providers.energiebe import (
         parse_snapshot as energiebe_parse,
@@ -512,8 +512,12 @@ def test_the_vreg_ceiling_constant_is_what_the_fleet_prints() -> None:
     from custom_components.be_electricity_prices.providers.frank import (
         parse_snapshot as frank_parse,
     )
-    from tests import fixture_text
+    from tests import FIXTURES, fixture_text
 
+    sheet = parse_network_ceiling(
+        (FIXTURES / "fluvius_zenne_dijle_2026.xlsx").read_bytes(), 2026
+    )
+    assert sheet is not None
     cards = (
         energiebe_parse(fixture_text("energiebe_dynamic_jul.pdf", layout=True), "t://"),
         frank_parse(
@@ -532,7 +536,7 @@ def test_the_vreg_ceiling_constant_is_what_the_fleet_prints() -> None:
             if key in FLUVIUS_KEYS
         }
         assert len(printed) == 1, "the card states one ceiling for every area"
-        assert printed.pop() == pytest.approx(VREG_NETWORK_CEILING_HTVA * 1.06)
+        assert printed.pop() == pytest.approx(sheet * 1.06)
 
 
 def test_the_flemish_network_ceiling_caps_the_capacity_charge() -> None:

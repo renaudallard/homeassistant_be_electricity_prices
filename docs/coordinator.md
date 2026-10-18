@@ -112,11 +112,12 @@ _update_body (coordinator_tick.py)
  ├─ _sync_deprecated_supplier_issue(), _sync_withdrawn_contract_issue()
  ├─ unless the setup tick: warm_meter_reads(), _ensure_annual_volume()
  ├─ ensure_power_term(year)              Brussels only (brugel.py)
+ ├─ ensure_network_ceiling(year)         Flanders only (fluvius.py)
  ├─ ensure_vat_rates()                   card archive on (vat_rates.py)
  ├─ ensure_excise_law()                  every entry (excise_law.py)
  ├─ _refresh_custom_snapshot() | _maybe_refresh_snapshot()
  │                                       custom formula | probe / TTL / fetch, may adopt sibling cache
- ├─ _reresolve_snapshot()                volume, Brugel term, VAT, excise or month moved
+ ├─ _reresolve_snapshot()                volume, Brugel term, VREG ceiling, VAT, excise or month moved
  ├─ _sync_excise_law_issue()             social card with no law read -> UpdateFailed
  ├─ _track_monthly_peak()                Flanders capacity peak (rolling max)
  ├─ ensure_ev_rates() + ev_rate_for()    EV home charging rate opted in (creg_ev.py)

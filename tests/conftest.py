@@ -42,6 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from scripts.card_texts import RENDER_THREAD  # noqa: E402
+from tests import FLUVIUS_CEILINGS  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -168,6 +169,31 @@ def _vat_table_holds_nothing() -> Iterator[None]:
         yield
     vat_rates._RESIDENTIAL.clear()
     vat_rates._STANDARD.clear()
+
+
+@pytest.fixture(autouse=True)
+def _fluvius_sheets_as_published() -> Iterator[None]:
+    """The tick reads the VREG network ceiling off Fluvius's tariff sheets.
+    Tests see the figures the sheets print instead of the network, and
+    whatever a test holds is gone before the next one."""
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.be_electricity_prices import (
+        backfill_window,
+        coordinator_tick,
+        fluvius,
+    )
+
+    fluvius._cache.clear()
+    fluvius._failed_at.clear()
+    fluvius._cache.update(FLUVIUS_CEILINGS)
+    with (
+        patch.object(coordinator_tick, "ensure_network_ceiling", AsyncMock()),
+        patch.object(backfill_window, "ensure_network_ceiling", AsyncMock()),
+    ):
+        yield
+    fluvius._cache.clear()
+    fluvius._failed_at.clear()
 
 
 _JUSTEL_PAGE = ROOT / "tests" / "fixtures" / "justel_loi_programme_2004_fr.html"

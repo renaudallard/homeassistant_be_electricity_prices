@@ -350,16 +350,17 @@ async def _download(
     return Path(tmp.name)
 
 
-def _resolve_sheet_path(z: zipfile.ZipFile) -> str:
-    """Map the ex-ante sheet name to its worksheet XML member."""
+def _resolve_sheet_path(z: zipfile.ZipFile, prefix: str = _SHEET_PREFIX) -> str:
+    """Map the first sheet whose name starts with ``prefix`` (the ex-ante
+    sheet by default) to its worksheet XML member."""
     wb = ET.fromstring(z.read("xl/workbook.xml"))
     rid = None
     for sheet in wb.iter(_NS + "sheet"):
-        if (sheet.get("name") or "").startswith(_SHEET_PREFIX):
+        if (sheet.get("name") or "").startswith(prefix):
             rid = sheet.get(_REL_NS + "id")
             break
     if rid is None:
-        raise KeyError(f"no sheet starting {_SHEET_PREFIX!r}")
+        raise KeyError(f"no sheet starting {prefix!r}")
     rels = ET.fromstring(z.read("xl/_rels/workbook.xml.rels"))
     for rel in rels.iter(_PKG_REL_NS + "Relationship"):
         if rel.get("Id") == rid:

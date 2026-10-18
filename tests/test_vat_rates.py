@@ -16,7 +16,6 @@ from custom_components.be_electricity_prices.const import (
     REGION_WALLONIA,
     VAT_RATE_REDUCED,
     VAT_RATE_STANDARD,
-    VREG_NETWORK_CEILING_HTVA,
 )
 from custom_components.be_electricity_prices.providers import (
     _bolt_cards,
@@ -42,7 +41,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
-from tests import fixture_text, make_snapshot
+from tests import FLUVIUS_CEILINGS, fixture_text, make_snapshot
 from tests.test_card_vat import _restated
 
 # Lays out real cards, Bolt's among them, which ran past 60 s with no
@@ -227,11 +226,11 @@ def test_the_regulated_figures_follow_the_months_rate(
     assert excise == pytest.approx(_LAW_EXCISE * 1.07)
     assert resolve_federal_excise(fluvius, OCT, professional=False) is fluvius
     ceiling = (
-        resolve_vreg_network_ceiling(fluvius, NOV)
+        resolve_vreg_network_ceiling(fluvius, NOV, FLUVIUS_CEILINGS[2026])
         .dsos["fluvius_antwerpen"]
         .network_ceiling_eur_per_kwh
     )
-    assert ceiling == pytest.approx(VREG_NETWORK_CEILING_HTVA * 1.07)
+    assert ceiling == pytest.approx(FLUVIUS_CEILINGS[2026] * 1.07)
     sibelga = make_snapshot(
         dsos={
             "sibelga": DsoOverlay(

@@ -332,21 +332,23 @@ tranche on every kWh.
 The ceiling is the VREG's, not the card's. It is one rate for the whole of
 Flanders per calendar year, so a card stating another one is wrong rather than
 different, which is the reasoning `resolve_federal_excise` already follows for
-the excise. `VREG_NETWORK_CEILING_HTVA` (`const.py`) holds it EXCLUDING VAT as
-the regulator sets it, with a `KNOWN_FROM` / `KNOWN_UNTIL` window, and
-`resolve_vreg_network_ceiling` (`providers/_resolve.py`) puts it on every Fluvius
-overlay inside that window, except on the social tariff, whose CREG network
-component replaces the operator's tariffs and has no capacity term to cap.
+the excise. `fluvius.py` reads it, EXCLUDING VAT as the regulator sets it,
+off Fluvius's tariff sheet of the delivery year (see
+[data sources](data-sources.md#part-6-the-vreg-network-ceiling-read-from-fluviuss-tariff-sheet-fluviuspy)),
+and `resolve_vreg_network_ceiling` (`providers/_resolve.py`) puts it on every
+Fluvius overlay, except on the social tariff, whose CREG network component
+replaces the operator's tariffs and has no capacity term to cap. A year whose
+sheet has not been read keeps the figure the card prints.
 
 Five suppliers read it correctly and are unaffected: Luminus, Frank and
 energie.be print 0,3472738 including the 6%, and energie.be's professional
 card and Ecopower print the 0,3276168 behind it. DATS 24 is what settles that
 it is not a per-DSO term, printing it as a COLUMN of its DSO table with eight
 identical copies, one per Fluvius area. Mega and Bolt print 0,2035480 instead,
-which would cap about 1,7 times too tight and UNDER-bill; Bolt prints that
-figure on its Wallonia and Brussels cards too, where no VREG tariff exists,
-and on its professional card without the VAT conversion Mega does make, so it
-is boilerplate rather than a reading. Ten further suppliers print no ceiling
+the 2023 and 2024 ceiling (0,1920264 before VAT), which would cap about 1,7
+times too tight and UNDER-bill; Bolt prints that figure on its Wallonia and
+Brussels cards too, where no VREG tariff exists, and on its professional card
+without the VAT conversion Mega does make. Ten further suppliers print no ceiling
 at all, so the cap simply never bound for their Flemish entries.
 
 It is resolved BEFORE `apply_vat`, which rewrites `vat_rate` to 0 for an entry

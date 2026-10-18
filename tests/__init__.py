@@ -62,6 +62,9 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
+# The maximumtarief each year's Fluvius tariff sheet prints, EUR/kWh excl. VAT,
+# which conftest holds in place of the network.
+FLUVIUS_CEILINGS = {2023: 0.1920264, 2024: 0.1920264, 2025: 0.3276168, 2026: 0.3276168}
 PACKAGE = (
     Path(__file__).resolve().parent.parent
     / "custom_components"

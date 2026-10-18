@@ -68,6 +68,7 @@ from .const import (
     SUPPLIER_SOCIAL,
 )
 from .excise_law import household_schedule
+from .fluvius import cached_network_ceiling
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
 from .providers._resolve import (
     apply_vat,
@@ -334,7 +335,9 @@ def _resolve_snapshot(
     # it decides the two federal levies below: the VREG sets one ceiling for
     # all of Flanders per calendar year, so a card stating another one is out
     # of date rather than different.
-    resolved = resolve_vreg_network_ceiling(resolved, month)
+    resolved = resolve_vreg_network_ceiling(
+        resolved, month, cached_network_ceiling(month.year)
+    )
     resolved = apply_vat(resolved, include_vat=_include_vat(entry))
     # The two federal levies, both defined by the month being billed rather
     # than by the card that prints them. A business on the custom supplier

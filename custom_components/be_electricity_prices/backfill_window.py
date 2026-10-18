@@ -67,6 +67,7 @@ from .const import (
     DSO_MODE_BI_HORAIRE,
     METER_MONO,
     REGION_BRUSSELS,
+    REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
 )
 from .contract_periods import (
@@ -77,6 +78,7 @@ from .contract_periods import (
 )
 from .coordinator import BePricesCoordinator
 from .day_night import day_start_for
+from .fluvius import ensure_network_ceiling
 from .injection import _injection_hourly_on_cohort
 from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
@@ -383,9 +385,14 @@ async def _build_context(
     # year, so a run reaching back into a finished year found nothing there
     # and rebuilt those rows without the term, disagreeing with the live
     # sensor beside them. The coordinator tick only ever fetches this year.
+    years = sorted({dt_util.as_local(hour).year for hour in hours})
     if region == REGION_BRUSSELS:
-        for year in sorted({dt_util.as_local(hour).year for hour in hours}):
+        for year in years:
             await ensure_power_term(coordinator._session, year)
+    # The VREG network ceiling of a Flemish entry, for the same reason.
+    if region == REGION_FLANDERS:
+        for year in years:
+            await ensure_network_ceiling(coordinator._session, year)
     return _BackfillContext(
         region=region,
         day_start=day_start_for(entry.data),

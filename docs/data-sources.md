@@ -1123,3 +1123,48 @@ The parser is tested on the page as Justel served it on 2026-10-09
 in place of the network, the archived copy on the one served on 2026-10-15
 (`tests/fixtures/justel_loi_programme_2004_fr_arch070.html`) and the law of
 19 March 2023 on the same day (`tests/fixtures/justel_loi_2023_03_19_fr.html`).
+
+## Part 6: the VREG network ceiling, read from Fluvius's tariff sheet (`fluvius.py`)
+
+### Why it exists
+
+The VREG's `maximumtarief` caps what a Flemish digital-meter connection pays
+in distribution charges per kWh: the capacity term and the per-kWh network
+term together, excluding data management (see
+[the pricing model](pricing-model.md#the-flemish-network-ceiling)). It is one
+rate for the whole of Flanders per calendar year, and the cards disagree about
+it: four print the current figure, Mega and Bolt the 2023 and 2024 one, and
+ten print none. vreg.be answers nothing from this host, so the figure is read
+from the copy Fluvius publishes of the tariffs the regulator approved.
+
+### What it fetches and how
+
+Fluvius's "Netkosten afname elektriciteit" page lists one workbook per network
+area and year, each through a publication page of its own named after the
+year it covers (`...-afname-elektriciteit-01012026-31122026`). `fluvius.py`
+takes the first such page for the year, follows its link to the `.xlsx`, and
+reads the first worksheet with the stdlib zip reader and `defusedxml`, through
+the helpers `synergrid.py` already uses. The sheet must title itself the
+year's "Tarieflijst periodieke distributienettarieven". Two rows are read: the
+capacity rate's ("Gemiddelde maandpiek"), whose only figure sits in the
+column a peak-metered low-voltage connection is billed on, and the
+"Maximumtarief" row, whose figure in that column is the ceiling. The column is
+found that way because up to 2024 a transformer-station column also headed
+"piekmeting" comes first. Every area's sheet prints the same figure:
+0,3276168 EUR/kWh excluding VAT in all eight for 2025 and 2026, 0,1920264 in
+2023 and 2024. A figure outside 0,1 to 1 EUR/kWh is a misread and refused.
+
+### Caching and failure
+
+`ensure_network_ceiling` runs in the tick of a Flemish entry, before the card
+is resolved, and for every year a backfill window spans. A year read is held
+for the life of the process; a failure is held for six hours. Without the
+year's figure `resolve_vreg_network_ceiling` leaves the card exactly as
+printed, which is what the integration did before the sheet was read. Nothing
+here raises, for the reason `brugel.py` gives. The live check reads this
+year's and last year's sheet through the same module, files
+`_federal: Fluvius <year> tariff sheet unreadable` when this year's cannot be
+read, and compares the cards' printed ceilings against it.
+
+The parser is tested on the 2026 Zenne-Dijle sheet and the 2023 Antwerpen one
+as Fluvius served them on 2026-10-19 (`tests/fixtures/fluvius_*.xlsx`).

@@ -262,11 +262,13 @@ class BePricesCoordinator(
         # Brussels billed 50,07 EUR a year less until the yearly volume next
         # moved, and never at all on an entry with no meter configured.
         self._snapshot_power_term: tuple[float, float] | None = None
+        # The same for the VREG ceiling read off Fluvius's sheet (fluvius.py).
+        self._snapshot_ceiling: float | None = None
         # The VAT rates the snapshot was resolved at (coordinator_snapshot.py).
         self._snapshot_vat: tuple[float, float] = (0.0, 0.0)
         self._snapshot_excise: tuple[float | None, float | None] = (None, None)
         # And the month, which the resolver reads for the VREG ceiling's
-        # window and the federal contribution's gate.
+        # year and the federal contribution's gate.
         self._snapshot_month: tuple[int, int] | None = None
         self._snapshot_fetched_at: datetime | None = None
         self._snapshot_probe_key: str | None = None

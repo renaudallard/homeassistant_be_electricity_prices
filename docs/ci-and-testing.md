@@ -74,6 +74,7 @@ machinery.
 | `tests/test_engie.py` | Engie extractor |
 | `tests/test_excise_law.py` | The federal excise read from article 419 on Justel (`excise_law.py`), the household schedule read from its archived copy, started after the transition its law fixed and billed on a card standing in for one of its months, their store round trip, and `resolve_federal_excise` billing the law |
 | `tests/test_brugel.py` | Brugel's published Sibelga power term (`brugel.py`) and the card it completes |
+| `tests/test_fluvius.py` | The VREG network ceiling read off Fluvius's yearly tariff sheet (`fluvius.py`), on two real workbooks, and the restart that has to put it back on a stored card |
 | `tests/test_creg_ev.py` | The CREG home charging reimbursement rate and the sensor that carries it |
 | `tests/test_synergrid_rlp.py` | Synergrid RLP profile fetch and parse (the `.xlsb` workbook) and the RLP-weighted month mean |
 | `tests/test_synergrid_spp.py` | Synergrid SPP profile fetch and parse and the SPP-weighted custom injection |
@@ -1460,7 +1461,7 @@ the script through a fake `gh`.
 | bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-product-gone` | `[live-check] a registered product left the supplier listing`, when no new product is among the failures and a registered one is gone |
 | bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-discovery` | `[live-check] supplier product discovery failed`, when no product is new or gone among the failures |
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees` |
-| bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax-window` | `[live-check] a federal constant window needs extending`, when every failure is a window reminder |
+| bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax-fluvius` | `[live-check] the Fluvius tariff sheet can no longer be read`, when that is the only failure |
 | bit 1 (rc 2/3/6/7) | Open or update network-figure issue | `live-check-network` | `[live-check] a supplier's network figure disagrees` |
 | bit 1 (rc 2/3/6/7) | Open or update card-editions issue | `live-check-editions` | `[live-check] a supplier's French and Dutch cards disagree` |
 
@@ -1493,13 +1494,14 @@ five: Electricité Variable in Wallonia charges a 100,00 EUR fee in French and 9
 and four Dutch addresses serve another product, a gas card or a formula with a comma.
 
 The tax report carries four kinds of row: a supplier whose federal block disagrees with the
-month's consensus (`_check_federal_tax_consensus`), the same for the VREG network ceiling
-(`_check_vreg_ceiling_consensus`) and for the VAT rate (`_check_vat_consensus`), and the standing request to extend the VREG ceiling window before it
-lapses (`_check_vreg_ceiling_window`, silent until eight weeks out).
+month's consensus (`_check_federal_tax_consensus`), a card whose VREG network ceiling disagrees
+with the one Fluvius's sheet prints for its year (`_check_vreg_ceiling_consensus`), the same for
+the VAT rate (`_check_vat_consensus`), and this year's Fluvius sheet no longer reading
+(`_check_fluvius_sheet`), which the integration would otherwise survive silently by billing each
+card's own ceiling.
 All are supplier- or maintainer-side rather than a break here, which is why they share a thread
-and fail no pull request. The issue is titled after what failed, as the products one is: a run
-whose only failures are window reminders files under the window title, so the triager is
-not sent looking for a card printing a wrong levy. Every title has its own label: the thread is
+and fail no pull request. The issue is titled after what failed, as the products one is, so the
+triager is not sent looking for a card printing a wrong levy. Every title has its own label: the thread is
 found by its label and the title is only read when an issue is opened, so two titles sharing one
 posted each problem inside the other's open issue (`test_every_issue_title_files_under_its_own_label`).
 
@@ -1518,15 +1520,14 @@ one row named after the first of them, so an allowance granted to Aspiravi would
 any other card printing its July block.
 
 `_KNOWN_VREG_CEILINGS` is the same mechanism for the same reason, and shipped a day later than
-the check it quiets: Bolt prints 0,2035480 where the three other suppliers whose cards the
+the check it quiets: Bolt prints 0,2035480, the 2023 and 2024 ceiling, where the three other suppliers whose cards the
 shared reader matches in that month print 0,3472738 (five cards state the figure in all, but
 DATS 24 and Ecopower state it as a table column this reader cannot see), and
-`resolve_vreg_network_ceiling` bills the regulator's figure regardless, so the card is worth
+`resolve_vreg_network_ceiling` bills the sheet's figure regardless, so the card is worth
 reporting and not worth failing a run over daily. Keyed on the exact (supplier, ceiling) pair
-and expiring with `VREG_NETWORK_CEILING_KNOWN_UNTIL`, which is the month the constant stops
-being applied at all and every allowance under it has to be looked at again. A MAJORITY
-disagreeing is never allowed: that says the regulator moved and the constant is stale, so it
-stays a hard failure naming the constant rather than the cards.
+and expiring on 2027-01-01, when every card is reprinted. A MAJORITY disagreeing is never
+allowed: that says the sheet is being misread, so it stays a hard failure naming Fluvius's
+sheet rather than the cards.
 
 That verdict needs a fleet to be a majority of, so it is held behind a quorum
 (`_VREG_CONSENSUS_QUORUM`, two cards PRINTING the sentence, not two agreeing

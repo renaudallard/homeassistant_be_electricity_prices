@@ -1,0 +1,246 @@
+# Copyright (c) 2026, Renaud Allard <renaud@allard.it>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+"""Fluvius's yearly tariff sheet and the VREG network ceiling read off it."""
+
+from __future__ import annotations
+
+import zipfile
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from custom_components.be_electricity_prices import fluvius
+from tests import FakeBody
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+# The 2026 sheet of one area, as Fluvius serves it.
+_SHEET_2026 = (_FIXTURES / "fluvius_zenne_dijle_2026.xlsx").read_bytes()
+# A 2023 sheet, whose transformer-station column is headed "piekmeting" too and
+# comes before the low-voltage one.
+_SHEET_2023 = (_FIXTURES / "fluvius_antwerpen_2023.xlsx").read_bytes()
+
+_PUBLICATION = (
+    "/nl/publicatie/fluvius-zenne-dijle-distributienettarief-afname-elektriciteit"
+    "-01012026-31122026"
+)
+_WORKBOOK = (
+    "/sites/fluvius/files/2025-11/distributienettarieven-elektriciteit-afname-"
+    "fluvius-zenne-dijle-01012026-31122026.xlsx"
+)
+
+
+@pytest.fixture(autouse=True)
+def _nothing_held() -> None:
+    """conftest holds the published figures; these tests read them."""
+    fluvius._cache.clear()
+    fluvius._failed_at.clear()
+
+
+def test_the_ceiling_is_read_off_the_years_sheet() -> None:
+    assert fluvius.parse_network_ceiling(_SHEET_2026, 2026) == 0.3276168
+    # Another year's sheet is not this year's.
+    assert fluvius.parse_network_ceiling(_SHEET_2026, 2027) is None
+
+
+def test_the_low_voltage_column_is_found_by_its_capacity_rate() -> None:
+    """Up to 2024 the first "piekmeting" column is the transformer stations',
+    whose maximumtarief is 0,0905158; the household's is the capacity rate's."""
+    assert fluvius.parse_network_ceiling(_SHEET_2023, 2023) == 0.1920264
+
+
+def test_a_figure_outside_the_bounds_is_refused(tmp_path: Path) -> None:
+    """A unit slip is not a ceiling: the same sheet printing ten times the
+    figure yields nothing rather than a cap ten times too loose."""
+    out = tmp_path / "slipped.xlsx"
+    with (
+        zipfile.ZipFile(_FIXTURES / "fluvius_zenne_dijle_2026.xlsx") as src,
+        zipfile.ZipFile(out, "w") as dst,
+    ):
+        for info in src.infolist():
+            data = src.read(info)
+            if info.filename == "xl/worksheets/sheet1.xml":
+                assert data.count(b"<v>0.32761679999999999</v>") == 1
+                data = data.replace(
+                    b"<v>0.32761679999999999</v>", b"<v>3.2761679999999999</v>"
+                )
+            dst.writestr(info, data)
+    assert fluvius.parse_network_ceiling(out.read_bytes(), 2026) is None
+
+
+class _Response:
+    def __init__(self, body: bytes, status: int = 200) -> None:
+        self.status = status
+        self.content_length = None
+        self.charset = "utf-8"
+        self.history = ()
+        self.content = FakeBody(body)
+
+    def raise_for_status(self) -> None:
+        if self.status >= 400:
+            raise RuntimeError(f"HTTP {self.status}")
+
+    async def __aenter__(self) -> _Response:
+        return self
+
+    async def __aexit__(self, *_a: object) -> bool:
+        return False
+
+
+class _Session:
+    """Fluvius's listing, publication page and workbook, by address."""
+
+    def __init__(self, workbook: bytes = _SHEET_2026) -> None:
+        self.pages = {
+            fluvius._LISTING_URL: f'<a href="{_PUBLICATION}">Zenne-Dijle</a>'.encode(),
+            fluvius._SITE + _PUBLICATION: f'<a href="{_WORKBOOK}">XLSX</a>'.encode(),
+            fluvius._SITE + _WORKBOOK: workbook,
+        }
+        self.asked: list[str] = []
+
+    def get(self, url: str, *_a: object, **_k: object) -> _Response:
+        self.asked.append(url)
+        body = self.pages.get(url)
+        return _Response(b"", 404) if body is None else _Response(body)
+
+
+async def test_the_sheet_is_found_from_the_listing_and_kept() -> None:
+    session: Any = _Session()
+    assert await fluvius.ensure_network_ceiling(session, 2026) == 0.3276168
+    assert session.asked == [
+        fluvius._LISTING_URL,
+        fluvius._SITE + _PUBLICATION,
+        fluvius._SITE + _WORKBOOK,
+    ]
+    assert fluvius.cached_network_ceiling(2026) == 0.3276168
+    session.asked.clear()
+    assert await fluvius.ensure_network_ceiling(session, 2026) == 0.3276168
+    assert session.asked == [], "a held year was fetched again"
+
+
+async def test_a_year_not_listed_yet_yields_nothing_until_the_backoff() -> None:
+    session: Any = _Session()
+    assert await fluvius.ensure_network_ceiling(session, 2027) is None
+    assert fluvius.cached_network_ceiling(2027) is None
+    session.asked.clear()
+    assert await fluvius.ensure_network_ceiling(session, 2027) is None
+    assert session.asked == [], "the backoff did not hold"
+
+
+@pytest.mark.parametrize(
+    ("label", "body"),
+    [
+        ("a maintenance page answered with 200", b"<html>maintenance</html>"),
+        ("an empty body", b""),
+        ("a truncated workbook", _SHEET_2026[:4000]),
+    ],
+)
+async def test_a_body_that_is_not_a_sheet_never_raises(label: str, body: bytes) -> None:
+    """The fetch runs inside the coordinator tick, whose only handler is for
+    UpdateFailed, so anything escaping here would take the device down."""
+    session: Any = _Session(body)
+    assert await fluvius.ensure_network_ceiling(session, 2026) is None, label
+    assert 2026 in fluvius._failed_at
+
+
+def test_the_sheet_is_read_before_the_card_is_resolved() -> None:
+    """The resolver reads the cache synchronously and cannot await, so the
+    year's ceiling has to be there before the tick resolves its card, as
+    Brugel's term does. Held on the source: the defect would be an ordering
+    one."""
+    import inspect
+
+    from custom_components.be_electricity_prices import backfill, snapshot_resolve
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+
+    body = inspect.getsource(BePricesCoordinator._update_body)
+    assert body.index("ensure_network_ceiling(") < body.index(
+        "_maybe_refresh_snapshot()"
+    )
+    resolver = inspect.getsource(snapshot_resolve._resolve_snapshot)
+    assert "cached_network_ceiling(month.year)" in resolver
+    # A backfill asks for every year its window prices, not just this one.
+    context = inspect.getsource(backfill._build_context)
+    assert "ensure_network_ceiling(coordinator._session, year)" in context
+
+
+async def test_a_restart_puts_the_ceiling_on_the_stored_card(hass: Any) -> None:
+    """The cache is a module global, empty after every restart, and the stored
+    card is resolved before the first refresh reads the sheet. Unless the
+    ceiling is stamped, the tick that reads it keeps the card as it booted,
+    on the ceiling the card prints, until the volume next moves."""
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.be_electricity_prices.const import (
+        DOMAIN,
+        DSO_FLUVIUS_ANTWERPEN,
+    )
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        TaxOverlay,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "mega",
+            "contract": "mega_fix",
+            "region": "flanders",
+            "dso": DSO_FLUVIUS_ANTWERPEN,
+            "meter": "mono",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    card = make_snapshot(
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.0),
+        dsos={
+            DSO_FLUVIUS_ANTWERPEN: DsoOverlay(
+                distribution_single=0.0535,
+                transport=0.0,
+                capacity_eur_per_kw_year=52.37,
+                network_ceiling_eur_per_kwh=0.2035480,
+            )
+        },
+    )
+    coord._set_snapshot(card)
+    booted = coord._snapshot
+    assert booted is not None
+    coord._reresolve_snapshot()
+    assert coord._snapshot is booted
+
+    fluvius._cache[dt_util.now().year] = 0.3276168
+    coord._reresolve_snapshot()
+    assert coord._snapshot is not booted
+    overlay = coord._snapshot.dsos[DSO_FLUVIUS_ANTWERPEN]
+    assert overlay.network_ceiling_eur_per_kwh == pytest.approx(0.3276168 * 1.06)

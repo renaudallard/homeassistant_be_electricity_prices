@@ -50,7 +50,7 @@ import sys
 import time
 import traceback
 import types
-from collections.abc import Awaitable, Callable, Iterable, Iterator
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
@@ -128,13 +128,11 @@ def _load_providers() -> dict[str, types.ModuleType]:
 
     const = _load("be_pkg.const", PKG / "const.py")
     global _FLUVIUS_KEYS, _WALLONIA_DSO_KEYS, _BRUSSELS_DSO_KEYS
-    global _VREG_CEILING_HTVA, _VREG_CEILING_KNOWN_UNTIL, _VAT_RATE_REDUCED
+    global _VAT_RATE_REDUCED
     global _MAX_WELCOME_CREDIT_MONTHS
     _FLUVIUS_KEYS = const.FLUVIUS_KEYS
     _WALLONIA_DSO_KEYS = const.WALLONIA_DSO_KEYS
     _BRUSSELS_DSO_KEYS = const.BRUSSELS_DSO_KEYS
-    _VREG_CEILING_HTVA = const.VREG_NETWORK_CEILING_HTVA
-    _VREG_CEILING_KNOWN_UNTIL = const.VREG_NETWORK_CEILING_KNOWN_UNTIL
     _VAT_RATE_REDUCED = const.VAT_RATE_REDUCED
     _MAX_WELCOME_CREDIT_MONTHS = const.MAX_QUOTED_WELCOME_WAIT_MONTHS
     _EXPECTED_DSOS.update(
@@ -184,8 +182,11 @@ def _load_providers() -> dict[str, types.ModuleType]:
     # ModuleNotFoundError, and the first version of the spot-fallback check
     # did exactly that and never ran.
     api = _load("be_pkg.api", PKG / "api.py")
-    global _ENERGY_CHARTS_CLIENT
+    global _ENERGY_CHARTS_CLIENT, _ENSURE_NETWORK_CEILING
     _ENERGY_CHARTS_CLIENT = api.EnergyChartsClient
+    # The integration's own reader of Fluvius's sheet, for the same reason.
+    fluvius = _load("be_pkg.fluvius", PKG / "fluvius.py")
+    _ENSURE_NETWORK_CEILING = fluvius.ensure_network_ceiling
     loaded = {
         supplier: _load(
             f"be_pkg.providers.{supplier}", PKG / "providers" / f"{supplier}.py"
@@ -270,8 +271,6 @@ _FLUVIUS_KEYS: frozenset[str] = frozenset()
 _WALLONIA_DSO_KEYS: frozenset[str] = frozenset()
 _BRUSSELS_DSO_KEYS: frozenset[str] = frozenset()
 # Filled from const.py by the loader above, like the DSO key sets.
-_VREG_CEILING_HTVA: float = 0.3276168
-_VREG_CEILING_KNOWN_UNTIL: tuple[int, int] = (2027, 1)
 _VAT_RATE_REDUCED: float = 0.06
 # How many cards have to PRINT the sentence before a disagreeing majority
 # among them is read as the regulator having moved. Two is the smallest number
@@ -356,6 +355,8 @@ _EXTRACTOR_ERROR: type[Exception] = RuntimeError
 # changes shape under it fails here instead of silently at a user's next
 # ENTSO-E outage.
 _ENERGY_CHARTS_CLIENT: Any = None
+# Bound by _load_providers to fluvius.ensure_network_ceiling.
+_ENSURE_NETWORK_CEILING: Any = None
 
 
 # Per-supplier fetch-time (summed per-request durations) + bytes-received
@@ -663,16 +664,13 @@ _KNOWN_TAX_BLOCKS: dict[tuple[str, float, float], tuple[date, str]] = {
 # a known tax block, and reported the same way. Keyed on the exact figure, so
 # a supplier that changes it by a digit stops matching and files.
 #
-# The expiry is the one the constant carries
-# (VREG_NETWORK_CEILING_KNOWN_UNTIL): when the window lapses every card is
-# read as printed again and each of these has to be looked at afresh.
+# Every allowance expires on 2027-01-01, when the DSOs publish next year's
+# tariffs and every card is reprinted.
 _KNOWN_VREG_CEILINGS: dict[tuple[str, float], tuple[date, str]] = {
     ("bolt", 0.2035480): (
         date(2027, 1, 1),
-        "prints a figure three other suppliers contradict in the same month, "
-        "on its Wallonia and "
-        "Brussels cards too where no VREG tariff applies; billed from the "
-        "regulator either way",
+        "prints the 2023 and 2024 ceiling, on its Wallonia and Brussels cards "
+        "too where no VREG tariff applies; billed from Fluvius's sheet either way",
     ),
 }
 
@@ -2856,59 +2854,12 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
 _OFF_MARKET_SUPPLIERS = frozenset({"social"})
 
 
-# How long before the VREG ceiling window lapses the check starts asking for
-# it to be extended. Long enough to read the new figure off January's cards,
-# check it against the fleet and ship, without nagging for a quarter.
-_WINDOW_NOTICE = timedelta(days=56)
-
-
-def _check_vreg_ceiling_window(today: date | None = None) -> None:
-    """Ask for the VREG ceiling window to be extended before it lapses.
-
-    ``resolve_vreg_network_ceiling`` bills the regulator's maximumtarief
-    instead of a card's copy of it, but only for months inside
-    ``VREG_NETWORK_CEILING_KNOWN_FROM`` .. ``_KNOWN_UNTIL``, because the
-    distribution tariffs are set per calendar year and encoding next year's
-    before it is published would bill a prediction. Past the window every card
-    is read as printed again, which puts Mega and Bolt back on a figure 1,7
-    times too tight and drops the cap entirely for the ten suppliers that
-    print none.
-
-    Nothing in the code can know next year's rate, so this asks a person, on
-    the same principle as the archive workflow warning before its upload token
-    expires. Reported as a tax row, so it files in the thread the federal block
-    already uses and fails no pull request.
-    """
-    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
-    lapses = date(*_VREG_CEILING_KNOWN_UNTIL, 1)
-    if today < lapses - _WINDOW_NOTICE:
-        return
-    left = (lapses - today).days
-    when = (
-        f"in {left} days"
-        if left > 0
-        else f"{-left} days ago, and it is billing cards as printed"
-    )
-    _record(
-        "_federal: the VREG ceiling window needs extending",
-        False,
-        f"the regulator's maximumtarief is applied to months before "
-        f"{lapses.isoformat()}, which lapses {when}. Read the new figure off the "
-        "fleet's Flemish cards, check the majority the way "
-        "_check_vreg_ceiling_consensus does, then move VREG_NETWORK_CEILING_HTVA "
-        "and VREG_NETWORK_CEILING_KNOWN_UNTIL (const.py) and re-pin the test. "
-        "Mind the basis: the constant is EXCLUDING VAT as the regulator sets it "
-        f"({_VREG_CEILING_HTVA} = "
-        f"{_VREG_CEILING_HTVA * (1.0 + _VAT_RATE_REDUCED):.7f} including the "
-        "residential rate, which is what most cards print)",
-        kind="tax",
-    )
-
-
 def _check_vreg_ceiling_consensus(
-    archive: Path | None, today: date | None = None
+    archive: Path | None,
+    ceilings: Mapping[int, float | None],
+    today: date | None = None,
 ) -> None:
-    """Assert the Flemish cards that print a ceiling agree with the constant.
+    """Assert the Flemish cards that print a ceiling agree with Fluvius's sheet.
 
     The maximumtarief is one rate for the whole of Flanders, so a card stating
     another one is wrong. Read from the card TEXT, not from the archived
@@ -2916,10 +2867,15 @@ def _check_vreg_ceiling_consensus(
     snapshot would be tautological, and the field only started being parsed at
     schema 65 so older rows carry ``None`` whatever their card said.
 
+    ``ceilings`` is the maximumtarief of each year's sheet, ex-VAT, as the
+    integration reads it (``fluvius.ensure_network_ceiling``); a month whose
+    year it does not hold is not checked, and
+    :func:`_check_fluvius_sheet` reports that.
+
     Two things it catches. A single supplier drifting, which is what Bolt does
-    at 0,2035480 against the others' 0,3472738. And the constant itself going
-    stale, which shows as the MAJORITY disagreeing: that is the signal to move
-    the window rather than to file against a card.
+    at 0,2035480 against the others' 0,3472738. And the sheet being misread,
+    which shows as the MAJORITY disagreeing: that is the signal to look at
+    the reader rather than to file against a card.
 
     Only what the shared reader sees. Mega states the same wrong figure in a
     phrasing ``parse_vreg_network_ceiling`` does not match ("Ce tarif maximum
@@ -2946,6 +2902,9 @@ def _check_vreg_ceiling_consensus(
     for row in rows:
         counts[row.stem] = counts.get(row.stem, 0) + 1
     month = max(counts, key=lambda stem: (counts[stem], stem))
+    sheet = ceilings.get(int(month[:4]))
+    if sheet is None:
+        return
     printed: dict[str, float] = {}
     for row in rows:
         if row.stem != month or row.parts[-4] in printed:
@@ -2964,11 +2923,11 @@ def _check_vreg_ceiling_consensus(
             break
     if not printed:
         return
-    tvac = _VREG_CEILING_HTVA * (1.0 + _VAT_RATE_REDUCED)
+    tvac = sheet * (1.0 + _VAT_RATE_REDUCED)
     agree = {
         name
         for name, value in printed.items()
-        if min(abs(value - tvac), abs(value - _VREG_CEILING_HTVA)) < 5e-6
+        if min(abs(value - tvac), abs(value - sheet)) < 5e-6
     }
     odd = sorted(set(printed) - agree)
     if not odd:
@@ -2978,7 +2937,7 @@ def _check_vreg_ceiling_consensus(
     # counts toward the quorum. Bolt prints one, and is one of only four
     # suppliers whose sentence the reader matches: with one card unread and
     # another moved, its vote made the stale side a majority and the run
-    # asked for the constant to be moved.
+    # asked for the figure billed to be moved.
     allowances = {
         name: _vreg_ceiling_allowance(name, printed[name], today) for name in odd
     }
@@ -2991,13 +2950,13 @@ def _check_vreg_ceiling_consensus(
     # moves the ceiling and the cards follow, every printing card lands in
     # ``odd``, ``agree`` collapses to zero, and a gate on ``len(agree)`` can
     # never open however many cards moved. The rows below would then call the
-    # CORRECT cards stale and say no money is lost, while the stale constant is
+    # CORRECT cards stale and say no money is lost, while a misread sheet is
     # what is being billed. Only four suppliers print the sentence at all, so
     # that gate needed five printing cards to ever report a fleet-wide move.
     #
     # The floor is still worth having, and it is a floor on the EVIDENCE: one
     # card is not a fleet, so a month that captured a single stale card and
-    # none of its peers says nothing about the constant. Below it the
+    # none of its peers says nothing about the sheet. Below it the
     # per-supplier rows still file, and those say the card is stale, which is
     # the claim one card can support.
     #
@@ -3005,13 +2964,13 @@ def _check_vreg_ceiling_consensus(
     # that is only as large as its runner-up.
     if len(moved) > len(agree) and seen >= _VREG_CONSENSUS_QUORUM:
         _record(
-            "_federal: the VREG ceiling constant disagrees with the fleet",
+            "_federal: Fluvius's VREG ceiling disagrees with the fleet",
             False,
             f"{len(moved)} of {seen} Flemish cards printing a "
-            f"maximumtarief for {month} disagree with VREG_NETWORK_CEILING_HTVA "
-            f"({_VREG_CEILING_HTVA} ex-VAT, {tvac:.7f} incl.): {detail}. A "
-            "majority means the regulator moved it and the constant needs "
-            "updating, not that the cards are wrong",
+            f"maximumtarief for {month} disagree with Fluvius's sheet "
+            f"({sheet} ex-VAT, {tvac:.7f} incl.): {detail}. A majority means "
+            "the sheet is being misread (fluvius.py), not that the cards are "
+            "wrong",
             kind="tax",
         )
         return
@@ -3020,7 +2979,7 @@ def _check_vreg_ceiling_consensus(
     for name in odd:
         line = (
             f"{month}: {name} prints {printed[name]:.7f} against the fleet's "
-            f"{tvac:.7f} including VAT ({_VREG_CEILING_HTVA} excluding it) on "
+            f"{tvac:.7f} including VAT ({sheet} excluding it) on "
             f"{len(agree)} other suppliers. The ceiling is one rate for all of "
             "Flanders, so this card is stale; resolve_vreg_network_ceiling "
             "already bills the regulator's figure, so it is a card to report "
@@ -3035,6 +2994,40 @@ def _check_vreg_ceiling_consensus(
             line,
             kind="tax",
         )
+
+
+async def _fluvius_ceilings(
+    session: aiohttp.ClientSession, today: date | None = None
+) -> dict[int, float | None]:
+    """This year's and last year's maximumtarief off Fluvius's sheets."""
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    return {
+        year: await _ENSURE_NETWORK_CEILING(session, year)
+        for year in (today.year - 1, today.year)
+    }
+
+
+def _check_fluvius_sheet(
+    ceilings: Mapping[int, float | None], today: date | None = None
+) -> None:
+    """Assert this year's Fluvius tariff sheet can still be read.
+
+    Without it the integration bills the ceiling each card prints, which for
+    Mega and Bolt is the 2023 one, and nothing else would say the reader broke.
+    Reported as a tax row, so it files in the federal block's thread and fails
+    no pull request.
+    """
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    if ceilings.get(today.year) is not None:
+        return
+    _record(
+        f"_federal: Fluvius {today.year} tariff sheet unreadable",
+        False,
+        "the maximumtarief could not be read off this year's Fluvius sheet, so "
+        "Flemish cards are billed with the ceiling they print; see fluvius.py "
+        "and the listing it starts from",
+        kind="tax",
+    )
 
 
 def _check_federal_tax_consensus(
@@ -5381,15 +5374,17 @@ async def _run(texts: Path | None = None) -> int:
             # gate, which is the one check that sees a supplier superseding
             # a card we still resolve.
             try:
-                _check_vreg_ceiling_window()
+                ceilings = await _fluvius_ceilings(session)
+                _check_fluvius_sheet(ceilings)
             except Exception as err:
+                ceilings = {}
                 _record(
-                    "_federal: VREG ceiling window check crashed",
+                    "_federal: Fluvius sheet check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                 )
             try:
-                _check_vreg_ceiling_consensus(texts)
+                _check_vreg_ceiling_consensus(texts, ceilings)
             except Exception as err:
                 _record(
                     "_federal: VREG ceiling consensus check crashed",

@@ -469,16 +469,16 @@ jobs:
             cat tax_report.md
           } > tax_issue_body.md
 
-          # Titled after what failed, as the products issue is. Two of the
-          # rows are reminders to move a constant before its window lapses,
-          # and filed as a supplier's block they sent the triager looking for
-          # a card printing a wrong levy.
+          # Titled after what failed, as the products issue is. One row says
+          # Fluvius's tariff sheet no longer reads, which is a reader to fix
+          # here, and filed as a supplier's block it would send the triager
+          # looking for a card printing a wrong levy.
           # Each title has its own label, for the reason the products step
           # gives.
           if [ -s tax_failures.txt ] \
-            && ! grep -qv 'window needs extending$' tax_failures.txt; then
-            title='[live-check] a federal constant window needs extending'
-            label='live-check-tax-window'
+            && ! grep -qv 'tariff sheet unreadable$' tax_failures.txt; then
+            title='[live-check] the Fluvius tariff sheet can no longer be read'
+            label='live-check-tax-fluvius'
           else
             title="[live-check] a supplier's federal tax block disagrees"
             label='live-check-tax'
