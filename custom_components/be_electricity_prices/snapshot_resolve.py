@@ -60,7 +60,6 @@ from .const import (
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
-    DEFAULT_CUSTOM_VAT_RATE,
     DEFAULT_DIRECT_DEBIT,
     DEFAULT_INCLUDE_VAT,
     METER_MONO,
@@ -106,8 +105,9 @@ def _include_vat(entry: ConfigEntry) -> bool:
     """
     data = entry.data
     if CONF_INCLUDE_VAT not in data and data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM:
+        # Unset, the rate is the month's residential one, never zero.
         rate = data.get(CONF_CUSTOM_VAT_RATE)
-        return (DEFAULT_CUSTOM_VAT_RATE if rate is None else float(rate)) > 0.0
+        return rate is None or float(rate) > 0.0
     return bool(data.get(CONF_INCLUDE_VAT, DEFAULT_INCLUDE_VAT))
 
 

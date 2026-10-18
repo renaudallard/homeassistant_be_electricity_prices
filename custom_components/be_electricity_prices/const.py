@@ -758,10 +758,10 @@ CONF_CUSTOM_TAX_REGIONAL_RENEWABLES: Final = "custom_tax_regional_renewables"
 CONF_CUSTOM_TAX_REGION_CONNECTION_FEE: Final = "custom_tax_region_connection_fee"
 CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH: Final = "custom_tax_energy_fund_per_month"
 # VAT rate the pricing engine grosses up per component (energy/network/taxes;
-# injection stays exempt). Default 0.06 so users type the excl-VAT coefficients
-# printed on their tariff sheet verbatim.
+# injection stays exempt). Defaults to the month's residential rate
+# (vat_rates.residential_vat) so users type the excl-VAT coefficients printed
+# on their tariff sheet verbatim.
 CONF_CUSTOM_VAT_RATE: Final = "custom_vat_rate"
-DEFAULT_CUSTOM_VAT_RATE: Final = 0.06
 # A business on the custom supplier: the federal excise and energy contribution
 # it typed are the professional scheme's and are billed as typed, where a
 # residential entry's are corrected to the law's residential figures.

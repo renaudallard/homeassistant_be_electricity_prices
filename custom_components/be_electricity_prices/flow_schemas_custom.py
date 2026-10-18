@@ -45,6 +45,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorConfig,
     SelectSelectorMode,
 )
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_CONTRACT,
@@ -89,7 +90,6 @@ from .const import (
     CUSTOM_CONTRACT_MONTHLY,
     CUSTOM_INJECTION_MODE_CURRENT,
     CUSTOM_INJECTION_MODES,
-    DEFAULT_CUSTOM_VAT_RATE,
     DSO_MODE_IMPACT,
     METER_BI,
     METER_DYNAMIC,
@@ -100,6 +100,7 @@ from .const import (
     REGION_WALLONIA,
 )
 from .flow_schemas import _add_manual_num, _custom_num
+from .vat_rates import residential_vat
 
 
 def _add_custom_num(
@@ -319,7 +320,11 @@ def _custom_tax_schema(defaults: dict[str, Any]) -> vol.Schema:
     fields[
         vol.Optional(
             CONF_CUSTOM_VAT_RATE,
-            default=float(defaults.get(CONF_CUSTOM_VAT_RATE, DEFAULT_CUSTOM_VAT_RATE)),
+            default=float(
+                defaults.get(
+                    CONF_CUSTOM_VAT_RATE, residential_vat(dt_util.now().date())
+                )
+            ),
         )
     ] = NumberSelector(
         NumberSelectorConfig(min=0.0, max=1.0, step=0.01, mode=NumberSelectorMode.BOX)

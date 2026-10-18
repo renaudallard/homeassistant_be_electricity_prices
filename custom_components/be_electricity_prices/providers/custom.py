@@ -51,6 +51,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import aiohttp
+from homeassistant.util import dt as dt_util
 
 from ..const import (
     CONF_CONNECTION_KVA_TIER,
@@ -92,13 +93,13 @@ from ..const import (
     CUSTOM_CONTRACT_MONTHLY,
     CUSTOM_INJECTION_MODE_FORMULA,
     DEFAULT_CONNECTION_KVA_TIER,
-    DEFAULT_CUSTOM_VAT_RATE,
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
     SOLAR_REGIME_INJECTION,
     SUPPLIER_CUSTOM,
 )
+from ..vat_rates import residential_vat
 from ._rates import (
     Contract,
     DynamicRates,
@@ -236,7 +237,9 @@ def _build_taxes(data: Mapping[str, Any], region: str) -> TaxOverlay:
             else 0.0
         ),
         energy_fund_eur_per_month=_num(data, CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH),
-        vat_rate=_num(data, CONF_CUSTOM_VAT_RATE, DEFAULT_CUSTOM_VAT_RATE),
+        vat_rate=_num(
+            data, CONF_CUSTOM_VAT_RATE, residential_vat(dt_util.now().date())
+        ),
     )
 
 

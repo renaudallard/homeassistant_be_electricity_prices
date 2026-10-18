@@ -1258,3 +1258,25 @@ def test_the_custom_tax_step_asks_whether_the_contract_is_a_business() -> None:
         const.CONF_CUSTOM_PROFESSIONAL: True,
     }
     assert _custom_tax_schema(stored)({})[const.CONF_CUSTOM_PROFESSIONAL] is True
+
+
+def test_an_unset_custom_vat_rate_is_the_months_residential_one() -> None:
+    """The tax step offers the residential rate of the month, and an entry
+    that never stored a rate bills on it, rather than on a 6% typed here."""
+    from custom_components.be_electricity_prices import vat_rates
+    from custom_components.be_electricity_prices.flow_schemas_custom import (
+        _custom_tax_schema,
+    )
+
+    today = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
+    vat_rates.hold({"residential": {"2026-11": {"rate": 0.07}}})
+    data = {
+        const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+        const.CONF_CUSTOM_ENERGY_SINGLE: 0.10,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.05,
+    }
+    with patch("homeassistant.util.dt.now", return_value=today):
+        schema = _custom_tax_schema({const.CONF_REGION: const.REGION_FLANDERS})
+        snap = build_snapshot(data, const.REGION_FLANDERS, const.DSO_FLUVIUS_ANTWERPEN)
+    assert schema({})[const.CONF_CUSTOM_VAT_RATE] == 0.07
+    assert snap.taxes.vat_rate == 0.07

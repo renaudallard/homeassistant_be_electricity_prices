@@ -147,7 +147,7 @@ the reported components match what the PDF prints exactly.
 
 A non-zero `vat_rate` means the opposite: the snapshot carries the numbers
 **excluding** VAT, at the rate given. The expert custom supplier does this today
-(the user types ex-VAT coefficients, default rate 0.06), and professional cards,
+(the user types ex-VAT coefficients, default rate the month's residential one), and professional cards,
 which print *"Prix tva exclue"* at 21%, do the same.
 
 VAT then has to reach two kinds of value, and only one of them goes through the

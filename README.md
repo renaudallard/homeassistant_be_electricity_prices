@@ -267,7 +267,8 @@ tax step and the two levies you type are billed as typed. The box also puts the
 entry in the professional segment, so the comparisons quote it against
 professional cards, excluding VAT when the VAT rate you typed is 0 and
 including it otherwise. Coefficients
-are entered excluding VAT and the VAT rate grosses them up. The spot and the base
+are entered excluding VAT and the VAT rate grosses them up; its box starts at
+the month's residential rate. The spot and the base
 are both in EUR/kWh, so a formula printed in c€/kWh on a Belpex in EUR/MWh has to
 be converted: (0.1068 × Belpex + 1.5) c€/kWh is a factor of 1.068 and a base of
 0.015. An injection formula works the same way and keeps the sign of its base:
