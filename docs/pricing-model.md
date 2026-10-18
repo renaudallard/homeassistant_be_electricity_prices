@@ -334,7 +334,7 @@ Flanders per calendar year, so a card stating another one is wrong rather than
 different, which is the reasoning `resolve_federal_excise` already follows for
 the excise. `fluvius.py` reads it, EXCLUDING VAT as the regulator sets it,
 off Fluvius's tariff sheet of the delivery year (see
-[data sources](data-sources.md#part-6-the-vreg-network-ceiling-read-from-fluviuss-tariff-sheet-fluviuspy)),
+[data sources](data-sources.md#part-6-the-vreg-network-ceiling-and-capacity-floor-read-from-fluviuss-tariff-sheet-fluviuspy)),
 and `resolve_vreg_network_ceiling` (`providers/_resolve.py`) puts it on every
 Fluvius overlay, except on the social tariff, whose CREG network component
 replaces the operator's tariffs and has no capacity term to cap. A year whose

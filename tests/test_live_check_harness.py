@@ -1899,6 +1899,10 @@ async def _async_no_op(*_args: Any) -> None:
     return None
 
 
+async def _async_dict(*_args: Any) -> dict[Any, Any]:
+    return {}
+
+
 def _drive_run(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, **stubs: Callable[..., Any]
 ) -> int:
@@ -1911,7 +1915,7 @@ def _drive_run(
     monkeypatch.setattr(lc, "_SUPPLIERS", ())
     phases: dict[str, Callable[..., Any]] = {
         "_check_catalogs": _async_no_op,
-        "_fluvius_ceilings": _async_no_op,
+        "_fluvius_sheets": _async_dict,
         "_check_fluvius_sheet": _sync_no_op,
         "_check_vreg_ceiling_consensus": _sync_no_op,
         "_check_federal_tax_consensus": _sync_no_op,
@@ -2010,7 +2014,7 @@ async def _async_crash(*_args: Any) -> None:
     ("phase", "stub", "label"),
     [
         ("_check_catalogs", _async_crash, "_catalog: probe crashed"),
-        ("_fluvius_ceilings", _async_crash, "_federal: Fluvius sheet check crashed"),
+        ("_fluvius_sheets", _async_crash, "_federal: Fluvius sheet check crashed"),
         (
             "_check_vreg_ceiling_consensus",
             _crash,
@@ -3844,12 +3848,19 @@ def test_an_unreadable_fluvius_sheet_is_reported(
     ceiling and nothing else would say the reader broke. A month whose year is
     not held is not compared against anything."""
     today = date(2026, 10, 19)
-    lc._check_fluvius_sheet({2025: 0.3276168, 2026: 0.3276168}, today)
+    whole = SimpleNamespace(ceiling=0.3276168, floor_kw=2.5)
+    lc._check_fluvius_sheet({2025: whole, 2026: whole}, today)
     assert lc.CHECKS == []
-    lc._check_fluvius_sheet({2025: 0.3276168, 2026: None}, today)
+    lc._check_fluvius_sheet({2025: whole, 2026: None}, today)
     (row,) = lc.CHECKS
     assert row.label == "_federal: Fluvius 2026 tariff sheet unreadable"
     assert not row.ok and row.kind == "tax"
+    assert "maximumtarief" in row.detail
+    lc.CHECKS.clear()
+    no_floor = SimpleNamespace(ceiling=0.3276168, floor_kw=None)
+    lc._check_fluvius_sheet({2026: no_floor}, today)
+    (row,) = lc.CHECKS
+    assert "minimum contribution" in row.detail
 
     lc.CHECKS.clear()
     text = tmp_path / "texts" / "2026-09" / "bolt.txt"

@@ -10139,3 +10139,23 @@ async def test_the_refresh_service_is_not_dropped_behind_a_long_tick(
     await tick
     await hass.async_block_till_done()
     assert runs == 2
+
+
+async def test_billed_peak_floors_at_the_minimum_fluvius_publishes(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The floor is read off the year's Fluvius sheet, so a sheet stating a
+    higher minimum contribution moves the billed peak with it."""
+    from custom_components.be_electricity_prices import fluvius
+
+    freezer.move_to("2026-05-11 12:00:00+02:00")
+    entity_id = "sensor.house_power"
+    entry = _flanders_sensor_entry(entity_id)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hass.states.async_set(entity_id, "1.0", {"unit_of_measurement": "kW"})
+    await coord._track_monthly_peak()
+    assert coord._billed_peak_kw() == pytest.approx(2.5)
+
+    fluvius._cache[2026] = fluvius.SheetTerms(0.3276168, 3.0)
+    assert coord._billed_peak_kw() == pytest.approx(3.0)

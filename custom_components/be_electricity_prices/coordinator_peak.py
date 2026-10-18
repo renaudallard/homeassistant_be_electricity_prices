@@ -51,8 +51,8 @@ from .const import (
     CONF_CAPACITY_PEAK_SENSOR,
     CONF_REGION,
     REGION_FLANDERS,
-    VREG_CAPACITY_FLOOR_KW,
 )
+from .fluvius import capacity_floor_kw
 from .providers.base import SupplierSnapshot
 
 _LOGGER = logging.getLogger(__name__)
@@ -248,12 +248,13 @@ class _PeakMixin:
         measuring one, so it is read off the entry, which also makes a change
         to it count from the next tick.
         """
+        floor = capacity_floor_kw()
         if self.entry.data.get(CONF_CAPACITY_MODE) == CAPACITY_MODE_FIXED:
-            fixed = self.entry.data.get(CONF_CAPACITY_FIXED_KW, VREG_CAPACITY_FLOOR_KW)
-            return max(float(fixed), VREG_CAPACITY_FLOOR_KW)
+            fixed = self.entry.data.get(CONF_CAPACITY_FIXED_KW, floor)
+            return max(float(fixed), floor)
         peaks = self._peak_terms()
         if not peaks:
             # A brand-new entry in the first hours of its first month has
             # nothing measured anywhere; the regulated minimum is the answer.
-            return VREG_CAPACITY_FLOOR_KW
-        return sum(max(kw, VREG_CAPACITY_FLOOR_KW) for kw in peaks) / len(peaks)
+            return floor
+        return sum(max(kw, floor) for kw in peaks) / len(peaks)

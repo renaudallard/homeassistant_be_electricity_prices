@@ -186,10 +186,16 @@ def _fluvius_sheets_as_published() -> Iterator[None]:
 
     fluvius._cache.clear()
     fluvius._failed_at.clear()
-    fluvius._cache.update(FLUVIUS_CEILINGS)
+    # Every sheet from 2023 to 2026 gives a 2,50 kW minimum peak.
+    fluvius._cache.update(
+        {
+            year: fluvius.SheetTerms(ceiling, 2.5)
+            for year, ceiling in FLUVIUS_CEILINGS.items()
+        }
+    )
     with (
-        patch.object(coordinator_tick, "ensure_network_ceiling", AsyncMock()),
-        patch.object(backfill_window, "ensure_network_ceiling", AsyncMock()),
+        patch.object(coordinator_tick, "ensure_tariff_sheet", AsyncMock()),
+        patch.object(backfill_window, "ensure_tariff_sheet", AsyncMock()),
     ):
         yield
     fluvius._cache.clear()

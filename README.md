@@ -604,7 +604,8 @@ dropped rather than billed on the new card.
    settles the closed month or quarter where the supplier prints the index
    it closed at.
 9. **Capacity tariff peak source** *(Flanders only)* — a sensor, or a fixed
-   kW value (default 2.5 kW, the VREG regulated minimum). Leaving it at that
+   kW value (default the VREG regulated minimum, 2.5 kW, read off Fluvius's
+   tariff sheet like the network ceiling). Leaving it at that
    default when your real peak is higher understates the bill by the
    difference times the per-kW rate, which is the largest single thing that
    can be wrong about `current_year_cost` without anything looking wrong on

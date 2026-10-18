@@ -77,8 +77,8 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_NONE,
     SOLAR_REGIMES,
-    VREG_CAPACITY_FLOOR_KW,
 )
+from .fluvius import capacity_floor_kw
 
 
 def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
@@ -116,7 +116,7 @@ def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
     fields[
         vol.Optional(
             CONF_CAPACITY_FIXED_KW,
-            default=defaults.get(CONF_CAPACITY_FIXED_KW, VREG_CAPACITY_FLOOR_KW),
+            default=defaults.get(CONF_CAPACITY_FIXED_KW, capacity_floor_kw()),
         )
     ] = NumberSelector(
         NumberSelectorConfig(min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX)

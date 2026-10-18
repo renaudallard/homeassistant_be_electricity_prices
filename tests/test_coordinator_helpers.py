@@ -504,7 +504,7 @@ def test_the_fluvius_sheets_ceiling_is_what_the_fleet_prints() -> None:
     agree to the last decimal, or the sheet is being read wrong."""
     from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
     from custom_components.be_electricity_prices.fluvius import (
-        parse_network_ceiling,
+        parse_sheet,
     )
     from custom_components.be_electricity_prices.providers.energiebe import (
         parse_snapshot as energiebe_parse,
@@ -514,10 +514,9 @@ def test_the_fluvius_sheets_ceiling_is_what_the_fleet_prints() -> None:
     )
     from tests import FIXTURES, fixture_text
 
-    sheet = parse_network_ceiling(
-        (FIXTURES / "fluvius_zenne_dijle_2026.xlsx").read_bytes(), 2026
-    )
-    assert sheet is not None
+    terms = parse_sheet((FIXTURES / "fluvius_zenne_dijle_2026.xlsx").read_bytes(), 2026)
+    assert terms is not None
+    sheet = terms.ceiling
     cards = (
         energiebe_parse(fixture_text("energiebe_dynamic_jul.pdf", layout=True), "t://"),
         frank_parse(

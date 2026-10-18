@@ -60,16 +60,18 @@ def _nothing_held() -> None:
     fluvius._failed_at.clear()
 
 
-def test_the_ceiling_is_read_off_the_years_sheet() -> None:
-    assert fluvius.parse_network_ceiling(_SHEET_2026, 2026) == 0.3276168
+def test_the_ceiling_and_floor_are_read_off_the_years_sheet() -> None:
+    """The floor is the minimum contribution over the capacity rate: 140,31
+    EUR a year at 56,1228635 EUR/kW on Zenne-Dijle in 2026."""
+    assert fluvius.parse_sheet(_SHEET_2026, 2026) == fluvius.SheetTerms(0.3276168, 2.5)
     # Another year's sheet is not this year's.
-    assert fluvius.parse_network_ceiling(_SHEET_2026, 2027) is None
+    assert fluvius.parse_sheet(_SHEET_2026, 2027) is None
 
 
 def test_the_low_voltage_column_is_found_by_its_capacity_rate() -> None:
     """Up to 2024 the first "piekmeting" column is the transformer stations',
     whose maximumtarief is 0,0905158; the household's is the capacity rate's."""
-    assert fluvius.parse_network_ceiling(_SHEET_2023, 2023) == 0.1920264
+    assert fluvius.parse_sheet(_SHEET_2023, 2023) == fluvius.SheetTerms(0.1920264, 2.5)
 
 
 def test_a_figure_outside_the_bounds_is_refused(tmp_path: Path) -> None:
@@ -88,7 +90,7 @@ def test_a_figure_outside_the_bounds_is_refused(tmp_path: Path) -> None:
                     b"<v>0.32761679999999999</v>", b"<v>3.2761679999999999</v>"
                 )
             dst.writestr(info, data)
-    assert fluvius.parse_network_ceiling(out.read_bytes(), 2026) is None
+    assert fluvius.parse_sheet(out.read_bytes(), 2026) is None
 
 
 class _Response:
@@ -129,7 +131,8 @@ class _Session:
 
 async def test_the_sheet_is_found_from_the_listing_and_kept() -> None:
     session: Any = _Session()
-    assert await fluvius.ensure_network_ceiling(session, 2026) == 0.3276168
+    terms = await fluvius.ensure_tariff_sheet(session, 2026)
+    assert terms is not None and terms.ceiling == 0.3276168
     assert session.asked == [
         fluvius._LISTING_URL,
         fluvius._SITE + _PUBLICATION,
@@ -137,16 +140,16 @@ async def test_the_sheet_is_found_from_the_listing_and_kept() -> None:
     ]
     assert fluvius.cached_network_ceiling(2026) == 0.3276168
     session.asked.clear()
-    assert await fluvius.ensure_network_ceiling(session, 2026) == 0.3276168
+    assert await fluvius.ensure_tariff_sheet(session, 2026) == terms
     assert session.asked == [], "a held year was fetched again"
 
 
 async def test_a_year_not_listed_yet_yields_nothing_until_the_backoff() -> None:
     session: Any = _Session()
-    assert await fluvius.ensure_network_ceiling(session, 2027) is None
+    assert await fluvius.ensure_tariff_sheet(session, 2027) is None
     assert fluvius.cached_network_ceiling(2027) is None
     session.asked.clear()
-    assert await fluvius.ensure_network_ceiling(session, 2027) is None
+    assert await fluvius.ensure_tariff_sheet(session, 2027) is None
     assert session.asked == [], "the backoff did not hold"
 
 
@@ -162,7 +165,7 @@ async def test_a_body_that_is_not_a_sheet_never_raises(label: str, body: bytes) 
     """The fetch runs inside the coordinator tick, whose only handler is for
     UpdateFailed, so anything escaping here would take the device down."""
     session: Any = _Session(body)
-    assert await fluvius.ensure_network_ceiling(session, 2026) is None, label
+    assert await fluvius.ensure_tariff_sheet(session, 2026) is None, label
     assert 2026 in fluvius._failed_at
 
 
@@ -179,14 +182,12 @@ def test_the_sheet_is_read_before_the_card_is_resolved() -> None:
     )
 
     body = inspect.getsource(BePricesCoordinator._update_body)
-    assert body.index("ensure_network_ceiling(") < body.index(
-        "_maybe_refresh_snapshot()"
-    )
+    assert body.index("ensure_tariff_sheet(") < body.index("_maybe_refresh_snapshot()")
     resolver = inspect.getsource(snapshot_resolve._resolve_snapshot)
     assert "cached_network_ceiling(month.year)" in resolver
     # A backfill asks for every year its window prices, not just this one.
     context = inspect.getsource(backfill._build_context)
-    assert "ensure_network_ceiling(coordinator._session, year)" in context
+    assert "ensure_tariff_sheet(coordinator._session, year)" in context
 
 
 async def test_a_restart_puts_the_ceiling_on_the_stored_card(hass: Any) -> None:
@@ -239,8 +240,25 @@ async def test_a_restart_puts_the_ceiling_on_the_stored_card(hass: Any) -> None:
     coord._reresolve_snapshot()
     assert coord._snapshot is booted
 
-    fluvius._cache[dt_util.now().year] = 0.3276168
+    fluvius._cache[dt_util.now().year] = fluvius.SheetTerms(0.3276168, 2.5)
     coord._reresolve_snapshot()
     assert coord._snapshot is not booted
     overlay = coord._snapshot.dsos[DSO_FLUVIUS_ANTWERPEN]
     assert overlay.network_ceiling_eur_per_kwh == pytest.approx(0.3276168 * 1.06)
+
+
+def test_the_floor_is_the_years_or_the_last_sheet_before_it() -> None:
+    """Never a later year's: the rule is billed for the months it was set for.
+    Before any sheet is read, the figure every sheet from 2023 to 2026 gives."""
+    from custom_components.be_electricity_prices.const import VREG_CAPACITY_FLOOR_KW
+
+    assert fluvius.capacity_floor_kw(2026) == VREG_CAPACITY_FLOOR_KW
+    fluvius._cache[2025] = fluvius.SheetTerms(0.3276168, 2.5)
+    fluvius._cache[2026] = fluvius.SheetTerms(0.3276168, 3.0)
+    assert fluvius.capacity_floor_kw(2026) == 3.0
+    assert fluvius.capacity_floor_kw(2027) == 3.0
+    assert fluvius.capacity_floor_kw(2025) == 2.5
+    assert fluvius.capacity_floor_kw(2024) == VREG_CAPACITY_FLOOR_KW
+    # A sheet whose minimum could not be read does not hide the one before.
+    fluvius._cache[2027] = fluvius.SheetTerms(0.3276168, None)
+    assert fluvius.capacity_floor_kw(2027) == 3.0

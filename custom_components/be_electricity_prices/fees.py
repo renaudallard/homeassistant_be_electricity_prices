@@ -56,9 +56,9 @@ from .const import (
     METER_MONO,
     REGION_WALLONIA,
     SOLAR_REGIME_COMPENSATION,
-    VREG_CAPACITY_FLOOR_KW,
     WELCOME_CREDIT_ANNIVERSARY,
 )
+from .fluvius import capacity_floor_kw
 from .pricing import (
     MeterType,
     static_energy_eur_per_kwh,
@@ -215,10 +215,10 @@ def _capped_capacity_annual(
         (overlay.network_ceiling_eur_per_kwh - per_kwh) * (1.0 + vat_rate) * annual_kwh
     )
     capped = min(capacity_annual, max(headroom, 0.0))
-    # ``_billed_peak_kw`` already floors the PEAK at 2,5 kW, so the charge
-    # arrives at or above the minimum; the cap is the only thing that can push
-    # it under, and the card forbids that.
-    minimum = VREG_CAPACITY_FLOOR_KW * (overlay.capacity_eur_per_kw_year or 0.0)
+    # ``_billed_peak_kw`` already floors the PEAK at the regulated minimum, so
+    # the charge arrives at or above it; the cap is the only thing that can
+    # push it under, and the card forbids that.
+    minimum = capacity_floor_kw() * (overlay.capacity_eur_per_kw_year or 0.0)
     return max(capped, min(capacity_annual, minimum))
 
 

@@ -182,11 +182,11 @@ def _load_providers() -> dict[str, types.ModuleType]:
     # ModuleNotFoundError, and the first version of the spot-fallback check
     # did exactly that and never ran.
     api = _load("be_pkg.api", PKG / "api.py")
-    global _ENERGY_CHARTS_CLIENT, _ENSURE_NETWORK_CEILING
+    global _ENERGY_CHARTS_CLIENT, _ENSURE_TARIFF_SHEET
     _ENERGY_CHARTS_CLIENT = api.EnergyChartsClient
     # The integration's own reader of Fluvius's sheet, for the same reason.
     fluvius = _load("be_pkg.fluvius", PKG / "fluvius.py")
-    _ENSURE_NETWORK_CEILING = fluvius.ensure_network_ceiling
+    _ENSURE_TARIFF_SHEET = fluvius.ensure_tariff_sheet
     loaded = {
         supplier: _load(
             f"be_pkg.providers.{supplier}", PKG / "providers" / f"{supplier}.py"
@@ -355,8 +355,8 @@ _EXTRACTOR_ERROR: type[Exception] = RuntimeError
 # changes shape under it fails here instead of silently at a user's next
 # ENTSO-E outage.
 _ENERGY_CHARTS_CLIENT: Any = None
-# Bound by _load_providers to fluvius.ensure_network_ceiling.
-_ENSURE_NETWORK_CEILING: Any = None
+# Bound by _load_providers to fluvius.ensure_tariff_sheet.
+_ENSURE_TARIFF_SHEET: Any = None
 
 
 # Per-supplier fetch-time (summed per-request durations) + bytes-received
@@ -2868,7 +2868,7 @@ def _check_vreg_ceiling_consensus(
     schema 65 so older rows carry ``None`` whatever their card said.
 
     ``ceilings`` is the maximumtarief of each year's sheet, ex-VAT, as the
-    integration reads it (``fluvius.ensure_network_ceiling``); a month whose
+    integration reads it (``fluvius.ensure_tariff_sheet``); a month whose
     year it does not hold is not checked, and
     :func:`_check_fluvius_sheet` reports that.
 
@@ -2996,36 +2996,45 @@ def _check_vreg_ceiling_consensus(
         )
 
 
-async def _fluvius_ceilings(
+async def _fluvius_sheets(
     session: aiohttp.ClientSession, today: date | None = None
-) -> dict[int, float | None]:
-    """This year's and last year's maximumtarief off Fluvius's sheets."""
+) -> dict[int, Any]:
+    """This year's and last year's Fluvius sheets, as ``fluvius.SheetTerms``
+    or ``None``."""
     today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
     return {
-        year: await _ENSURE_NETWORK_CEILING(session, year)
+        year: await _ENSURE_TARIFF_SHEET(session, year)
         for year in (today.year - 1, today.year)
     }
 
 
-def _check_fluvius_sheet(
-    ceilings: Mapping[int, float | None], today: date | None = None
-) -> None:
-    """Assert this year's Fluvius tariff sheet can still be read.
+def _check_fluvius_sheet(sheets: Mapping[int, Any], today: date | None = None) -> None:
+    """Assert this year's Fluvius tariff sheet can still be read, whole.
 
     Without it the integration bills the ceiling each card prints, which for
-    Mega and Bolt is the 2023 one, and nothing else would say the reader broke.
-    Reported as a tax row, so it files in the federal block's thread and fails
-    no pull request.
+    Mega and Bolt is the 2023 one, and without its minimum contribution the
+    capacity floor falls back to the constant; nothing else would say the
+    reader broke. Reported as a tax row, so it files in the federal block's
+    thread and fails no pull request.
     """
     today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
-    if ceilings.get(today.year) is not None:
+    terms = sheets.get(today.year)
+    if terms is None:
+        detail = (
+            "the maximumtarief could not be read off this year's Fluvius sheet, "
+            "so Flemish cards are billed with the ceiling they print"
+        )
+    elif terms.floor_kw is None:
+        detail = (
+            "the minimum contribution could not be read off this year's Fluvius "
+            "sheet, so the capacity floor falls back to VREG_CAPACITY_FLOOR_KW"
+        )
+    else:
         return
     _record(
         f"_federal: Fluvius {today.year} tariff sheet unreadable",
         False,
-        "the maximumtarief could not be read off this year's Fluvius sheet, so "
-        "Flemish cards are billed with the ceiling they print; see fluvius.py "
-        "and the listing it starts from",
+        f"{detail}; see fluvius.py and the listing it starts from",
         kind="tax",
     )
 
@@ -5374,8 +5383,12 @@ async def _run(texts: Path | None = None) -> int:
             # gate, which is the one check that sees a supplier superseding
             # a card we still resolve.
             try:
-                ceilings = await _fluvius_ceilings(session)
-                _check_fluvius_sheet(ceilings)
+                sheets = await _fluvius_sheets(session)
+                _check_fluvius_sheet(sheets)
+                ceilings = {
+                    year: None if terms is None else terms.ceiling
+                    for year, terms in sheets.items()
+                }
             except Exception as err:
                 ceilings = {}
                 _record(

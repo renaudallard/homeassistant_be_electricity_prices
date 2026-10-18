@@ -1124,7 +1124,7 @@ in place of the network, the archived copy on the one served on 2026-10-15
 (`tests/fixtures/justel_loi_programme_2004_fr_arch070.html`) and the law of
 19 March 2023 on the same day (`tests/fixtures/justel_loi_2023_03_19_fr.html`).
 
-## Part 6: the VREG network ceiling, read from Fluvius's tariff sheet (`fluvius.py`)
+## Part 6: the VREG network ceiling and capacity floor, read from Fluvius's tariff sheet (`fluvius.py`)
 
 ### Why it exists
 
@@ -1154,17 +1154,30 @@ found that way because up to 2024 a transformer-station column also headed
 0,3276168 EUR/kWh excluding VAT in all eight for 2025 and 2026, 0,1920264 in
 2023 and 2024. A figure outside 0,1 to 1 EUR/kWh is a misread and refused.
 
+The minimum monthly peak the capacity term is billed on is not printed in kW.
+The remarks under the table state it as a yearly minimum contribution
+("Laagspanningsklanten met piekmeting betalen een minimale bijdrage van 140,31
+euro/jaar"), which divided by the same column's capacity rate and rounded to
+the hundredth the cents allow gives the floor: 2,50 kW on every sheet from
+2023 to 2026. A floor outside 0,5 to 10 kW, or a sheet without the sentence,
+leaves the floor unread and the ceiling stands.
+
 ### Caching and failure
 
-`ensure_network_ceiling` runs in the tick of a Flemish entry, before the card
+`ensure_tariff_sheet` runs in the tick of a Flemish entry, before the card
 is resolved, and for every year a backfill window spans. A year read is held
 for the life of the process; a failure is held for six hours. Without the
 year's figure `resolve_vreg_network_ceiling` leaves the card exactly as
-printed, which is what the integration did before the sheet was read. Nothing
+printed, which is what the integration did before the sheet was read.
+`capacity_floor_kw` answers the floor of the year's sheet, else of the latest
+earlier sheet held, else `VREG_CAPACITY_FLOOR_KW` (`const.py`), for the billed
+peak (`coordinator_peak.py`), the minimum the ceiling cannot cut below
+(`fees.py`) and the fixed-peak default of the meter step. Nothing
 here raises, for the reason `brugel.py` gives. The live check reads this
 year's and last year's sheet through the same module, files
-`_federal: Fluvius <year> tariff sheet unreadable` when this year's cannot be
-read, and compares the cards' printed ceilings against it.
+`_federal: Fluvius <year> tariff sheet unreadable` when this year's ceiling
+or minimum contribution cannot be read, and compares the cards' printed
+ceilings against it.
 
 The parser is tested on the 2026 Zenne-Dijle sheet and the 2023 Antwerpen one
 as Fluvius served them on 2026-10-19 (`tests/fixtures/fluvius_*.xlsx`).

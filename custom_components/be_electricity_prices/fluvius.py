@@ -31,17 +31,22 @@ published by Fluvius as one small workbook per network area and year,
 VAT. vreg.be answers nothing from this host, so this is the official copy that
 can be read.
 
-One figure is taken from it: the "Maximumtarief" of a low-voltage connection
-with peak metering, the ceiling the capacity term and the per-kWh network term
-together may not exceed per kWh. It is one rate for the whole of Flanders,
-which every area's sheet prints identically (0,3276168 in all eight for 2025
-and 2026), so the first sheet the year's listing links to answers for all of
-them.
+Two figures are taken from it, both rules for the whole of Flanders, so the
+first sheet the year's listing links to answers for every area:
+
+- the "Maximumtarief" of a low-voltage connection with peak metering, the
+  ceiling the capacity term and the per-kWh network term together may not
+  exceed per kWh, which every area's sheet prints identically (0,3276168 in
+  all eight for 2025 and 2026);
+- the minimum monthly peak the capacity term is billed on. The sheet states it
+  as the "minimale bijdrage" in EUR a year, which divided by the area's
+  capacity rate gives 2,50 kW on every sheet from 2023 to 2026.
 
 Never raises, for the reason ``brugel.py`` gives: the fetch runs inside the
 coordinator tick, whose only handler is for ``UpdateFailed``. A download or
-parse failure logs and leaves the year unknown, and the card is then billed
-with the ceiling it prints, as it was before the sheet was read.
+parse failure logs and leaves the year unknown. The card is then billed with
+the ceiling it prints and the floor falls back to ``VREG_CAPACITY_FLOOR_KW``,
+as they were before the sheet was read.
 """
 
 from __future__ import annotations
@@ -51,6 +56,7 @@ import io
 import logging
 import re
 import zipfile
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
@@ -58,6 +64,8 @@ import aiohttp
 from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
 from homeassistant.util import dt as dt_util
 
+from .const import VREG_CAPACITY_FLOOR_KW
+from .providers._parse import to_float
 from .providers._pdf import USER_AGENT, fetch_text, guard_redirect, read_capped
 from .synergrid import _NS, _column_of, _resolve_sheet_path, _shared_strings
 
@@ -82,16 +90,32 @@ _MAX_UNPACKED_BYTES: Final = 4 * 1024 * 1024
 # not on what the tariff ought to be.
 _MIN_CEILING: Final = 0.1
 _MAX_CEILING: Final = 1.0
+_MIN_FLOOR_KW: Final = 0.5
+_MAX_FLOOR_KW: Final = 10.0
 # The capacity rate's row. Its one figure sits in the column a peak-metered
 # low-voltage connection is billed on, which is N from 2025 and O before,
 # where a second "piekmeting" column for the transformer stations came first.
 _CAPACITY_LABEL: Final = "Gemiddelde maandpiek"
 _CEILING_LABEL: Final = "Maximumtarief"
+# "Laagspanningsklanten met piekmeting betalen een minimale bijdrage van 140,31
+# euro/jaar", in the remarks under the table.
+_MINIMUM_RE: Final = re.compile(r"minimale bijdrage van (\d+(?:,\d+)?) euro/jaar")
 
-# Successes are kept for the life of the process: the figure is set per
+
+@dataclass(frozen=True)
+class SheetTerms:
+    """What a year's sheet gives: the ceiling in EUR/kWh excl. VAT, and the
+    minimum monthly peak in kW, ``None`` where the sheet states no minimum
+    contribution to derive it from."""
+
+    ceiling: float
+    floor_kw: float | None
+
+
+# Successes are kept for the life of the process: the figures are set per
 # calendar year. A failure is kept only briefly, so a blocked or slow Fluvius
 # does not cost three downloads every tick while a transient one still heals.
-_cache: dict[int, float] = {}
+_cache: dict[int, SheetTerms] = {}
 _failed_at: dict[int, datetime] = {}
 # One fetch per year at a time, for the reason brugel.py gives.
 _locks: dict[int, asyncio.Lock] = {}
@@ -109,15 +133,33 @@ def cached_network_ceiling(year: int) -> float | None:
     """The year's ceiling if it has been read, EUR/kWh excl. VAT, else ``None``.
 
     Synchronous on purpose: the snapshot resolver runs in the pricing path and
-    cannot await. :func:`ensure_network_ceiling` is what puts a value here.
+    cannot await. :func:`ensure_tariff_sheet` is what puts a value here.
     """
-    return _cache.get(year)
+    terms = _cache.get(year)
+    return None if terms is None else terms.ceiling
 
 
-async def ensure_network_ceiling(
+def capacity_floor_kw(year: int | None = None) -> float:
+    """The minimum monthly peak the capacity term is billed on, in kW.
+
+    The year's sheet (this year's by default), else the latest earlier one
+    held, else ``VREG_CAPACITY_FLOOR_KW``: never a later year's, since the rule
+    is applied to the months it was set for.
+    """
+    year = dt_util.now().year if year is None else year
+    held = {
+        held_year: terms.floor_kw
+        for held_year, terms in _cache.items()
+        if held_year <= year and terms.floor_kw is not None
+    }
+    floor = held[max(held)] if held else None
+    return VREG_CAPACITY_FLOOR_KW if floor is None else floor
+
+
+async def ensure_tariff_sheet(
     session: aiohttp.ClientSession, year: int
-) -> float | None:
-    """Read the year's ceiling unless it is held, and return it or ``None``."""
+) -> SheetTerms | None:
+    """Read the year's sheet unless it is held, and return it or ``None``."""
     hit = _cache.get(year)
     if hit is not None:
         return hit
@@ -131,19 +173,24 @@ async def ensure_network_ceiling(
                 return None
             del _failed_at[year]
         try:
-            ceiling = await _fetch_ceiling(session, year)
+            terms = await _fetch_sheet(session, year)
         except Exception as err:  # the docstring promises no raise
             _LOGGER.warning("Fluvius %d tariff sheet could not be read: %s", year, err)
-            ceiling = None
-        if ceiling is None:
+            terms = None
+        if terms is None:
             _failed_at[year] = dt_util.utcnow()
             return None
-        _cache[year] = ceiling
-        _LOGGER.debug("Fluvius %d maximumtarief: %.7f EUR/kWh excl. VAT", year, ceiling)
-        return ceiling
+        _cache[year] = terms
+        _LOGGER.debug(
+            "Fluvius %d maximumtarief %.7f EUR/kWh excl. VAT, minimum peak %s kW",
+            year,
+            terms.ceiling,
+            terms.floor_kw,
+        )
+        return terms
 
 
-async def _fetch_ceiling(session: aiohttp.ClientSession, year: int) -> float | None:
+async def _fetch_sheet(session: aiohttp.ClientSession, year: int) -> SheetTerms | None:
     """The listing, the year's first publication page, then its workbook."""
     listing = await fetch_text(session, _LISTING_URL, timeout=_TIMEOUT)
     publication = re.search(_PUBLICATION_RE.format(year=year), listing)
@@ -164,7 +211,7 @@ async def _fetch_ceiling(session: aiohttp.ClientSession, year: int) -> float | N
         guard_redirect(url, resp)
         resp.raise_for_status()
         payload = await read_capped(resp, url)
-    return parse_network_ceiling(payload, year)
+    return parse_sheet(payload, year)
 
 
 def _rows(payload: bytes) -> list[dict[str, str]]:
@@ -191,13 +238,15 @@ def _rows(payload: bytes) -> list[dict[str, str]]:
     return rows
 
 
-def parse_network_ceiling(payload: bytes, year: int) -> float | None:
-    """The maximumtarief a sheet prints for a peak-metered connection.
+def parse_sheet(payload: bytes, year: int) -> SheetTerms | None:
+    """The maximumtarief and minimum peak a sheet gives a peak-metered
+    connection.
 
     ``None`` when the workbook is not the year's tariff list, prints no single
-    capacity rate to find the column by or no maximumtarief, or prints a figure
-    outside the bounds. Raises on a payload that is not a workbook; the caller
-    logs it.
+    capacity rate to find the column by or no maximumtarief, or prints a
+    ceiling outside the bounds. A minimum that cannot be read or lands outside
+    its own bounds leaves ``floor_kw`` at ``None`` and the ceiling stands.
+    Raises on a payload that is not a workbook; the caller logs it.
     """
     rows = _rows(payload)
     title = f"periodieke distributienettarieven {year}"
@@ -212,9 +261,25 @@ def parse_network_ceiling(payload: bytes, year: int) -> float | None:
         return None
     try:
         ceiling = float(ceiling_row[column])
+        rate = float(capacity[column])
     except (KeyError, ValueError):
         return None
-    return ceiling if _MIN_CEILING <= ceiling <= _MAX_CEILING else None
+    if not _MIN_CEILING <= ceiling <= _MAX_CEILING:
+        return None
+    return SheetTerms(ceiling, _floor_kw(rows, rate))
+
+
+def _floor_kw(rows: list[dict[str, str]], rate: float) -> float | None:
+    """The minimum contribution over the capacity rate, to the hundredth of a
+    kW the contribution's cents allow, or ``None``."""
+    for row in rows:
+        for text in row.values():
+            match = _MINIMUM_RE.search(text)
+            if match is None or rate <= 0.0:
+                continue
+            floor = round(to_float(match.group(1)) / rate, 2)
+            return floor if _MIN_FLOOR_KW <= floor <= _MAX_FLOOR_KW else None
+    return None
 
 
 def _labelled_row(rows: list[dict[str, str]], label: str) -> dict[str, str] | None:
