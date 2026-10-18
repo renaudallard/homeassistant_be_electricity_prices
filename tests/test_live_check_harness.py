@@ -1917,6 +1917,7 @@ def _drive_run(
         "_check_catalogs": _async_no_op,
         "_fluvius_sheets": _async_dict,
         "_check_fluvius_sheet": _sync_no_op,
+        "_check_dso_schedules": _async_no_op,
         "_check_vreg_ceiling_consensus": _sync_no_op,
         "_check_federal_tax_consensus": _sync_no_op,
         "_check_vat_consensus": _sync_no_op,
@@ -2015,6 +2016,7 @@ async def _async_crash(*_args: Any) -> None:
     [
         ("_check_catalogs", _async_crash, "_catalog: probe crashed"),
         ("_fluvius_sheets", _async_crash, "_federal: Fluvius sheet check crashed"),
+        ("_check_dso_schedules", _async_crash, "_schedule: watch crashed"),
         (
             "_check_vreg_ceiling_consensus",
             _crash,
@@ -2182,6 +2184,14 @@ def test_the_tax_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
         step,
         "tax",
     ) == ("[live-check] a supplier's federal tax block disagrees")
+    schedule = tmp_path / "schedule"
+    schedule.mkdir()
+    assert _file_catalog_issue(
+        schedule,
+        "_schedule: ORES off-peak hours no longer match\n",
+        step,
+        "tax",
+    ) == ("[live-check] an operator's published hours no longer match")
 
 
 def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
@@ -2213,6 +2223,11 @@ def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
         (
             "Open or update tax-block issue",
             "tax",
+            "_schedule: ORES off-peak hours no longer match\n",
+        ),
+        (
+            "Open or update tax-block issue",
+            "tax",
             "a/federal tax block disagrees for 2026-09\n",
         ),
     )
@@ -2222,8 +2237,8 @@ def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
         root.mkdir()
         title = _file_catalog_issue(root, failures, step, kind)
         labels[title] = (root / "label").read_text()
-    assert len(labels) == 5
-    assert len(set(labels.values())) == 5, labels
+    assert len(labels) == 6
+    assert len(set(labels.values())) == 6, labels
 
     archive = (
         Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
@@ -4848,3 +4863,70 @@ async def test_the_social_tariff_is_checked_on_its_own_bounds(
         "social/social_engie/wallonia: feed-in",
         "social/social_engie/wallonia: connection fee",
     }
+
+
+def _schedule_pages(monkeypatch: Any, pages: dict[str, str]) -> list[str]:
+    """The watch over the integration's own schedule code and these pages."""
+    from custom_components.be_electricity_prices import day_night, pricing
+
+    monkeypatch.setattr(lc, "_DAY_NIGHT", day_night)
+    monkeypatch.setattr(lc, "_IMPACT_BAND", pricing.dso_impact_band)
+    asked: list[str] = []
+
+    async def _fetch(_session: Any, url: str) -> str:
+        asked.append(url)
+        if url not in pages:
+            raise lc._EXTRACTOR_ERROR("HTTP 403")
+        return pages[url]
+
+    monkeypatch.setattr(lc, "_fetch_text", _fetch)
+    return asked
+
+
+_SCHEDULE_PAGES = {
+    lc._FLUVIUS_HOURS_URL: "fluvius_dag_en_nachttarief.html",
+    lc._ORES_BIHORAIRE_URL: "ores_bihoraire.html",
+    lc._ORES_IMPACT_URL: "ores_impact.html",
+}
+
+
+def _served_pages() -> dict[str, str]:
+    fixtures = Path(__file__).parent / "fixtures"
+    return {
+        url: (fixtures / name).read_text(encoding="utf-8")
+        for url, name in _SCHEDULE_PAGES.items()
+    }
+
+
+def test_the_published_hours_match_the_ones_billed(monkeypatch: Any) -> None:
+    """Fluvius's and ORES's pages as served on 2026-10-19 state exactly the
+    hours day_night.py and pricing.py bill by, each page read once."""
+    asked = _schedule_pages(monkeypatch, _served_pages())
+    asyncio.run(lc._check_dso_schedules(None, date(2026, 10, 18)))
+    assert lc.CHECKS == []
+    assert sorted(asked) == sorted(_SCHEDULE_PAGES)
+
+
+def test_an_operator_moving_its_hours_is_reported(monkeypatch: Any) -> None:
+    """ORES moving the midday off-peak window, and a page that cannot be read,
+    each file a row naming the schedule, under the schedule title."""
+    pages = _served_pages()
+    bihoraire = pages[lc._ORES_BIHORAIRE_URL]
+    assert "de 11h à 17 h" in bihoraire
+    pages[lc._ORES_BIHORAIRE_URL] = bihoraire.replace("de 11h à 17 h", "de 12h à 17 h")
+    del pages[lc._FLUVIUS_HOURS_URL]
+    _schedule_pages(monkeypatch, pages)
+    asyncio.run(lc._check_dso_schedules(None, date(2026, 10, 19)))
+    rows = {check.label: check for check in lc.CHECKS}
+    assert sorted(rows) == [
+        "_schedule: Fluvius day hours no longer match",
+        "_schedule: Fluvius early day hours no longer match",
+        "_schedule: ORES off-peak hours no longer match",
+    ]
+    assert all(row.kind == "tax" and not row.ok for row in rows.values())
+    assert "could not be read: HTTP 403" in (
+        rows["_schedule: Fluvius day hours no longer match"].detail
+    )
+    assert "[0, 1, 2, 3, 4, 5, 6, 12, 13" in (
+        rows["_schedule: ORES off-peak hours no longer match"].detail
+    )

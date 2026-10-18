@@ -1462,6 +1462,7 @@ the script through a fake `gh`.
 | bit 1 (rc 2/3/6/7) | Open or update new-products issue | `live-check-discovery` | `[live-check] supplier product discovery failed`, when no product is new or gone among the failures |
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax` | `[live-check] a supplier's federal tax block disagrees` |
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax-fluvius` | `[live-check] the Fluvius tariff sheet can no longer be read`, when that is the only failure |
+| bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax-schedule` | `[live-check] an operator's published hours no longer match`, when every failure is a schedule row |
 | bit 1 (rc 2/3/6/7) | Open or update network-figure issue | `live-check-network` | `[live-check] a supplier's network figure disagrees` |
 | bit 1 (rc 2/3/6/7) | Open or update card-editions issue | `live-check-editions` | `[live-check] a supplier's French and Dutch cards disagree` |
 
@@ -1493,12 +1494,16 @@ which is once a month in practice, when TotalEnergies republishes. On 3 October 
 five: Electricité Variable in Wallonia charges a 100,00 EUR fee in French and 94,34 in Dutch,
 and four Dutch addresses serve another product, a gas card or a formula with a comma.
 
-The tax report carries four kinds of row: a supplier whose federal block disagrees with the
+The tax report carries five kinds of row: a supplier whose federal block disagrees with the
 month's consensus (`_check_federal_tax_consensus`), a card whose VREG network ceiling disagrees
 with the one Fluvius's sheet prints for its year (`_check_vreg_ceiling_consensus`), the same for
-the VAT rate (`_check_vat_consensus`), and this year's Fluvius sheet no longer reading
+the VAT rate (`_check_vat_consensus`), this year's Fluvius sheet no longer reading
 (`_check_fluvius_sheet`), which the integration would otherwise survive silently by billing each
-card's own ceiling.
+card's own ceiling, and an operator's published hours no longer matching the ones the
+integration bills by (`_check_dso_schedules`). That last one reads Fluvius's day and night page
+and ORES's bi-hourly and Impact pages, turns each sentence into the hours it covers and holds
+them against what `day_night.is_offpeak` and `pricing.dso_impact_band` return on the next
+working day; Brussels is not watched, since sibelga.be answers 403.
 All are supplier- or maintainer-side rather than a break here, which is why they share a thread
 and fail no pull request. The issue is titled after what failed, as the products one is, so the
 triager is not sent looking for a card printing a wrong levy. Every title has its own label: the thread is

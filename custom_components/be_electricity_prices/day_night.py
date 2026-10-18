@@ -127,6 +127,9 @@ def is_offpeak(
         public holidays (the historical Brussels exception; unchanged).
       Wallonia (from 2026-01-01): one uniform schedule every day including
         weekends and holidays - off-peak 22:00-07:00 and 11:00-17:00.
+
+    The live check holds the Flemish and Walloon hours against Fluvius's and
+    ORES's own pages daily (``_check_dso_schedules``); Sibelga's answers 403.
     """
     if region == REGION_WALLONIA and when.date() >= _WALLONIA_SCHEDULE_FROM:
         return when.hour < 7 or when.hour >= 22 or 11 <= when.hour < 17

@@ -722,7 +722,8 @@ def dso_impact_band(when: datetime) -> ImpactBand:
       eco    01:00-07:00 + 11:00-17:00
 
     Source: TotalEnergies Impact tariff card footnote 7 / ORES
-    'Comprendre ma facture / Impact'.
+    'Comprendre ma facture / Impact', which the live check holds these bands
+    against daily (``_check_dso_schedules``).
     """
     h = when.hour
     if 17 <= h < 22:

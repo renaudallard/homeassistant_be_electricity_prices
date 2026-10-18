@@ -56,6 +56,7 @@ from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
+from html import unescape
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -187,6 +188,11 @@ def _load_providers() -> dict[str, types.ModuleType]:
     # The integration's own reader of Fluvius's sheet, for the same reason.
     fluvius = _load("be_pkg.fluvius", PKG / "fluvius.py")
     _ENSURE_TARIFF_SHEET = fluvius.ensure_tariff_sheet
+    # And the hours it bills by, which the schedule watch holds against what
+    # the operators publish.
+    global _DAY_NIGHT, _IMPACT_BAND
+    _DAY_NIGHT = _load("be_pkg.day_night", PKG / "day_night.py")
+    _IMPACT_BAND = _load("be_pkg.pricing", PKG / "pricing.py").dso_impact_band
     loaded = {
         supplier: _load(
             f"be_pkg.providers.{supplier}", PKG / "providers" / f"{supplier}.py"
@@ -357,6 +363,9 @@ _EXTRACTOR_ERROR: type[Exception] = RuntimeError
 _ENERGY_CHARTS_CLIENT: Any = None
 # Bound by _load_providers to fluvius.ensure_tariff_sheet.
 _ENSURE_TARIFF_SHEET: Any = None
+# Bound by _load_providers to the day_night module and pricing.dso_impact_band.
+_DAY_NIGHT: Any = None
+_IMPACT_BAND: Any = None
 
 
 # Per-supplier fetch-time (summed per-request durations) + bytes-received
@@ -3039,6 +3048,142 @@ def _check_fluvius_sheet(sheets: Mapping[int, Any], today: date | None = None) -
     )
 
 
+# The pages the operators publish the hours on that day_night.is_offpeak and
+# pricing.dso_impact_band bill by. sibelga.be answers 403, so Brussels is not
+# watched.
+_FLUVIUS_HOURS_URL = (
+    "https://www.fluvius.be/nl/aansluitingen/uren-van-het-dag-en-nachttarief"
+)
+_ORES_BIHORAIRE_URL = "https://www.ores.be/comprendre-ma-facture/bihoraire/"
+_ORES_IMPACT_URL = "https://www.ores.be/comprendre-ma-facture/impact/"
+# "van 7 tot 22 uur", "de 11h à 17 h", "entre 1h et 7h".
+_HOUR_RANGE_RE = re.compile(
+    r"(\d{1,2})\s*(?:h|uur)?\s*(?:à|tot|et)\s*(\d{1,2})\s*(?:h|uur)"
+)
+_PAGE_NOISE_RE = re.compile(r"<(script|style)\b.*?</\1>", re.S | re.I)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _page_text(page: str) -> str:
+    """An HTML page as one line of visible text."""
+    return " ".join(unescape(_TAG_RE.sub(" ", _PAGE_NOISE_RE.sub(" ", page))).split())
+
+
+def _published_hours(sentence: str) -> set[int]:
+    """The hours of the day every range in ``sentence`` covers, across
+    midnight where one runs over it (22h à 7h)."""
+    hours: set[int] = set()
+    for start, end in _HOUR_RANGE_RE.findall(sentence):
+        hour, stop = int(start) % 24, int(end) % 24
+        while hour != stop:
+            hours.add(hour)
+            hour = (hour + 1) % 24
+    return hours
+
+
+def _schedule_watch(day: date) -> list[tuple[str, str, re.Pattern[str], set[int]]]:
+    """Each watched schedule: its name, page, the sentence stating it and the
+    hours of ``day``, a working day, the integration bills that way."""
+    flanders = _DAY_NIGHT.REGION_FLANDERS
+    wallonia = _DAY_NIGHT.REGION_WALLONIA
+
+    def hours(test: Callable[[datetime], bool]) -> set[int]:
+        return {h for h in range(24) if test(datetime(day.year, day.month, day.day, h))}
+
+    def offpeak(region: str, **kwargs: Any) -> Callable[[datetime], bool]:
+        return lambda when: bool(_DAY_NIGHT.is_offpeak(when, region, **kwargs))
+
+    def band(name: str) -> Callable[[datetime], bool]:
+        return lambda when: bool(_IMPACT_BAND(when) == name)
+
+    early = _DAY_NIGHT.DAY_START_EARLY
+    return [
+        (
+            "Fluvius day",
+            _FLUVIUS_HOURS_URL,
+            re.compile(
+                r"dagtarief geldt van maandag tot en met vrijdag "
+                r"(van \d{1,2} tot \d{1,2} uur)"
+            ),
+            set(range(24)) - hours(offpeak(flanders)),
+        ),
+        (
+            "Fluvius early day",
+            _FLUVIUS_HOURS_URL,
+            re.compile(
+                r"is het dagtarief (van \d{1,2} tot \d{1,2} uur) van maandag tot en met"
+            ),
+            set(range(24)) - hours(offpeak(flanders, day_start=early)),
+        ),
+        (
+            "ORES off-peak",
+            _ORES_BIHORAIRE_URL,
+            re.compile(
+                r"Heures creuses\s*:\s*"
+                r"((?:(?:et\s+)?de\s+\d{1,2}\s*h\s*à\s*\d{1,2}\s*h\s*)+)"
+            ),
+            hours(offpeak(wallonia)),
+        ),
+        (
+            "ORES Impact ECO",
+            _ORES_IMPACT_URL,
+            re.compile(r"ECO \(€\)([^.]*)\."),
+            hours(band("eco")),
+        ),
+        (
+            "ORES Impact MEDIUM",
+            _ORES_IMPACT_URL,
+            re.compile(r"MEDIUM \(€€\)([^.]*)\."),
+            hours(band("medium")),
+        ),
+        (
+            "ORES Impact PIC",
+            _ORES_IMPACT_URL,
+            re.compile(r"PIC \(€€€\)([^.]*)\."),
+            hours(band("pic")),
+        ),
+    ]
+
+
+async def _check_dso_schedules(
+    session: aiohttp.ClientSession, today: date | None = None
+) -> None:
+    """Assert the operators still publish the hours the integration bills by.
+
+    The bi-hourly schedules and the Walloon Impact bands are written into
+    ``day_night.py`` and ``pricing.py``: no source states them in a form to
+    bill from. So each page's sentence is turned into the hours it covers and
+    held against what the code classifies on the next working day, and a page
+    that no longer states them, or states other hours, is reported. Reported
+    as a tax row, under its own issue title, so it fails no pull request.
+    """
+    day = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    while day.weekday() >= 5 or _DAY_NIGHT.is_belgian_holiday(day):
+        day += timedelta(days=1)
+    pages: dict[str, str] = {}
+    errors: dict[str, str] = {}
+    for name, url, pattern, billed in _schedule_watch(day):
+        if url not in pages and url not in errors:
+            try:
+                pages[url] = _page_text(await _fetch_text(session, url))
+            except _EXTRACTOR_ERROR as err:
+                errors[url] = str(err)
+        match = pattern.search(pages[url]) if url in pages else None
+        if url in errors:
+            detail = f"{url} could not be read: {errors[url]}"
+        elif match is None:
+            detail = f"{url} no longer states the hours in the words this reads"
+        elif (published := _published_hours(match.group(1))) != billed:
+            detail = (
+                f"{url} says {match.group(1).strip()!r}, hours {sorted(published)}, "
+                f"where the integration bills {sorted(billed)}; update "
+                "day_night.py or pricing.py, with the date it changed"
+            )
+        else:
+            continue
+        _record(f"_schedule: {name} hours no longer match", False, detail, kind="tax")
+
+
 def _check_federal_tax_consensus(
     archive: Path | None, today: date | None = None
 ) -> None:
@@ -5401,6 +5546,14 @@ async def _run(texts: Path | None = None) -> int:
             except Exception as err:
                 _record(
                     "_federal: VREG ceiling consensus check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                )
+            try:
+                await _check_dso_schedules(session)
+            except Exception as err:
+                _record(
+                    "_schedule: watch crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                 )
