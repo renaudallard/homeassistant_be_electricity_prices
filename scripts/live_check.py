@@ -128,13 +128,14 @@ def _load_providers() -> dict[str, types.ModuleType]:
 
     const = _load("be_pkg.const", PKG / "const.py")
     global _FLUVIUS_KEYS, _WALLONIA_DSO_KEYS, _BRUSSELS_DSO_KEYS
-    global _VREG_CEILING_HTVA, _VREG_CEILING_KNOWN_UNTIL
+    global _VREG_CEILING_HTVA, _VREG_CEILING_KNOWN_UNTIL, _VAT_RATE_REDUCED
     global _MAX_WELCOME_CREDIT_MONTHS
     _FLUVIUS_KEYS = const.FLUVIUS_KEYS
     _WALLONIA_DSO_KEYS = const.WALLONIA_DSO_KEYS
     _BRUSSELS_DSO_KEYS = const.BRUSSELS_DSO_KEYS
     _VREG_CEILING_HTVA = const.VREG_NETWORK_CEILING_HTVA
     _VREG_CEILING_KNOWN_UNTIL = const.VREG_NETWORK_CEILING_KNOWN_UNTIL
+    _VAT_RATE_REDUCED = const.VAT_RATE_REDUCED
     _MAX_WELCOME_CREDIT_MONTHS = const.MAX_QUOTED_WELCOME_WAIT_MONTHS
     _EXPECTED_DSOS.update(
         {
@@ -271,6 +272,7 @@ _BRUSSELS_DSO_KEYS: frozenset[str] = frozenset()
 # Filled from const.py by the loader above, like the DSO key sets.
 _VREG_CEILING_HTVA: float = 0.3276168
 _VREG_CEILING_KNOWN_UNTIL: tuple[int, int] = (2027, 1)
+_VAT_RATE_REDUCED: float = 0.06
 # How many cards have to PRINT the sentence before a disagreeing majority
 # among them is read as the regulator having moved. Two is the smallest number
 # that is a fleet rather than a card. Counted on the cards seen and not on the
@@ -2896,8 +2898,9 @@ def _check_vreg_ceiling_window(today: date | None = None) -> None:
         "_check_vreg_ceiling_consensus does, then move VREG_NETWORK_CEILING_HTVA "
         "and VREG_NETWORK_CEILING_KNOWN_UNTIL (const.py) and re-pin the test. "
         "Mind the basis: the constant is EXCLUDING VAT as the regulator sets it "
-        f"({_VREG_CEILING_HTVA} = {_VREG_CEILING_HTVA * 1.06:.7f} including the "
-        "6% residential rate, which is what most cards print)",
+        f"({_VREG_CEILING_HTVA} = "
+        f"{_VREG_CEILING_HTVA * (1.0 + _VAT_RATE_REDUCED):.7f} including the "
+        "residential rate, which is what most cards print)",
         kind="tax",
     )
 
@@ -2961,7 +2964,7 @@ def _check_vreg_ceiling_consensus(
             break
     if not printed:
         return
-    tvac = _VREG_CEILING_HTVA * 1.06
+    tvac = _VREG_CEILING_HTVA * (1.0 + _VAT_RATE_REDUCED)
     agree = {
         name
         for name, value in printed.items()
@@ -3381,10 +3384,12 @@ def _check_network_consensus(archive: Path | None, today: date | None = None) ->
         try:
             snap = json.loads(row.read_text(encoding="utf-8"))
             vat = float(snap["taxes"].get("vat_rate") or 0.0)
+            stated = float(snap["taxes"].get("card_vat_rate") or _VAT_RATE_REDUCED)
             dsos = snap.get("dsos") or {}
         except (KeyError, TypeError, ValueError, AttributeError):
             continue
-        basis = 1.06 if vat == 0.0 else 1.0
+        # A VAT-inclusive card, at the rate it states or else the residential one.
+        basis = 1.0 + stated if vat == 0.0 else 1.0
         for dso, overlay in dsos.items():
             if not isinstance(overlay, dict):
                 continue

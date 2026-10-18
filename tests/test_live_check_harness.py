@@ -3085,6 +3085,31 @@ def test_a_card_printing_another_network_rate_than_the_fleet_is_caught(
     assert lc._catalog_gates_ci(list(lc.CHECKS)) is True
 
 
+def test_a_network_figure_is_put_ex_vat_at_the_rate_its_card_states(
+    tmp_path: Path,
+) -> None:
+    """A VAT-inclusive card that states its own rate is on that rate, so a
+    month the residential rate moves compares its figures on the right basis
+    rather than on the 6% the check used to assume."""
+    archive = _network_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "wallonia"): (0.0, {"distribution_single": 0.1083}),
+            ("b", "b_fixed", "wallonia"): (0.0, {"distribution_single": 0.1083}),
+            ("c", "c_pro", "wallonia"): (0.21, {"distribution_single": 0.1022}),
+        },
+    )
+    for name in ("a/a_fixed", "b/b_fixed"):
+        path = archive / "cards" / name / "wallonia" / "2026-09.json"
+        row = json.loads(path.read_text(encoding="utf-8"))
+        row["taxes"]["card_vat_rate"] = 0.09
+        path.write_text(json.dumps(row), encoding="utf-8")
+    lc._check_network_consensus(archive, date(2026, 9, 25))
+    (check,) = lc.CHECKS
+    assert check.label == "c/ores distribution_single 0.1022 disagrees for 2026-09"
+    assert "0.099358 ex VAT on 2 suppliers' cards" in check.detail
+
+
 def test_the_social_tariff_is_left_out_of_the_regulated_consensus(
     tmp_path: Path,
 ) -> None:
