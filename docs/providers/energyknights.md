@@ -7,7 +7,7 @@ Knights' monthly tariff cards, how the energy / injection / tax / DSO fields are
 parsed for each supported product, and the land mines a future maintainer
 must know when Energy Knights changes its cards. The test module
 `tests/test_energyknights.py` is treated as ground truth throughout: it pins the
-expected parse output against twelve real fixtures.
+expected parse output against fourteen real fixtures.
 
 Related reading:
 
@@ -27,7 +27,7 @@ Related reading:
 Energy Knights BV (Mechelen) sells residential electricity in Flanders only. It
 publishes six products, three base and a "green" twin of each, since Optima
 Online and its twin were withdrawn in October 2026. The integration tracks all
-six:
+six, and the two withdrawn ones for the households still under contract on them:
 
 | Contract id | Card product | Kind | Settles on |
 | --- | --- | --- | --- |
@@ -37,6 +37,8 @@ six:
 | `energyknights_agilior_green` | Agilior Online Green | as above | as above, plus the green adder |
 | `energyknights_agilis_green` | Agilis Online Green | as above | as above, plus the green adder |
 | `energyknights_essentia_green` | Essentia Online Green | as above | as above, plus the green adder |
+| `energyknights_optima` | Optima Online *(withdrawn 2026-10-01)* | `dynamic`, quarter-hourly | `Belpex_15` |
+| `energyknights_optima_green` | Optima Online Green *(withdrawn 2026-10-01)* | as above | as above, plus the green adder |
 
 Agilior and Agilis are the same card design on different settlement grids (two separate
 PDFs, one slug each); the only thing separating them in the parsed snapshot is
@@ -56,14 +58,18 @@ is also the contractual fallback for both: page 3 of every dynamic card says tha
 consumption Fluvius cannot deliver quarter values for is billed "volgens het variabele
 tarief (Essentia Online) dat van toepassing is in dezelfde tariefmaand".
 
-**Optima Online was out of scope, and is no longer sold.** Its energy block was byte-identical to Agilior's in
-August 2026, but its card carries a `Service fee onbalans handelen (€/jaar)` whose
-amount depends on which home energy management system the customer runs. It printed
-10,00 EUR/jaar for Flexio by Lifepowr on the December 2025 card and printed with no
-value at all in August 2026. No field in `SupplierSnapshot` can hold a fee keyed on the
-customer's own hardware, and shipping the product would price it at zero and silently
-under-bill whenever Energy Knights re-prints it. The October 2026 listing names neither
-Optima Online nor its twin, and their cards redirect to the homepage.
+**Optima Online is withdrawn, and priced on its last card.** It is Agilior's card for a
+household whose home energy management system trades its flexibility on the imbalance
+market, sold from December 2025 (as `Elektriciteit Optima`, slug `optima`) to September
+2026 (issue #135). Every one of those months printed `Belpex_15 * 1 + 12` and
+`Belpex_15 * 1 - 12` on the Agilior layout, on a 15,00 EUR abonnement in December 2025
+and 25,00 after. Two things on it are not modelled. What the imbalance trading earns is
+paid in "munten", depends on the EMS and is not published. The EMS's own service fee was
+printed once, 10,00 EUR/jaar for Flexio by Lifepowr on the December 2025 card, and listed
+with no value from January 2026. The October 2026 listing names neither Optima Online
+nor its twin, so both carry `withdrawn=date(2026, 10, 1)`. The card also says a contract
+whose imbalance service stops, for instance when the EMS operator's agreement ends, moves
+to Agilior Online.
 
 **The green twins are the same card plus one row.** `Groene stroom (c€/kWh)`, no formula
 and no footnote, so it is on the same VAT-inclusive basis as the printed rate columns and
@@ -74,7 +80,7 @@ hardcoded adder would have been a third light that month. It is mandatory on a g
 card, since the row is what the customer is paying the premium for.
 
 `DISCOVER_IDS` lists the six published slugs so `discover()` only flags a genuinely new
-product, and the module asserts that every slug it sells is in that set - otherwise the
+product, and the module asserts that every slug it still sells is in that set - otherwise the
 nightly catalogue check would report our own products as new. The same check reports a
 slug the listing stops naming, which is why Optima Online and its twin left the set when
 Energy Knights withdrew them: kept, they failed it every day.
@@ -92,7 +98,15 @@ The `/website/` prefix is part of the path. Without it the site answers 404. So 
 `par` segment, which the site added on 1 October 2026 beside a `prof` one for its
 professional cards: since then every URL without it, current, archive and listing alike,
 answers 404, which stopped all six contracts at once. Slugs are `agilioronline`,
-`agilisonline` and `essentiaonline`, and the same three with `green` appended.
+`agilisonline`, `essentiaonline` and `optimaonline`, and the same four with `green`
+appended.
+
+A withdrawn product never asks its current address (`_last_card`). That answers with the
+homepage, except on a session that has already read an archived month: the site keeps
+the last card viewed in its session cookie and serves it there, so with Home Assistant's
+shared session, which keeps cookies, a year-to-date walk would leave a past month's card
+to be read as the current one. `fetch` reads the archived card of the month before
+`withdrawn` instead, and `probe` answers a key that never moves.
 
 ```
 config (contract_id) -> fetch(): GET the product's card URL
@@ -434,10 +448,12 @@ products at the turn of the year, so an archived month resolves under a predeces
 | Agilior | `agilioronline` / "Agilior Online" | `dynamic15` / "Elektriciteit Dynamisch 15" or "Dynamisch15" | 2025-09 |
 | Agilis | `agilisonline` / "Agilis Online" | `dynamic` / "Elektriciteit Dynamisch" | 2025-01 |
 | Essentia | `essentiaonline` / "Essentia Online" | `variable` / "Elektriciteit Variabel" | 2025-01 |
+| Optima | `optimaonline` / "Optima Online" | `optima` / "Elektriciteit Optima" | 2025-12, last 2026-09 |
 
 The handover is clean, measured against the live site: no month resolves under both
 slugs, and none is missing between them. Agilior stops at 2025-09 because `dynamic15`
-did not exist before that, not because of the horizon.
+did not exist before that, and Optima at 2025-12 for the same reason, not because of
+the horizon.
 
 **"Elektriciteit Dynamisch" is a prefix of "Elektriciteit Dynamisch15".** The product
 guard compares the whole captured name, so it separates them; a prefix or a substring

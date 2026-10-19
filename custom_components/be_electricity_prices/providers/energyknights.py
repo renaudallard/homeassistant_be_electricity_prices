@@ -41,25 +41,29 @@ aiohttp follows, so a typo yields 480 KB of HTML rather than an error status.
 _fetch_validated_pdf_bytes catches that on the magic bytes and raises, which
 is why nothing here inspects the payload itself.
 
-All six published products are modelled. Agilior Online prices each
-quarter hour off Belpex_15 and Agilis Online each hour off Belpex_h; they are
-the same card with a different index token, and the only thing separating them
-in the snapshot is DynamicRates.quarter_hourly. Essentia Online is indexed
-monthly, on Belpex-RLP for offtake and the solar-weighted Belpex-SPP for the
-credit, and it is the contractual fallback the other two bill on when Fluvius
-cannot deliver quarter values.
+All six published products are modelled, and the two withdrawn ones.
+Agilior Online prices each quarter hour off Belpex_15 and Agilis Online each
+hour off Belpex_h; they are the same card with a different index token, and
+the only thing separating them in the snapshot is DynamicRates.quarter_hourly.
+Essentia Online is indexed monthly, on Belpex-RLP for offtake and the
+solar-weighted Belpex-SPP for the credit, and it is the contractual fallback
+the other two bill on when Fluvius cannot deliver quarter values.
 
 Each also has a "green" twin, which is the same card plus one flat
-"Groene stroom" row applying to every kWh, so the six share every parser here.
-That row is not a constant: it printed 0,42 c€/kWh in September 2025 against
-0,32 everywhere else.
+"Groene stroom" row applying to every kWh, so they all share every parser
+here. That row is not a constant: it printed 0,42 c€/kWh in September 2025
+against 0,32 everywhere else.
 
-Optima Online and its twin were the two products left out. Optima carries a
-"Service fee onbalans handelen" whose amount depends on which home energy
-management system the customer runs: 10,00 EUR/jaar in December 2025, printed
-without a value in August 2026, and no field here can hold it. Energy Knights
-stopped publishing both in October 2026, so they left DISCOVER_IDS too, and
-discover() would report their return as a new product.
+Optima Online and its twin are Agilior's card for a household whose home
+energy management system trades its flexibility on the imbalance market, sold
+from December 2025 to September 2026 (issue #135). Every month printed
+"Belpex_15 * 1 + 12" and "Belpex_15 * 1 - 12" on the Agilior layout. What the
+imbalance trading earns is paid in "munten", depends on the EMS and is not
+published, and the December 2025 card alone printed the EMS's service fee
+(10,00 EUR/jaar for Flexio), so neither is modelled. Energy Knights stopped
+publishing both in October 2026: they are withdrawn, priced on their last
+card, and left out of DISCOVER_IDS, so discover() would report their return
+as a new product.
 
 Two things on these cards are easy to get wrong.
 
@@ -95,7 +99,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 import aiohttp
 
@@ -165,6 +169,11 @@ _RENAMED_FROM = date(2026, 1, 1)
 # whole month at the wrong network cost, which is worse than not billing it.
 _ARCHIVE_HORIZON = date(2025, 1, 1)
 
+# The October 2026 listing names neither Optima product and their current card
+# redirects to the homepage, while the archive still serves every month up to
+# September 2026.
+_OPTIMA_WITHDRAWN = date(2026, 10, 1)
+
 
 @dataclass(frozen=True)
 class _ContractDef:
@@ -208,6 +217,8 @@ class _ContractDef:
     # is not constant: it printed 0,42 c€/kWh in September 2025 and 0,32
     # everywhere else, so it is parsed like everything else here.
     green: bool = False
+    # The first day Energy Knights no longer sold it; see ``Contract.withdrawn``.
+    withdrawn: date | None = None
 
     @property
     def credit_index(self) -> str:
@@ -269,9 +280,22 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         legacy_slug="variable",
         legacy_products=("Elektriciteit Variabel",),
     ),
+    _ContractDef(
+        "energyknights_optima",
+        "Energy Knights Optima Online",
+        "dynamic",
+        "optimaonline",
+        "Optima Online",
+        "Belpex_15",
+        quarter_hourly=True,
+        legacy_slug="optima",
+        legacy_products=("Elektriciteit Optima",),
+        # The first month published; "optima" 302s before it.
+        archive_from=date(2025, 12, 1),
+        withdrawn=_OPTIMA_WITHDRAWN,
+    ),
     # The green twins. Same cards plus one flat "Groene stroom" row, so they
-    # share every parser here and differ only by that offset. Optima has no
-    # twin listed because Optima itself is out of scope.
+    # share every parser here and differ only by that offset.
     _ContractDef(
         "energyknights_agilior_green",
         "Energy Knights Agilior Online Green",
@@ -311,12 +335,26 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         legacy_products=("Elektriciteit Variabel Groen",),
         green=True,
     ),
+    _ContractDef(
+        "energyknights_optima_green",
+        "Energy Knights Optima Online Green",
+        "dynamic",
+        "optimaonlinegreen",
+        "Optima Online Green",
+        "Belpex_15",
+        quarter_hourly=True,
+        legacy_slug="optimagreen",
+        legacy_products=("Elektriciteit Optima Groen",),
+        archive_from=date(2025, 12, 1),
+        green=True,
+        withdrawn=_OPTIMA_WITHDRAWN,
+    ),
 )
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
 # Every residential electricity slug on the tariff card listing, so discover()
 # flags only a genuinely new product, and the live check flags one that the
-# listing stops naming.
+# listing stops naming. A withdrawn product is not on it.
 DISCOVER_IDS: frozenset[str] = frozenset(
     {
         "agilioronline",
@@ -327,7 +365,7 @@ DISCOVER_IDS: frozenset[str] = frozenset(
         "essentiaonlinegreen",
     }
 )
-assert {c.slug for c in _CONTRACTS} <= DISCOVER_IDS
+assert {c.slug for c in _CONTRACTS if c.withdrawn is None} <= DISCOVER_IDS
 
 # Index tokens that settle per quarter hour. Listed rather than inferred from
 # the flag, because the two are independent fields and only the card decides:
@@ -431,11 +469,37 @@ async def fetch(
         raise ExtractorError(f"unknown Energy Knights contract {contract_id!r}")
     if region not in _FLANDERS_ONLY:
         raise ExtractorError("Energy Knights only operates in Flanders")
+    if contract.withdrawn is not None:
+        return await _last_card(session, contract, region, contract.withdrawn)
     url = _card_url(contract)
     text = await fetch_pdf_text_layout(session, url)
     snap = parse_snapshot(contract_id, text, url)
     # Here and not in the reader: a past month's card keeps a short table.
     require_every_area("Energy Knights", snap, FLUVIUS_KEYS)
+    return snap
+
+
+async def _last_card(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    region: str,
+    withdrawn: date,
+) -> SupplierSnapshot:
+    """A withdrawn product's card for the last month it was sold.
+
+    Read from the archive, never from the current address. That answers with
+    the homepage, except on a session that has already read an archived
+    month: the site keeps the last card viewed in its session cookie and
+    serves it there, and Home Assistant's shared session keeps cookies, so a
+    year-to-date walk would leave that month's card to be read as current.
+    """
+    last = (withdrawn - timedelta(days=1)).replace(day=1)
+    snap = await fetch_for_month(session, contract.contract_id, region, last)
+    if snap is None:
+        raise ExtractorError(
+            f"Energy Knights {contract.contract_id}: no archived card for "
+            f"{last:%Y-%m}, the last month it was sold"
+        )
     return snap
 
 
@@ -448,11 +512,14 @@ async def probe(
 
     Energy Knights serves a Last-Modified stamped at the moment it generated
     the month's card (09:00 on the last day of the preceding month for the
-    August 2026 set), so the key flips exactly when the rates do.
+    August 2026 set), so the key flips exactly when the rates do. A withdrawn
+    product's last card never changes, so its key does not either.
     """
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None:
         return None
+    if contract.withdrawn is not None:
+        return f"withdrawn {contract.withdrawn.isoformat()}"
     return await head_freshness_key(
         session, _card_url(contract), prefer=("Last-Modified", "ETag")
     )
@@ -836,6 +903,7 @@ EXTRACTOR = SupplierExtractor(
             # one, and every kind here is in SPOT_PRICED_CONTRACT_KINDS, so
             # the key is already mandatory: setting it would add a second,
             # redundant key step to the flow.
+            withdrawn=c.withdrawn,
         )
         for c in _CONTRACTS
     ),

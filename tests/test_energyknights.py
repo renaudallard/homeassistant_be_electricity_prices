@@ -708,10 +708,10 @@ def test_discover_ids_cover_the_published_catalogue() -> None:
         _CONTRACTS,
     )
 
-    assert {c.slug for c in _CONTRACTS} <= DISCOVER_IDS
-    # Optima Online and its twin were never modelled, and Energy Knights
-    # stopped publishing them in October 2026: kept here, the check that a
-    # product left the listing failed on them every day.
+    assert {c.slug for c in _CONTRACTS if c.withdrawn is None} <= DISCOVER_IDS
+    # Energy Knights stopped publishing Optima Online and its twin in October
+    # 2026: kept here, the check that a product left the listing failed on
+    # them every day, and their return would not read as new.
     assert len(DISCOVER_IDS) == 6
     assert not {"optimaonline", "optimaonlinegreen"} & DISCOVER_IDS
 
@@ -965,16 +965,16 @@ def test_a_green_card_does_not_parse_as_its_base_product() -> None:
         parse_snapshot(_AGILIOR_GREEN, _agilior_text(), "test://")
 
 
-def test_all_six_products_are_registered() -> None:
+def test_all_eight_products_are_registered() -> None:
+    """The six sold and the two Optima products withdrawn in October 2026."""
     contracts = {c.id: c for c in EXTRACTORS["energyknights"].contracts}
-    assert len(contracts) == 6
+    assert len(contracts) == 8
+    assert sum(c.withdrawn is None for c in contracts.values()) == 6
     assert contracts[_AGILIOR_GREEN].kind == "dynamic"
     assert contracts[_ESSENTIA_GREEN].kind == "spot_monthly"
     for contract in contracts.values():
         assert contract.regions == frozenset({"flanders"})
         assert contract.spot_indexed_injection is False
-    # Optima has no twin here because Optima itself is out of scope.
-    assert "energyknights_optima_green" not in contracts
 
 
 def test_settlement_index_and_quarter_hourly_flag_agree() -> None:
@@ -1049,3 +1049,96 @@ def test_the_declared_indices_match_the_live_card_grammar() -> None:
         green = by_id[f"energyknights_{stem}_green"]
         assert green.index == plain.index
         assert green.quarter_hourly == plain.quarter_hourly
+
+
+# ---- Optima Online: withdrawn in October 2026 ---------------------------------
+
+_OPTIMA = "energyknights_optima"
+_OPTIMA_GREEN = "energyknights_optima_green"
+
+
+def test_optima_is_agiliors_card_under_its_own_name() -> None:
+    """Every Optima card from December 2025 to September 2026 printed
+    "Belpex_15 * 1 + 12" and "Belpex_15 * 1 - 12" on the Agilior layout
+    (issue #135). The formula column is ex-VAT, the credit VAT-exempt."""
+    snap = parse_snapshot(
+        _OPTIMA,
+        fixture_text("energyknights_optima_aug.pdf", layout=True),
+        "test://ek-optima-aug",
+    )
+    energy = snap.energy
+    assert isinstance(energy, DynamicRates)
+    assert energy.quarter_hourly is True
+    assert energy.factor == pytest.approx(1 * _VAT)
+    assert energy.base == pytest.approx(0.012 * _VAT)
+    assert energy.yearly_fixed_fee == pytest.approx(25.0)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(1.0)
+    assert snap.injection.base == pytest.approx(-0.012)
+    assert set(snap.dsos) == FLUVIUS_KEYS
+
+
+def test_optima_parses_under_its_2025_name() -> None:
+    """Sold as "Elektriciteit Optima" under the slug "optima" in December
+    2025, on a 15,00 standing charge."""
+    from custom_components.be_electricity_prices.providers.energyknights import (
+        _CONTRACTS_BY_ID,
+    )
+
+    optima = _CONTRACTS_BY_ID[_OPTIMA]
+    assert optima.slug_for(date(2025, 12, 1)) == "optima"
+    assert optima.slug_for(date(2026, 1, 1)) == "optimaonline"
+    assert _CONTRACTS_BY_ID[_OPTIMA_GREEN].slug_for(date(2025, 12, 1)) == (
+        "optimagreen"
+    )
+    snap = _legacy("energyknights_optima_dec25.pdf", _OPTIMA)
+    assert snap.publication_label == "2025-12"
+    assert snap.energy.yearly_fixed_fee == pytest.approx(15.0)
+    with pytest.raises(ExtractorError, match="card is for 'Elektriciteit Optima'"):
+        _legacy("energyknights_optima_dec25.pdf", _AGILIOR)
+
+
+def test_optima_green_adds_the_flat_adder() -> None:
+    snap = parse_snapshot(
+        _OPTIMA_GREEN,
+        fixture_text("energyknights_optima_green_sep.pdf", layout=True),
+        "test://ek-optima-green-sep",
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.publication_label == "2026-09"
+    assert snap.energy.base == pytest.approx(0.012 * _VAT + 0.0032)
+
+
+def test_optima_is_withdrawn_from_october_2026() -> None:
+    contracts = {c.id: c for c in EXTRACTORS["energyknights"].contracts}
+    for cid in (_OPTIMA, _OPTIMA_GREEN):
+        assert contracts[cid].withdrawn == date(2026, 10, 1)
+        assert contracts[cid].kind == "dynamic"
+    assert contracts[_AGILIOR].withdrawn is None
+
+
+async def test_a_withdrawn_product_reads_its_last_card_from_the_archive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Its current address answers with the homepage, or, on a session that
+    has read an archived month, with that month's card, since the site keeps
+    the last card viewed in its session cookie. So the current address is
+    never asked: September 2026's archived card is read, and the freshness key
+    never moves."""
+    from custom_components.be_electricity_prices.providers import energyknights
+
+    asked: list[str] = []
+
+    async def serve(_session: Any, url: str) -> str:
+        asked.append(url)
+        return fixture_text("energyknights_optima_green_sep.pdf", layout=True)
+
+    monkeypatch.setattr(energyknights, "fetch_pdf_text_layout", serve)
+    snap = await energyknights.fetch(None, _OPTIMA_GREEN, "flanders")  # type: ignore[arg-type]
+    assert snap.publication_label == "2026-09"
+    assert asked == [
+        "https://www.energyknights.be/website/getHistoricalTariffchart/par/"
+        "2026-09/optimaonlinegreen/nl"
+    ]
+    key = await energyknights.probe(None, _OPTIMA_GREEN, "flanders")  # type: ignore[arg-type]
+    assert key == "withdrawn 2026-10-01"

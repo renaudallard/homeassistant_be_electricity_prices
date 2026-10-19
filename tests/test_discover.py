@@ -207,10 +207,13 @@ def test_energyvision_discover_reads_the_brusol_pages() -> None:
 def test_energyknights_discover_matches_registry() -> None:
     session = _FakeSession(_read("energyknights.html"))
     discovered = _run(energyknights_mod.discover(session))
-    # The listing of October 2026 carries the six products modelled here and
-    # no longer Optima. The baseline is DISCOVER_IDS, the full catalogue, so
-    # a genuinely new product is the only thing that flags.
-    assert discovered == {c.slug for c in energyknights_mod._CONTRACTS}
+    # The listing of October 2026 carries the six products still sold and no
+    # longer Optima, which is modelled as withdrawn. The baseline is
+    # DISCOVER_IDS, the full catalogue, so a genuinely new product is the only
+    # thing that flags.
+    assert discovered == {
+        c.slug for c in energyknights_mod._CONTRACTS if c.withdrawn is None
+    }
     assert discovered <= energyknights_mod.DISCOVER_IDS
 
 
