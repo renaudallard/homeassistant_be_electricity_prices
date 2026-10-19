@@ -292,9 +292,11 @@ class _Patience:
 
 
 _MANIFEST = "pdfs.json"
-# The running month and the twelve before it, the same retention the gas and
-# water namespaces keep.
-_KEEP_MONTHS = 12
+# The running month and the thirty-six before it, the same retention the gas
+# and water namespaces keep: a fixed contract runs up to three years on the
+# card of the month it was signed, and a product withdrawn since has no other
+# copy of it.
+_KEEP_MONTHS = 36
 # The rows sit under their own directory of the cards repository, so the
 # texts, the manifest and the sheets keep the top of it readable.
 _ROWS = "cards"

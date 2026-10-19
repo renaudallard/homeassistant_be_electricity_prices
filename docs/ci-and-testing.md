@@ -1052,7 +1052,7 @@ Three design points:
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
   what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py`),
   so the archive gains a commit only when a card changed. Months older than `--keep-months`
-  (12) are removed on every run (`_prune`, `scripts/archive_cards.py`), and so is every text no
+  (36) are removed on every run (`_prune`, `scripts/archive_cards.py`), and so is every text no
   row names (`_drop_unnamed_texts`): the day's copy of a listing page that carries a nonce, the
   text a rewritten row no longer reads, or the texts of a row pruned. Texts never go by the
   month they were stored in: a card published ahead of its month is stored the month before

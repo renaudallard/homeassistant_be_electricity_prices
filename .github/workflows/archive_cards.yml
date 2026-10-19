@@ -12,7 +12,7 @@ on:
         description: >-
           Also mirror this many closed months before the current one from the
           supplier archives, for months the archive does not hold yet. At
-          most 12, the months the archive keeps.
+          most 36, the months the archive keeps.
         default: "12"
         required: false
         type: string
@@ -396,16 +396,16 @@ jobs:
           # the current month's from the live walk, a past month's by asking
           # the supplier's archive for that month once more.
           [ "$failed" -eq 0 ] || exit 1
-          # Same retention as the rows: a month more than twelve back goes.
+          # Same retention as the rows: a month more than thirty-six back goes.
           # Only this integration's releases, not the gas or water ones, and
           # counted from the 1st so no day of the month shifts the cutoff.
           # Listed with an explicit limit: gh stops at 30 by default, and with
-          # two releases a month the ones past the cutoff would sit beyond it
-          # from 2029 on, never listed and never deleted. A release pdfs.json
+          # two releases a month the ones past the cutoff would sit beyond it,
+          # never listed and never deleted. A release pdfs.json
           # still lists stays: an unchanged card is uploaded once, under the
           # month it was first captured in, and the walk keeps its entry while
           # a kept row names it.
-          cutoff="electricity-$(date -u -d "$(date -u +%Y-%m-01) -12 months" +%Y-%m)"
+          cutoff="electricity-$(date -u -d "$(date -u +%Y-%m-01) -36 months" +%Y-%m)"
           jq -r '.[] | split("/")[0]' "$manifest" | sort -u > named.txt
           gh release list --repo "$CARDS_REPO" --limit 1000 --json tagName --jq '.[].tagName'             | while read -r tag; do
               case "$tag" in electricity-*) ;; *) continue ;; esac
