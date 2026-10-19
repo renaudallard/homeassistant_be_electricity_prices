@@ -1,7 +1,8 @@
 # Provider: energyknights
 
 This document is the maintenance reference for the Energy Knights extractor
-(`providers/energyknights.py`). It explains how the extractor addresses Energy
+(`providers/energyknights.py`, with its DSO and tax readers in
+`providers/_energyknights_overlays.py`). It explains how the extractor addresses Energy
 Knights' monthly tariff cards, how the energy / injection / tax / DSO fields are
 parsed for each supported product, and the land mines a future maintainer
 must know when Energy Knights changes its cards. The test module
@@ -292,7 +293,8 @@ a classic one, and the two differ by far more than rounding:
 | afname normaal | 5,35 c€/kWh | 8,09 c€/kWh |
 | capaciteitstarief | 52,37 EUR/kW/jaar | 130,92 EUR/kW/jaar |
 
-`_extract_dsos` cuts at the `klassieke meter` header and reads only the digital block.
+`_extract_dsos` (`_energyknights_overlays.py`) cuts at the `klassieke meter` header and
+reads only the digital block.
 Both markers are matched case-insensitively and only when they stand alone on their line.
 A plain substring search binds the digital one to the solar footnote instead, *"Heb je
 zonnepanelen en een digitale meter?"*, which sits 921 characters above the table on every
