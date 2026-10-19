@@ -5516,8 +5516,15 @@ async def _run(texts: Path | None = None) -> int:
         for _contract in _mod.EXTRACTOR.contracts:
             _CONTRACTS_BY_ID[_contract.id] = _contract
     timeout = aiohttp.ClientTimeout(total=60)
+    # Public resolvers rather than the runner's. Fluvius serves its own zone
+    # from two nameservers that do not answer GitHub's Azure resolver, so
+    # www.fluvius.be never resolved from a runner while 1.1.1.1 and 8.8.8.8
+    # resolve it. aiodns comes with homeassistant.
+    resolver = aiohttp.AsyncResolver(nameservers=["1.1.1.1", "8.8.8.8"])
     async with aiohttp.ClientSession(
-        timeout=timeout, trace_configs=[_trace_config()]
+        connector=aiohttp.TCPConnector(resolver=resolver),
+        timeout=timeout,
+        trace_configs=[_trace_config()],
     ) as session:
         # Run the per-supplier checks concurrently. ContextVars are
         # copy-on-write per asyncio.Task, so the _attributed() ContextVar
