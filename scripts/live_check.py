@@ -183,11 +183,11 @@ def _load_providers() -> dict[str, types.ModuleType]:
     # ModuleNotFoundError, and the first version of the spot-fallback check
     # did exactly that and never ran.
     api = _load("be_pkg.api", PKG / "api.py")
-    global _ENERGY_CHARTS_CLIENT, _ENSURE_TARIFF_SHEET
+    global _ENERGY_CHARTS_CLIENT, _FETCH_TARIFF_SHEET
     _ENERGY_CHARTS_CLIENT = api.EnergyChartsClient
     # The integration's own reader of Fluvius's sheet, for the same reason.
     fluvius = _load("be_pkg.fluvius", PKG / "fluvius.py")
-    _ENSURE_TARIFF_SHEET = fluvius.ensure_tariff_sheet
+    _FETCH_TARIFF_SHEET = fluvius._fetch_sheet
     # And the hours it bills by, which the schedule watch holds against what
     # the operators publish.
     global _DAY_NIGHT, _IMPACT_BAND
@@ -361,8 +361,9 @@ _EXTRACTOR_ERROR: type[Exception] = RuntimeError
 # changes shape under it fails here instead of silently at a user's next
 # ENTSO-E outage.
 _ENERGY_CHARTS_CLIENT: Any = None
-# Bound by _load_providers to fluvius.ensure_tariff_sheet.
-_ENSURE_TARIFF_SHEET: Any = None
+# Bound by _load_providers to fluvius._fetch_sheet, the reader under
+# ensure_tariff_sheet, which raises where ensure_tariff_sheet logs.
+_FETCH_TARIFF_SHEET: Any = None
 # Bound by _load_providers to the day_night module and pricing.dso_impact_band.
 _DAY_NIGHT: Any = None
 _IMPACT_BAND: Any = None
@@ -2877,7 +2878,7 @@ def _check_vreg_ceiling_consensus(
     schema 65 so older rows carry ``None`` whatever their card said.
 
     ``ceilings`` is the maximumtarief of each year's sheet, ex-VAT, as the
-    integration reads it (``fluvius.ensure_tariff_sheet``); a month whose
+    integration reads it (``fluvius._fetch_sheet``); a month whose
     year it does not hold is not checked, and
     :func:`_check_fluvius_sheet` reports that.
 
@@ -3007,26 +3008,47 @@ def _check_vreg_ceiling_consensus(
 
 async def _fluvius_sheets(
     session: aiohttp.ClientSession, today: date | None = None
-) -> dict[int, Any]:
+) -> tuple[dict[int, Any], dict[int, str]]:
     """This year's and last year's Fluvius sheets, as ``fluvius.SheetTerms``
-    or ``None``."""
+    or ``None``, and the fetch error of each year that raised one."""
     today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
-    return {
-        year: await _ENSURE_TARIFF_SHEET(session, year)
-        for year in (today.year - 1, today.year)
-    }
+    sheets: dict[int, Any] = {}
+    errors: dict[int, str] = {}
+    for year in (today.year - 1, today.year):
+        try:
+            sheets[year] = await _FETCH_TARIFF_SHEET(session, year)
+        except Exception as err:
+            sheets[year] = None
+            # The ExtractorError's own text, whose prefix says if it heals.
+            errors[year] = (
+                str(err)
+                if isinstance(err, _EXTRACTOR_ERROR)
+                else f"{type(err).__name__}: {err}"
+            )
+    return sheets, errors
 
 
-def _check_fluvius_sheet(sheets: Mapping[int, Any], today: date | None = None) -> None:
+def _check_fluvius_sheet(
+    sheets: Mapping[int, Any],
+    errors: Mapping[int, str],
+    today: date | None = None,
+) -> None:
     """Assert this year's Fluvius tariff sheet can still be read, whole.
 
     Without it the integration bills the ceiling each card prints, which for
     Mega and Bolt is the 2023 one, and without its minimum contribution the
     capacity floor falls back to the constant; nothing else would say the
     reader broke. Reported as a tax row, so it files in the federal block's
-    thread and fails no pull request.
+    thread and fails no pull request. A fetch that failed the way a later one
+    recovers from passes, as the Frank freshness rows do: the integration
+    retries it within hours, and a DNS blip on the runner is no broken reader.
     """
     today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    label = f"_federal: Fluvius {today.year} tariff sheet unreadable"
+    error = errors.get(today.year)
+    if error is not None and _is_transient_fetch_error(error):
+        _record(label, True, f"sheet not fetched: {error}", kind="tax")
+        return
     terms = sheets.get(today.year)
     if terms is None:
         detail = (
@@ -3040,8 +3062,10 @@ def _check_fluvius_sheet(sheets: Mapping[int, Any], today: date | None = None) -
         )
     else:
         return
+    if error is not None:
+        detail = f"{detail} ({error})"
     _record(
-        f"_federal: Fluvius {today.year} tariff sheet unreadable",
+        label,
         False,
         f"{detail}; see fluvius.py and the listing it starts from",
         kind="tax",
@@ -3155,7 +3179,9 @@ async def _check_dso_schedules(
     bill from. So each page's sentence is turned into the hours it covers and
     held against what the code classifies on the next working day, and a page
     that no longer states them, or states other hours, is reported. Reported
-    as a tax row, under its own issue title, so it fails no pull request.
+    as a tax row, under its own issue title, so it fails no pull request. A
+    page that failed the way a later fetch recovers from passes, as in
+    :func:`_check_fluvius_sheet`.
     """
     day = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
     while day.weekday() >= 5 or _DAY_NIGHT.is_belgian_holiday(day):
@@ -3168,10 +3194,13 @@ async def _check_dso_schedules(
                 pages[url] = _page_text(await _fetch_text(session, url))
             except _EXTRACTOR_ERROR as err:
                 errors[url] = str(err)
-        match = pattern.search(pages[url]) if url in pages else None
+        label = f"_schedule: {name} hours no longer match"
         if url in errors:
-            detail = f"{url} could not be read: {errors[url]}"
-        elif match is None:
+            ok = _is_transient_fetch_error(errors[url])
+            _record(label, ok, f"{url} could not be read: {errors[url]}", kind="tax")
+            continue
+        match = pattern.search(pages[url])
+        if match is None:
             detail = f"{url} no longer states the hours in the words this reads"
         elif (published := _published_hours(match.group(1))) != billed:
             detail = (
@@ -3181,7 +3210,7 @@ async def _check_dso_schedules(
             )
         else:
             continue
-        _record(f"_schedule: {name} hours no longer match", False, detail, kind="tax")
+        _record(label, False, detail, kind="tax")
 
 
 def _check_federal_tax_consensus(
@@ -5528,8 +5557,8 @@ async def _run(texts: Path | None = None) -> int:
             # gate, which is the one check that sees a supplier superseding
             # a card we still resolve.
             try:
-                sheets = await _fluvius_sheets(session)
-                _check_fluvius_sheet(sheets)
+                sheets, sheet_errors = await _fluvius_sheets(session)
+                _check_fluvius_sheet(sheets, sheet_errors)
                 ceilings = {
                     year: None if terms is None else terms.ceiling
                     for year, terms in sheets.items()

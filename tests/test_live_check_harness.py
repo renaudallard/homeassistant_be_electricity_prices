@@ -55,6 +55,9 @@ import aiohttp
 import pytest
 from homeassistant.util import dt as dt_util
 
+from custom_components.be_electricity_prices.providers._pdf import (
+    is_transient_fetch_error,
+)
 from custom_components.be_electricity_prices.providers._rates import SpotMonthlyRates
 from tests import FLUVIUS_CEILINGS
 
@@ -1899,8 +1902,8 @@ async def _async_no_op(*_args: Any) -> None:
     return None
 
 
-async def _async_dict(*_args: Any) -> dict[Any, Any]:
-    return {}
+async def _async_no_sheets(*_args: Any) -> tuple[dict[Any, Any], dict[Any, Any]]:
+    return {}, {}
 
 
 def _drive_run(
@@ -1915,7 +1918,7 @@ def _drive_run(
     monkeypatch.setattr(lc, "_SUPPLIERS", ())
     phases: dict[str, Callable[..., Any]] = {
         "_check_catalogs": _async_no_op,
-        "_fluvius_sheets": _async_dict,
+        "_fluvius_sheets": _async_no_sheets,
         "_check_fluvius_sheet": _sync_no_op,
         "_check_dso_schedules": _async_no_op,
         "_check_vreg_ceiling_consensus": _sync_no_op,
@@ -3862,20 +3865,37 @@ def test_an_unreadable_fluvius_sheet_is_reported(
     """Without this year's sheet the integration bills each card's own
     ceiling and nothing else would say the reader broke. A month whose year is
     not held is not compared against anything."""
+    monkeypatch.setattr(lc, "_is_transient_fetch_error", is_transient_fetch_error)
     today = date(2026, 10, 19)
     whole = SimpleNamespace(ceiling=0.3276168, floor_kw=2.5)
-    lc._check_fluvius_sheet({2025: whole, 2026: whole}, today)
+    lc._check_fluvius_sheet({2025: whole, 2026: whole}, {}, today)
     assert lc.CHECKS == []
-    lc._check_fluvius_sheet({2025: whole, 2026: None}, today)
+    lc._check_fluvius_sheet({2025: whole, 2026: None}, {}, today)
     (row,) = lc.CHECKS
     assert row.label == "_federal: Fluvius 2026 tariff sheet unreadable"
     assert not row.ok and row.kind == "tax"
     assert "maximumtarief" in row.detail
     lc.CHECKS.clear()
     no_floor = SimpleNamespace(ceiling=0.3276168, floor_kw=None)
-    lc._check_fluvius_sheet({2026: no_floor}, today)
+    lc._check_fluvius_sheet({2026: no_floor}, {}, today)
     (row,) = lc.CHECKS
     assert "minimum contribution" in row.detail
+
+    # The 2026-10-19 run: the runner's DNS failed on www.fluvius.be. That
+    # heals on its own and passes; a sheet that raised otherwise still files.
+    lc.CHECKS.clear()
+    dns = (
+        "network error fetching https://www.fluvius.be/nl/factuur-en-tarieven/"
+        "netkosten/netkosten-afname-elektriciteit: Cannot connect to host "
+        "www.fluvius.be:443 ssl:default [Timeout while contacting DNS servers]"
+    )
+    lc._check_fluvius_sheet({2026: None}, {2026: dns}, today)
+    (row,) = lc.CHECKS
+    assert row.ok and dns in row.detail
+    lc.CHECKS.clear()
+    lc._check_fluvius_sheet({2026: None}, {2026: "BadZipFile: not a zip"}, today)
+    (row,) = lc.CHECKS
+    assert not row.ok and "(BadZipFile: not a zip)" in row.detail
 
     lc.CHECKS.clear()
     text = tmp_path / "texts" / "2026-09" / "bolt.txt"
@@ -4865,18 +4885,23 @@ async def test_the_social_tariff_is_checked_on_its_own_bounds(
     }
 
 
-def _schedule_pages(monkeypatch: Any, pages: dict[str, str]) -> list[str]:
-    """The watch over the integration's own schedule code and these pages."""
+def _schedule_pages(
+    monkeypatch: Any, pages: dict[str, str], errors: dict[str, str] | None = None
+) -> list[str]:
+    """The watch over the integration's own schedule code and these pages; a
+    page not served raises its entry in ``errors``, else an HTTP 404."""
+    errors = errors or {}
     from custom_components.be_electricity_prices import day_night, pricing
 
     monkeypatch.setattr(lc, "_DAY_NIGHT", day_night)
     monkeypatch.setattr(lc, "_IMPACT_BAND", pricing.dso_impact_band)
+    monkeypatch.setattr(lc, "_is_transient_fetch_error", is_transient_fetch_error)
     asked: list[str] = []
 
     async def _fetch(_session: Any, url: str) -> str:
         asked.append(url)
         if url not in pages:
-            raise lc._EXTRACTOR_ERROR("HTTP 403")
+            raise lc._EXTRACTOR_ERROR(errors.get(url, "HTTP 404"))
         return pages[url]
 
     monkeypatch.setattr(lc, "_fetch_text", _fetch)
@@ -4924,9 +4949,28 @@ def test_an_operator_moving_its_hours_is_reported(monkeypatch: Any) -> None:
         "_schedule: ORES off-peak hours no longer match",
     ]
     assert all(row.kind == "tax" and not row.ok for row in rows.values())
-    assert "could not be read: HTTP 403" in (
+    assert "could not be read: HTTP 404" in (
         rows["_schedule: Fluvius day hours no longer match"].detail
     )
     assert "[0, 1, 2, 3, 4, 5, 6, 12, 13" in (
         rows["_schedule: ORES off-peak hours no longer match"].detail
     )
+
+
+def test_a_page_the_runner_could_not_reach_passes(monkeypatch: Any) -> None:
+    """The 2026-10-19 run: the runner's DNS failed on www.fluvius.be. A fetch
+    that heals on its own passes both Fluvius rows; the ORES pages are still
+    held against the code."""
+    pages = _served_pages()
+    del pages[lc._FLUVIUS_HOURS_URL]
+    dns = (
+        f"network error fetching {lc._FLUVIUS_HOURS_URL}: Cannot connect to host "
+        "www.fluvius.be:443 ssl:default [DNS server returned general failure]"
+    )
+    _schedule_pages(monkeypatch, pages, {lc._FLUVIUS_HOURS_URL: dns})
+    asyncio.run(lc._check_dso_schedules(None, date(2026, 10, 19)))
+    assert sorted(check.label for check in lc.CHECKS) == [
+        "_schedule: Fluvius day hours no longer match",
+        "_schedule: Fluvius early day hours no longer match",
+    ]
+    assert all(check.ok and dns in check.detail for check in lc.CHECKS)
