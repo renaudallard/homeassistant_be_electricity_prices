@@ -512,35 +512,26 @@ def test_withdrawn_supplier_not_a_comparison_target() -> None:
             }
 
 
-def test_withdrawn_contract_not_offered_to_new_setups() -> None:
+def test_withdrawn_contract_offered_to_new_setups_with_a_dagger() -> None:
     """OCTA+ stopped selling Fixed, Eco Fixed, Flux and Eco Flux with its
-    October 2026 cards, while their files still serve the August cards."""
-    from custom_components.be_electricity_prices.flow_contracts import _contracts_for
+    October 2026 cards, but a household still under contract on one has to be
+    able to set it up (issue #135). The setup picker lists them marked with a
+    dagger the step's description explains; the products still sold are not."""
+    from custom_components.be_electricity_prices.flow_schemas import _contract_schema
 
-    offered = {c.id for c in _contracts_for("octaplus", const.REGION_WALLONIA)}
-    assert offered.isdisjoint(
-        {
-            "octaplus_fixed",
-            "octaplus_fixed_impact",
-            "octaplus_ecofixed",
-            "octaplus_flux",
-            "octaplus_ecoflux",
-        }
-    )
-    assert "octaplus_boostfix" in offered
-
-
-def test_withdrawn_contract_still_editable_on_an_existing_entry() -> None:
-    """Same escape hatch as the supplier one: the contract picker's default
-    must be among its options or the entry cannot be edited at all."""
-    from custom_components.be_electricity_prices.flow_contracts import _contracts_for
-
-    kept = {
-        c.id
-        for c in _contracts_for("octaplus", const.REGION_WALLONIA, keep="octaplus_flux")
-    }
-    assert "octaplus_flux" in kept
-    assert "octaplus_fixed" not in kept
+    schema = _contract_schema("octaplus", const.REGION_WALLONIA, {})
+    marker = next(k for k in schema.schema if str(k) == const.CONF_CONTRACT)
+    labels = {o["value"]: o["label"] for o in schema.schema[marker].config["options"]}
+    for withdrawn in (
+        "octaplus_fixed",
+        "octaplus_fixed_impact",
+        "octaplus_ecofixed",
+        "octaplus_flux",
+        "octaplus_ecoflux",
+    ):
+        assert labels[withdrawn].endswith(" †")
+    assert labels["octaplus_flux"] == "OCTA+ Flux †"
+    assert "†" not in labels["octaplus_boostfix"]
 
 
 def test_withdrawn_contract_not_a_comparison_target() -> None:

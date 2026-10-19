@@ -11,7 +11,7 @@
       },
       "contract": {
         "title": "Contrat",
-        "description": "Choisissez votre contrat. L'intégration récupère la carte tarifaire courante à chaque rafraîchissement.",
+        "description": "Choisissez votre contrat. L'intégration récupère la carte tarifaire courante à chaque rafraîchissement. Un contrat marqué † n'est plus vendu par le fournisseur : choisissez-le seulement si votre contrat court encore sur ce produit. Il est alors calculé sur la dernière carte tarifaire publiée pour lui, ou, avec une date de début de contrat, sur la carte du mois de votre signature.",
         "data": {
           "contract": "Contrat",
           "contract_start_date": "Date de début du contrat (facultatif)",
@@ -352,7 +352,7 @@
       },
       "contract": {
         "title": "Contrat",
-        "description": "Choisissez votre contrat. L'intégration récupère la carte tarifaire courante à chaque rafraîchissement.",
+        "description": "Choisissez votre contrat. L'intégration récupère la carte tarifaire courante à chaque rafraîchissement. Un contrat marqué † n'est plus vendu par le fournisseur : choisissez-le seulement si votre contrat court encore sur ce produit. Il est alors calculé sur la dernière carte tarifaire publiée pour lui, ou, avec une date de début de contrat, sur la carte du mois de votre signature.",
         "data": {
           "contract": "Contrat",
           "contract_start_date": "Date de début du contrat (facultatif)",

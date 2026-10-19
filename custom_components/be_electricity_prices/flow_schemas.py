@@ -186,8 +186,15 @@ def _contract_schema(
     supplier_id: str, region: str, defaults: dict[str, Any]
 ) -> vol.Schema:
     current = defaults.get(CONF_CONTRACT)
-    contracts = _contracts_for(supplier_id, region, keep=current)
-    options = [SelectOptionDict(value=c.id, label=c.label) for c in contracts]
+    contracts = _contracts_for(supplier_id, region, withdrawn=True)
+    # A product the supplier no longer sells carries a dagger, which the
+    # step's description explains in the user's language.
+    options = [
+        SelectOptionDict(
+            value=c.id, label=c.label if c.withdrawn is None else f"{c.label} †"
+        )
+        for c in contracts
+    ]
     valid_ids = {c.id for c in contracts}
     selector = SelectSelector(
         SelectSelectorConfig(options=options, mode=SelectSelectorMode.LIST)

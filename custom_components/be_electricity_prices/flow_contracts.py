@@ -105,9 +105,7 @@ def _region_mismatch_error(data: dict[str, Any]) -> dict[str, str] | None:
     if not supplier or not region:
         return None
     try:
-        available = _contracts_for(
-            str(supplier), str(region), keep=data.get(CONF_CONTRACT)
-        )
+        available = _contracts_for(str(supplier), str(region), withdrawn=True)
     except ExtractorError:
         # Not this check's business: an unknown supplier id is rejected by the
         # selector itself.
@@ -118,18 +116,24 @@ def _region_mismatch_error(data: dict[str, Any]) -> dict[str, str] | None:
 
 
 def _contracts_for(
-    supplier_id: str, region: str | None = None, keep: str | None = None
+    supplier_id: str,
+    region: str | None = None,
+    keep: str | None = None,
+    *,
+    withdrawn: bool = False,
 ) -> tuple[Contract, ...]:
-    """The contracts a picker may offer, dropping any the supplier withdrew.
+    """The contracts a picker may offer, dropping any the supplier withdrew
+    unless ``withdrawn`` is set.
 
-    ``keep`` is the contract already stored on the entry being edited, for
-    the reason ``_supplier_options`` gives: a SelectSelector rejects a default
-    that is not among its options.
+    The setup and edit pickers set it: a household still under contract on a
+    product the supplier no longer sells has to be able to set it up. The
+    comparison does not, since nobody can sign one. ``keep`` is the contract
+    already stored on the entry, which a comparison keeps for its what-if.
     """
     contracts = tuple(
         c
         for c in get_extractor(supplier_id).contracts
-        if c.withdrawn is None or c.id == keep
+        if withdrawn or c.withdrawn is None or c.id == keep
     )
     if region is None:
         return contracts

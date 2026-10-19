@@ -144,9 +144,9 @@ async def test_edit_branch_offers_a_withdrawn_supplier_it_already_has(
 async def test_edit_branch_offers_a_withdrawn_contract_it_already_has(
     hass: HomeAssistant,
 ) -> None:
-    """The contract twin of the test above: a product its supplier stopped
-    selling is hidden from everyone else, and the entry on it keeps it as an
-    option it can be submitted with."""
+    """The contract twin of the test above: the entry on a product its
+    supplier stopped selling keeps it as the default it can be submitted
+    with."""
     entry = make_entry(supplier="octaplus", contract="octaplus_flux", region="wallonia")
     entry.add_to_hass(hass)
 
@@ -162,7 +162,6 @@ async def test_edit_branch_offers_a_withdrawn_contract_it_already_has(
     options = {o["value"] for o in selector.config["options"]}
     assert marker.default() == "octaplus_flux"
     assert "octaplus_flux" in options
-    assert "octaplus_fixed" not in options
     assert selector(marker.default()) == "octaplus_flux"
 
 

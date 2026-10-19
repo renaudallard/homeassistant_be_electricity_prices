@@ -11,7 +11,7 @@
       },
       "contract": {
         "title": "Vertrag",
-        "description": "Vertrag wählen. Die Integration holt bei jeder Aktualisierung die aktuelle Tarifkarte.",
+        "description": "Vertrag wählen. Die Integration holt bei jeder Aktualisierung die aktuelle Tarifkarte. Ein mit † markierter Vertrag wird vom Anbieter nicht mehr verkauft: Wählen Sie ihn nur, wenn Ihr Vertrag noch darauf läuft. Er wird dann nach der letzten dafür veröffentlichten Tarifkarte berechnet oder, mit einem Vertragsbeginn, nach der Karte des Monats, in dem Sie unterschrieben haben.",
         "data": {
           "contract": "Vertrag",
           "contract_start_date": "Vertragsbeginn (optional)",
@@ -352,7 +352,7 @@
       },
       "contract": {
         "title": "Vertrag",
-        "description": "Vertrag wählen. Die Integration holt bei jeder Aktualisierung die aktuelle Tarifkarte.",
+        "description": "Vertrag wählen. Die Integration holt bei jeder Aktualisierung die aktuelle Tarifkarte. Ein mit † markierter Vertrag wird vom Anbieter nicht mehr verkauft: Wählen Sie ihn nur, wenn Ihr Vertrag noch darauf läuft. Er wird dann nach der letzten dafür veröffentlichten Tarifkarte berechnet oder, mit einem Vertragsbeginn, nach der Karte des Monats, in dem Sie unterschrieben haben.",
         "data": {
           "contract": "Vertrag",
           "contract_start_date": "Vertragsbeginn (optional)",

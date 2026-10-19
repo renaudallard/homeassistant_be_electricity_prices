@@ -11,7 +11,7 @@
       },
       "contract": {
         "title": "Contract",
-        "description": "Pick your contract. The integration fetches its current rate sheet on every refresh.",
+        "description": "Pick your contract. The integration fetches its current rate sheet on every refresh. A contract marked † is no longer sold by the supplier: pick it only if your contract still runs on it. It is then priced on the last tariff card published for it, or, with a contract start date, on the card of the month you signed.",
         "data": {
           "contract": "Contract",
           "contract_start_date": "Contract start date (optional)",

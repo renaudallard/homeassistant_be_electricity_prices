@@ -76,8 +76,8 @@ Notes:
   cards: the tarifs page and the October archive listing name none of them, while their
   fixed URLs still answer with the cards of 31 August, which `probe` sees as unchanged.
   They stay registered so an entry on one keeps pricing on that last card and is told
-  so by the `contract_withdrawn` Repairs card; new setups and both compare pages no
-  longer offer them. Their past months still come from the archive endpoint.
+  so by the `contract_withdrawn` Repairs card; new setups still list them, marked †,
+  for a household under contract on one, and both compare pages no longer offer them. Their past months still come from the archive endpoint.
 - Smart Variable, Flux, Eco Flux, Boost Flex, Eco Boost Flex and Basic Online carry
   `month_indexed_energy`, the registry twin
   of the parsed `month_indexed`, which offers the optional ENTSO-E key on every solar

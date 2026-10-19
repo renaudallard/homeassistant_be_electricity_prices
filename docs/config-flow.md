@@ -156,9 +156,10 @@ Schema `_user_schema` (`flow_schemas.py`). Two dropdowns:
   extractor by `id`/`label`, ordered by label with the expert custom supplier
   last, minus any carrying `deprecated_until` (a supplier that
   has announced it is leaving the residential market -- you cannot sign up for a
-  contract being transferred away). The contract step drops a product its supplier
-  has stopped selling (`Contract.withdrawn`, through `_contracts_for`) unless it is
-  the entry's own. Region filtering happens on submit instead: a supplier
+  contract being transferred away). The contract step still lists a product its
+  supplier has stopped selling (`Contract.withdrawn`), marked †, because a household
+  can still be under contract on it (issue #135); only the compare pages drop it.
+  Region filtering happens on submit instead: a supplier
   with no product in the chosen region re-shows this form with
   `supplier_region_unavailable` on the supplier field (`_region_mismatch_error`,
   `flow_contracts.py`) rather than being hidden, and the answers typed stay in
@@ -181,9 +182,11 @@ The OptionsFlow's `edit` step seeds instead from `{**entry.data, **entry.options
 ### `contract`: region-filtered product list
 
 Schema `_contract_schema` (`flow_schemas.py`). Contracts come from
-`_contracts_for(supplier_id, region)` (`flow_contracts.py`), which reads
-`get_extractor(supplier_id).contracts` and keeps only those whose
-`Contract.regions` frozenset contains the region. `Contract` is defined at
+`_contracts_for(supplier_id, region, withdrawn=True)` (`flow_contracts.py`), which
+reads `get_extractor(supplier_id).contracts` and keeps only those whose
+`Contract.regions` frozenset contains the region. `withdrawn=True` keeps the products
+the supplier no longer sells, labelled with a trailing ` †` that the step's
+description explains; the compare pages call it without, so they drop them. `Contract` is defined at
 `providers/_rates.py`; its `kind` is one of the `TariffKind` literals
 `fixed | variable | dynamic | tou | tou_impact | spot_monthly` (`providers/_rates.py`).
 

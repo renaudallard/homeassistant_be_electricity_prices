@@ -11,7 +11,7 @@
       },
       "contract": {
         "title": "Contract",
-        "description": "Kies je contract. De integratie haalt bij elke verversing de actuele tariefkaart op.",
+        "description": "Kies je contract. De integratie haalt bij elke verversing de actuele tariefkaart op. Een contract met † wordt niet meer verkocht door de leverancier: kies het alleen als je contract er nog op loopt. Het wordt dan berekend op de laatste tariefkaart die ervoor verscheen, of, met een startdatum van het contract, op de kaart van de maand waarin je tekende.",
         "data": {
           "contract": "Contract",
           "contract_start_date": "Startdatum van het contract (optioneel)",
@@ -352,7 +352,7 @@
       },
       "contract": {
         "title": "Contract",
-        "description": "Kies je contract. De integratie haalt bij elke verversing de actuele tariefkaart op.",
+        "description": "Kies je contract. De integratie haalt bij elke verversing de actuele tariefkaart op. Een contract met † wordt niet meer verkocht door de leverancier: kies het alleen als je contract er nog op loopt. Het wordt dan berekend op de laatste tariefkaart die ervoor verscheen, of, met een startdatum van het contract, op de kaart van de maand waarin je tekende.",
         "data": {
           "contract": "Contract",
           "contract_start_date": "Startdatum van het contract (optioneel)",
