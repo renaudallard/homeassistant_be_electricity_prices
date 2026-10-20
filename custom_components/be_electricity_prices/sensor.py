@@ -620,7 +620,7 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
                 # prices and appears only while the fallback is in use.
                 **(
                     {"attribution": ENERGY_CHARTS_ATTRIBUTION}
-                    if data.spot_source == "energy-charts"
+                    if "energy-charts" in data.spot_source
                     else {}
                 ),
                 "cheapest_4h_today": cheapest,

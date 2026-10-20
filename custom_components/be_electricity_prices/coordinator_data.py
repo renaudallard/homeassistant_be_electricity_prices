@@ -94,9 +94,11 @@ class CoordinatorData:
     # the same fact as a price read out of one.
     card_read_by_ocr: bool = False
     # Which source supplied the day-ahead curve behind these prices:
-    # "entsoe" (source of record) or "energy-charts" (the keyless fallback,
-    # used only while ENTSO-E is unreachable). Not an error, so deliberately
-    # kept out of last_error, which drives the staleness Repairs card.
+    # "entsoe" (source of record), "energy-charts" (the keyless fallback,
+    # used while ENTSO-E is unreachable) or "entsoe+energy-charts" (the
+    # fallback filled a day ENTSO-E had not published). Not an error, so
+    # deliberately kept out of last_error, which drives the staleness Repairs
+    # card.
     spot_source: str = "entsoe"
     # This month's running peak, as measured. NOT floored at the regulated
     # minimum: it is a measurement, and the floor is a billing rule that

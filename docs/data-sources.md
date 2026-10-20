@@ -94,6 +94,18 @@ Two exception types are defined (`api.py`):
 prices *and* the source that supplied them, which reaches the `current_price`
 sensor as `spot_source`.
 
+An ENTSO-E answer that leaves whole local days of the window empty is a
+success, not an `EntsoeError`: from 11:00 the live fetch asks for today and
+tomorrow, and ENTSO-E answers with today alone until it publishes.
+`_fill_missing_days` (`api.py`) asks energy-charts for the missing days only,
+keeps its answer for those days and nothing else, and labels the curve
+`entsoe+energy-charts`. A fill that fails or comes back empty (energy-charts
+answers `no content available` before the auction is out) leaves ENTSO-E's
+answer as it was, without an error, and the next tick asks again. A day
+ENTSO-E answered only in part is not filled. Once tomorrow is held, the live
+cache stops refetching for the day, so the fill costs one energy-charts request
+per entry per tick only until either source publishes.
+
 Three properties are load-bearing:
 
 - **`EntsoeAuthError` is deliberately not caught.** A rejected or exhausted

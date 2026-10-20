@@ -300,9 +300,10 @@ class BePricesCoordinator(
         self._force_refresh = False
         self._spot_cache: dict[datetime, float] = {}
         # Which source last supplied the live curve: "entsoe" normally,
-        # "energy-charts" when the keyless fallback answered for it. Surfaced
-        # on current_price so a user can tell a fallback price from a
-        # source-of-record one rather than having to trust it blindly.
+        # "energy-charts" when the keyless fallback answered for it,
+        # "entsoe+energy-charts" when it filled a day ENTSO-E left out.
+        # Surfaced on current_price so a user can tell a fallback price from
+        # a source-of-record one rather than having to trust it blindly.
         self._spot_source: str = "entsoe"
         self._spot_cache_day: date | None = None
         self._spot_cache_includes_tomorrow = False

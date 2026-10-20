@@ -37,7 +37,7 @@ import json
 import logging
 import math
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import aiohttp
 
@@ -610,10 +610,12 @@ async def fetch_day_ahead_or_fallback(
     """Day-ahead prices plus the source that supplied them.
 
     ENTSO-E stays the source of record; energy-charts answers only when
-    ENTSO-E could not. An ``EntsoeAuthError`` is deliberately NOT caught: a
-    rejected or exhausted token has to keep raising its Repairs card, and
-    quietly papering over it with a keyless source is how an entry runs for
-    months on a credential its owner never renews.
+    ENTSO-E could not, or for the whole local days its answer left out, the
+    source then reading ``entsoe+energy-charts``. An ``EntsoeAuthError`` is
+    deliberately NOT caught: a rejected or exhausted token has to keep
+    raising its Repairs card, and quietly papering over it with a keyless
+    source is how an entry runs for months on a credential its owner never
+    renews.
 
     Not used by the config flow's key check. That check exists to tell an
     invalid key from an unreachable server, and a fallback that answered for
@@ -621,14 +623,18 @@ async def fetch_day_ahead_or_fallback(
     """
     client = EntsoeClient(api_key, session)
     try:
-        return await client.fetch_day_ahead(
+        answered = await client.fetch_day_ahead(
             period_start, period_end, quarter_hourly=quarter_hourly
-        ), "entsoe"
+        )
     except EntsoeAuthError:
         raise
     except EntsoeError as err:
         primary = err
         _LOGGER.debug("ENTSO-E unavailable (%s); trying the keyless fallback", err)
+    else:
+        return await _fill_missing_days(
+            session, answered, period_start, period_end, quarter_hourly
+        )
 
     # Both messages travel together from here on. When the fallback fails too
     # this is what reaches last_error and the log, and the ENTSO-E half is the
@@ -648,3 +654,48 @@ async def fetch_day_ahead_or_fallback(
             f"ENTSO-E: {primary}; fallback returned no prices for the window"
         )
     return prices, "energy-charts"
+
+
+async def _fill_missing_days(
+    session: aiohttp.ClientSession,
+    prices: dict[datetime, float],
+    period_start: datetime,
+    period_end: datetime,
+    quarter_hourly: bool,
+) -> tuple[dict[datetime, float], str]:
+    """Ask energy-charts for the local days an ENTSO-E answer left out.
+
+    ENTSO-E answering for today while tomorrow is not published yet is a
+    success, so the outage path above never sees it, and tomorrow would stay
+    empty until ENTSO-E caught up even when the fallback already carries the
+    curve. Only whole missing days are asked for: every hour ENTSO-E served
+    keeps the source of record. A fallback that fails or has nothing yet
+    leaves ENTSO-E's answer as it was, and the next tick asks again.
+    """
+    day = dt_util.as_local(period_start).date()
+    last = dt_util.as_local(period_end - timedelta(seconds=1)).date()
+    held = {dt_util.as_local(slot).date() for slot in prices}
+    missing: set[date] = set()
+    while day <= last:
+        if day not in held:
+            missing.add(day)
+        day += timedelta(days=1)
+    if not missing:
+        return prices, "entsoe"
+    start = max(period_start, dt_util.start_of_local_day(min(missing)).astimezone(UTC))
+    try:
+        extra = await EnergyChartsClient(session).fetch_day_ahead(
+            start, period_end, quarter_hourly=quarter_hourly
+        )
+    except EntsoeError as err:
+        _LOGGER.debug("ENTSO-E left %s unpriced; fallback: %s", sorted(missing), err)
+        return prices, "entsoe"
+    extra = {
+        slot: value
+        for slot, value in extra.items()
+        if dt_util.as_local(slot).date() in missing
+    }
+    if not extra:
+        return prices, "entsoe"
+    source = "entsoe+energy-charts" if prices else "energy-charts"
+    return dict(sorted({**prices, **extra}.items())), source

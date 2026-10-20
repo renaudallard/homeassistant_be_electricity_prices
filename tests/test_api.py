@@ -450,8 +450,9 @@ class _FakeSession:
     def __init__(self, entsoe: Exception | str, fallback_body: str) -> None:
         self._entsoe = entsoe
         self._fallback_body = fallback_body
+        self.fallback_params: list[object] = []
 
-    def get(self, url: str, **_: object) -> _CM:
+    def get(self, url: str, **kwargs: object) -> _CM:
         if "entsoe" in url:
             if isinstance(self._entsoe, str):
                 return _CM(resp=_Resp(200, self._entsoe))
@@ -459,6 +460,7 @@ class _FakeSession:
                 # A rejected token is an HTTP 401 on the wire.
                 return _CM(resp=_Resp(401, ""))
             return _CM(exc=aiohttp.ClientError("503 Service Unavailable"))
+        self.fallback_params.append(kwargs.get("params"))
         return _CM(resp=_Resp(200, self._fallback_body))
 
 
@@ -607,6 +609,88 @@ async def test_fallback_never_masks_a_rejected_key() -> None:
             datetime(2026, 8, 30, 22, 0, tzinfo=UTC),
             datetime(2026, 8, 31, 22, 0, tzinfo=UTC),
         )
+
+
+# 2026-04-30 and 2026-05-01 in Brussels; _doc's period covers the first only.
+_TODAY_START = datetime(2026, 4, 29, 22, 0, tzinfo=UTC)
+_TOMORROW_START = datetime(2026, 4, 30, 22, 0, tzinfo=UTC)
+_WINDOW_END = datetime(2026, 5, 1, 22, 0, tzinfo=UTC)
+
+
+def _today_only_doc() -> str:
+    return _doc(
+        "".join(
+            f"<Point><position>{i}</position><price.amount>50</price.amount></Point>"
+            for i in range(1, 25)
+        )
+    )
+
+
+def _tomorrow_body() -> str:
+    # The last hour of today rides along to show it cannot displace ENTSO-E.
+    stamps = [_TOMORROW_START - timedelta(hours=1)] + [
+        _TOMORROW_START + timedelta(hours=h) for h in range(24)
+    ]
+    return json.dumps(
+        {
+            "unix_seconds": [int(t.timestamp()) for t in stamps],
+            "price": [999.0] + [100.0] * 24,
+        }
+    )
+
+
+async def test_fallback_fills_a_day_entsoe_has_not_published() -> None:
+    """ENTSO-E answering for today but not yet for tomorrow is a success, so
+    the outage path never ran and tomorrow stayed empty until ENTSO-E caught
+    up, though energy-charts already carried it. The missing day is asked
+    for alone and the hours ENTSO-E served keep the source of record."""
+    session = _FakeSession(entsoe=_today_only_doc(), fallback_body=_tomorrow_body())
+    prices, source = await fetch_day_ahead_or_fallback(
+        "key",
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _WINDOW_END,
+    )
+    assert source == "entsoe+energy-charts"
+    assert session.fallback_params == [
+        {"bzn": "BE", "start": "2026-05-01", "end": "2026-05-01"}
+    ]
+    assert len(prices) == 48
+    assert prices[_TOMORROW_START - timedelta(hours=1)] == pytest.approx(0.05)
+    assert prices[_TOMORROW_START] == pytest.approx(0.1)
+    assert list(prices) == sorted(prices)
+
+
+async def test_a_failed_fill_keeps_the_entsoe_answer() -> None:
+    """Before the auction is out energy-charts has nothing either. That is no
+    error: ENTSO-E's today stands as it was and the next tick asks again."""
+    session = _FakeSession(
+        entsoe=_today_only_doc(), fallback_body="no content available"
+    )
+    prices, source = await fetch_day_ahead_or_fallback(
+        "key",
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _WINDOW_END,
+    )
+    assert source == "entsoe"
+    assert len(prices) == 24
+    assert len(session.fallback_params) == 1
+
+
+async def test_a_complete_entsoe_answer_never_asks_the_fallback() -> None:
+    """Every day of the window answered: energy-charts is rate limited per IP
+    and shared by every entry on the host, so it is not asked."""
+    session = _FakeSession(entsoe=_today_only_doc(), fallback_body="{}")
+    prices, source = await fetch_day_ahead_or_fallback(
+        "key",
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _TOMORROW_START,
+    )
+    assert source == "entsoe"
+    assert len(prices) == 24
+    assert session.fallback_params == []
 
 
 def test_key_validation_does_not_use_the_fallback() -> None:

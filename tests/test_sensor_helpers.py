@@ -356,6 +356,40 @@ def test_the_recorded_attributes_stay_under_the_recorder_cap() -> None:
     assert len(json.dumps(recorded).encode()) < MAX_STATE_ATTRS_BYTES
 
 
+@pytest.mark.parametrize(
+    ("source", "credited"),
+    [
+        ("entsoe", False),
+        ("energy-charts", True),
+        ("entsoe+energy-charts", True),
+    ],
+)
+def test_attribution_rides_with_any_energy_charts_data(
+    source: str, credited: bool
+) -> None:
+    """CC BY 4.0 obliges the credit wherever energy-charts data is shown, and
+    a day it filled beside ENTSO-E's today is shown just the same."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.const import (
+        ENERGY_CHARTS_ATTRIBUTION,
+    )
+    from custom_components.be_electricity_prices.sensor import SENSORS, BePriceSensor
+
+    data = replace(_quarter_today_data([0.1] * 96), spot_source=source)
+    sensor = BePriceSensor(
+        SimpleNamespace(  # type: ignore[arg-type]
+            data=data,
+            entry=SimpleNamespace(entry_id="x", data={}, title="t"),
+            last_update_success=True,
+        ),
+        next(d for d in SENSORS if d.key == "current_price"),
+    )
+    attrs = sensor.extra_state_attributes
+    assert attrs["spot_source"] == source
+    assert (attrs.get("attribution") == ENERGY_CHARTS_ATTRIBUTION) is credited
+
+
 def test_tomorrow_aggregations_return_none_before_publication() -> None:
     data = _today_and_tomorrow_data([0.10] * 24, [])
     assert _tomorrow_avg(data) is None
