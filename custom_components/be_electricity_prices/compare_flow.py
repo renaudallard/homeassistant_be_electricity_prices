@@ -107,6 +107,7 @@ from .providers import (
     offers_quarter_hourly,
     settlement_answer,
 )
+from .spot_stats import spots_available
 
 
 def _compare_supplier_options(
@@ -515,7 +516,7 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
                 )
             )
         )
-        if needs_spot and not current.get(CONF_API_KEY):
+        if needs_spot and not spots_available(current):
             return await self.async_step_compare_api_key()
         return await self.async_step_compare_result()
 

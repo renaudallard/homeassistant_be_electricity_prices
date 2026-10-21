@@ -8034,7 +8034,9 @@ async def test_the_first_tick_fetches_the_month_not_the_year(
     windows: list[tuple[date, date]] = []
     scheduled: list[Any] = []
 
-    async def _fill(start: date, end: date, api_key: str | None = None) -> None:
+    async def _fill(
+        start: date, end: date, api_key: str | None = None, *, keyless: bool = False
+    ) -> None:
         windows.append((start, end))
         # Stand in for what the walk would have cached, so the deferred fill
         # can tell "I fetched a year" from "the cache was already warm".

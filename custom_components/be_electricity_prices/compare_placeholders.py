@@ -76,6 +76,7 @@ from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
     CONF_DIRECT_DEBIT,
+    CONF_KEYLESS_SPOTS,
     CONF_METER,
     CONF_SUPPLIER,
     METER_MONO,
@@ -707,7 +708,10 @@ class _PlaceholdersMixin(OptionsFlow):
             # left out whole. The own row keeps it whatever is typed, since the
             # current_year_cost sensor bills on it (``_own_year``).
             stale = _keyless_stale_spots(current, hist_spots, ytd_from, today_local)
-            typed = bool(self._compare.get(CONF_API_KEY))
+            # A key typed on the page, or the keyless setting ticked there.
+            typed = bool(
+                self._compare.get(CONF_API_KEY) or self._compare.get(CONF_KEYLESS_SPOTS)
+            )
             if stale:
                 hist_spots, hist_quarters = {}, {}
             if compare_spot_injection and not hist_spots:
@@ -720,11 +724,17 @@ class _PlaceholdersMixin(OptionsFlow):
                 # coordinator, so a read-only comparison neither mutates live
                 # coordinator state nor has the next tick persist it.
                 borrowed = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
-                if borrowed:
+                keyless = bool(
+                    self._compare.get(CONF_KEYLESS_SPOTS)
+                    or current.get(CONF_KEYLESS_SPOTS)
+                )
+                if borrowed or keyless:
                     # Isolated: this wants the target's own year, not whatever
                     # the entry happens to hold.
                     view = _detached_spot_view(coord, isolate=True)
-                    await view._ensure_historical_spots(ytd_from, today_local, borrowed)
+                    await view._ensure_historical_spots(
+                        ytd_from, today_local, borrowed, keyless=keyless
+                    )
                     hist_spots = view._historical_spots
                     hist_quarters = view._historical_spot_quarters
             if stale and typed:

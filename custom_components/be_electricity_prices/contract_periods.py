@@ -62,6 +62,7 @@ from .const import (
     CONF_DAY_HOURS,
     CONF_DOUBLE_FLOW_METER,
     CONF_DSO,
+    CONF_KEYLESS_SPOTS,
     CONF_PREVIOUS_CONTRACTS,
     CONF_REGION,
     CONF_SOLAR_KVA,
@@ -97,7 +98,7 @@ from .snapshot_months import month_card, month_card_failed
 from .snapshot_resolve import _resolve_snapshot, entry_annual_kwh
 from .snapshot_stand_ins import card_for_unreadable_month
 from .snapshot_store import fetch_shared
-from .spot_stats import _energy_is_rlp_indexed, _spp_weighting_enabled
+from .spot_stats import _energy_is_rlp_indexed, _spp_weighting_enabled, spots_available
 from .ytd_cost import _compute_current_year_cost
 
 _LOGGER = logging.getLogger(__name__)
@@ -239,11 +240,16 @@ def recorded_contracts(data: Mapping[str, Any]) -> list[tuple[date, Mapping[str,
 
 # Facts about the house rather than the contract that a household may only
 # have entered after recording a switch: the inverter's capacity, once the
-# Repairs card asked for it, a day-ahead key taken out for the new contract,
-# the connection's kVA tier. An earlier contract whose copy has none takes the
+# Repairs card asked for it, a day-ahead key taken out for the new contract
+# or the keyless setting ticked for it, the connection's kVA tier. An earlier contract whose copy has none takes the
 # entry's. One it holds is kept, since a switch is often when the house
 # changes too; the meter, its wiring and direct debit are the contract's own.
-_HOUSEHOLD_BLANKS = (CONF_SOLAR_KVA, CONF_API_KEY, CONF_CONNECTION_KVA_TIER)
+_HOUSEHOLD_BLANKS = (
+    CONF_SOLAR_KVA,
+    CONF_API_KEY,
+    CONF_KEYLESS_SPOTS,
+    CONF_CONNECTION_KVA_TIER,
+)
 
 # Questions a copy recorded before they were asked cannot answer. Whether the
 # meter counts draw and injection apart is the meter's own, so a copy that
@@ -555,14 +561,14 @@ def _kind(period: ContractPeriod) -> str:
 def _reprices_on_spots(period: ContractPeriod) -> bool:
     """Whether the walk re-prices a variable contract's energy off the day-ahead.
 
-    Two ways, and only with an ENTSO-E key in the settings, which is the walk's
-    own guard (``cohort_legs._month_indexed_leg`` and the variable cohort in
+    Two ways, and only with a day-ahead source in the settings, a key or the
+    keyless setting (``spots_available``), which is the walk's own guard (``cohort_legs._month_indexed_leg`` and the variable cohort in
     ``cohort._cohort_legs``): a card indexed on the delivery month's mean, which
     the registry flags ``month_indexed_energy`` and mostly registers as variable,
     and a signing cohort re-priced off its archived variable card's formula.
     """
     data = period.data
-    if not data.get(CONF_API_KEY):
+    if not spots_available(data):
         return False
     if _contract_is_month_indexed(data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT)):
         return True

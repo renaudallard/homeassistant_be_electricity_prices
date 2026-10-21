@@ -858,7 +858,9 @@ async def test_an_old_dynamic_contract_fills_the_spots_with_the_key_it_kept(
     periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
     with patch(f"{_COSTS}.price_previous_periods", AsyncMock(return_value=[])):
         await coord._price_previous(periods, date(2026, 9, 24))
-    fill.assert_awaited_once_with(date(2026, 1, 1), date(2026, 6, 14), "OLDKEY")
+    fill.assert_awaited_once_with(
+        date(2026, 1, 1), date(2026, 6, 14), "OLDKEY", keyless=False
+    )
 
 
 @pytest.mark.parametrize(
@@ -871,6 +873,8 @@ async def test_an_old_dynamic_contract_fills_the_spots_with_the_key_it_kept(
         (_held("mega", "mega_online_flex", api_key="OLDKEY"), True),
         # And one indexed on the delivery quarter's.
         (_held("bolt", "bolt_variable", api_key="OLDKEY"), True),
+        # The keyless setting kept with the old contract does the same.
+        (_held("mega", "mega_online_flex", keyless_spots=True), True),
         # A variable signing cohort, re-priced off its archived card's formula.
         (
             _held(
@@ -907,7 +911,12 @@ async def test_an_old_contract_the_walk_reprices_on_the_day_ahead_fills_the_spot
     with patch(f"{_COSTS}.price_previous_periods", AsyncMock(return_value=[])):
         await coord._price_previous(periods, date(2026, 9, 24))
     if fetched:
-        fill.assert_awaited_once_with(date(2026, 1, 1), date(2026, 6, 14), "OLDKEY")
+        fill.assert_awaited_once_with(
+            date(2026, 1, 1),
+            date(2026, 6, 14),
+            held.get("api_key"),
+            keyless=bool(held.get("keyless_spots")),
+        )
     else:
         fill.assert_not_awaited()
 

@@ -55,7 +55,6 @@ from .cohort_legs import (
     _with_standing_charge,
 )
 from .const import (
-    CONF_API_KEY,
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
     CONF_SUPPLIER,
@@ -83,6 +82,7 @@ from .snapshot_months import (
     month_card,
     month_card_cached,
 )
+from .spot_stats import spots_available
 from .vat_rates import residential_vat
 from .year_ahead import YEAR_AHEAD
 
@@ -417,7 +417,7 @@ async def _cohort_legs(
             # Groene Stroom Flex cohort signed in March showed March's price
             # through a cold start or an ENTSO-E outage.
             if isinstance(cohort, SpotMonthlyRates):
-                if settled is None and not entry.data.get(CONF_API_KEY):
+                if settled is None and not spots_available(entry.data):
                     unindexed, cohort = cohort, None
                     unbilled = "not re-priced while the month runs: no ENTSO-E key"
                 else:
@@ -544,7 +544,7 @@ async def _cohort_legs(
         or archived is not None
         or (
             injection is not None
-            and (injection.fixed_for_term or bool(entry.data.get(CONF_API_KEY)))
+            and (injection.fixed_for_term or spots_available(entry.data))
         )
     )
     return _CohortLegs(

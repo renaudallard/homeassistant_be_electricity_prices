@@ -277,6 +277,12 @@ CONF_DIRECT_DEBIT: Final = "direct_debit"
 DEFAULT_DIRECT_DEBIT: Final = False
 
 CONF_API_KEY: Final = "api_key"
+# Price off the keyless day-ahead sources (energy-charts, then SMARD) without
+# an ENTSO-E key. Opt-in: an entry that skipped the key and never ticked this
+# keeps the card's printed figures where the formula needs the day-ahead, as
+# it did before the setting existed. With a key it changes nothing, since
+# the same sources already back ENTSO-E up.
+CONF_KEYLESS_SPOTS: Final = "keyless_spots"
 
 # Whether prices include VAT. Only meaningful on a contract whose card
 # prints excluding VAT (the professional cards); residential cards print

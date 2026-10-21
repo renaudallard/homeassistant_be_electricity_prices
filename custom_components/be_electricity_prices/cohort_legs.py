@@ -41,7 +41,6 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 
 from .const import (
-    CONF_API_KEY,
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT,
     CONF_MANUAL_ENERGY_FACTOR,
@@ -64,6 +63,7 @@ from .providers._rates import (
 from .providers._settle import _register_indices, settled_registers
 from .providers.base import SupplierSnapshot
 from .snapshot_resolve import _include_vat
+from .spot_stats import spots_available
 
 
 def _manual_energy_leg(
@@ -548,7 +548,7 @@ def _month_indexed_leg(
         return None
     if not (energy.month_indexed or getattr(energy, "quarter_indexed", False)):
         return None
-    if not entry.data.get(CONF_API_KEY):
+    if not spots_available(entry.data):
         return None
     if getattr(energy, "settled_as_stated", False):
         # The month's rates are what the supplier states it settled at, on

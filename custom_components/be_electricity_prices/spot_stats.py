@@ -31,16 +31,20 @@ toward a day that has not been billed."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from statistics import fmean
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_API_KEY,
     CONF_CONTRACT,
     CONF_CUSTOM_INJECTION_MODE,
     CONF_CUSTOM_INJECTION_SPP_WEIGHTED,
+    CONF_KEYLESS_SPOTS,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     CUSTOM_CONTRACT_MONTHLY,
@@ -65,6 +69,16 @@ from .synergrid import (
     RlpWeights,
     SppWeights,
 )
+
+
+def spots_available(data: Mapping[str, Any]) -> bool:
+    """Whether the entry's settings can fetch the day-ahead at all.
+
+    An ENTSO-E key, or the keyless setting. Every branch that bills the
+    card's printed figure "without a key" asks this rather than the key,
+    so an entry on the keyless sources is priced as one with a key.
+    """
+    return bool(data.get(CONF_API_KEY) or data.get(CONF_KEYLESS_SPOTS))
 
 
 def _energy_is_quarter_hourly(energy: EnergyRates) -> bool:

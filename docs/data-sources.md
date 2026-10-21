@@ -105,6 +105,32 @@ that supplied them, joined by `+`, which reaches the `current_price` sensor as
 `spot_source`: `entsoe`, `energy-charts`, `smard`, `entsoe+energy-charts`,
 `entsoe+smard` or `energy-charts+smard`.
 
+### The keyless setting
+
+An entry with no key can opt in to `keyless_spots` (`CONF_KEYLESS_SPOTS`,
+`const.py`). `fetch_day_ahead_or_fallback` is then called with no key: ENTSO-E
+is not asked, the keyless sources answer the whole window, and a failure reads
+`day-ahead: <each cause>`. The historical walk (`_walk_historical_spots`,
+`coordinator_spots.py`) skips its ENTSO-E week chunks and hands every missing
+range to `_fill_spots_from_fallback` at once, one request per grid, which is
+what energy-charts' two requests a minute allows.
+
+The key was also the test for "can this entry be priced on the day-ahead at
+all": a month-indexed card, a variable signing cohort, a frozen feed-in leg,
+the earlier contracts of a switch and the compare pages each bill the card's
+printed figure without one. All of them ask `spots_available` (`spot_stats.py`)
+instead, a key or the setting, so an entry on the setting is priced exactly as
+one with a key. The setting is a household fact like the key
+(`_HOUSEHOLD_BLANKS`, `contract_periods.py`), so an earlier contract inherits
+it. Off by default: an entry with neither keeps the printed figures, and every
+"no ENTSO-E key" fallback described in the provider notes means an entry with
+neither.
+
+`last_error` is cleared on the next good spot fetch only when it starts with
+one of `SPOT_ERROR_PREFIXES` (`api.py`), `ENTSO-E:` or `day-ahead:`. Matching
+the text rather than keeping a flag is deliberate: a card fetch's error can
+overwrite a spot error, and a flag set by the spot fetch would then clear it.
+
 A successful answer leaves days empty when ENTSO-E publishes late: from 11:00
 the live fetch asks for today and tomorrow, and ENTSO-E answers with today
 alone until it publishes. A source that fails or comes back empty

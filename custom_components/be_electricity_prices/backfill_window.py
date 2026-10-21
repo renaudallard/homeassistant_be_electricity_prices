@@ -55,7 +55,6 @@ from .cohort import (
 )
 from .compare_inputs import _coordinator_rlp_index_weights
 from .const import (
-    CONF_API_KEY,
     CONF_CONTRACT,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
@@ -91,7 +90,12 @@ from .snapshot_months import (
     nearer_card_not_read,
 )
 from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
-from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for, _spp_weighting_enabled
+from .spot_stats import (
+    _energy_is_rlp_indexed,
+    _rlp_blend_for,
+    _spp_weighting_enabled,
+    spots_available,
+)
 from .synergrid import RlpWeights, SppWeights
 
 
@@ -370,7 +374,7 @@ async def _build_context(
         if _energy_is_rlp_indexed(snap.energy) or regime == SOLAR_REGIME_COMPENSATION:
             rlp_weights = coordinator._rlp_weights or None
     elif (
-        _energy_is_rlp_indexed(snap.energy) and entry.data.get(CONF_API_KEY)
+        _energy_is_rlp_indexed(snap.energy) and spots_available(entry.data)
     ) or regime == SOLAR_REGIME_COMPENSATION:
         await coordinator._ensure_rlp_weights(_rlp_blend_for(snap.energy))
         rlp_weights = coordinator._rlp_weights or None

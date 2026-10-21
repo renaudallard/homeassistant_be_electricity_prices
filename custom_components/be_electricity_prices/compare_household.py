@@ -76,6 +76,7 @@ from .const import (
     CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
+    CONF_KEYLESS_SPOTS,
     CONF_METER,
     CONF_REGION,
     CONF_SOLAR_REGIME,
@@ -316,21 +317,25 @@ class _HouseholdMixin:
             )
             or compare_spot_injection
         )
-        if need_spot and not spot_dict:
-            api_key = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
-            if api_key:
-                from .api import EntsoeClient
+        # The key typed on the page or the entry's, and the keyless setting
+        # ticked on either: every day-ahead read below goes through them.
+        spot_key = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
+        spot_keyless = bool(
+            self._compare.get(CONF_KEYLESS_SPOTS) or current.get(CONF_KEYLESS_SPOTS)
+        )
+        if need_spot and not spot_dict and (spot_key or spot_keyless):
+            from .api import fetch_day_ahead_or_fallback
 
-                try:
-                    client = EntsoeClient(api_key, async_get_clientsession(self.hass))
-                    midnight = now_utc.replace(
-                        hour=0, minute=0, second=0, microsecond=0
-                    )
-                    spot_dict = await client.fetch_day_ahead(
-                        midnight, midnight + timedelta(days=1)
-                    )
-                except Exception:  # degrade to '-' for the dynamic side
-                    pass
+            try:
+                midnight = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+                spot_dict, _source = await fetch_day_ahead_or_fallback(
+                    spot_key,
+                    async_get_clientsession(self.hass),
+                    midnight,
+                    midnight + timedelta(days=1),
+                )
+            except Exception:  # degrade to '-' for the dynamic side
+                pass
         # For the ANNUAL estimate a dynamic contract's all-in is
         # factor*spot + base, linear in spot, so the time-averaged yearly
         # bill equals the breakdown at the MEAN spot over the fetched
@@ -357,7 +362,6 @@ class _HouseholdMixin:
             if month_spot_resolved:
                 return month_spot_resolved[0]
             value = avg_spot
-            key = self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY)
             # Merged rather than isolated: a month mean is the same number
             # whoever asks, so whatever the entry has already cached is valid
             # input, and it is what still answers when the fetch fails.
@@ -366,7 +370,10 @@ class _HouseholdMixin:
             # A failed fetch degrades to the day-ahead mean.
             with contextlib.suppress(Exception):
                 await view._ensure_historical_spots(
-                    today_local.replace(day=1), today_local, key
+                    today_local.replace(day=1),
+                    today_local,
+                    spot_key,
+                    keyless=spot_keyless,
                 )
             resolved = view._monthly_spot_mean(
                 today_local.year, today_local.month, spot_dict
@@ -456,9 +463,7 @@ class _HouseholdMixin:
                 # A failed fetch degrades to the month mean below.
                 with contextlib.suppress(Exception):
                     await view._ensure_historical_spots(
-                        first,
-                        today_local,
-                        self._compare.get(CONF_API_KEY) or current.get(CONF_API_KEY),
+                        first, today_local, spot_key, keyless=spot_keyless
                     )
                 quarter: float | None = view._quarter_index(
                     snapshot.energy, today_local.year, today_local.month, spot_dict

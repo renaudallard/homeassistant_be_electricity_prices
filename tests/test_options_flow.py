@@ -1308,6 +1308,46 @@ async def test_compare_api_key_is_skippable_when_left_blank(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_quotes_a_dynamic_target_on_the_keyless_sources(
+    hass: HomeAssistant,
+) -> None:
+    """A dynamic target is quoted on today's day-ahead. An entry on the
+    keyless setting is asked for no key and fetches it with none, so it
+    comes from energy-charts or SMARD."""
+    entry, extractors = _static_to_dynamic_compare(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "keyless_spots": True}
+    )
+    fetch = AsyncMock(return_value=({}, "energy-charts"))
+
+    async def _no_history(*_a: Any, **_kw: Any) -> None:
+        return None
+
+    with (
+        extractors,
+        patch(
+            "custom_components.be_electricity_prices.api.fetch_day_ahead_or_fallback",
+            fetch,
+        ),
+        patch.object(type(entry.runtime_data), "_ensure_historical_spots", _no_history),
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_dynamic"}
+        )
+        result = await _pass_compare_solar(hass, entry, result)
+        assert result["step_id"] == "compare_result"
+    assert fetch.await_args is not None
+    assert fetch.await_args.args[0] is None
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_branch_spot_injection_target_prompts_for_api_key(
     hass: HomeAssistant,
 ) -> None:
@@ -1449,7 +1489,7 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
     calls: list[tuple[Any, Any]] = []
 
     async def _fake_ensure(
-        self: Any, start: Any, end: Any, api_key: Any = None
+        self: Any, start: Any, end: Any, api_key: Any = None, *, keyless: bool = False
     ) -> None:
         calls.append((start, api_key))
         if fetched and api_key:
@@ -1509,6 +1549,88 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_on_the_keyless_setting_asks_for_no_key(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An entry on the keyless setting can fetch the day-ahead itself, so the
+    page goes straight to the result and the target's spot-indexed feed-in
+    is credited on a window fetched from the keyless sources."""
+    from dataclasses import replace
+
+    freezer.move_to("2026-06-15 12:00:00+02:00")
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        VariableRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "mega",
+            "contract": "mega_online_fixed",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "keyless_spots": True,
+        },
+        title="Mega injection, keyless",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(
+        hass, entry, _stub_snapshot("mega", "mega_online_fixed", 0.18)
+    )
+    entry.runtime_data = coord
+    other_snap = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.925, base=-0.0125),
+        source_url="test://stub",
+        publication_label="april 2026",
+    )
+    calls: list[tuple[Any, Any, bool]] = []
+
+    async def _fake_ensure(
+        self: Any, start: Any, end: Any, api_key: Any = None, *, keyless: bool = False
+    ) -> None:
+        calls.append((start, api_key, keyless))
+
+    fake = replace(
+        EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
+    with (
+        patch.dict(EXTRACTORS, {"cociter": fake}),
+        patch.object(type(coord), "_ensure_historical_spots", _fake_ensure),
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+            AsyncMock(return_value=123.0),
+        ),
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_variable"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        result = await _pass_compare_solar(hass, entry, result)
+        assert result["step_id"] == "compare_result"
+
+    year_start = date(dt_util.now().year, 1, 1)
+    assert (year_start, None, True) in calls
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_a_keyless_entry_keeps_its_own_row_on_the_sensor_under_a_typed_key(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -1559,7 +1681,7 @@ async def test_a_keyless_entry_keeps_its_own_row_on_the_sensor_under_a_typed_key
     fresh = {datetime(2026, 6, 1, 11, tzinfo=UTC): 0.07}
 
     async def _fake_ensure(
-        self: Any, start: Any, end: Any, api_key: Any = None
+        self: Any, start: Any, end: Any, api_key: Any = None, *, keyless: bool = False
     ) -> None:
         if api_key:
             self._historical_spots.update(fresh)
@@ -1671,7 +1793,7 @@ async def test_compare_prices_the_earlier_contracts_on_the_entrys_own_spots(
     fetched = {datetime(2026, 3, 1, 11, tzinfo=UTC): 0.07}
 
     async def _fake_ensure(
-        self: Any, start: Any, end: Any, api_key: Any = None
+        self: Any, start: Any, end: Any, api_key: Any = None, *, keyless: bool = False
     ) -> None:
         if api_key:
             self._historical_spots.update(fetched)
@@ -1766,7 +1888,7 @@ async def test_compare_does_not_mutate_live_historical_spots(
     )
 
     async def _fake_ensure(
-        self: Any, start: Any, end: Any, api_key: Any = None
+        self: Any, start: Any, end: Any, api_key: Any = None, *, keyless: bool = False
     ) -> None:
         # Simulate a fetch populating the (temporary) caches. Both of them: a
         # fetch fills whichever the borrowing entry replays from, and an
@@ -10523,7 +10645,9 @@ async def test_compare_weights_the_month_it_fetched_on_the_load_profile(
     coord._spot_cache = {today + timedelta(hours=h): 0.01 for h in range(24)}
     assert not coord._historical_spots
 
-    async def _fetch(self: Any, start: Any, end: Any, api_key: Any = None) -> None:
+    async def _fetch(
+        self: Any, start: Any, end: Any, api_key: Any = None, *, keyless: bool = False
+    ) -> None:
         self._historical_spots.update(month)
 
     card = replace(
@@ -10781,3 +10905,37 @@ async def test_compare_leaves_the_year_to_date_out_after_rewired_meters(
 
     assert page["compare_ytd"] == quoted
     assert ("other meter sensors" in page["card_note"]) is (quoted == "-")
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.parametrize(("keyless", "step"), [(True, "sweep"), (False, "key")])
+async def test_the_sweep_asks_for_a_key_only_without_a_day_ahead_source(
+    hass: HomeAssistant, freezer: Any, keyless: bool, step: str
+) -> None:
+    """On the injection regime most of the cell credits its feed-in on the
+    day-ahead, so an entry without a key is asked for a token before the
+    ranking. One on the keyless setting fetches the day-ahead itself and goes
+    straight to the sweep."""
+    from custom_components.be_electricity_prices.compare_sweep_flow import (
+        _SweepStepsMixin,
+    )
+
+    freezer.move_to("2026-04-29 13:00:00+02:00")
+    entry = make_entry(solar_regime="injection", solar_kva=5.0, keyless_spots=keyless)
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("eneco", "power_fix", 0.18)
+    )
+
+    async def _sweep(self: Any, user_input: Any = None) -> Any:
+        return self.async_abort(reason="sweep")
+
+    with patch.object(_SweepStepsMixin, "async_step_compare_all_progress", _sweep):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare_all"}
+        )
+    if step == "sweep":
+        assert result["reason"] == "sweep", result
+    else:
+        assert result.get("step_id") == "compare_api_key", result

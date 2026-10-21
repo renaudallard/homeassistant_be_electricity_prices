@@ -113,7 +113,8 @@ machinery.
 | `tests/test_bi_hourly_sensors.py` | The static peak and off-peak price sensors (pull request #98) |
 | `tests/test_reminder_sensor.py` | The contract end date renewal reminder sensor |
 | `tests/test_button.py` | The Flemish `reset_monthly_peak` button |
-| `tests/test_api.py` | ENTSO-E spot client (`api.py`) |
+| `tests/test_api.py` | Day-ahead clients: ENTSO-E, energy-charts, SMARD and the fallback chain (`api.py`) |
+| `tests/test_keyless_spots.py` | The keyless setting: no-key fetches, the backfill, and every branch that asks `spots_available` |
 | `tests/test_backfill.py` | Recorder cost-statistics backfill |
 | `tests/test_diagnostics.py` | Diagnostics dump |
 | `tests/test_icons.py` | `icons.json` names only real entities and services, and gives every entity without a device class an icon |

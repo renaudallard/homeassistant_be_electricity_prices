@@ -55,6 +55,7 @@ from .api import (
 )
 from .const import (
     CONF_API_KEY,
+    CONF_KEYLESS_SPOTS,
     MEASURED_FULL_YEAR_DAYS,
 )
 from .coordinator_profiles import _ProfilesMixin
@@ -74,6 +75,7 @@ from .spot_stats import (
     _group_spot_quarters_by_hour,
     _mean_of_month,
     _rlp_blend_for,
+    spots_available,
 )
 from .synergrid import (
     RlpWeights,
@@ -266,7 +268,12 @@ class _SpotsMixin(_ProfilesMixin):
         return self._priced if self._priced is not None else self._snapshot
 
     async def _ensure_historical_spots(
-        self, start: date, end: date, api_key: str | None = None
+        self,
+        start: date,
+        end: date,
+        api_key: str | None = None,
+        *,
+        keyless: bool = False,
     ) -> None:
         """Cover ``[start, end]`` in the historical spot cache, one walk at a
         time.
@@ -281,10 +288,15 @@ class _SpotsMixin(_ProfilesMixin):
         a request.
         """
         async with self._spot_fetch_lock:
-            await self._walk_historical_spots(start, end, api_key)
+            await self._walk_historical_spots(start, end, api_key, keyless=keyless)
 
     async def _walk_historical_spots(
-        self, start: date, end: date, api_key: str | None = None
+        self,
+        start: date,
+        end: date,
+        api_key: str | None = None,
+        *,
+        keyless: bool = False,
     ) -> None:
         """Make sure ``self._historical_spots`` covers every hour of the
         local days in ``[start, end]``, fetching missing ranges from
@@ -294,6 +306,9 @@ class _SpotsMixin(_ProfilesMixin):
         ``api_key`` overrides the entry's key, letting the compare flow
         backfill spots for a spot-indexed target with a key the user typed
         in the compare step even when their own entry carries none.
+        ``keyless`` does the same for the keyless setting. With no key at all
+        but that setting, ENTSO-E is not asked and every missing range goes
+        to the keyless sources in one request per grid.
 
         Day boundaries are anchored on local midnight (converted to UTC),
         matching the recorder window (``_recorder_rows``) and the
@@ -338,7 +353,8 @@ class _SpotsMixin(_ProfilesMixin):
             self._historical_spot_quarters.clear()
             self._spot_generation += 1
         api_key = api_key or self.entry.data.get(CONF_API_KEY)
-        if not api_key:
+        keyless = keyless or bool(self.entry.data.get(CONF_KEYLESS_SPOTS))
+        if not api_key and not keyless:
             return
         now = dt_util.utcnow()
         today_local = dt_util.now().date()
@@ -409,6 +425,20 @@ class _SpotsMixin(_ProfilesMixin):
         if range_start is not None:
             missing_ranges.append((range_start, cur))
         if not missing_ranges:
+            return
+        if not api_key:
+            await self._fill_spots_from_fallback(
+                [
+                    run
+                    for r_start, r_end in missing_ranges
+                    for run in _grid_runs(r_start, r_end, grid_of)
+                ],
+                [],
+                None,
+                want_quarters,
+                now,
+                stable_before,
+            )
             return
         # ``quarter_hourly`` asks for the same grid the contract settles on,
         # exactly as the live fetch does. ENTSO-E publishes Belgium as two
@@ -651,13 +681,24 @@ class _SpotsMixin(_ProfilesMixin):
             # Both messages travel together: the ENTSO-E half is the half that
             # explains the outage, and reporting only the fallback's own error
             # sends the reader after the wrong service entirely.
-            log(
-                "historical spot fetch failed for %s..%s: ENTSO-E: %s; fallback: %s",
-                span_start,
-                span_end,
-                primary,
-                "; ".join(errors) or "returned no prices for the window",
-            )
+            cause = "; ".join(errors) or "returned no prices for the window"
+            if primary is None:
+                # A keyless entry: ENTSO-E was never asked.
+                log(
+                    "historical spot fetch failed for %s..%s: day-ahead: %s",
+                    span_start,
+                    span_end,
+                    cause,
+                )
+            else:
+                log(
+                    "historical spot fetch failed for %s..%s: ENTSO-E: %s; "
+                    "fallback: %s",
+                    span_start,
+                    span_end,
+                    primary,
+                    cause,
+                )
             self._defer_spot_days(unanswered, stable_before, now + _SPOT_OUTAGE_TTL)
             return
         failed_days = {
@@ -691,7 +732,7 @@ class _SpotsMixin(_ProfilesMixin):
 
     async def _fetch_spot_prices(self) -> dict[datetime, float]:
         api_key = self.entry.data.get(CONF_API_KEY)
-        if not api_key:
+        if not spots_available(self.entry.data):
             raise EntsoeError("ENTSO-E: missing API key")
 
         # Window the request on the *local* day (Europe/Brussels) so a
@@ -730,7 +771,7 @@ class _SpotsMixin(_ProfilesMixin):
         )
         previous_source = self._spot_source
         prices, self._spot_source = await fetch_day_ahead_or_fallback(
-            api_key, self._session, start, end, quarter_hourly=quarter_hourly
+            api_key or None, self._session, start, end, quarter_hourly=quarter_hourly
         )
         if self._spot_source != previous_source:
             # Log the TRANSITION, not the state. A fallback that answers

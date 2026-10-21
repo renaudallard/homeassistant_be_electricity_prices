@@ -45,7 +45,6 @@ from homeassistant.util import dt as dt_util
 from .compare_table import _row_label
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
-    CONF_API_KEY,
     CONF_DIRECT_DEBIT,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
@@ -75,6 +74,7 @@ from .spot_stats import (
     _injection_is_spp_indexed,
     _rlp_blend_for,
     _spp_weighting_enabled,
+    spots_available,
 )
 from .synergrid import RlpWeights, SppWeights
 
@@ -511,11 +511,12 @@ def _keyless_stale_spots(
     bills on it. Stale means it misses some day of the window, which for a
     keyless entry is the days since its key was removed.
 
-    Only a keyless entry. One with a key keeps its cache current, and a day
-    or two ENTSO-E never published must not cost it its figures.
+    Only an entry with no day-ahead source. One with a key or the keyless
+    setting keeps its cache current, and a day or two that was never
+    published must not cost it its figures.
     """
     return (
-        not data.get(CONF_API_KEY)
+        not spots_available(data)
         and bool(spots)
         and not _spots_cover(spots, start, today)
     )

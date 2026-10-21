@@ -10952,6 +10952,20 @@ async def test_cohort_card_says_when_the_signing_card_bills_nothing(
     )
     assert keyed.energy is not None
     assert keyed.card == "mai 2026"
+    # The keyless setting is a day-ahead source like the key: same legs.
+    _monthly_snapshots(hass).clear()
+    on_keyless = await _cohort_legs(
+        hass,
+        MagicMock(),
+        _fixed_extractor(_ffm),
+        "test",
+        "wallonia",
+        _entry(contract="test", contract_start_date="2026-05-15", keyless_spots=True),
+        current,
+    )
+    assert on_keyless.card == keyed.card
+    assert on_keyless.energy == keyed.energy
+    assert on_keyless.injection == keyed.injection
 
     # A card printing resolved TOU bands and no formula has nothing to
     # re-price either, key or not; a feed-in price fixed for the term on it

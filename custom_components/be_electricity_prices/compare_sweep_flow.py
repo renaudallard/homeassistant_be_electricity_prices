@@ -48,12 +48,12 @@ from .compare_inputs import _candidate_label, _effective_regime
 from .compare_table import RankedRow, _ranking_table
 from .const import (
     COMPARE_SWEEP_BUDGET_S,
-    CONF_API_KEY,
     SOLAR_REGIME_INJECTION,
     SPOT_PRICED_CONTRACT_KINDS,
 )
 from .flow_contracts import _contract_has_spot_injection, _contract_kind
 from .providers import get as get_extractor
+from .spot_stats import spots_available
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -165,7 +165,7 @@ class _SweepStepsMixin(_CompareStepsMixin):
             in SPOT_PRICED_CONTRACT_KINDS
             for supplier, contract, q in candidates
         )
-        if needs_key and not current.get(CONF_API_KEY):
+        if needs_key and not spots_available(current):
             self._api_key_next_step = self.async_step_compare_all_progress
             return await self.async_step_compare_api_key()
         return await self.async_step_compare_all_progress()

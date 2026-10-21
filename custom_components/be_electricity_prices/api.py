@@ -701,8 +701,14 @@ def _bucket_slots(
     return {slot: sums[slot] / counts[slot] for slot in sums}
 
 
+# How a spot fetch failure starts, with a key and on the keyless sources
+# alone. The coordinator clears last_error on the next good fetch only when
+# it holds one of these, so a card fetch's error is left for its own path.
+SPOT_ERROR_PREFIXES: tuple[str, ...] = ("ENTSO-E:", "day-ahead:")
+
+
 async def fetch_day_ahead_or_fallback(
-    api_key: str,
+    api_key: str | None,
     session: aiohttp.ClientSession,
     period_start: datetime,
     period_end: datetime,
@@ -720,10 +726,22 @@ async def fetch_day_ahead_or_fallback(
     with a keyless source is how an entry runs for months on a credential
     its owner never renews.
 
+    Without ``api_key`` ENTSO-E is not asked and the keyless sources answer
+    for the whole window, which is what an entry on the keyless setting
+    fetches. A failure then reads ``day-ahead: <each cause>``.
+
     Not used by the config flow's key check. That check exists to tell an
     invalid key from an unreachable server, and a fallback that answered for
     it would let a user finalise an entry whose key never worked.
     """
+    if not api_key:
+        prices, sources, errors = await fill_missing_days(
+            session, {}, period_start, period_end, quarter_hourly
+        )
+        if not prices:
+            cause = "; ".join(errors) or "no prices for the window"
+            raise EntsoeError(f"day-ahead: {cause}")
+        return prices, "+".join(sources)
     client = EntsoeClient(api_key, session)
     primary: EntsoeError | None = None
     try:

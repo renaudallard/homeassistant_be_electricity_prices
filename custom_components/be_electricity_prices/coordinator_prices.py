@@ -45,7 +45,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import EntsoeAuthError, EntsoeError
+from .api import SPOT_ERROR_PREFIXES, EntsoeAuthError, EntsoeError
 from .cohort import (
     ytd_window_start,
 )
@@ -130,7 +130,12 @@ class _PricesMixin:
         # one mixin composed anywhere else is the profiles mixin, which the
         # spots mixin extends.
         async def _ensure_historical_spots(
-            self, start: date, end: date, api_key: str | None = None
+            self,
+            start: date,
+            end: date,
+            api_key: str | None = None,
+            *,
+            keyless: bool = False,
         ) -> None: ...
         async def _ensure_rlp_weights(self, blend: str = "distinct") -> None: ...
         async def _ensure_spp_weights(self) -> None: ...
@@ -202,7 +207,7 @@ class _PricesMixin:
             # share the hard-fail-on-cold-start path.
             try:
                 spot_prices = await self._fetch_spot_prices()
-                if (self._last_error or "").startswith("ENTSO-E:"):
+                if (self._last_error or "").startswith(SPOT_ERROR_PREFIXES):
                     # The blip a previous tick recorded has cleared. Only that
                     # message: a probe match clears an extractor error, and
                     # on a probe-less supplier nothing else did, so the blip

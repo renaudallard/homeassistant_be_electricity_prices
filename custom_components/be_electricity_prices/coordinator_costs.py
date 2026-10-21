@@ -52,6 +52,7 @@ from .cohort import (
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
+    CONF_KEYLESS_SPOTS,
     CONF_REGION,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
@@ -190,7 +191,12 @@ class _CostsMixin:
         # one mixin composed anywhere else is the profiles mixin, which the
         # spots mixin extends.
         async def _ensure_historical_spots(
-            self, start: date, end: date, api_key: str | None = None
+            self,
+            start: date,
+            end: date,
+            api_key: str | None = None,
+            *,
+            keyless: bool = False,
         ) -> None: ...
         async def _ensure_rlp_weights(self, blend: str = "distinct") -> None: ...
         async def async_request_refresh(self) -> None: ...
@@ -669,9 +675,14 @@ class _CostsMixin:
                 (p.data[CONF_API_KEY] for p in periods if p.data.get(CONF_API_KEY)),
                 None,
             )
+            # The keyless setting likewise, from the entry or a contract left.
+            keyless = any(
+                d.get(CONF_KEYLESS_SPOTS)
+                for d in (self.entry.data, *(p.data for p in periods))
+            )
             try:
                 await self._ensure_historical_spots(
-                    periods[0].start, periods[-1].end, api_key
+                    periods[0].start, periods[-1].end, api_key, keyless=keyless
                 )
             except Exception as err:  # priced on what is cached
                 # An hour with no spot still bills its network and tax legs, as
