@@ -91,6 +91,7 @@ from .const import (
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_INCLUDE_VAT,
+    CONF_KEYLESS_SPOTS,
     CONF_MANUAL_ENERGY_BASE,
     CONF_MANUAL_ENERGY_EXCLUSIVE_NIGHT,
     CONF_MANUAL_ENERGY_FACTOR,
@@ -495,12 +496,20 @@ def _direct_debit_schema(defaults: dict[str, Any]) -> vol.Schema:
 
 
 def _api_key_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """The key, or the keyless box in its place. Optional, so a ticked box can
+    stand in for a blank key; the step answers ``empty_api_key`` itself when
+    both are empty. The stored key is a suggestion for the reason the
+    injection twin gives: a default could never be removed."""
     current = defaults.get(CONF_API_KEY, "")
     return vol.Schema(
         {
-            vol.Required(CONF_API_KEY, default=current): TextSelector(
-                TextSelectorConfig(type=TextSelectorType.PASSWORD)
-            )
+            vol.Optional(
+                CONF_API_KEY, description={"suggested_value": current}
+            ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
+            vol.Optional(
+                CONF_KEYLESS_SPOTS,
+                default=bool(defaults.get(CONF_KEYLESS_SPOTS, False)),
+            ): BooleanSelector(),
         }
     )
 
@@ -518,7 +527,11 @@ def _injection_api_key_schema(defaults: dict[str, Any]) -> vol.Schema:
         {
             vol.Optional(
                 CONF_API_KEY, description={"suggested_value": current}
-            ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+            ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
+            vol.Optional(
+                CONF_KEYLESS_SPOTS,
+                default=bool(defaults.get(CONF_KEYLESS_SPOTS, False)),
+            ): BooleanSelector(),
         }
     )
 

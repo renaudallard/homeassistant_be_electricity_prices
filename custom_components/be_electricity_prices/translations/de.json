@@ -94,16 +94,18 @@
       },
       "api_key": {
         "title": "ENTSO-E API-Schlüssel",
-        "description": "Erforderlich für diesen Vertrag. Der Energiepreis wird vom belgischen Day-Ahead-Markt bestimmt: pro Slot bei einem dynamischen Vertrag, oder auf dem Durchschnitt des Liefermonats bei einem monatlich indexierten Vertrag. Kostenlos bei transparency.entsoe.eu anfordern.",
+        "description": "Der Energiepreis dieses Vertrags wird vom belgischen Day-Ahead-Markt bestimmt: pro Slot bei einem dynamischen Vertrag, oder auf dem Durchschnitt des Liefermonats bei einem monatlich indexierten Vertrag. Fügen Sie einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu ein, oder setzen Sie das Häkchen, um die Day-Ahead-Preise ohne Schlüssel von energy-charts.info und SMARD abzurufen. Mit Schlüssel ist ENTSO-E die Hauptquelle und die beiden anderen dienen als Reserve.",
         "data": {
-          "api_key": "ENTSO-E API-Schlüssel"
+          "api_key": "ENTSO-E API-Schlüssel",
+          "keyless_spots": "Day-Ahead-Preise ohne Schlüssel verwenden (energy-charts, SMARD)"
         }
       },
       "injection_api_key": {
         "title": "ENTSO-E API-Schlüssel (optional)",
-        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats (oder Lieferquartals), oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benötigt dafür einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu. Leer lassen zum Überspringen; ohne Schlüssel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats (oder Vorquartals), bis die nächste Karte den vergangenen Monat (oder das vergangene Quartal) abrechnet, sofern der Lieferant den Index druckt, zu dem er abgeschlossen hat, während eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfügbar bleibt.",
+        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats (oder Lieferquartals), oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benötigt dafür Day-Ahead-Preise: einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu, oder das Häkchen unten, um sie ohne Schlüssel von energy-charts.info und SMARD abzurufen. Beides leer lassen zum Überspringen; ohne beides wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats (oder Vorquartals), bis die nächste Karte den vergangenen Monat (oder das vergangene Quartal) abrechnet, sofern der Lieferant den Index druckt, zu dem er abgeschlossen hat, während eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfügbar bleibt.",
         "data": {
-          "api_key": "ENTSO-E API-Schlüssel"
+          "api_key": "ENTSO-E API-Schlüssel",
+          "keyless_spots": "Day-Ahead-Preise ohne Schlüssel verwenden (energy-charts, SMARD)"
         }
       },
       "api_key_unreachable": {
@@ -237,7 +239,7 @@
     },
     "error": {
       "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Prüfen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "empty_api_key": "Geben Sie Ihren ENTSO-E Token ein. Dieser Vertrag wird am Day-Ahead-Markt bepreist und lässt sich ohne Token nicht einrichten. Sie erhalten ihn auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Geben Sie Ihren ENTSO-E Token ein, oder setzen Sie das Häkchen, um die Day-Ahead-Preise ohne Schlüssel zu verwenden. Dieser Vertrag wird am Day-Ahead-Markt bepreist und lässt sich ohne eines von beiden nicht einrichten. Sie erhalten einen Token auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprüft werden. Prüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "card_date_in_future": "Der Monat der Tarifkarte kann nicht in der Zukunft liegen.",
@@ -261,7 +263,7 @@
     },
     "error": {
       "invalid_api_key": "ENTSO-E hat diesen Token abgelehnt. Prüfen Sie den Wert auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "empty_api_key": "Geben Sie Ihren ENTSO-E Token ein. Dieser Vertrag wird am Day-Ahead-Markt bepreist und lässt sich ohne Token nicht einrichten. Sie erhalten ihn auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Geben Sie Ihren ENTSO-E Token ein, oder setzen Sie das Häkchen, um die Day-Ahead-Preise ohne Schlüssel zu verwenden. Dieser Vertrag wird am Day-Ahead-Markt bepreist und lässt sich ohne eines von beiden nicht einrichten. Sie erhalten einen Token auf transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "ENTSO-E nicht erreichbar, Token konnte nicht geprüft werden. Prüfen Sie Ihr Netzwerk und versuchen Sie es erneut.",
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "start_date_before_switch": "Der Vertragsbeginn darf nicht vor dem letzten für diesen Eintrag erfassten Lieferantenwechsel liegen.",
@@ -341,9 +343,10 @@
       },
       "compare_api_key": {
         "title": "Anderen Lieferanten vergleichen",
-        "description": "Dieser Vergleich benötigt ENTSO-E day-ahead Preise: ein am Spotpreis indexierter Vertrag (dynamisch je Zeitfenster oder monatlich indexiert auf den Monatsmittelwert), oder, im Einspeiseregime, ein Vertrag, dessen Solareinspeisung an den Spotpreis gekoppelt ist. ENTSO-E API-Token einfügen, damit die Spotpreise abgerufen werden können. Der Token wird nur für diesen Vergleich verwendet, nicht gespeichert. Lassen Sie das Feld leer, um ohne Token fortzufahren: ein am Spotpreis indexierter Vertrag erhält dann keinen Preis, eine Einspeisevergütung, die je Zeitfenster dem Spotpreis folgt, wird weggelassen, wie das Ergebnis vermerkt, und eine auf einen Monatsmittelwert indexierte wird zu dem Betrag berechnet, den die Tarifkarte druckt. Bei einem einmaligen Angebot rechnet ein Token eine Einspeisevergütung, die je Zeitfenster dem Spotpreis folgt, bei einem Vertrag, dessen Energie nicht am Spotpreis indexiert ist, auch in die Zahlen dieses Jahres der Alternative ein, wenn beide Anbieter ein Archiv früherer Karten führen; Ihre eigene Zahl bleibt die, die Ihr Sensor „Kosten dieses Jahr“ abrechnet. Die Zahlen dieses Jahres in der Rangliste verwenden den Token nicht, ebenso wenig die Jahresschätzung dieser Einspeisevergütung: beide lesen nur die Day-Ahead-Preise, die dieser Eintrag mit einem eigenen Token gesammelt hat.",
+        "description": "Dieser Vergleich benötigt Day-Ahead-Preise: ein am Spotpreis indexierter Vertrag (dynamisch je Zeitfenster oder monatlich indexiert auf den Monatsmittelwert), oder, im Einspeiseregime, ein Vertrag, dessen Solareinspeisung an den Spotpreis gekoppelt ist. ENTSO-E API-Token einfügen, oder das Häkchen setzen, um die Spotpreise ohne Schlüssel von energy-charts.info und SMARD abzurufen. Beides wird nur für diesen Vergleich verwendet, nicht gespeichert. Lassen Sie beides leer, um ohne fortzufahren: ein am Spotpreis indexierter Vertrag erhält dann keinen Preis, eine Einspeisevergütung, die je Zeitfenster dem Spotpreis folgt, wird weggelassen, wie das Ergebnis vermerkt, und eine auf einen Monatsmittelwert indexierte wird zu dem Betrag berechnet, den die Tarifkarte druckt. Bei einem einmaligen Angebot rechnet ein Token, oder das Häkchen, eine Einspeisevergütung, die je Zeitfenster dem Spotpreis folgt, bei einem Vertrag, dessen Energie nicht am Spotpreis indexiert ist, auch in die Zahlen dieses Jahres der Alternative ein, wenn beide Anbieter ein Archiv früherer Karten führen; Ihre eigene Zahl bleibt die, die Ihr Sensor „Kosten dieses Jahr“ abrechnet. Die Zahlen dieses Jahres in der Rangliste verwenden keines von beiden, ebenso wenig die Jahresschätzung dieser Einspeisevergütung: beide lesen nur die Day-Ahead-Preise, die dieser Eintrag mit einem eigenen Token oder der Einstellung ohne Schlüssel gesammelt hat.",
         "data": {
-          "api_key": "ENTSO-E API-Schlüssel"
+          "api_key": "ENTSO-E API-Schlüssel",
+          "keyless_spots": "Day-Ahead-Preise ohne Schlüssel verwenden (energy-charts, SMARD)"
         }
       },
       "compare_result": {
@@ -444,16 +447,18 @@
       },
       "api_key": {
         "title": "ENTSO-E API-Schlüssel",
-        "description": "Erforderlich für diesen Vertrag. Der Energiepreis wird vom belgischen Day-Ahead-Markt bestimmt: pro Slot bei einem dynamischen Vertrag, oder auf dem Durchschnitt des Liefermonats bei einem monatlich indexierten Vertrag. Kostenlos bei transparency.entsoe.eu anfordern.",
+        "description": "Der Energiepreis dieses Vertrags wird vom belgischen Day-Ahead-Markt bestimmt: pro Slot bei einem dynamischen Vertrag, oder auf dem Durchschnitt des Liefermonats bei einem monatlich indexierten Vertrag. Fügen Sie einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu ein, oder setzen Sie das Häkchen, um die Day-Ahead-Preise ohne Schlüssel von energy-charts.info und SMARD abzurufen. Mit Schlüssel ist ENTSO-E die Hauptquelle und die beiden anderen dienen als Reserve.",
         "data": {
-          "api_key": "ENTSO-E API-Schlüssel"
+          "api_key": "ENTSO-E API-Schlüssel",
+          "keyless_spots": "Day-Ahead-Preise ohne Schlüssel verwenden (energy-charts, SMARD)"
         }
       },
       "injection_api_key": {
         "title": "ENTSO-E API-Schlüssel (optional)",
-        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats (oder Lieferquartals), oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benötigt dafür einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu. Leer lassen zum Überspringen; ohne Schlüssel wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats (oder Vorquartals), bis die nächste Karte den vergangenen Monat (oder das vergangene Quartal) abrechnet, sofern der Lieferant den Index druckt, zu dem er abgeschlossen hat, während eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfügbar bleibt.",
+        "description": "Optional. Dieser Vertrag indexiert seinen Energiepreis am Day-Ahead-Mittel des Liefermonats (oder Lieferquartals), oder die Einspeisung am Day-Ahead-Spotpreis, oder beides, und benötigt dafür Day-Ahead-Preise: einen kostenlosen ENTSO-E-Schlüssel von transparency.entsoe.eu, oder das Häkchen unten, um sie ohne Schlüssel von energy-charts.info und SMARD abzurufen. Beides leer lassen zum Überspringen; ohne beides wird eine Karte, die einen Monatsbetrag druckt, mit diesem Betrag abgerechnet, also dem des Vormonats (oder Vorquartals), bis die nächste Karte den vergangenen Monat (oder das vergangene Quartal) abrechnet, sofern der Lieferant den Index druckt, zu dem er abgeschlossen hat, während eine je Zeitfenster abgerechnete Einspeiseformel nicht gutgeschrieben wird und ihr Preis nicht verfügbar bleibt.",
         "data": {
-          "api_key": "ENTSO-E API-Schlüssel"
+          "api_key": "ENTSO-E API-Schlüssel",
+          "keyless_spots": "Day-Ahead-Preise ohne Schlüssel verwenden (energy-charts, SMARD)"
         }
       },
       "api_key_unreachable": {

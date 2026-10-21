@@ -94,16 +94,18 @@
       },
       "api_key": {
         "title": "ENTSO-E API-sleutel",
-        "description": "Vereist voor dit contract. De energieprijs wordt bepaald door de Belgische day-ahead markt: per slot bij een dynamisch contract, of op het gemiddelde van de leveringsmaand bij een maandelijks geïndexeerd contract. Gratis aan te vragen op transparency.entsoe.eu.",
+        "description": "De energieprijs van dit contract wordt bepaald door de Belgische day-ahead markt: per slot bij een dynamisch contract, of op het gemiddelde van de leveringsmaand bij een maandelijks geïndexeerd contract. Plak een gratis ENTSO-E-sleutel van transparency.entsoe.eu, of vink het vakje aan om de day-ahead prijzen zonder sleutel op te halen bij energy-charts.info en SMARD. Met een sleutel is ENTSO-E de hoofdbron en zijn die twee de reserve.",
         "data": {
-          "api_key": "ENTSO-E API-sleutel"
+          "api_key": "ENTSO-E API-sleutel",
+          "keyless_spots": "Day-ahead prijzen zonder sleutel gebruiken (energy-charts, SMARD)"
         }
       },
       "injection_api_key": {
         "title": "ENTSO-E API-sleutel (optioneel)",
-        "description": "Optioneel. Dit contract indexeert zijn energieprijs op het day-ahead-gemiddelde van de leveringsmaand (of het leveringskwartaal), of zijn injectie op de day-ahead spotprijs, of beide, en heeft daarvoor een gratis ENTSO-E-sleutel van transparency.entsoe.eu nodig. Laat leeg om over te slaan; zonder sleutel wordt een kaart die een maandbedrag drukt daarop aangerekend, dat van vorige maand (of vorig kwartaal), tot de volgende kaart de afgesloten maand (of het afgesloten kwartaal) afrekent als de leverancier de index drukt waarop die afsloot, terwijl een injectieformule die per tijdslot wordt afgerekend niet gecrediteerd wordt en haar prijs onbeschikbaar blijft.",
+        "description": "Optioneel. Dit contract indexeert zijn energieprijs op het day-ahead-gemiddelde van de leveringsmaand (of het leveringskwartaal), of zijn injectie op de day-ahead spotprijs, of beide, en heeft daarvoor day-ahead prijzen nodig: een gratis ENTSO-E-sleutel van transparency.entsoe.eu, of het vakje hieronder om ze zonder sleutel op te halen bij energy-charts.info en SMARD. Laat beide leeg om over te slaan; zonder een van beide wordt een kaart die een maandbedrag drukt daarop aangerekend, dat van vorige maand (of vorig kwartaal), tot de volgende kaart de afgesloten maand (of het afgesloten kwartaal) afrekent als de leverancier de index drukt waarop die afsloot, terwijl een injectieformule die per tijdslot wordt afgerekend niet gecrediteerd wordt en haar prijs onbeschikbaar blijft.",
         "data": {
-          "api_key": "ENTSO-E API-sleutel"
+          "api_key": "ENTSO-E API-sleutel",
+          "keyless_spots": "Day-ahead prijzen zonder sleutel gebruiken (energy-charts, SMARD)"
         }
       },
       "api_key_unreachable": {
@@ -237,7 +239,7 @@
     },
     "error": {
       "invalid_api_key": "ENTSO-E heeft deze token geweigerd. Controleer de waarde op transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "empty_api_key": "Voer uw ENTSO-E token in. Dit contract wordt geprijsd op de day-ahead markt en kan niet zonder token worden ingesteld. Vraag hem aan op transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Voer uw ENTSO-E token in, of vink het vakje aan om de day-ahead prijzen zonder sleutel te gebruiken. Dit contract wordt geprijsd op de day-ahead markt en kan niet zonder een van beide worden ingesteld. Vraag een token aan op transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "Kon ENTSO-E niet bereiken om de token te verifieren. Controleer uw netwerk en probeer opnieuw.",
       "start_date_in_future": "De startdatum van het contract kan niet in de toekomst liggen.",
       "card_date_in_future": "De maand van de tariefkaart kan niet in de toekomst liggen.",
@@ -261,7 +263,7 @@
     },
     "error": {
       "invalid_api_key": "ENTSO-E heeft deze token geweigerd. Controleer de waarde op transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "empty_api_key": "Voer uw ENTSO-E token in. Dit contract wordt geprijsd op de day-ahead markt en kan niet zonder token worden ingesteld. Vraag hem aan op transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Voer uw ENTSO-E token in, of vink het vakje aan om de day-ahead prijzen zonder sleutel te gebruiken. Dit contract wordt geprijsd op de day-ahead markt en kan niet zonder een van beide worden ingesteld. Vraag een token aan op transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "Kon ENTSO-E niet bereiken om de token te verifieren. Controleer uw netwerk en probeer opnieuw.",
       "start_date_in_future": "De startdatum van het contract kan niet in de toekomst liggen.",
       "start_date_before_switch": "De startdatum van het contract kan niet voor de laatste geregistreerde leverancierswissel van deze invoer liggen.",
@@ -341,9 +343,10 @@
       },
       "compare_api_key": {
         "title": "Andere leverancier vergelijken",
-        "description": "Deze vergelijking heeft ENTSO-E day-ahead prijzen nodig: een contract dat op de spot geprijsd wordt (een dynamisch per kwartier of uur, een maandgeïndexeerd op het maandgemiddelde), of, in injectieregime, een contract waarvan de zonne-injectie aan de spot gekoppeld is. Plak een ENTSO-E API-token zodat de spotprijzen opgehaald kunnen worden. De token wordt enkel voor deze vergelijking gebruikt, niet opgeslagen. Laat het veld leeg om zonder token verder te gaan: een contract dat op de spot geprijsd wordt krijgt dan geen prijs, een injectievergoeding die per tijdslot de spot volgt wordt weggelaten, zoals het resultaat vermeldt, en een die op een maandgemiddelde geïndexeerd is, wordt berekend tegen het bedrag dat de kaart afdrukt. Bij een eenmalige offerte telt een token ook een injectievergoeding die per tijdslot de spot volgt, op een contract waarvan de energie niet op de spot geprijsd wordt, mee in de cijfers van dit jaar van het alternatief als beide leveranciers een archief van oude kaarten bijhouden; je eigen cijfer blijft wat de sensor 'Kost dit jaar' aanrekent. De cijfers van dit jaar in de rangschikking gebruiken de token niet, en de jaarraming van die injectievergoeding evenmin: beide lezen alleen de day-ahead prijzen die deze invoer met een eigen token heeft verzameld.",
+        "description": "Deze vergelijking heeft day-ahead prijzen nodig: een contract dat op de spot geprijsd wordt (een dynamisch per kwartier of uur, een maandgeïndexeerd op het maandgemiddelde), of, in injectieregime, een contract waarvan de zonne-injectie aan de spot gekoppeld is. Plak een ENTSO-E API-token, of vink het vakje aan om de spotprijzen zonder sleutel op te halen bij energy-charts.info en SMARD. Beide worden enkel voor deze vergelijking gebruikt, niet opgeslagen. Laat beide leeg om zonder verder te gaan: een contract dat op de spot geprijsd wordt krijgt dan geen prijs, een injectievergoeding die per tijdslot de spot volgt wordt weggelaten, zoals het resultaat vermeldt, en een die op een maandgemiddelde geïndexeerd is, wordt berekend tegen het bedrag dat de kaart afdrukt. Bij een eenmalige offerte telt een token, of het vakje, ook een injectievergoeding die per tijdslot de spot volgt, op een contract waarvan de energie niet op de spot geprijsd wordt, mee in de cijfers van dit jaar van het alternatief als beide leveranciers een archief van oude kaarten bijhouden; je eigen cijfer blijft wat de sensor 'Kost dit jaar' aanrekent. De cijfers van dit jaar in de rangschikking gebruiken geen van beide, en de jaarraming van die injectievergoeding evenmin: beide lezen alleen de day-ahead prijzen die deze invoer met een eigen token of de instelling zonder sleutel heeft verzameld.",
         "data": {
-          "api_key": "ENTSO-E API-sleutel"
+          "api_key": "ENTSO-E API-sleutel",
+          "keyless_spots": "Day-ahead prijzen zonder sleutel gebruiken (energy-charts, SMARD)"
         }
       },
       "compare_result": {
@@ -444,16 +447,18 @@
       },
       "api_key": {
         "title": "ENTSO-E API-sleutel",
-        "description": "Vereist voor dit contract. De energieprijs wordt bepaald door de Belgische day-ahead markt: per slot bij een dynamisch contract, of op het gemiddelde van de leveringsmaand bij een maandelijks geïndexeerd contract. Gratis aan te vragen op transparency.entsoe.eu.",
+        "description": "De energieprijs van dit contract wordt bepaald door de Belgische day-ahead markt: per slot bij een dynamisch contract, of op het gemiddelde van de leveringsmaand bij een maandelijks geïndexeerd contract. Plak een gratis ENTSO-E-sleutel van transparency.entsoe.eu, of vink het vakje aan om de day-ahead prijzen zonder sleutel op te halen bij energy-charts.info en SMARD. Met een sleutel is ENTSO-E de hoofdbron en zijn die twee de reserve.",
         "data": {
-          "api_key": "ENTSO-E API-sleutel"
+          "api_key": "ENTSO-E API-sleutel",
+          "keyless_spots": "Day-ahead prijzen zonder sleutel gebruiken (energy-charts, SMARD)"
         }
       },
       "injection_api_key": {
         "title": "ENTSO-E API-sleutel (optioneel)",
-        "description": "Optioneel. Dit contract indexeert zijn energieprijs op het day-ahead-gemiddelde van de leveringsmaand (of het leveringskwartaal), of zijn injectie op de day-ahead spotprijs, of beide, en heeft daarvoor een gratis ENTSO-E-sleutel van transparency.entsoe.eu nodig. Laat leeg om over te slaan; zonder sleutel wordt een kaart die een maandbedrag drukt daarop aangerekend, dat van vorige maand (of vorig kwartaal), tot de volgende kaart de afgesloten maand (of het afgesloten kwartaal) afrekent als de leverancier de index drukt waarop die afsloot, terwijl een injectieformule die per tijdslot wordt afgerekend niet gecrediteerd wordt en haar prijs onbeschikbaar blijft.",
+        "description": "Optioneel. Dit contract indexeert zijn energieprijs op het day-ahead-gemiddelde van de leveringsmaand (of het leveringskwartaal), of zijn injectie op de day-ahead spotprijs, of beide, en heeft daarvoor day-ahead prijzen nodig: een gratis ENTSO-E-sleutel van transparency.entsoe.eu, of het vakje hieronder om ze zonder sleutel op te halen bij energy-charts.info en SMARD. Laat beide leeg om over te slaan; zonder een van beide wordt een kaart die een maandbedrag drukt daarop aangerekend, dat van vorige maand (of vorig kwartaal), tot de volgende kaart de afgesloten maand (of het afgesloten kwartaal) afrekent als de leverancier de index drukt waarop die afsloot, terwijl een injectieformule die per tijdslot wordt afgerekend niet gecrediteerd wordt en haar prijs onbeschikbaar blijft.",
         "data": {
-          "api_key": "ENTSO-E API-sleutel"
+          "api_key": "ENTSO-E API-sleutel",
+          "keyless_spots": "Day-ahead prijzen zonder sleutel gebruiken (energy-charts, SMARD)"
         }
       },
       "api_key_unreachable": {

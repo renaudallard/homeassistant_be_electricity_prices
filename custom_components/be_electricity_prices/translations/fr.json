@@ -94,16 +94,18 @@
       },
       "api_key": {
         "title": "Clé API ENTSO-E",
-        "description": "Nécessaire pour ce contrat. Son prix de l'énergie est fixé par le marché day-ahead belge: par créneau pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexé mensuellement. Clé gratuite sur transparency.entsoe.eu.",
+        "description": "Le prix de l'énergie de ce contrat est fixé par le marché day-ahead belge: par créneau pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexé mensuellement. Collez une clé ENTSO-E gratuite de transparency.entsoe.eu, ou cochez la case pour récupérer les prix day-ahead sans clé chez energy-charts.info et SMARD. Avec une clé, ENTSO-E est la source principale et ces deux-là servent de secours.",
         "data": {
-          "api_key": "Clé API ENTSO-E"
+          "api_key": "Clé API ENTSO-E",
+          "keyless_spots": "Utiliser les prix day-ahead sans clé (energy-charts, SMARD)"
         }
       },
       "injection_api_key": {
         "title": "Clé API ENTSO-E (facultative)",
-        "description": "Facultatif. Ce contrat indexe son prix de l'énergie sur la moyenne day-ahead du mois (ou du trimestre) de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et nécessite une clé ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans clé, une fiche qui imprime un montant mensuel est facturée sur celui-ci, celui du mois (ou du trimestre) précédent, jusqu'à ce que la fiche suivante règle le mois (ou le trimestre) écoulé, lorsque le fournisseur imprime l'indice sur lequel il s'est clôturé, tandis qu'une formule d'injection réglée par créneau n'est pas créditée et son prix reste indisponible.",
+        "description": "Facultatif. Ce contrat indexe son prix de l'énergie sur la moyenne day-ahead du mois (ou du trimestre) de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et nécessite les prix day-ahead: une clé ENTSO-E gratuite sur transparency.entsoe.eu, ou la case ci-dessous pour les récupérer sans clé chez energy-charts.info et SMARD. Laissez les deux vides pour ignorer; sans l'un ni l'autre, une fiche qui imprime un montant mensuel est facturée sur celui-ci, celui du mois (ou du trimestre) précédent, jusqu'à ce que la fiche suivante règle le mois (ou le trimestre) écoulé, lorsque le fournisseur imprime l'indice sur lequel il s'est clôturé, tandis qu'une formule d'injection réglée par créneau n'est pas créditée et son prix reste indisponible.",
         "data": {
-          "api_key": "Clé API ENTSO-E"
+          "api_key": "Clé API ENTSO-E",
+          "keyless_spots": "Utiliser les prix day-ahead sans clé (energy-charts, SMARD)"
         }
       },
       "api_key_unreachable": {
@@ -237,7 +239,7 @@
     },
     "error": {
       "invalid_api_key": "ENTSO-E a rejeté ce jeton. Vérifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "empty_api_key": "Saisissez votre jeton ENTSO-E. Ce contrat est indexé sur le marché day-ahead et ne peut pas être configuré sans jeton. Obtenez-le sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Saisissez votre jeton ENTSO-E, ou cochez la case pour utiliser les prix day-ahead sans clé. Ce contrat est indexé sur le marché day-ahead et ne peut pas être configuré sans l'un des deux. Obtenez un jeton sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "Impossible de joindre ENTSO-E pour vérifier le jeton. Vérifiez votre réseau et réessayez.",
       "start_date_in_future": "La date de début du contrat ne peut pas être dans le futur.",
       "card_date_in_future": "Le mois de la carte tarifaire ne peut pas être dans le futur.",
@@ -261,7 +263,7 @@
     },
     "error": {
       "invalid_api_key": "ENTSO-E a rejeté ce jeton. Vérifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
-      "empty_api_key": "Saisissez votre jeton ENTSO-E. Ce contrat est indexé sur le marché day-ahead et ne peut pas être configuré sans jeton. Obtenez-le sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
+      "empty_api_key": "Saisissez votre jeton ENTSO-E, ou cochez la case pour utiliser les prix day-ahead sans clé. Ce contrat est indexé sur le marché day-ahead et ne peut pas être configuré sans l'un des deux. Obtenez un jeton sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
       "cannot_connect": "Impossible de joindre ENTSO-E pour vérifier le jeton. Vérifiez votre réseau et réessayez.",
       "start_date_in_future": "La date de début du contrat ne peut pas être dans le futur.",
       "start_date_before_switch": "La date de début du contrat ne peut pas précéder le dernier changement de fournisseur enregistré sur cette entrée.",
@@ -341,9 +343,10 @@
       },
       "compare_api_key": {
         "title": "Comparer un autre fournisseur",
-        "description": "Cette comparaison nécessite les prix day-ahead d'ENTSO-E : un contrat indexé sur le spot (dynamique par créneau, ou mensuel sur la moyenne du mois de fourniture), ou, en régime d'injection, un contrat dont l'injection solaire est indexée sur le spot. Collez un jeton ENTSO-E pour que les prix spot puissent être récupérés. Le jeton n'est utilisé que pour cette comparaison et n'est pas enregistré. Laissez le champ vide pour continuer sans jeton : un contrat indexé sur le spot n'obtient alors aucun prix, une rémunération d'injection qui suit le spot par créneau est laissée de côté, comme le résultat l'indique, et une rémunération indexée sur une moyenne mensuelle est tarifée au montant imprimé sur la carte. Pour un devis ponctuel, un jeton permet aussi de compter une rémunération d'injection qui suit le spot par créneau, sur un contrat dont l'énergie n'est pas indexée sur le spot, dans le cumul de l'année en cours de l'alternative lorsque les deux fournisseurs conservent une archive de leurs anciennes cartes ; le vôtre reste celui que calcule votre capteur « Coût de l'année ». Le cumul de l'année du classement n'utilise pas le jeton, pas plus que l'estimation annuelle de cette rémunération d'injection : tous deux ne lisent que les prix day-ahead que cette entrée a recueillis avec son propre jeton.",
+        "description": "Cette comparaison nécessite les prix day-ahead : un contrat indexé sur le spot (dynamique par créneau, ou mensuel sur la moyenne du mois de fourniture), ou, en régime d'injection, un contrat dont l'injection solaire est indexée sur le spot. Collez un jeton ENTSO-E, ou cochez la case pour récupérer les prix spot sans clé chez energy-charts.info et SMARD. L'un comme l'autre ne sert qu'à cette comparaison et n'est pas enregistré. Laissez les deux vides pour continuer sans : un contrat indexé sur le spot n'obtient alors aucun prix, une rémunération d'injection qui suit le spot par créneau est laissée de côté, comme le résultat l'indique, et une rémunération indexée sur une moyenne mensuelle est tarifée au montant imprimé sur la carte. Pour un devis ponctuel, un jeton, ou la case, permet aussi de compter une rémunération d'injection qui suit le spot par créneau, sur un contrat dont l'énergie n'est pas indexée sur le spot, dans le cumul de l'année en cours de l'alternative lorsque les deux fournisseurs conservent une archive de leurs anciennes cartes ; le vôtre reste celui que calcule votre capteur « Coût de l'année ». Le cumul de l'année du classement n'utilise ni l'un ni l'autre, pas plus que l'estimation annuelle de cette rémunération d'injection : tous deux ne lisent que les prix day-ahead que cette entrée a recueillis avec son propre jeton ou le réglage sans clé.",
         "data": {
-          "api_key": "Clé API ENTSO-E"
+          "api_key": "Clé API ENTSO-E",
+          "keyless_spots": "Utiliser les prix day-ahead sans clé (energy-charts, SMARD)"
         }
       },
       "compare_result": {
@@ -444,16 +447,18 @@
       },
       "api_key": {
         "title": "Clé API ENTSO-E",
-        "description": "Nécessaire pour ce contrat. Son prix de l'énergie est fixé par le marché day-ahead belge: par créneau pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexé mensuellement. Clé gratuite sur transparency.entsoe.eu.",
+        "description": "Le prix de l'énergie de ce contrat est fixé par le marché day-ahead belge: par créneau pour un contrat dynamique, ou sur la moyenne du mois de fourniture pour un contrat indexé mensuellement. Collez une clé ENTSO-E gratuite de transparency.entsoe.eu, ou cochez la case pour récupérer les prix day-ahead sans clé chez energy-charts.info et SMARD. Avec une clé, ENTSO-E est la source principale et ces deux-là servent de secours.",
         "data": {
-          "api_key": "Clé API ENTSO-E"
+          "api_key": "Clé API ENTSO-E",
+          "keyless_spots": "Utiliser les prix day-ahead sans clé (energy-charts, SMARD)"
         }
       },
       "injection_api_key": {
         "title": "Clé API ENTSO-E (facultative)",
-        "description": "Facultatif. Ce contrat indexe son prix de l'énergie sur la moyenne day-ahead du mois (ou du trimestre) de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et nécessite une clé ENTSO-E gratuite sur transparency.entsoe.eu. Laissez vide pour ignorer; sans clé, une fiche qui imprime un montant mensuel est facturée sur celui-ci, celui du mois (ou du trimestre) précédent, jusqu'à ce que la fiche suivante règle le mois (ou le trimestre) écoulé, lorsque le fournisseur imprime l'indice sur lequel il s'est clôturé, tandis qu'une formule d'injection réglée par créneau n'est pas créditée et son prix reste indisponible.",
+        "description": "Facultatif. Ce contrat indexe son prix de l'énergie sur la moyenne day-ahead du mois (ou du trimestre) de fourniture, ou son injection sur le prix spot day-ahead, ou les deux, et nécessite les prix day-ahead: une clé ENTSO-E gratuite sur transparency.entsoe.eu, ou la case ci-dessous pour les récupérer sans clé chez energy-charts.info et SMARD. Laissez les deux vides pour ignorer; sans l'un ni l'autre, une fiche qui imprime un montant mensuel est facturée sur celui-ci, celui du mois (ou du trimestre) précédent, jusqu'à ce que la fiche suivante règle le mois (ou le trimestre) écoulé, lorsque le fournisseur imprime l'indice sur lequel il s'est clôturé, tandis qu'une formule d'injection réglée par créneau n'est pas créditée et son prix reste indisponible.",
         "data": {
-          "api_key": "Clé API ENTSO-E"
+          "api_key": "Clé API ENTSO-E",
+          "keyless_spots": "Utiliser les prix day-ahead sans clé (energy-charts, SMARD)"
         }
       },
       "api_key_unreachable": {

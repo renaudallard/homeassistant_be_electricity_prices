@@ -771,6 +771,46 @@ async def test_options_flow_spot_injection_api_key_is_skippable(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_options_flow_trades_the_key_for_the_keyless_box(
+    hass: HomeAssistant,
+) -> None:
+    """A month-indexed card's key can be dropped for the keyless setting on
+    the optional step, and unticked again later."""
+    entry = make_entry(
+        supplier="cociter", contract="cociter_variable", api_key="old-key"
+    )
+    entry.add_to_hass(hass)
+    result = await _walk_to_solar_cociter_variable(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    assert result["step_id"] == "injection_api_key"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"api_key": "", "keyless_spots": True}
+    )
+    assert result["step_id"] == "meters"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert "api_key" not in entry.data
+    assert entry.data["keyless_spots"] is True
+
+    result = await _walk_to_solar_cociter_variable(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+    )
+    schema = result["data_schema"]
+    assert schema is not None
+    box = next(k for k in schema.schema if str(k) == "keyless_spots")
+    assert box.default() is True
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"keyless_spots": False}
+    )
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert "keyless_spots" not in entry.data
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_options_flow_lets_a_stored_optional_key_be_replaced(
     hass: HomeAssistant, _bypass_entsoe_validation: MagicMock
 ) -> None:
@@ -1345,6 +1385,37 @@ async def test_compare_quotes_a_dynamic_target_on_the_keyless_sources(
         assert result["step_id"] == "compare_result"
     assert fetch.await_args is not None
     assert fetch.await_args.args[0] is None
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_api_key_offers_the_keyless_box_for_one_quote(
+    hass: HomeAssistant,
+) -> None:
+    """A household without a key can still quote a dynamic contract: the box
+    on the compare page fetches the day-ahead without one, for this quote
+    only, and leaves the entry's settings alone."""
+    entry, extractors = _static_to_dynamic_compare(hass)
+    fetch = AsyncMock(return_value=({}, "energy-charts"))
+
+    async def _no_history(*_a: Any, **_kw: Any) -> None:
+        return None
+
+    with (
+        extractors,
+        patch(
+            "custom_components.be_electricity_prices.api.fetch_day_ahead_or_fallback",
+            fetch,
+        ),
+        patch.object(type(entry.runtime_data), "_ensure_historical_spots", _no_history),
+    ):
+        result = await _drive_to_compare_api_key(hass, entry)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"api_key": "", "keyless_spots": True}
+        )
+        assert result["step_id"] == "compare_result"
+    assert fetch.await_args is not None
+    assert fetch.await_args.args[0] is None
+    assert "keyless_spots" not in entry.data
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

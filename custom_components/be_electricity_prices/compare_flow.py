@@ -48,6 +48,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
@@ -71,6 +72,7 @@ from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
     CONF_DIRECT_DEBIT,
+    CONF_KEYLESS_SPOTS,
     CONF_METER,
     CONF_QUARTER_HOURLY,
     CONF_REGION,
@@ -540,6 +542,8 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
             # Same idiom as the injection key step: a blanked password field
             # can be absent from user_input rather than present and empty.
             key = (user_input.get(CONF_API_KEY) or "").strip()
+            if user_input.get(CONF_KEYLESS_SPOTS):
+                self._compare[CONF_KEYLESS_SPOTS] = True
             if not key:
                 return await self._after_compare_api_key()
             err = await _validate_entsoe_key(self.hass, key)
@@ -553,7 +557,8 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
                 {
                     vol.Optional(CONF_API_KEY, default=""): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.PASSWORD)
-                    )
+                    ),
+                    vol.Optional(CONF_KEYLESS_SPOTS, default=False): BooleanSelector(),
                 }
             ),
             errors=errors,

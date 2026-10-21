@@ -88,7 +88,7 @@ Each of these has a section of its own further down; this is the scan.
 
 - **Cheapest / most-expensive window services** — ask for the best N-hour block of the day from an automation.
 - **Tomorrow-available trigger** — a binary sensor that flips when tomorrow's prices land.
-- **Keyless day-ahead fallback** — ENTSO-E is down: prices keep coming from [energy-charts.info](https://energy-charts.info), and from [SMARD](https://www.smard.de) where energy-charts cannot answer either, until it recovers. Both need no key and publish the same prices (CC BY 4.0, Bundesnetzagentur | SMARD.de, credited on the sensor while either is in use). They also fill a day ENTSO-E has not published yet, typically tomorrow's curve when ENTSO-E is late, and the hours ENTSO-E did serve stay on ENTSO-E. The `spot_source` attribute on `current_price` names every source behind the curve: `entsoe`, `energy-charts`, `smard`, or a mix such as `entsoe+energy-charts`. It only steps in for an entry that holds a key; a dynamic contract needs its own, and an optional key you skipped bills a monthly-indexed card's printed figure until a next card printing the closed month's index settles it, while a feed-in formula settled per slot stays uncredited and its price unknown.
+- **Keyless day-ahead prices** — ENTSO-E is down: prices keep coming from [energy-charts.info](https://energy-charts.info), and from [SMARD](https://www.smard.de) where energy-charts cannot answer either, until it recovers. Both need no key and publish the same prices (CC BY 4.0, Bundesnetzagentur | SMARD.de, credited on the sensor while either is in use). They also fill a day ENTSO-E has not published yet, typically tomorrow's curve when ENTSO-E is late, and the hours ENTSO-E did serve stay on ENTSO-E. The `spot_source` attribute on `current_price` names every source behind the curve: `entsoe`, `energy-charts`, `smard`, or a mix such as `entsoe+energy-charts`. With no key at all, tick *Use keyless day-ahead prices* at the key step and the entry prices off these two alone, a dynamic contract included, exactly as it would with a key: wherever this README says what an ENTSO-E key does, the keyless setting does the same. With neither, a monthly-indexed card bills its printed figure until a next card printing the closed month's index settles it, while a feed-in formula settled per slot stays uncredited and its price unknown. See [Getting an ENTSO-E API key](#getting-an-entso-e-api-key).
 - **Self-healing** — last-known prices keep serving through an outage, and Repairs cards explain anything that needs you. See [Failure mode](#failure-mode).
 - **Catalog drift detection** — a daily check that tells the maintainer when a supplier changes its lineup.
 - **Expert custom formula** — type a card in by hand when a supplier is not covered.
@@ -570,7 +570,7 @@ dropped rather than billed on the new card.
    the day rate in PIC and MEDIUM, except on TotalEnergies' Walloon cards,
    which say their day/night split does not apply under Impact and bill the
    single rate in every band.
-8. **ENTSO-E API key** *(dynamic and monthly-indexed contracts, both of
+8. **ENTSO-E API key or keyless day-ahead prices** *(dynamic and monthly-indexed contracts, both of
    which price the commodity off spot; also offered, skippable, right after
    the Solar panels step, to every
    contract whose energy is indexed on the delivery month's mean and whose
@@ -595,13 +595,15 @@ dropped rather than billed on the new card.
    no way to tell a good key from a bad one, so blocking setup would only punish
    you for their downtime. A key accepted that way is checked for real on the
    first price refresh, and the usual repair notice appears if it turns out to
-   be rejected. Blank is not one of the answers here: the field is rejected
-   on the spot, without asking ENTSO-E, because a dynamic contract has no
-   price at all without a key. It is also the one value the keyless fallback
-   cannot rescue, since the entry never gets as far as trying it. For the
-   injection and monthly-indexed cases it is optional and skippable: leave
-   it blank to skip it, and a feed-in credit settled per slot stays
-   unavailable until you add a key through **Configure → Edit settings**,
+   be rejected. In place of a key you can tick *Use keyless day-ahead
+   prices*: the entry then fetches the day-ahead from energy-charts.info and
+   SMARD and never asks ENTSO-E, and is priced as one with a key. A blank key
+   with the box unticked is rejected on the spot, without asking ENTSO-E,
+   because a dynamic contract has no price at all without one of the two. For
+   the injection and monthly-indexed cases both are optional and skippable:
+   leave them empty to skip, and a feed-in credit settled per slot stays
+   unavailable until you add a key or tick the box through **Configure →
+   Edit settings**,
    while a leg indexed on the month keeps the card's printed figure, the
    previous month's (or on Bolt the previous quarter's), until the next card
    settles the closed month or quarter where the supplier prints the index
@@ -747,7 +749,7 @@ Energy Knights Essentia Online and Essentia Online Green, EnergyVision's
 1.800 kWh vast, vaste injectieprijs 3 jaar, Laadpunt and Groene stroom,
 Trevion Groene Stroom
 Flex, FlexiO Max and the withdrawn LifePowr, and the custom supplier's monthly-average formula), which is where the setup flow asks
-for it as a mandatory, validated field.
+for it as a validated field, or for the keyless box in its place.
 It is optional everywhere else, but two features use it when present: an
 injection tariff that is itself index-linked — the hourly-spot shape
 (Cociter Variable and Variable Trihoraire, every Bolt fixed card, and a Bolt
@@ -762,14 +764,25 @@ One, EBEM Groen Variabel and B@sic+, the withdrawn DATS 24 Groen Variabel,
 TotalEnergies Electricité Variable, Impact, myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
 card), and of Bolt's variable cards (Variable, Plenty, Online and Plenty
 Online, residential and pro) on the delivery quarter's, which is what Bolt
-indexes them on. Both stay off without a key rather than failing the entry: a
+indexes them on. Both stay off without a key or the keyless setting rather than failing the entry: a
 feed-in credit settled per slot goes unavailable, while a monthly one and the
 re-price keep the card's printed figure, which is the previous month's, or on
 Bolt the previous quarter's, until the next card settles the closed month or
 quarter where the supplier prints the index it closed at. A settled month needs
 no key at all, so with a contract start date it bills on the formula you signed,
-key or not; without a key, the months not settled yet keep the printed rate,
-still with the standing charge you signed. The token is free but ENTSO-E does not auto-grant it —
+key or not; without a key or the keyless setting, the months not settled yet keep the printed rate,
+still with the standing charge you signed.
+
+**No key?** Tick *Use keyless day-ahead prices* on the key step instead. The
+entry then fetches the Belgian day-ahead from energy-charts.info and, where it
+cannot answer, from SMARD, the German regulator's portal it takes the series
+from, and is priced exactly as an entry with a key. The difference is only
+where the prices come from: with a key ENTSO-E is the source and those two
+back it up, while without one they are the only sources, so an outage of both
+leaves the entry on its cached curve. The setting can be turned on or off at
+any time through **Configure → Edit settings**.
+
+The token is free but ENTSO-E does not auto-grant it —
 you have to request access explicitly:
 
 1. **Register** an account on the
@@ -823,8 +836,9 @@ opens a menu of four options, five once a supplier switch has been recorded this
   ↔ dynamic crossings are allowed**: the flow prompts for an ENTSO-E
   API key when a side needs spot data (a dynamic or monthly-indexed
   contract, or an index-linked-injection target like the Cociter variable
-  cards or energie.be Vast on the injection regime) and your current entry doesn't already carry
-  one. That prompt is skippable: a quote is a one-off, so leaving it blank
+  cards or energie.be Vast on the injection regime) and your current entry carries
+  neither a key nor the keyless setting. The prompt offers the keyless box
+  too, for that quote only. It is skippable: a quote is a one-off, so leaving it blank
   still shows you every other line of the comparison rather than stopping
   you on a page you may have no token for. Static
   contracts also let you
@@ -842,8 +856,8 @@ opens a menu of four options, five once a supplier switch has been recorded this
   prices are missing) with pro-rated annual fees, plus
   unicode bar charts so the difference reads at a glance. Your own
   year-to-date row is the figure your `current_year_cost` sensor bills, on
-  the day-ahead prices your entry holds: an ENTSO-E token typed on this
-  page prices the alternative only. The yearly
+  the day-ahead prices your entry holds: an ENTSO-E token typed, or the
+  keyless box ticked, on this page prices the alternative only. The yearly
   bill is an indication of the order of magnitude and will not match
   your settlement: it holds today's tariffs for twelve months and
   assumes your past consumption repeats, neither of which is a
@@ -997,7 +1011,7 @@ the meter type, DSO billing mode, solar regime, direct debit answer and meter
 sensors included, since a switch is often when those change too. Three facts
 about the house are taken from the entry where the earlier contract's copy has
 none: the inverter's capacity in kVA (a copy holding 0 counts as none), the
-ENTSO-E API key and the connection's kVA tier. One you enter after recording
+ENTSO-E API key or the keyless setting, and the connection's kVA tier. One you enter after recording
 the switch, for instance when a Repairs card asks for it, then reaches the
 months before it as well; one the earlier contract already held is kept.
 When the meter sensors changed at the switch, the comparison pages leave out
@@ -1546,8 +1560,8 @@ and trihoraire) cannot be
 credited for an hour the day-ahead cache holds no price for. Those hours
 are credited nothing rather than a guess, and `injection_hours_uncredited`
 appears and counts them, so the bill reads high by their feed-in. Past
-hours are only fetched with an ENTSO-E API key, which is what these
-contracts need.
+hours are only fetched with an ENTSO-E API key or the keyless setting, which
+is what these contracts need.
 
 ## Dashboard cards
 

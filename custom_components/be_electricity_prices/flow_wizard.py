@@ -54,6 +54,7 @@ from .const import (
     CONF_DIRECT_DEBIT,
     CONF_DSO_TARIFF_MODE,
     CONF_INCLUDE_VAT,
+    CONF_KEYLESS_SPOTS,
     CONF_QUARTER_HOURLY,
     CONF_REGION,
     CONF_SOLAR_KVA,
@@ -489,12 +490,25 @@ class _WizardStepsMixin:
             return await self.async_step_meters()
         return await self._after_api_key()
 
+    def _set_keyless(self, user_input: dict[str, Any]) -> None:
+        """Keep the keyless box as answered, stored only when ticked so an
+        entry that never used it carries nothing new."""
+        if user_input.get(CONF_KEYLESS_SPOTS):
+            self._data[CONF_KEYLESS_SPOTS] = True
+        else:
+            self._data.pop(CONF_KEYLESS_SPOTS, None)
+
     async def async_step_api_key(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            key = user_input[CONF_API_KEY].strip()
+            key = (user_input.get(CONF_API_KEY) or "").strip()
+            self._set_keyless(user_input)
+            if not key and self._data.get(CONF_KEYLESS_SPOTS):
+                # The box stands in for the key: no key is kept beside it.
+                self._data.pop(CONF_API_KEY, None)
+                return await self._after_api_key()
             if not key:
                 # A blank field must not reach the validator. While ENTSO-E is
                 # unreachable every answer is "cannot_connect", so the empty
@@ -515,8 +529,7 @@ class _WizardStepsMixin:
             else:
                 err = await _validate_entsoe_key(self.hass, key)
                 if err is None:
-                    user_input[CONF_API_KEY] = key
-                    self._data.update(user_input)
+                    self._data[CONF_API_KEY] = key
                     return await self._after_api_key()
                 if err == "cannot_connect":
                     return await self._offer_unverified_key(key, "api_key")
@@ -625,6 +638,7 @@ class _WizardStepsMixin:
         errors: dict[str, str] = {}
         if user_input is not None:
             key = (user_input.get(CONF_API_KEY) or "").strip()
+            self._set_keyless(user_input)
             if not key:
                 self._data.pop(CONF_API_KEY, None)
                 return await self.async_step_meters()

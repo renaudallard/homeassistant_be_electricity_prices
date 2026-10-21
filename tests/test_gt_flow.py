@@ -292,3 +292,35 @@ async def test_a_recheck_that_rejects_an_optional_key_keeps_it_optional(
     assert schema is not None
     marker = next(k for k in schema.schema if str(k) == const.CONF_API_KEY)
     assert isinstance(marker, vol.Optional)
+
+
+async def test_the_keyless_box_stands_in_for_the_key(hass: HomeAssistant) -> None:
+    """A dynamic contract could not be set up without a token. Ticking the box
+    stores the keyless setting instead, and ENTSO-E is not asked anything."""
+    cfg, flow = await _to_api_key_step(hass)
+    with patch(
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
+        side_effect=AssertionError("no key to validate"),
+    ):
+        result = await cfg(
+            flow, {const.CONF_API_KEY: "", const.CONF_KEYLESS_SPOTS: True}
+        )
+    assert result.get("step_id") != "api_key", result
+    data = hass.config_entries.flow._progress[flow]._data  # type: ignore[attr-defined]
+    assert data[const.CONF_KEYLESS_SPOTS] is True
+    assert const.CONF_API_KEY not in data
+
+
+async def test_a_key_typed_beside_the_box_is_still_validated(
+    hass: HomeAssistant,
+) -> None:
+    cfg, flow = await _to_api_key_step(hass)
+    with patch(
+        "custom_components.be_electricity_prices.flow_wizard._validate_entsoe_key",
+        return_value="invalid_api_key",
+    ):
+        result = await cfg(
+            flow, {const.CONF_API_KEY: "bad", const.CONF_KEYLESS_SPOTS: True}
+        )
+    assert result["step_id"] == "api_key"
+    assert result["errors"] == {const.CONF_API_KEY: "invalid_api_key"}
