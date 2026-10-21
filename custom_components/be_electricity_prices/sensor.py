@@ -68,6 +68,7 @@ from .const import (
     METER_DYNAMIC,
     REGION_FLANDERS,
     REGION_WALLONIA,
+    SMARD_ATTRIBUTION,
     SMART_METER_CONTRACT_KINDS,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
@@ -618,9 +619,13 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
                 # CC BY 4.0 obliges us to credit the fallback's source
                 # wherever its data is shown, so the credit rides with the
                 # prices and appears only while the fallback is in use.
+                # energy-charts' credit names SMARD as its origin, so it covers
+                # a curve that drew on both.
                 **(
                     {"attribution": ENERGY_CHARTS_ATTRIBUTION}
                     if "energy-charts" in data.spot_source
+                    else {"attribution": SMARD_ATTRIBUTION}
+                    if "smard" in data.spot_source
                     else {}
                 ),
                 "cheapest_4h_today": cheapest,

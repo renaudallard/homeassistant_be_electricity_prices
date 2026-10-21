@@ -37,6 +37,7 @@ import json
 import logging
 import math
 import re
+from collections.abc import Iterable
 from datetime import UTC, date, datetime, timedelta
 
 import aiohttp
@@ -54,6 +55,8 @@ from .const import (
     ENERGY_CHARTS_URL,
     ENTSOE_BASE_URL,
     ENTSOE_BE_DOMAIN,
+    SMARD_BE_URL,
+    SMARD_QUARTERS_FROM,
 )
 from .providers._pdf import error_text, read_text_capped
 from .providers.base import ExtractorError
@@ -530,6 +533,83 @@ class EnergyChartsClient:
         )
 
 
+class SmardClient:
+    """Keyless BE day-ahead client on SMARD, the second fallback.
+
+    Same contract as ``EnergyChartsClient.fetch_day_ahead``. SMARD is the
+    Bundesnetzagentur's portal and the source energy-charts republishes, so
+    it answers with the same prices while being a separate service: one of
+    the two being down does not take the other with it.
+
+    A window costs the index plus one file per week it touches, fetched one
+    after another: two requests for the live curve, about 44 for a year.
+    No rate limit has been seen or announced, so a 429 is an ordinary
+    failure here rather than a cooldown.
+    """
+
+    def __init__(self, session: aiohttp.ClientSession) -> None:
+        self._session = session
+
+    async def _get_json(self, url: str) -> object:
+        try:
+            async with self._session.get(
+                url, timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                if resp.status >= 400:
+                    raise EntsoeError(f"smard HTTP {resp.status}")
+                body = await read_text_capped(resp, url)
+        except (aiohttp.ClientError, TimeoutError, ExtractorError) as err:
+            raise EntsoeError(f"smard: {error_text(err)}") from err
+        try:
+            return json.loads(body)
+        except json.JSONDecodeError as err:
+            raise EntsoeError(f"smard: non-JSON response: {body[:120]!r}") from err
+
+    async def fetch_day_ahead(
+        self,
+        period_start: datetime,
+        period_end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> dict[datetime, float]:
+        """Fetch BE day-ahead prices in EUR/kWh for the given UTC window."""
+        index = await self._get_json(f"{SMARD_BE_URL}/index_quarterhour.json")
+        stamps = index.get("timestamps") if isinstance(index, dict) else None
+        if not isinstance(stamps, list):
+            raise EntsoeError("smard: index carried no timestamps")
+        weeks = sorted(t for t in stamps if type(t) is int)
+        start_ms = period_start.timestamp() * 1000
+        end_ms = period_end.timestamp() * 1000
+        # A week file runs from its own stamp to the next one's.
+        wanted = [
+            week
+            for week, after in zip(weeks, [*weeks[1:], math.inf], strict=True)
+            if week < end_ms and after > start_ms
+        ]
+        points: list[tuple[object, object]] = []
+        for week in wanted:
+            doc = await self._get_json(
+                f"{SMARD_BE_URL}/4996_DE_quarterhour_{week}.json"
+            )
+            series = doc.get("series") if isinstance(doc, dict) else None
+            if not isinstance(series, list):
+                raise EntsoeError("smard: week file carried no series")
+            points.extend(
+                (point[0], point[1])
+                for point in series
+                if isinstance(point, list) and len(point) == 2
+            )
+        return await asyncio.to_thread(
+            _bucket_slots,
+            points,
+            period_start,
+            period_end,
+            quarter_hourly,
+            millis=True,
+            quarters_from=SMARD_QUARTERS_FROM,
+        )
+
+
 def _parse_energy_charts(
     body: str,
     period_start: datetime,
@@ -553,13 +633,33 @@ def _parse_energy_charts(
     prices = doc.get("price")
     if not isinstance(seconds, list) or not isinstance(prices, list):
         raise EntsoeError("energy-charts: response carried no price series")
+    # Truncated to the shorter of the two if the answer is malformed.
+    return _bucket_slots(
+        zip(seconds, prices, strict=False), period_start, period_end, quarter_hourly
+    )
 
+
+def _bucket_slots(
+    points: Iterable[tuple[object, object]],
+    period_start: datetime,
+    period_end: datetime,
+    quarter_hourly: bool,
+    *,
+    millis: bool = False,
+    quarters_from: datetime | None = None,
+) -> dict[datetime, float]:
+    """Keyless (timestamp, EUR/MWh) points into slot-start -> EUR/kWh.
+
+    Shared by energy-charts (seconds) and SMARD (``millis``). A slot before
+    ``quarters_from`` is always an hour: SMARD repeats the hour's price in
+    each quarter before the 15-minute MTU, where energy-charts publishes the
+    hour itself.
+    """
     # Bucket per slot, then mean. Same shape as the ENTSO-E parser so the
-    # two sources are interchangeable to every caller.
+    # sources are interchangeable to every caller.
     sums: dict[datetime, float] = {}
     counts: dict[datetime, int] = {}
-    # Truncated to the shorter of the two if the answer is malformed.
-    for raw_when, raw_price in zip(seconds, prices, strict=False):
+    for raw_when, raw_price in points:
         if not isinstance(raw_when, (int, float)) or not isinstance(
             raw_price, (int, float)
         ):
@@ -580,7 +680,9 @@ def _parse_energy_charts(
             # unusable point costs its own slot, not the whole window.
             continue
         try:
-            when = datetime.fromtimestamp(float(raw_when), UTC)
+            when = datetime.fromtimestamp(
+                float(raw_when) / (1000.0 if millis else 1.0), UTC
+            )
         except (OverflowError, OSError, ValueError):
             # Finite but not an instant the platform can represent (1e18, or
             # a negative year): skipped like a null gap, so the point costs
@@ -591,9 +693,8 @@ def _parse_energy_charts(
             # The request is day-granular, so the response overhangs the
             # asked-for window whenever it does not start at local midnight.
             continue
-        slot = (
-            when if quarter_hourly else when.replace(minute=0, second=0, microsecond=0)
-        )
+        quarter = quarter_hourly and (quarters_from is None or when >= quarters_from)
+        slot = when if quarter else when.replace(minute=0, second=0, microsecond=0)
         sums[slot] = sums.get(slot, 0.0) + float(raw_price) / 1000.0
         counts[slot] = counts.get(slot, 0) + 1
     return {slot: sums[slot] / counts[slot] for slot in sums}
@@ -607,21 +708,23 @@ async def fetch_day_ahead_or_fallback(
     *,
     quarter_hourly: bool = False,
 ) -> tuple[dict[datetime, float], str]:
-    """Day-ahead prices plus the source that supplied them.
+    """Day-ahead prices plus the sources that supplied them.
 
-    ENTSO-E stays the source of record; energy-charts answers only when
-    ENTSO-E could not, or for the whole local days its answer left out, the
-    source then reading ``entsoe+energy-charts``. An ``EntsoeAuthError`` is
-    deliberately NOT caught: a rejected or exhausted token has to keep
-    raising its Repairs card, and quietly papering over it with a keyless
-    source is how an entry runs for months on a credential its owner never
-    renews.
+    ENTSO-E stays the source of record. The keyless sources, energy-charts
+    then SMARD, answer for the local days ENTSO-E did not: all of them when
+    it could not be reached, or the ones its answer left out. The source
+    names every contributor, joined by ``+``, such as ``entsoe+smard``. An
+    ``EntsoeAuthError`` is deliberately NOT caught: a rejected or exhausted
+    token has to keep raising its Repairs card, and quietly papering over it
+    with a keyless source is how an entry runs for months on a credential
+    its owner never renews.
 
     Not used by the config flow's key check. That check exists to tell an
     invalid key from an unreachable server, and a fallback that answered for
     it would let a user finalise an entry whose key never worked.
     """
     client = EntsoeClient(api_key, session)
+    primary: EntsoeError | None = None
     try:
         answered = await client.fetch_day_ahead(
             period_start, period_end, quarter_hourly=quarter_hourly
@@ -630,47 +733,46 @@ async def fetch_day_ahead_or_fallback(
         raise
     except EntsoeError as err:
         primary = err
+        answered = {}
         _LOGGER.debug("ENTSO-E unavailable (%s); trying the keyless fallback", err)
-    else:
-        return await _fill_missing_days(
-            session, answered, period_start, period_end, quarter_hourly
-        )
-
-    # Both messages travel together from here on. When the fallback fails too
-    # this is what reaches last_error and the log, and the ENTSO-E half is the
-    # half that explains the outage: reporting only "energy-charts: non-JSON
-    # response" for a day ENTSO-E spent returning 503 sends the reader after
-    # the wrong service entirely.
-    try:
-        prices = await EnergyChartsClient(session).fetch_day_ahead(
-            period_start, period_end, quarter_hourly=quarter_hourly
-        )
-    except EntsoeError as err:
-        raise EntsoeError(f"ENTSO-E: {primary}; fallback: {err}") from err
+    prices, sources, errors = await fill_missing_days(
+        session, answered, period_start, period_end, quarter_hourly
+    )
+    if primary is None:
+        contributors = (["entsoe"] if answered else []) + sources
+        return prices, "+".join(contributors) or "entsoe"
     if not prices:
-        # Nothing usable from either side. Raise rather than return empty so
-        # the caller's existing EntsoeError path decides what to degrade to.
-        raise EntsoeError(
-            f"ENTSO-E: {primary}; fallback returned no prices for the window"
-        )
-    return prices, "energy-charts"
+        # Both messages travel together. When the fallback fails too this is
+        # what reaches last_error and the log, and the ENTSO-E half is the
+        # half that explains the outage: reporting only "energy-charts:
+        # non-JSON response" for a day ENTSO-E spent returning 503 sends the
+        # reader after the wrong service entirely. Raised rather than
+        # returned empty so the caller's EntsoeError path decides what to
+        # degrade to.
+        cause = "; ".join(errors) or "returned no prices for the window"
+        raise EntsoeError(f"ENTSO-E: {primary}; fallback: {cause}")
+    return prices, "+".join(sources)
 
 
-async def _fill_missing_days(
+async def fill_missing_days(
     session: aiohttp.ClientSession,
     prices: dict[datetime, float],
     period_start: datetime,
     period_end: datetime,
     quarter_hourly: bool,
-) -> tuple[dict[datetime, float], str]:
-    """Ask energy-charts for the local days an ENTSO-E answer left out.
+) -> tuple[dict[datetime, float], list[str], list[str]]:
+    """Fill the local days ``prices`` leaves out from the keyless sources.
+
+    Returns the prices, the sources that added any, and each failure. Every
+    source is asked only for the days still empty, from the first of them to
+    the window's end, and kept for those days alone, so a day already held
+    keeps the source that served it.
 
     ENTSO-E answering for today while tomorrow is not published yet is a
-    success, so the outage path above never sees it, and tomorrow would stay
-    empty until ENTSO-E caught up even when the fallback already carries the
-    curve. Only whole missing days are asked for: every hour ENTSO-E served
-    keeps the source of record. A fallback that fails or has nothing yet
-    leaves ENTSO-E's answer as it was, and the next tick asks again.
+    success, and without this tomorrow stayed empty until ENTSO-E caught up
+    though the keyless sources already carried it. A day held in part is not
+    filled. A source that fails or has nothing yet adds nothing, and the
+    next tick asks again.
     """
     day = dt_util.as_local(period_start).date()
     last = dt_util.as_local(period_end - timedelta(seconds=1)).date()
@@ -680,22 +782,34 @@ async def _fill_missing_days(
         if day not in held:
             missing.add(day)
         day += timedelta(days=1)
-    if not missing:
-        return prices, "entsoe"
-    start = max(period_start, dt_util.start_of_local_day(min(missing)).astimezone(UTC))
-    try:
-        extra = await EnergyChartsClient(session).fetch_day_ahead(
-            start, period_end, quarter_hourly=quarter_hourly
+    sources: list[str] = []
+    errors: list[str] = []
+    keyless: tuple[tuple[str, type[EnergyChartsClient | SmardClient]], ...] = (
+        ("energy-charts", EnergyChartsClient),
+        ("smard", SmardClient),
+    )
+    for name, client in keyless:
+        if not missing:
+            break
+        start = max(
+            period_start, dt_util.start_of_local_day(min(missing)).astimezone(UTC)
         )
-    except EntsoeError as err:
-        _LOGGER.debug("ENTSO-E left %s unpriced; fallback: %s", sorted(missing), err)
-        return prices, "entsoe"
-    extra = {
-        slot: value
-        for slot, value in extra.items()
-        if dt_util.as_local(slot).date() in missing
-    }
-    if not extra:
-        return prices, "entsoe"
-    source = "entsoe+energy-charts" if prices else "energy-charts"
-    return dict(sorted({**prices, **extra}.items())), source
+        try:
+            answer = await client(session).fetch_day_ahead(
+                start, period_end, quarter_hourly=quarter_hourly
+            )
+        except EntsoeError as err:
+            _LOGGER.debug("%s left %s unpriced: %s", name, sorted(missing), err)
+            errors.append(str(err))
+            continue
+        extra = {
+            slot: value
+            for slot, value in answer.items()
+            if dt_util.as_local(slot).date() in missing
+        }
+        if not extra:
+            continue
+        prices = {**prices, **extra}
+        missing -= {dt_util.as_local(slot).date() for slot in extra}
+        sources.append(name)
+    return dict(sorted(prices.items())), sources, errors

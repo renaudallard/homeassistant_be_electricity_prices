@@ -357,22 +357,27 @@ def test_the_recorded_attributes_stay_under_the_recorder_cap() -> None:
 
 
 @pytest.mark.parametrize(
-    ("source", "credited"),
+    ("source", "credit"),
     [
-        ("entsoe", False),
-        ("energy-charts", True),
-        ("entsoe+energy-charts", True),
+        ("entsoe", None),
+        ("energy-charts", "energy-charts"),
+        ("entsoe+energy-charts", "energy-charts"),
+        ("smard", "smard"),
+        ("entsoe+smard", "smard"),
+        # energy-charts' credit names SMARD as its origin, so it covers both.
+        ("energy-charts+smard", "energy-charts"),
     ],
 )
-def test_attribution_rides_with_any_energy_charts_data(
-    source: str, credited: bool
+def test_attribution_rides_with_any_keyless_data(
+    source: str, credit: str | None
 ) -> None:
-    """CC BY 4.0 obliges the credit wherever energy-charts data is shown, and
-    a day it filled beside ENTSO-E's today is shown just the same."""
+    """CC BY 4.0 obliges the credit wherever a keyless source's data is shown,
+    and a day it filled beside ENTSO-E's today is shown just the same."""
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices.const import (
         ENERGY_CHARTS_ATTRIBUTION,
+        SMARD_ATTRIBUTION,
     )
     from custom_components.be_electricity_prices.sensor import SENSORS, BePriceSensor
 
@@ -387,7 +392,14 @@ def test_attribution_rides_with_any_energy_charts_data(
     )
     attrs = sensor.extra_state_attributes
     assert attrs["spot_source"] == source
-    assert (attrs.get("attribution") == ENERGY_CHARTS_ATTRIBUTION) is credited
+    assert (
+        attrs.get("attribution")
+        == {
+            None: None,
+            "energy-charts": ENERGY_CHARTS_ATTRIBUTION,
+            "smard": SMARD_ATTRIBUTION,
+        }[credit]
+    )
 
 
 def test_tomorrow_aggregations_return_none_before_publication() -> None:

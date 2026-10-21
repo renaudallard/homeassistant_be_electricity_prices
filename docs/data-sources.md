@@ -89,22 +89,39 @@ Two exception types are defined (`api.py`):
 
 ### The keyless fallback
 
-`fetch_day_ahead_or_fallback` (`api.py`) tries ENTSO-E first and, on
-`EntsoeError` only, re-asks `EnergyChartsClient` (`api.py`). It returns the
-prices *and* the source that supplied them, which reaches the `current_price`
-sensor as `spot_source`.
+`fetch_day_ahead_or_fallback` (`api.py`) tries ENTSO-E first. The local days
+it did not answer, all of them on an `EntsoeError` or the ones a successful
+answer left empty, go to `fill_missing_days` (`api.py`), which asks
+`EnergyChartsClient` and then `SmardClient` (`api.py`), each for the days still
+empty and kept for those days alone. It returns the prices *and* every source
+that supplied them, joined by `+`, which reaches the `current_price` sensor as
+`spot_source`: `entsoe`, `energy-charts`, `smard`, `entsoe+energy-charts`,
+`entsoe+smard` or `energy-charts+smard`.
 
-An ENTSO-E answer that leaves whole local days of the window empty is a
-success, not an `EntsoeError`: from 11:00 the live fetch asks for today and
-tomorrow, and ENTSO-E answers with today alone until it publishes.
-`_fill_missing_days` (`api.py`) asks energy-charts for the missing days only,
-keeps its answer for those days and nothing else, and labels the curve
-`entsoe+energy-charts`. A fill that fails or comes back empty (energy-charts
-answers `no content available` before the auction is out) leaves ENTSO-E's
-answer as it was, without an error, and the next tick asks again. A day
-ENTSO-E answered only in part is not filled. Once tomorrow is held, the live
-cache stops refetching for the day, so the fill costs one energy-charts request
-per entry per tick only until either source publishes.
+A successful answer leaves days empty when ENTSO-E publishes late: from 11:00
+the live fetch asks for today and tomorrow, and ENTSO-E answers with today
+alone until it publishes. A source that fails or comes back empty
+(energy-charts answers `no content available` before the auction is out, SMARD
+serves the slot as `null`) adds nothing, without an error, and the next tick
+asks again. A day held only in part is not filled. Once tomorrow is held, the
+live cache stops refetching for the day, so the fill costs one energy-charts
+request per entry per tick, plus two SMARD requests while energy-charts has
+nothing either, only until a source publishes.
+
+**SMARD** is the Bundesnetzagentur's portal and the source energy-charts
+republishes the BE series from, so the two answer with the same prices while
+being separate services. Filter 4996 under `chart_data/4996/DE` is the Belgian
+day-ahead although the path names DE. Its quarter-hour index lists one file
+per week, from Monday at local midnight, and each holds `[ms, EUR/MWh]` pairs
+with `null` for a slot not published yet; a window costs the index plus the
+week files it touches, so two requests live and about 44 for a year. Before
+the 15-minute MTU (2025-10-01) the quarter-hour file repeats the hour's price
+four times, so `_bucket_slots` keeps slots before `SMARD_QUARTERS_FROM`
+(`const.py`) hourly whatever the grid asked for, as energy-charts publishes
+them. Measured before adoption on 2026-10-21: identical to energy-charts on
+every slot of four windows, hourly and quarter-hourly, including the MTU
+change and the 25-hour fall-back day. No rate limit is announced or has been
+seen, so a 429 is an ordinary failure rather than a cooldown.
 
 Three properties are load-bearing:
 
@@ -118,8 +135,8 @@ Three properties are load-bearing:
   function to keep it that way.
 - **One series, so no blending hazard.** ENTSO-E publishes BE as a PT60M *and*
   a PT15M series for the same period and the parser must not mix them;
-  energy-charts returns whichever grid the auction cleared on and nothing else,
-  so an hour is simply the mean of the slots inside it.
+  energy-charts and SMARD return one series each, so an hour is simply the mean
+  of the slots inside it. Both go through the same `_bucket_slots` (`api.py`).
 - **It rejects the same non-finite points the XML parser does.** `json.loads`
   accepts the `NaN` / `Infinity` / `-Infinity` literals by default and overflows
   a long numeric literal such as `1e400` to `inf`, so without a `math.isfinite`
@@ -241,7 +258,8 @@ answered that way: ENTSO-E returns HTTP 401 (with an acknowledgement reading
 acknowledgement reading `No matching data found` is ENTSO-E holding nothing
 for the window, a late publication for instance. `parse_day_ahead_xml`
 (`api.py`) raises it as `EntsoeNoDataError`, an `EntsoeError`, so the live
-fetch falls back to energy-charts and then the cached curve as on any outage,
+fetch falls back to energy-charts, SMARD and then the cached curve as on any
+outage,
 and the config flow's key check reports `cannot_connect`. The historical walk
 catches it with `EntsoeAuthError` and holds the chunk's past days back on the
 short-day TTL, since a past window with no data stays that way. Any other

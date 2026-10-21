@@ -46,12 +46,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .api import (
-    EnergyChartsClient,
     EntsoeAuthError,
     EntsoeClient,
     EntsoeError,
     EntsoeNoDataError,
     fetch_day_ahead_or_fallback,
+    fill_missing_days,
 )
 from .const import (
     CONF_API_KEY,
@@ -616,7 +616,8 @@ class _SpotsMixin(_ProfilesMixin):
         One request spanning them all, never one per chunk: energy-charts
         limits /price to two requests per minute per client IP and takes plain
         dates with no length cap, so a whole year costs exactly one call and
-        about 0,4 MB.
+        about 0,4 MB. Only the days it leaves empty go on to SMARD, which
+        costs its index plus one file per week of the span.
 
         The response is filtered back to the days that actually failed. The
         span runs from the first failed chunk to the last and may cover chunks
@@ -643,11 +644,10 @@ class _SpotsMixin(_ProfilesMixin):
         # Short days alone are retried on ENTSO-E's own schedule, so only a
         # chunk nothing answered is worth a warning.
         log = _LOGGER.warning if unanswered else _LOGGER.debug
-        try:
-            prices = await EnergyChartsClient(self._session).fetch_day_ahead(
-                start_utc, end_utc, quarter_hourly=quarter_hourly
-            )
-        except EntsoeError as err:
+        prices, _sources, errors = await fill_missing_days(
+            self._session, {}, start_utc, end_utc, quarter_hourly
+        )
+        if not prices:
             # Both messages travel together: the ENTSO-E half is the half that
             # explains the outage, and reporting only the fallback's own error
             # sends the reader after the wrong service entirely.
@@ -656,17 +656,7 @@ class _SpotsMixin(_ProfilesMixin):
                 span_start,
                 span_end,
                 primary,
-                err,
-            )
-            self._defer_spot_days(unanswered, stable_before, now + _SPOT_OUTAGE_TTL)
-            return
-        if not prices:
-            log(
-                "historical spot fetch failed for %s..%s: ENTSO-E: %s; "
-                "fallback returned no prices for the window",
-                span_start,
-                span_end,
-                primary,
+                "; ".join(errors) or "returned no prices for the window",
             )
             self._defer_spot_days(unanswered, stable_before, now + _SPOT_OUTAGE_TTL)
             return

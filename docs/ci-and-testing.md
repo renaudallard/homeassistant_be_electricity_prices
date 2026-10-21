@@ -431,17 +431,17 @@ Antwerpen distribution rate and Mega's Halle-Vilvoorde prosumer tariff. The rows
 
 ### The keyless day-ahead fallback
 
-`_check_spot_fallback` (`scripts/live_check.py`) asks whether energy-charts still serves the
-Belgian day-ahead. It is the one source that has to work on the day ENTSO-E does not, so leaving it
-unexercised until then is how it rots unnoticed -- the same reasoning as the freshness gate above,
+`_check_spot_fallback` (`scripts/live_check.py`) asks whether energy-charts and SMARD still serve
+the Belgian day-ahead, one row each through `_check_keyless_source`. They are the sources that have
+to work on the day ENTSO-E does not, so leaving one unexercised until then is how it rots unnoticed -- the same reasoning as the freshness gate above,
 applied to a source rather than a card.
 
 It checks shape, not values: a full local day of hourly slots and every price inside the publishable
 band. The 23/24/25 tolerance is deliberate -- a DST boundary day is a real Belgian day, not a fault.
 
-It exercises **our** `EnergyChartsClient`, not the endpoint alone, so an upstream that changes shape
-under the parser fails here rather than silently at a user's next ENTSO-E outage. That client is
-reached through the same synthetic `be_pkg` loader every other integration module uses
+It exercises **our** `EnergyChartsClient` and `SmardClient`, not the endpoints alone, so an upstream
+that changes shape under the parser fails here rather than silently at a user's next ENTSO-E outage.
+Those clients are reached through the same synthetic `be_pkg` loader every other integration module uses
 (`_load("be_pkg.api", ...)`): a plain `import custom_components...` raises `ModuleNotFoundError` in
 this script, and the first version of this check did exactly that and never ran. Because it was also
 folded into the freshness `try` at the time, the crash was filed as `_freshness: probe crashed`,

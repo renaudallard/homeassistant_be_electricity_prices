@@ -30,6 +30,7 @@ No prices live here - all rates come from per-provider live extractors.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Final
 
 DOMAIN: Final = "be_electricity_prices"
@@ -563,8 +564,8 @@ VREG_CAPACITY_FLOOR_KW: Final = 2.5
 ENTSOE_BASE_URL: Final = "https://web-api.tp.entsoe.eu/api"
 ENTSOE_BE_DOMAIN: Final = "10YBE----------2"
 
-# Keyless day-ahead fallback for the Belgian bidding zone, used only when
-# ENTSO-E itself is unreachable. Fraunhofer ISE's energy-charts republishes
+# Keyless day-ahead fallback for the Belgian bidding zone, used for the days
+# ENTSO-E does not answer. Fraunhofer ISE's energy-charts republishes
 # the cleared SDAC result; for BE the series is CC BY 4.0 from
 # Bundesnetzagentur | SMARD.de, and that attribution is a licence condition,
 # not a courtesy (it is carried in the README and the sensor attribution).
@@ -575,6 +576,19 @@ ENERGY_CHARTS_BE_ZONE: Final = "BE"
 ENERGY_CHARTS_ATTRIBUTION: Final = (
     "Day-ahead fallback: energy-charts.info, CC BY 4.0 from "
     "Bundesnetzagentur | SMARD.de"
+)
+
+# The second keyless fallback: SMARD itself, the Bundesnetzagentur's portal
+# energy-charts takes the BE series from. Filter 4996 is the Belgian day-ahead
+# although the path names DE. The index lists one file per week, starting
+# Monday at local midnight, of [ms, EUR/MWh] pairs with null for a slot not
+# published yet. Measured identical to energy-charts on every quarter-hour of
+# three days. Before the 15-minute MTU the quarter-hour file repeats the
+# hour's price four times, so slots before SMARD_QUARTERS_FROM are hourly.
+SMARD_BE_URL: Final = "https://www.smard.de/app/chart_data/4996/DE"
+SMARD_QUARTERS_FROM: Final = datetime(2025, 9, 30, 22, 0, tzinfo=UTC)
+SMARD_ATTRIBUTION: Final = (
+    "Day-ahead fallback: CC BY 4.0 from Bundesnetzagentur | SMARD.de"
 )
 
 # The card archive. .github/workflows/archive_cards.yml stores what every

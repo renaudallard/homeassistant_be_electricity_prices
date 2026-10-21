@@ -45,7 +45,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -2050,12 +2050,23 @@ def test_a_crashed_phase_is_filed_as_a_bug_here(
     assert (tmp_path / "tax_failures.txt").read_text() == ""
 
 
+@pytest.mark.parametrize(
+    ("down", "label"),
+    [
+        (
+            "_ENERGY_CHARTS_CLIENT",
+            "spot/fallback: energy-charts serves the Belgian day-ahead",
+        ),
+        ("_SMARD_CLIENT", "spot/fallback: SMARD serves the Belgian day-ahead"),
+    ],
+)
 def test_a_spot_fallback_outage_is_retried_like_a_card_fetch(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, down: str, label: str
 ) -> None:
     """The keyless day-ahead source failing was a catalog row: never retried,
     so one blip on the attempt the loop ended on filed an issue, and filed
-    under "new supplier products detected"."""
+    under "new supplier products detected". Each source is its own row, so
+    the one that broke is the one named."""
 
     class _Down:
         def __init__(self, _session: Any) -> None:
@@ -2064,12 +2075,21 @@ def test_a_spot_fallback_outage_is_retried_like_a_card_fetch(
         async def fetch_day_ahead(self, *_args: Any) -> dict[datetime, float]:
             raise TimeoutError
 
-    monkeypatch.setattr(lc, "_ENERGY_CHARTS_CLIENT", _Down)
+    class _Up:
+        def __init__(self, _session: Any) -> None:
+            pass
+
+        async def fetch_day_ahead(
+            self, start: datetime, *_args: Any
+        ) -> dict[datetime, float]:
+            return {start + timedelta(hours=h): 0.1 for h in range(24)}
+
+    monkeypatch.setattr(lc, "_ENERGY_CHARTS_CLIENT", _Up)
+    monkeypatch.setattr(lc, "_SMARD_CLIENT", _Up)
+    monkeypatch.setattr(lc, down, _Down)
     rc = _drive_run(monkeypatch, tmp_path, _check_spot_fallback=lc._check_spot_fallback)
     assert rc == 1
-    assert (tmp_path / "extractor_failures.txt").read_text() == (
-        "spot/fallback: energy-charts serves the Belgian day-ahead\n"
-    )
+    assert (tmp_path / "extractor_failures.txt").read_text() == f"{label}\n"
     assert "## Failures" not in (tmp_path / "catalog_report.md").read_text()
 
 

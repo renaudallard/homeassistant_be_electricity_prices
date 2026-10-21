@@ -63,6 +63,7 @@ from custom_components.be_electricity_prices.providers.frank import parse_snapsh
 from tests import fixture_text, make_snapshot
 
 _SPOTS = "custom_components.be_electricity_prices.coordinator_spots"
+_API = "custom_components.be_electricity_prices.api"
 _METERS = {
     "sensor.cons_day": ("cons", "day"),
     "sensor.cons_night": ("cons", "night"),
@@ -293,7 +294,8 @@ def _a_frank_entry(
             *_recorder_patches(recorder),
             patch(_SPOTS + ".fetch_day_ahead_or_fallback", _wrapper),
             patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _method),
-            patch(_SPOTS + ".EnergyChartsClient.fetch_day_ahead", _no_fallback),
+            patch(_API + ".EnergyChartsClient.fetch_day_ahead", _no_fallback),
+            patch(_API + ".SmardClient.fetch_day_ahead", _no_fallback),
         ):
             stack.enter_context(cm)
         yield entry

@@ -84,6 +84,20 @@ from custom_components.be_electricity_prices.snapshot_store import (
 from tests import make_entry, make_snapshot, make_stub_extractor
 
 _SPOTS = "custom_components.be_electricity_prices.coordinator_spots"
+_API = "custom_components.be_electricity_prices.api"
+
+
+async def _smard_is_down(
+    _self: Any,
+    _start: datetime,
+    _end: datetime,
+    *,
+    quarter_hourly: bool = False,
+) -> dict[datetime, float]:
+    """Keeps SMARD off the network in a test that stubs energy-charts alone."""
+    raise EntsoeError("SMARD disabled for this test")
+
+
 _COORD = "custom_components.be_electricity_prices.coordinator"
 
 
@@ -136,7 +150,8 @@ def _patch_spot_fetch(fake_fetch: Any) -> Iterator[None]:
     with (
         patch(_SPOTS + ".fetch_day_ahead_or_fallback", _wrapper),
         patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _method),
-        patch(_SPOTS + ".EnergyChartsClient.fetch_day_ahead", _no_fallback),
+        patch(_API + ".EnergyChartsClient.fetch_day_ahead", _no_fallback),
+        patch(_API + ".SmardClient.fetch_day_ahead", _no_fallback),
     ):
         yield
 
@@ -675,7 +690,8 @@ async def test_ensure_historical_spots_backs_off_after_a_rejected_key(
 
         with (
             patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _entsoe_refuses),
-            patch(_SPOTS + ".EnergyChartsClient.fetch_day_ahead", _keyless_answered),
+            patch(_API + ".EnergyChartsClient.fetch_day_ahead", _keyless_answered),
+            patch(_API + ".SmardClient.fetch_day_ahead", _smard_is_down),
         ):
             await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
             first = calls
@@ -735,7 +751,8 @@ async def test_a_day_entsoe_answers_short_is_completed_from_the_fallback(
 
     with (
         patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _entsoe_short),
-        patch(_SPOTS + ".EnergyChartsClient.fetch_day_ahead", _keyless),
+        patch(_API + ".EnergyChartsClient.fetch_day_ahead", _keyless),
+        patch(_API + ".SmardClient.fetch_day_ahead", _smard_is_down),
     ):
         await coord._ensure_historical_spots(date(2026, 8, 20), date(2026, 8, 21))
 
@@ -744,6 +761,58 @@ async def test_a_day_entsoe_answers_short_is_completed_from_the_fallback(
     assert all(hour in coord._historical_spots for hour in day)
     assert coord._historical_spots[day_start] == 0.10, "ENTSO-E's hours are kept"
     assert coord._historical_spots[day_start + timedelta(hours=12)] == 0.20
+    assert date(2026, 8, 20) not in coord._spot_day_retry_at
+
+
+async def test_the_backfill_falls_through_to_smard(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """ENTSO-E down and energy-charts refusing: the days still come from
+    SMARD, one request each for the index and the weeks, rather than being
+    held back for the outage TTL."""
+    freezer.move_to("2026-08-31 09:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    day_start = dt_util.start_of_local_day(date(2026, 8, 20)).astimezone(UTC)
+
+    async def _entsoe_is_down(
+        _self: Any,
+        _start: datetime,
+        _end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> dict[datetime, float]:
+        raise EntsoeError("ENTSO-E HTTP 503")
+
+    async def _rate_limited(
+        _self: Any,
+        _start: datetime,
+        _end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> dict[datetime, float]:
+        raise EntsoeError("energy-charts HTTP 429: rate limited")
+
+    async def _smard(
+        _self: Any,
+        start: datetime,
+        end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> dict[datetime, float]:
+        hours = int((end - start).total_seconds() // 3600)
+        return {start + timedelta(hours=h): 0.30 for h in range(hours)}
+
+    with (
+        patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _entsoe_is_down),
+        patch(_API + ".EnergyChartsClient.fetch_day_ahead", _rate_limited),
+        patch(_API + ".SmardClient.fetch_day_ahead", _smard),
+    ):
+        await coord._ensure_historical_spots(date(2026, 8, 20), date(2026, 8, 21))
+
+    day = [day_start + timedelta(hours=h) for h in range(24)]
+    assert [coord._historical_spots.get(hour) for hour in day] == [0.30] * 24
     assert date(2026, 8, 20) not in coord._spot_day_retry_at
 
 
@@ -7811,7 +7880,8 @@ async def test_backfill_falling_back_does_not_relabel_the_live_price(
 
     with (
         patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _entsoe_is_down),
-        patch(_SPOTS + ".EnergyChartsClient.fetch_day_ahead", _keyless_answered),
+        patch(_API + ".EnergyChartsClient.fetch_day_ahead", _keyless_answered),
+        patch(_API + ".SmardClient.fetch_day_ahead", _smard_is_down),
     ):
         await coord._ensure_historical_spots(date(2026, 8, 20), date(2026, 8, 21))
 
@@ -7864,7 +7934,8 @@ async def test_the_keyless_fallback_answers_the_whole_span_in_one_request(
 
     with (
         patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _entsoe_is_down),
-        patch(_SPOTS + ".EnergyChartsClient.fetch_day_ahead", _keyless_answered),
+        patch(_API + ".EnergyChartsClient.fetch_day_ahead", _keyless_answered),
+        patch(_API + ".SmardClient.fetch_day_ahead", _smard_is_down),
     ):
         await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 8, 30))
 
@@ -7918,7 +7989,8 @@ async def test_a_window_neither_source_could_serve_is_not_re_walked_hourly(
 
     with (
         patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _entsoe_is_down),
-        patch(_SPOTS + ".EnergyChartsClient.fetch_day_ahead", _keyless_is_rate_limited),
+        patch(_API + ".EnergyChartsClient.fetch_day_ahead", _keyless_is_rate_limited),
+        patch(_API + ".SmardClient.fetch_day_ahead", _keyless_is_rate_limited),
     ):
         await coord._ensure_historical_spots(date(2026, 8, 1), date(2026, 8, 20))
         first = dict(attempts)

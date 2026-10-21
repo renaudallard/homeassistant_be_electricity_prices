@@ -183,8 +183,9 @@ def _load_providers() -> dict[str, types.ModuleType]:
     # ModuleNotFoundError, and the first version of the spot-fallback check
     # did exactly that and never ran.
     api = _load("be_pkg.api", PKG / "api.py")
-    global _ENERGY_CHARTS_CLIENT, _FETCH_TARIFF_SHEET
+    global _ENERGY_CHARTS_CLIENT, _SMARD_CLIENT, _FETCH_TARIFF_SHEET
     _ENERGY_CHARTS_CLIENT = api.EnergyChartsClient
+    _SMARD_CLIENT = api.SmardClient
     # The integration's own reader of Fluvius's sheet, for the same reason.
     fluvius = _load("be_pkg.fluvius", PKG / "fluvius.py")
     _FETCH_TARIFF_SHEET = fluvius._fetch_sheet
@@ -361,6 +362,8 @@ _EXTRACTOR_ERROR: type[Exception] = RuntimeError
 # changes shape under it fails here instead of silently at a user's next
 # ENTSO-E outage.
 _ENERGY_CHARTS_CLIENT: Any = None
+# Bound by _load_providers to api.SmardClient, the second keyless source.
+_SMARD_CLIENT: Any = None
 # Bound by _load_providers to fluvius._fetch_sheet, the reader under
 # ensure_tariff_sheet, which raises where ensure_tariff_sheet logs.
 _FETCH_TARIFF_SHEET: Any = None
@@ -2811,10 +2814,24 @@ async def _check_mega_professional(
 
 
 async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
-    """The keyless day-ahead fallback still answers for Belgium.
+    """Both keyless day-ahead fallbacks still answer for Belgium."""
+    await _check_keyless_source(
+        session,
+        "spot/fallback: energy-charts serves the Belgian day-ahead",
+        _ENERGY_CHARTS_CLIENT,
+    )
+    await _check_keyless_source(
+        session, "spot/fallback: SMARD serves the Belgian day-ahead", _SMARD_CLIENT
+    )
 
-    This is the one source that has to work on the day ENTSO-E does not, so
-    leaving it unexercised until then is how it rots unnoticed. Checked on
+
+async def _check_keyless_source(
+    session: aiohttp.ClientSession, label: str, client: Any
+) -> None:
+    """One keyless day-ahead fallback still answers for Belgium.
+
+    These are the sources that have to work on the day ENTSO-E does not, so
+    leaving one unexercised until then is how it rots unnoticed. Checked on
     its shape rather than its values: a full local day of slots, all inside
     the publishable band, on whichever grid the auction cleared on.
 
@@ -2826,7 +2843,6 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
     # Brussels explicitly, as elsewhere in this script: dt_util's default time
     # zone is UTC until brussels_clock() sets it, and asking UTC for "local
     # midnight" would slice 22 hours out of the middle of two Belgian days.
-    label = "spot/fallback: energy-charts serves the Belgian day-ahead"
     brussels = ZoneInfo("Europe/Brussels")
     today = datetime.now(brussels).date()
     tomorrow = today + timedelta(days=1)
@@ -2839,7 +2855,7 @@ async def _check_spot_fallback(session: aiohttp.ClientSession) -> None:
         tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=brussels
     ).astimezone(UTC)
     try:
-        prices = await _ENERGY_CHARTS_CLIENT(session).fetch_day_ahead(start, end)
+        prices = await client(session).fetch_day_ahead(start, end)
     except Exception as err:  # any failure is the finding
         _record(label, False, f"{type(err).__name__}: {err}")
         return

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
@@ -43,12 +44,15 @@ from custom_components.be_electricity_prices.api import (
     EntsoeClient,
     EntsoeError,
     EntsoeNoDataError,
+    SmardClient,
+    _bucket_slots,
     _parse_energy_charts,
     _parse_iso_utc,
     _retry_after,
     fetch_day_ahead_or_fallback,
     parse_day_ahead_xml,
 )
+from custom_components.be_electricity_prices.const import SMARD_QUARTERS_FROM
 from tests import FakeBody
 
 
@@ -447,10 +451,18 @@ class _CM:
 class _FakeSession:
     """Dispatches on URL so one session can serve both legs of the fallback."""
 
-    def __init__(self, entsoe: Exception | str, fallback_body: str) -> None:
+    def __init__(
+        self,
+        entsoe: Exception | str,
+        fallback_body: str,
+        smard: dict[str, str] | None = None,
+    ) -> None:
         self._entsoe = entsoe
         self._fallback_body = fallback_body
+        # SMARD files by name; any other name is a 404, as on the real site.
+        self._smard = smard or {}
         self.fallback_params: list[object] = []
+        self.smard_files: list[str] = []
 
     def get(self, url: str, **kwargs: object) -> _CM:
         if "entsoe" in url:
@@ -460,6 +472,11 @@ class _FakeSession:
                 # A rejected token is an HTTP 401 on the wire.
                 return _CM(resp=_Resp(401, ""))
             return _CM(exc=aiohttp.ClientError("503 Service Unavailable"))
+        if "smard" in url:
+            name = url.rsplit("/", 1)[1]
+            self.smard_files.append(name)
+            body = self._smard.get(name)
+            return _CM(resp=_Resp(404, "") if body is None else _Resp(200, body))
         self.fallback_params.append(kwargs.get("params"))
         return _CM(resp=_Resp(200, self._fallback_body))
 
@@ -676,6 +693,7 @@ async def test_a_failed_fill_keeps_the_entsoe_answer() -> None:
     assert source == "entsoe"
     assert len(prices) == 24
     assert len(session.fallback_params) == 1
+    assert session.smard_files == ["index_quarterhour.json"]
 
 
 async def test_a_complete_entsoe_answer_never_asks_the_fallback() -> None:
@@ -691,6 +709,143 @@ async def test_a_complete_entsoe_answer_never_asks_the_fallback() -> None:
     assert source == "entsoe"
     assert len(prices) == 24
     assert session.fallback_params == []
+    assert session.smard_files == []
+
+
+def _ms(when: datetime) -> int:
+    return int(when.timestamp() * 1000)
+
+
+# Mondays at Brussels midnight, which is where SMARD starts its week files.
+_WEEK_APR27 = _ms(datetime(2026, 4, 26, 22, 0, tzinfo=UTC))
+_WEEK_MAY04 = _ms(datetime(2026, 5, 3, 22, 0, tzinfo=UTC))
+
+
+def _smard(weeks: Mapping[int, Mapping[datetime, float | None]]) -> dict[str, str]:
+    """An index of ``weeks`` and one file per week, as SMARD serves them."""
+    files = {
+        "index_quarterhour.json": json.dumps({"timestamps": sorted(weeks)}),
+    }
+    for week, points in weeks.items():
+        files[f"4996_DE_quarterhour_{week}.json"] = json.dumps(
+            {"meta_data": {}, "series": [[_ms(t), v] for t, v in points.items()]}
+        )
+    return files
+
+
+def _quarters(start: datetime, hours: int, price: float) -> dict[datetime, float]:
+    return {start + timedelta(minutes=15 * q): price for q in range(hours * 4)}
+
+
+def test_smard_groups_to_the_hour_before_the_15_minute_mtu() -> None:
+    """Before 2025-10-01 SMARD's quarter-hour file repeats the hour's price
+    four times, where energy-charts publishes the hour itself. Kept as
+    quarters, a quarter-hourly entry's replay of those months would carry
+    four slots per hour that no auction ever cleared."""
+    hourly_era = datetime(2025, 9, 30, 21, 0, tzinfo=UTC)
+    quarter_era = datetime(2025, 9, 30, 22, 0, tzinfo=UTC)
+    points: list[tuple[object, object]] = [
+        (_ms(hourly_era + timedelta(minutes=15 * q)), 100.0) for q in range(4)
+    ]
+    points += [
+        (_ms(quarter_era + timedelta(minutes=15 * q)), p)
+        for q, p in enumerate([40.0, 80.0, None, 120.0])
+    ]
+    out = _bucket_slots(
+        points,
+        hourly_era,
+        quarter_era + timedelta(hours=1),
+        True,
+        millis=True,
+        quarters_from=SMARD_QUARTERS_FROM,
+    )
+    assert out == {
+        hourly_era: 0.1,
+        quarter_era: 0.04,
+        quarter_era + timedelta(minutes=15): 0.08,
+        quarter_era + timedelta(minutes=45): 0.12,
+    }
+
+
+async def test_smard_reads_only_the_weeks_the_window_touches() -> None:
+    """A window across Sunday night needs the two week files around it and
+    nothing else: a year's index lists about 600 of them."""
+    sunday = datetime(2026, 5, 2, 22, 0, tzinfo=UTC)
+    files = _smard(
+        {
+            _ms(datetime(2026, 4, 19, 22, 0, tzinfo=UTC)): {},
+            _WEEK_APR27: _quarters(sunday, 24, 50.0),
+            _WEEK_MAY04: _quarters(sunday + timedelta(days=1), 24, 70.0),
+        }
+    )
+    session = _FakeSession(entsoe=EntsoeError("503"), fallback_body="", smard=files)
+    prices = await SmardClient(session).fetch_day_ahead(  # type: ignore[arg-type]
+        sunday, sunday + timedelta(days=2)
+    )
+    assert session.smard_files == [
+        "index_quarterhour.json",
+        f"4996_DE_quarterhour_{_WEEK_APR27}.json",
+        f"4996_DE_quarterhour_{_WEEK_MAY04}.json",
+    ]
+    assert len(prices) == 48
+    assert prices[sunday] == pytest.approx(0.05)
+    assert prices[sunday + timedelta(days=1)] == pytest.approx(0.07)
+
+
+async def test_smard_fills_a_day_energy_charts_has_not_published() -> None:
+    """The second keyless source is asked for the days the first left empty,
+    and only those: ENTSO-E keeps today. A slot SMARD has not published yet
+    is null and stays absent rather than priced at zero."""
+    tomorrow: dict[datetime, float | None] = dict(_quarters(_TOMORROW_START, 24, 100.0))
+    tomorrow[_TOMORROW_START + timedelta(hours=23, minutes=45)] = None
+    session = _FakeSession(
+        entsoe=_today_only_doc(),
+        fallback_body="no content available",
+        smard=_smard({_WEEK_APR27: tomorrow}),
+    )
+    prices, source = await fetch_day_ahead_or_fallback(
+        "key",
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _WINDOW_END,
+    )
+    assert source == "entsoe+smard"
+    assert len(prices) == 48
+    assert prices[_TODAY_START] == pytest.approx(0.05)
+    assert prices[_TOMORROW_START] == pytest.approx(0.1)
+
+
+async def test_smard_answers_an_outage_energy_charts_cannot() -> None:
+    session = _FakeSession(
+        entsoe=EntsoeError("503"),
+        fallback_body="no content available",
+        smard=_smard({_WEEK_APR27: _quarters(_TODAY_START, 24, 100.0)}),
+    )
+    prices, source = await fetch_day_ahead_or_fallback(
+        "key",
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _TOMORROW_START,
+    )
+    assert source == "smard"
+    assert len(prices) == 24
+
+
+async def test_an_outage_of_every_source_names_each_cause() -> None:
+    """Each failure is in the message: which keyless source broke is what the
+    reader of last_error needs next."""
+    session = _FakeSession(entsoe=EntsoeError("503"), fallback_body="nope")
+    with pytest.raises(EntsoeError) as excinfo:
+        await fetch_day_ahead_or_fallback(
+            "key",
+            session,  # type: ignore[arg-type]
+            _TODAY_START,
+            _TOMORROW_START,
+        )
+    msg = str(excinfo.value)
+    assert msg.startswith("ENTSO-E: ")
+    assert "energy-charts: non-JSON" in msg
+    assert "smard HTTP 404" in msg
 
 
 def test_key_validation_does_not_use_the_fallback() -> None:

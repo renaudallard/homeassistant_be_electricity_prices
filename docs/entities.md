@@ -233,8 +233,8 @@ The payload:
 | `snapshot_age_hours` | `round(data.snapshot_age_hours, 2)` | hours since the snapshot was fetched |
 | `snapshot_stale` | `data.snapshot_stale` | true past the staleness threshold, never on the final card of a supplier that left or a withdrawn product |
 | `last_error` | `data.last_error` | last fetch/parse error string, or empty. A fetch failure always names the exception, so a CDN timeout reads `network error fetching <url>: TimeoutError` |
-| `spot_source` | `data.spot_source` | where the live day-ahead curve came from: `entsoe`, `energy-charts` (ENTSO-E unreachable) or `entsoe+energy-charts` (energy-charts filled a day ENTSO-E had not published) |
-| `attribution` | `ENERGY_CHARTS_ATTRIBUTION` | present only while `spot_source` includes `energy-charts`: the CC BY 4.0 credit its data requires |
+| `spot_source` | `data.spot_source` | every source behind the live day-ahead curve, joined by `+`: `entsoe`, `energy-charts`, `smard`, or a mix such as `entsoe+energy-charts` (a keyless source filled a day ENTSO-E had not published) |
+| `attribution` | `ENERGY_CHARTS_ATTRIBUTION` or `SMARD_ATTRIBUTION` | present only while `spot_source` includes a keyless source: the CC BY 4.0 credit its data requires. The energy-charts credit names SMARD as its origin, so it is the one shown when both contributed |
 | `cheapest_4h_today` | `_today_ranked(data, 4)[0]` | 4 cheapest today-hours, chronological |
 | `most_expensive_4h_today` | `_today_ranked(data, 4)[1]` | 4 dearest today-hours, chronological |
 | `today` | `_split_today_tomorrow(data)[0]` | per-hour breakdown rows for today |
