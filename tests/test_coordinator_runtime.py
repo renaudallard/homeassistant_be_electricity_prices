@@ -39,6 +39,7 @@ import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -9514,6 +9515,63 @@ async def test_a_cleared_entsoe_blip_leaves_last_error(
 
     assert await _tick("ENTSO-E: HTTP 503") == ""
     assert await _tick("HTTP 500 fetching the card") == "HTTP 500 fetching the card"
+
+
+async def test_a_spot_outage_names_entsoe_once(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The client, the fallback and the coordinator each put "ENTSO-E:" in
+    front, so the sensor read "ENTSO-E: ENTSO-E: ENTSO-E HTTP 503". The
+    fallback labels ENTSO-E's half once and the others pass it on as is."""
+    freezer.move_to("2026-07-01 12:30:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=DynamicRates(factor=1.0, base=0.02))
+    today = dt_util.start_of_local_day(date(2026, 7, 1)).astimezone(UTC)
+    coord._spot_cache = {today + timedelta(hours=h): 0.1 for h in range(24)}
+    coord._spot_cache_day = date(2026, 6, 30)
+
+    async def _down(_self: Any, *_a: Any, **_kw: Any) -> dict[datetime, float]:
+        raise EntsoeError("HTTP 503: Service Unavailable")
+
+    with (
+        patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _down),
+        patch(_API + ".EnergyChartsClient.fetch_day_ahead", _smard_is_down),
+        patch(_API + ".SmardClient.fetch_day_ahead", _smard_is_down),
+    ):
+        await coord._tick_spot_prices(coord._snapshot)
+    assert coord._last_error.startswith("ENTSO-E: HTTP 503: Service Unavailable;")
+    assert coord._last_error.count("ENTSO-E") == 1
+
+    # The prefix is also what clears it once the fetch succeeds again.
+    async def _up(
+        _self: Any, start: datetime, end: datetime, **_kw: Any
+    ) -> dict[datetime, float]:
+        hours = int((end - start).total_seconds() // 3600)
+        return {start + timedelta(hours=h): 0.1 for h in range(hours)}
+
+    with patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _up):
+        await coord._tick_spot_prices(coord._snapshot)
+    assert coord._last_error == ""
+
+
+async def test_a_missing_key_names_entsoe_once(hass: HomeAssistant) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "cociter",
+            "contract": "cociter_dynamic",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "dynamic",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=DynamicRates(factor=1.0, base=0.02))
+    with pytest.raises(UpdateFailed, match=r"^ENTSO-E: missing API key$"):
+        await coord._tick_spot_prices(coord._snapshot)
 
 
 async def test_a_withdrawn_supplier_is_neither_asked_nor_flagged_stale(

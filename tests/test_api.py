@@ -848,6 +848,30 @@ async def test_an_outage_of_every_source_names_each_cause() -> None:
     assert "smard HTTP 404" in msg
 
 
+async def test_an_entsoe_http_error_is_labelled_once() -> None:
+    """The client's message is unlabelled and the fallback names ENTSO-E's
+    half, so a 503 reads "ENTSO-E: HTTP 503", not "ENTSO-E: ENTSO-E HTTP
+    503"."""
+
+    class _Unavailable(_FakeSession):
+        def get(self, url: str, **kwargs: object) -> _CM:
+            if "entsoe" in url:
+                return _CM(resp=_Resp(503, "Service Unavailable"))
+            return super().get(url, **kwargs)
+
+    session = _Unavailable(entsoe="", fallback_body="no content available")
+    with pytest.raises(EntsoeError) as excinfo:
+        await fetch_day_ahead_or_fallback(
+            "key",
+            session,  # type: ignore[arg-type]
+            _TODAY_START,
+            _TOMORROW_START,
+        )
+    msg = str(excinfo.value)
+    assert msg.startswith("ENTSO-E: HTTP 503: Service Unavailable; fallback: ")
+    assert msg.count("ENTSO-E") == 1
+
+
 def test_key_validation_does_not_use_the_fallback() -> None:
     """The config flow's key check must keep calling EntsoeClient directly.
 

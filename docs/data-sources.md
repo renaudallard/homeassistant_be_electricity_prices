@@ -73,10 +73,17 @@ total timeout (`api.py`).
 
 ```
 resp.status == 401          -> EntsoeAuthError("ENTSO-E rejected the API key")
-resp.status >= 400          -> EntsoeError("ENTSO-E HTTP <status>: <body[:200]>")  (redacted)
+resp.status >= 400          -> EntsoeError("HTTP <status>: <body[:200]>")  (redacted)
 aiohttp.ClientError         -> EntsoeError(str(err))  (redacted)
 TimeoutError                -> EntsoeError(str(err))  (redacted)
 ```
+
+These messages do not name ENTSO-E, and neither does a "No matching data"
+acknowledgement's `EntsoeNoDataError("no data (<reason>)")`: whoever shows one
+does. `fetch_day_ahead_or_fallback` raises `ENTSO-E: <message>; fallback:
+<each keyless failure>`, the backfill logs its own `ENTSO-E: %s`, and the
+coordinator puts the message on `last_error` as it is. A label at each of the
+three layers read `ENTSO-E: ENTSO-E: ENTSO-E HTTP 503` on the sensor.
 
 Two exception types are defined (`api.py`):
 

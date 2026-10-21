@@ -212,7 +212,7 @@ class _PricesMixin:
                     self._last_error = ""
             except EntsoeAuthError as err:
                 self._sync_entsoe_auth_issue(True, str(err))
-                raise UpdateFailed(f"ENTSO-E auth: {err}") from err
+                raise UpdateFailed(str(err)) from err
             except EntsoeError as err:
                 # A transient ENTSO-E outage must not blank the entry: the
                 # last good day-ahead curve is still usable for breakdown
@@ -220,12 +220,14 @@ class _PricesMixin:
                 # back from the Store after a restart. Only fail when nothing
                 # on hand actually covers today: _fallback_spots refuses a
                 # curve from an earlier day rather than pricing today off it.
-                self._last_error = f"ENTSO-E: {err}"
+                # Already labelled: the fallback names ENTSO-E's half and
+                # each keyless source's.
+                self._last_error = str(err)
                 _LOGGER.warning("ENTSO-E refresh failed; serving cached spots: %s", err)
                 spot_prices = self._fallback_spots()
                 if not spot_prices:
                     self._sync_entsoe_auth_issue(False)
-                    raise UpdateFailed(f"ENTSO-E: {err}") from err
+                    raise UpdateFailed(str(err)) from err
         elif _injection_needs_spot(
             self._snapshot, self.entry
         ) or _injection_needs_month_spot(self._snapshot, self.entry):

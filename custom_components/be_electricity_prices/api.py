@@ -137,9 +137,10 @@ class EntsoeClient:
                     raise EntsoeAuthError("ENTSO-E rejected the API key")
                 if resp.status >= 400:
                     body = await read_text_capped(resp, ENTSOE_BASE_URL)
-                    raise EntsoeError(
-                        self._redact(f"ENTSO-E HTTP {resp.status}: {body[:200]}")
-                    )
+                    # Unlabelled, as every message raised here: whoever shows
+                    # it names ENTSO-E, and labelling it twice read "ENTSO-E:
+                    # ENTSO-E: ENTSO-E HTTP 503" on the sensor.
+                    raise EntsoeError(self._redact(f"HTTP {resp.status}: {body[:200]}"))
                 payload = await read_text_capped(resp, ENTSOE_BASE_URL)
         except (aiohttp.ClientError, TimeoutError, ExtractorError) as err:
             # aiohttp.ClientTimeout fires asyncio.TimeoutError, which is
@@ -205,7 +206,7 @@ def parse_day_ahead_xml(
     if _local_name(root.tag) == "Acknowledgement_MarketDocument":
         reason = _ack_reason(root)
         if "no matching data" in reason.lower():
-            raise EntsoeNoDataError(f"ENTSO-E returned no data ({reason})")
+            raise EntsoeNoDataError(f"no data ({reason})")
         raise EntsoeAuthError(
             f"ENTSO-E returned no data ({reason}); the API key "
             "may be invalid or its daily quota exhausted"

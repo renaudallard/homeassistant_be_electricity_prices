@@ -500,7 +500,7 @@ class _WizardStepsMixin:
                 # unreachable every answer is "cannot_connect", so the empty
                 # string would be offered the unverified branch and stored, and
                 # an empty key is the one value nothing recovers from:
-                # _fetch_spot_prices raises "missing ENTSO-E API key" before
+                # _fetch_spot_prices raises "ENTSO-E: missing API key" before
                 # fetch_day_ahead_or_fallback runs, so the keyless
                 # energy-charts source is never even tried. A typed-but-wrong
                 # key at least prices the entry off the fallback until ENTSO-E

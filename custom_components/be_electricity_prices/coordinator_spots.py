@@ -692,7 +692,7 @@ class _SpotsMixin(_ProfilesMixin):
     async def _fetch_spot_prices(self) -> dict[datetime, float]:
         api_key = self.entry.data.get(CONF_API_KEY)
         if not api_key:
-            raise EntsoeError("missing ENTSO-E API key")
+            raise EntsoeError("ENTSO-E: missing API key")
 
         # Window the request on the *local* day (Europe/Brussels) so a
         # 00:00-02:00 local query doesn't drop yesterday's UTC tail or
