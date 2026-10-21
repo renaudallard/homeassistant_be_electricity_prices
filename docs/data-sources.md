@@ -105,6 +105,32 @@ that supplied them, joined by `+`, which reaches the `current_price` sensor as
 `spot_source`: `entsoe`, `energy-charts`, `smard`, `entsoe+energy-charts`,
 `entsoe+smard` or `energy-charts+smard`.
 
+### One keyless curve per installation
+
+energy-charts and SMARD are free services every installation shares as its
+backup, and every entry asks for the same Belgian curve, so `fill_missing_days`
+(`api.py`) asks them once per installation rather than once per entry:
+
+- **Recent days are held.** `_shared_days` keeps yesterday onwards, on the
+  auction's own grid (every keyless request asks for quarter-hours) with the
+  source that answered. A caller billing hours reads them through `_on_grid`,
+  which sums each hour's slots in time order and divides, the arithmetic the
+  parsers apply to an hourly request, so the floats are the same. Only a day of
+  at least `_WHOLE_DAY_HOURS` (23, the spring-forward day) is shared: one still
+  filling in would be served short to every entry. Older days, a backfill's
+  year, are not held; each entry asks for them once and keeps them itself.
+- **A miss is remembered for 20 minutes.** `_missed_days` records a recent day a
+  source had nothing for, or failed on, and that source is not asked for it
+  again for `_MISS_TTL`: tomorrow before the auction no longer costs one request
+  per entry per tick.
+- **Requests in flight are shared.** `_inflight` lets entries refreshing at once,
+  all of them at startup, await one request instead of each spending
+  energy-charts' two a minute. It is shielded, so one caller giving up does not
+  cancel it for the others.
+
+ENTSO-E is not shared: an entry with a key asks it itself every time, which is
+what notices a revoked key and raises its Repairs card.
+
 ### The keyless setting
 
 An entry with no key can opt in to `keyless_spots` (`CONF_KEYLESS_SPOTS`,

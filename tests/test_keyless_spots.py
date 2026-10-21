@@ -178,6 +178,9 @@ async def test_a_keyless_entry_prices_its_live_curve(
         await coord._tick_spot_prices(coord._snapshot)
     assert coord._last_error.startswith("day-ahead: ")
 
+    # The next hourly tick: a source that failed is not asked again for 20
+    # minutes, so entries ticking close together do not each retry it.
+    freezer.tick(timedelta(hours=1))
     with (
         patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _entsoe_must_not_be_asked),
         patch(_API + ".EnergyChartsClient.fetch_day_ahead", _up),

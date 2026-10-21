@@ -94,7 +94,8 @@ def _force_brussels_timezone(request: pytest.FixtureRequest) -> Iterator[None]:
 
 @pytest.fixture(autouse=True)
 def _clear_energy_charts_cooldown() -> Iterator[None]:
-    """Start every test with the keyless source's rate-limit cooldown clear.
+    """Start every test with the keyless sources' module state clear: the
+    rate-limit cooldown and the days shared across entries.
 
     The cooldown a 429 imposes is module state, because the limit it tracks is
     per client IP rather than per entry. Left standing it would leak out of the
@@ -104,10 +105,16 @@ def _clear_energy_charts_cooldown() -> Iterator[None]:
     from custom_components.be_electricity_prices import api
 
     api._energy_charts_retry_at = None
+    api._shared_days.clear()
+    api._missed_days.clear()
+    api._inflight.clear()
     try:
         yield
     finally:
         api._energy_charts_retry_at = None
+        api._shared_days.clear()
+        api._missed_days.clear()
+        api._inflight.clear()
 
 
 @pytest.fixture(autouse=True)

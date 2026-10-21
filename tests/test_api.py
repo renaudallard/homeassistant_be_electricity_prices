@@ -27,10 +27,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import pathlib
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import MagicMock
 
 import aiohttp
@@ -980,3 +982,172 @@ async def test_a_429_stops_the_next_request_being_sent_at_all() -> None:
     with pytest.raises(EntsoeError, match="429"):
         await client.fetch_day_ahead(start, end)
     assert session.requests == 2
+
+
+# ---- one keyless curve per installation ------------------------------------------
+
+
+class _Counting(_FakeSession):
+    """Counts requests per host: ENTSO-E, energy-charts, SMARD."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.entsoe_calls = 0
+
+    def get(self, url: str, **kwargs: object) -> _CM:
+        if "entsoe" in url:
+            self.entsoe_calls += 1
+        return super().get(url, **kwargs)
+
+
+def _day_body(start: datetime, hours: int, quarters: bool = True) -> str:
+    step = 900 if quarters else 3600
+    count = hours * (4 if quarters else 1)
+    stamps = [int(start.timestamp()) + step * n for n in range(count)]
+    return json.dumps(
+        {"unix_seconds": stamps, "price": [40.0 + n % 7 for n in range(count)]}
+    )
+
+
+async def test_a_recent_day_is_fetched_once_per_installation(freezer: Any) -> None:
+    """Every entry on the installation asks for the same Belgian curve. The
+    second asks nothing: the day is shared, with the source that served it."""
+    freezer.move_to("2026-04-30 14:00:00+02:00")
+    session = _Counting(
+        entsoe=EntsoeError("503"), fallback_body=_day_body(_TODAY_START, 24)
+    )
+    first = await fetch_day_ahead_or_fallback(
+        None,
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _TOMORROW_START,
+    )
+    second = await fetch_day_ahead_or_fallback(
+        None,
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _TOMORROW_START,
+    )
+    assert first == second
+    assert first[1] == "energy-charts"
+    assert len(session.fallback_params) == 1
+
+
+async def test_entries_refreshing_at_once_share_one_request(freezer: Any) -> None:
+    """At startup every entry refreshes together; energy-charts allows two
+    requests a minute, so each asking on its own earned the rest a 429."""
+    freezer.move_to("2026-04-30 14:00:00+02:00")
+    session = _Counting(
+        entsoe=EntsoeError("503"), fallback_body=_day_body(_TODAY_START, 24)
+    )
+    answers = await asyncio.gather(
+        *(
+            fetch_day_ahead_or_fallback(
+                None,
+                session,  # type: ignore[arg-type]
+                _TODAY_START,
+                _TOMORROW_START,
+            )
+            for _ in range(4)
+        )
+    )
+    assert len(session.fallback_params) == 1
+    assert all(answer == answers[0] for answer in answers)
+
+
+async def test_an_hourly_entry_reads_the_shared_quarters_as_its_own_request(
+    freezer: Any,
+) -> None:
+    """The day is held on the auction's grid. An hourly entry reading it gets
+    the same floats as a request of its own on the hourly grid."""
+    freezer.move_to("2026-04-30 14:00:00+02:00")
+    body = _day_body(_TODAY_START, 24)
+    session = _Counting(entsoe=EntsoeError("503"), fallback_body=body)
+    quarters, _ = await fetch_day_ahead_or_fallback(
+        None,
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _TOMORROW_START,
+        quarter_hourly=True,
+    )
+    hours, _ = await fetch_day_ahead_or_fallback(
+        None,
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _TOMORROW_START,
+    )
+    assert len(quarters) == 96
+    assert len(session.fallback_params) == 1
+    assert hours == _parse_energy_charts(body, _TODAY_START, _TOMORROW_START, False)
+
+
+async def test_an_unpublished_day_is_not_asked_again_for_twenty_minutes(
+    freezer: Any,
+) -> None:
+    """Tomorrow before the auction is out: entries ticking a few minutes apart
+    each asked both sources in turn."""
+    freezer.move_to("2026-04-30 12:00:00+02:00")
+    session = _Counting(entsoe=_today_only_doc(), fallback_body="no content available")
+    for _ in range(2):
+        prices, source = await fetch_day_ahead_or_fallback(
+            "key",
+            session,  # type: ignore[arg-type]
+            _TODAY_START,
+            _WINDOW_END,
+        )
+        assert source == "entsoe" and len(prices) == 24
+    assert len(session.fallback_params) == 1
+    assert session.smard_files == ["index_quarterhour.json"]
+    freezer.tick(timedelta(minutes=21))
+    await fetch_day_ahead_or_fallback(
+        "key",
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _WINDOW_END,
+    )
+    assert len(session.fallback_params) == 2
+
+
+async def test_an_entry_with_a_key_still_asks_entsoe_each_time(freezer: Any) -> None:
+    """Only the keyless layer is shared. A keyed entry asking ENTSO-E itself
+    is what notices a revoked key and raises its Repairs card."""
+    freezer.move_to("2026-04-30 14:00:00+02:00")
+    session = _Counting(entsoe=_today_only_doc(), fallback_body="nope")
+    for _ in range(2):
+        await fetch_day_ahead_or_fallback(
+            "key",
+            session,  # type: ignore[arg-type]
+            _TODAY_START,
+            _TOMORROW_START,
+        )
+    assert session.entsoe_calls == 2
+
+
+async def test_old_days_and_part_days_are_not_shared(freezer: Any) -> None:
+    """A backfill's year is asked once and kept per entry, and a day still
+    filling in would be served short to every entry."""
+    freezer.move_to("2026-05-10 14:00:00+02:00")
+    session = _Counting(
+        entsoe=EntsoeError("503"), fallback_body=_day_body(_TODAY_START, 24)
+    )
+    for _ in range(2):
+        await fetch_day_ahead_or_fallback(
+            None,
+            session,  # type: ignore[arg-type]
+            _TODAY_START,
+            _TOMORROW_START,
+        )
+    assert len(session.fallback_params) == 2
+
+    freezer.move_to("2026-04-30 14:00:00+02:00")
+    session = _Counting(
+        entsoe=EntsoeError("503"), fallback_body=_day_body(_TODAY_START, 12)
+    )
+    for _ in range(2):
+        await fetch_day_ahead_or_fallback(
+            None,
+            session,  # type: ignore[arg-type]
+            _TODAY_START,
+            _TOMORROW_START,
+        )
+    assert len(session.fallback_params) == 2

@@ -37,7 +37,7 @@ import json
 import logging
 import math
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import UTC, date, datetime, timedelta
 
 import aiohttp
@@ -773,6 +773,89 @@ async def fetch_day_ahead_or_fallback(
     return prices, "+".join(sources)
 
 
+# ---- one keyless curve per installation ------------------------------------
+
+
+# The recent days this process already holds from a keyless source, shared by
+# every entry: the Belgian day-ahead is one curve whoever asks, and these are
+# free services every installation leans on as its backup. Yesterday on only,
+# which is what the live ticks of several entries keep asking for; a backfill's
+# year is asked once and kept per entry. Stored on the auction's own grid with
+# the source that answered, and only once whole.
+_shared_days: dict[date, tuple[str, dict[datetime, float]]] = {}
+
+# A recent day a source just had nothing for, with when and why: tomorrow
+# before the auction is out. That source is not asked for it again for
+# _MISS_TTL, so entries ticking a few minutes apart do not each ask in turn.
+_missed_days: dict[tuple[str, date], tuple[datetime, str]] = {}
+_MISS_TTL = timedelta(minutes=20)
+
+# Keyless requests in flight. Entries refreshing at once, every one of them at
+# startup, await the same request rather than each spending energy-charts'
+# two a minute.
+_inflight: dict[
+    tuple[str, datetime, datetime], asyncio.Future[dict[datetime, float]]
+] = {}
+
+# A day held with fewer hours than this is still being published, or has
+# gaps, and is not shared: the spring-forward day has 23.
+_WHOLE_DAY_HOURS = 23
+
+
+def _on_grid(
+    slots: dict[datetime, float], quarter_hourly: bool
+) -> dict[datetime, float]:
+    """Slots on the auction's grid, as the caller bills them.
+
+    An hour is the mean of the slots inside it, summed in time order, which is
+    the arithmetic the parsers apply when asked for hours directly, so a
+    shared answer prices to the same float as a request of its own.
+    """
+    if quarter_hourly:
+        return dict(slots)
+    sums: dict[datetime, float] = {}
+    counts: dict[datetime, int] = {}
+    for slot, value in slots.items():
+        hour = slot.replace(minute=0, second=0, microsecond=0)
+        sums[hour] = sums.get(hour, 0.0) + value
+        counts[hour] = counts.get(hour, 0) + 1
+    return {hour: sums[hour] / counts[hour] for hour in sums}
+
+
+def _settle(
+    key: tuple[str, datetime, datetime],
+) -> Callable[[asyncio.Future[dict[datetime, float]]], None]:
+    def done(future: asyncio.Future[dict[datetime, float]]) -> None:
+        _inflight.pop(key, None)
+        # Read here so a request whose every waiter was cancelled does not
+        # log "exception was never retrieved".
+        if not future.cancelled():
+            future.exception()
+
+    return done
+
+
+async def _keyless_fetch(
+    name: str,
+    client: type[EnergyChartsClient | SmardClient],
+    session: aiohttp.ClientSession,
+    start: datetime,
+    end: datetime,
+) -> dict[datetime, float]:
+    """One request per window and source at a time, on the auction's grid."""
+    key = (name, start, end)
+    pending = _inflight.get(key)
+    if pending is None:
+        pending = asyncio.ensure_future(
+            client(session).fetch_day_ahead(start, end, quarter_hourly=True)
+        )
+        _inflight[key] = pending
+        pending.add_done_callback(_settle(key))
+    # Shielded: one caller giving up must not cancel the request the others
+    # are waiting on.
+    return await asyncio.shield(pending)
+
+
 async def fill_missing_days(
     session: aiohttp.ClientSession,
     prices: dict[datetime, float],
@@ -785,7 +868,8 @@ async def fill_missing_days(
     Returns the prices, the sources that added any, and each failure. Every
     source is asked only for the days still empty, from the first of them to
     the window's end, and kept for those days alone, so a day already held
-    keeps the source that served it.
+    keeps the source that served it. A recent day another entry already
+    fetched is taken from the installation's shared days without a request.
 
     ENTSO-E answering for today while tomorrow is not published yet is a
     success, and without this tomorrow stayed empty until ENTSO-E caught up
@@ -801,8 +885,26 @@ async def fill_missing_days(
         if day not in held:
             missing.add(day)
         day += timedelta(days=1)
+    now = dt_util.utcnow()
+    recent = dt_util.now().date() - timedelta(days=1)
+    for old in [d for d in _shared_days if d < recent]:
+        del _shared_days[old]
+    for old_key in [k for k in _missed_days if k[1] < recent]:
+        del _missed_days[old_key]
     sources: list[str] = []
     errors: list[str] = []
+    for day in sorted(missing & _shared_days.keys()):
+        name, slots = _shared_days[day]
+        shared = {
+            slot: value
+            for slot, value in _on_grid(slots, quarter_hourly).items()
+            if period_start <= slot < period_end
+        }
+        if shared:
+            prices = {**prices, **shared}
+            missing.discard(day)
+            if name not in sources:
+                sources.append(name)
     keyless: tuple[tuple[str, type[EnergyChartsClient | SmardClient]], ...] = (
         ("energy-charts", EnergyChartsClient),
         ("smard", SmardClient),
@@ -810,20 +912,36 @@ async def fill_missing_days(
     for name, client in keyless:
         if not missing:
             break
+        marks = [_missed_days.get((name, d)) for d in missing]
+        fresh = [m for m in marks if m is not None and now - m[0] < _MISS_TTL]
+        if len(fresh) == len(marks):
+            errors.append(fresh[0][1])
+            continue
         start = max(
             period_start, dt_util.start_of_local_day(min(missing)).astimezone(UTC)
         )
         try:
-            answer = await client(session).fetch_day_ahead(
-                start, period_end, quarter_hourly=quarter_hourly
-            )
+            answer = await _keyless_fetch(name, client, session, start, period_end)
         except EntsoeError as err:
             _LOGGER.debug("%s left %s unpriced: %s", name, sorted(missing), err)
             errors.append(str(err))
+            for d in missing:
+                if d >= recent:
+                    _missed_days[(name, d)] = (now, str(err))
             continue
+        by_day: dict[date, dict[datetime, float]] = {}
+        for slot, value in answer.items():
+            by_day.setdefault(dt_util.as_local(slot).date(), {})[slot] = value
+        for d, slots in by_day.items():
+            hours = {slot.replace(minute=0) for slot in slots}
+            if d >= recent and len(hours) >= _WHOLE_DAY_HOURS:
+                _shared_days[d] = (name, slots)
+        for d in missing - by_day.keys():
+            if d >= recent:
+                _missed_days[(name, d)] = (now, f"{name}: no prices for {d}")
         extra = {
             slot: value
-            for slot, value in answer.items()
+            for slot, value in _on_grid(answer, quarter_hourly).items()
             if dt_util.as_local(slot).date() in missing
         }
         if not extra:
