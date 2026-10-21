@@ -88,7 +88,7 @@ Each of these has a section of its own further down; this is the scan.
 
 - **Cheapest / most-expensive window services** — ask for the best N-hour block of the day from an automation.
 - **Tomorrow-available trigger** — a binary sensor that flips when tomorrow's prices land.
-- **Keyless day-ahead prices** — ENTSO-E is down: prices keep coming from [energy-charts.info](https://energy-charts.info), and from [SMARD](https://www.smard.de) where energy-charts cannot answer either, until it recovers. Both need no key and publish the same prices (CC BY 4.0, Bundesnetzagentur | SMARD.de, credited on the sensor while either is in use). They also fill a day ENTSO-E has not published yet, typically tomorrow's curve when ENTSO-E is late, and the hours ENTSO-E did serve stay on ENTSO-E. The `spot_source` attribute on `current_price` names every source behind the curve: `entsoe`, `energy-charts`, `smard`, or a mix such as `entsoe+energy-charts`. With no key at all, tick *Use keyless day-ahead prices* at the key step and the entry prices off these two alone, a dynamic contract included, exactly as it would with a key: wherever this README says what an ENTSO-E key does, the keyless setting does the same. With neither, a monthly-indexed card bills its printed figure until a next card printing the closed month's index settles it, while a feed-in formula settled per slot stays uncredited and its price unknown. See [Getting an ENTSO-E API key](#getting-an-entso-e-api-key).
+- **Keyless day-ahead prices** — ENTSO-E is down: prices keep coming from [energy-charts.info](https://energy-charts.info), and from [SMARD](https://www.smard.de) where energy-charts cannot answer either, until it recovers. Both need no key and publish the same prices (CC BY 4.0, Bundesnetzagentur | SMARD.de, credited on the sensor while either is in use). They also fill a day ENTSO-E has not published yet, typically tomorrow's curve when ENTSO-E is late, and the hours ENTSO-E did serve stay on ENTSO-E. The `spot_source` attribute on `current_price` names every source behind the curve: `entsoe`, `energy-charts`, `smard`, or a mix such as `entsoe+energy-charts`. With no key at all, tick *Use keyless day-ahead prices* at the key step and the entry prices off these two alone (a key is still recommended, since they are free services every installation shares as its backup), a dynamic contract included, exactly as it would with a key: wherever this README says what an ENTSO-E key does, the keyless setting does the same. With neither, a monthly-indexed card bills its printed figure until a next card printing the closed month's index settles it, while a feed-in formula settled per slot stays uncredited and its price unknown. See [Getting an ENTSO-E API key](#getting-an-entso-e-api-key).
 - **Self-healing** — last-known prices keep serving through an outage, and Repairs cards explain anything that needs you. See [Failure mode](#failure-mode).
 - **Catalog drift detection** — a daily check that tells the maintainer when a supplier changes its lineup.
 - **Expert custom formula** — type a card in by hand when a supplier is not covered.
@@ -599,7 +599,9 @@ dropped rather than billed on the new card.
    prices*: the entry then fetches the day-ahead from energy-charts.info and
    SMARD and never asks ENTSO-E, and is priced as one with a key. A blank key
    with the box unticked is rejected on the spot, without asking ENTSO-E,
-   because a dynamic contract has no price at all without one of the two. For
+   because a dynamic contract has no price at all without one of the two. A
+   key is the recommended choice: see [Getting an ENTSO-E API key](#getting-an-entso-e-api-key)
+   for why. For
    the injection and monthly-indexed cases both are optional and skippable:
    leave them empty to skip, and a feed-in credit settled per slot stays
    unavailable until you add a key or tick the box through **Configure →
@@ -781,6 +783,11 @@ where the prices come from: with a key ENTSO-E is the source and those two
 back it up, while without one they are the only sources, so an outage of both
 leaves the entry on its cached curve. The setting can be turned on or off at
 any time through **Configure → Edit settings**.
+
+Please use a key if you can get one. energy-charts and SMARD are free public
+services, and every installation of this integration shares them as its backup;
+were most installations to use them as their main source, the load could get
+them restricted for everyone. The box is there for those who cannot get a key.
 
 The token is free but ENTSO-E does not auto-grant it —
 you have to request access explicitly:
