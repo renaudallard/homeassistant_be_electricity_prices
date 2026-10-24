@@ -35,6 +35,7 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 from datetime import date
+from typing import Any
 
 from ._parse import SIGN_CHARS, parse_sign, to_float
 from ._pdf import _MONTH_NAMES, vat_multiplier
@@ -50,10 +51,11 @@ from ._rates import (
 from .base import ExtractorError
 
 
-def _epexdam_formulas(
-    text: str, printed: float, vat: float
+def _index_formulas(
+    text: str, printed: float, vat: float, index: str = "EPEXDAM"
 ) -> dict[str, tuple[float, float]]:
-    """Per-band ``(factor, base)`` in EUR/kWh for the leg printing ``printed``.
+    """Per-band ``(factor, base)`` in EUR/kWh for the leg printing ``printed``,
+    on the formulas over ``index``: EPEXDAM, or the ENDEX101 of Easy Variable.
 
     Both legs' formula blocks live on the same card and the two-column PDF
     interleaves them, so binding by document order is exactly the mistake the
@@ -67,15 +69,15 @@ def _epexdam_formulas(
     ``vat`` is the multiplier this leg is printed on: 1.06 for a residential
     consumption row, 1.0 for injection, which is VAT-exempt.
     """
-    index = _epexdam_index(text)
-    if index is None:
+    value = _card_index(text, index)
+    if value is None:
         return {}
     # Group into contiguous blocks. Each block opens on its Normal / bare row
     # and its band rows follow, so a band can never be lifted out of the other
     # leg's block - which is exactly what a flat scan did, pairing this leg's
     # Normal with the other leg's Heures pleines.
     blocks: list[dict[str, tuple[float, float]]] = []
-    for label, sign, base_s, factor_s in _EPEXDAM_FORMULA_RE.findall(text):
+    for label, sign, base_s, factor_s in _INDEX_FORMULA_RES[index].findall(text):
         # The card states c/kWh per EUR/MWh of index, so onto a EUR/kWh spot
         # the factor carries a x10 and the base a /100.
         factor = to_float(factor_s) * 10.0 * vat
@@ -92,7 +94,7 @@ def _epexdam_formulas(
         single = block.get("single")
         if single is None:
             continue
-        if abs((single[0] * index / 1000.0 + single[1]) - printed) <= 1e-4:
+        if abs((single[0] * value / 1000.0 + single[1]) - printed) <= 1e-4:
             return block
     # No block reproduces this leg's printed price: the caller keeps that
     # price rather than billing a formula bound to the wrong leg.
@@ -105,15 +107,15 @@ def _flextime_coefficients(
     """The three Flextime ``(factor, base)`` pairs of the leg printing
     ``printed_single`` on its Normal row, or ``None``.
 
-    Bound through :func:`_epexdam_formulas`, so the block is the one whose
+    Bound through :func:`_index_formulas`, so the block is the one whose
     Normal row reproduces this leg's printed figure, and then held to the
     same test per slot: each Flextime pair has to reproduce the slot's own
     printed figure at the index the card states. A row that does not is a
     layout the card has not printed before, and the answer is the printed
     triplet, not two formulas and a guess.
     """
-    coefs = _epexdam_formulas(text, printed_single, vat)
-    index = _epexdam_index(text)
+    coefs = _index_formulas(text, printed_single, vat)
+    index = _card_index(text, "EPEXDAM")
     if index is None or any(band not in coefs for band in _FLEXTIME_BANDS):
         return None
     pairs = tuple(coefs[band] for band in _FLEXTIME_BANDS)
@@ -259,31 +261,46 @@ def _extract_energy(
         return rates
     # Empower Variable and Empty House index consumption on the DELIVERY
     # month's EPEXDAM and print a price computed from the last month whose
-    # value is known. Easy Variable indexes on ENDEX101, which is published in
-    # advance and correct as printed, and its card names no EPEXDAM at all, so
-    # gating on the formula being present is what keeps it out.
-    coefs = _epexdam_formulas(
-        text, mono, _vat_multiplier(text, professional=professional)
-    )
-    if not coefs:
+    # value is known.
+    vat = _vat_multiplier(text, professional=professional)
+    coefs = _index_formulas(text, mono, vat)
+    if coefs:
+        return replace(rates, month_indexed=True, **_formula_fields(coefs))
+    # Easy Variable indexes on ENDEX101 instead, the futures average of the
+    # month BEFORE delivery, and names the month's value, so its rates are
+    # the month's own and stay billed as printed. Its formulas are "valables
+    # pour tous les contrats conclus en <mois>": they are kept for a signing
+    # cohort, which bills them at each later month's value.
+    endex = _card_index(text, "ENDEX101")
+    coefs = _index_formulas(text, mono, vat, "ENDEX101")
+    if not coefs or endex is None:
         return rates
-    none2: tuple[float | None, float | None] = (None, None)
     return replace(
         rates,
-        month_indexed=True,
-        formula_factor=coefs["single"][0],
-        formula_base=coefs["single"][1],
-        formula_factor_peak=coefs.get("peak", none2)[0],
-        formula_base_peak=coefs.get("peak", none2)[1],
-        formula_factor_offpeak=coefs.get("offpeak", none2)[0],
-        formula_base_offpeak=coefs.get("offpeak", none2)[1],
+        forward_indexed=True,
+        index_realised=endex / 1000.0,
+        **_formula_fields(coefs),
+    )
+
+
+def _formula_fields(coefs: dict[str, tuple[float, float]]) -> dict[str, Any]:
+    """The ``formula_*`` fields of a variable leg, from the per-band pairs
+    :func:`_index_formulas` bound."""
+    none2: tuple[float | None, float | None] = (None, None)
+    return {
+        "formula_factor": coefs["single"][0],
+        "formula_base": coefs["single"][1],
+        "formula_factor_peak": coefs.get("peak", none2)[0],
+        "formula_base_peak": coefs.get("peak", none2)[1],
+        "formula_factor_offpeak": coefs.get("offpeak", none2)[0],
+        "formula_base_offpeak": coefs.get("offpeak", none2)[1],
         # The card prices a night circuit separately, "Exclusif nuit = 2,4510
         # + (0,1005 x EPEXDAM)", between the mono 0,1171 and the off-peak
         # 0,0988. Routing it onto either neighbour is wrong on the meter that
         # draws the volume.
-        formula_factor_exclusive_night=coefs.get("exclusive_night", none2)[0],
-        formula_base_exclusive_night=coefs.get("exclusive_night", none2)[1],
-    )
+        "formula_factor_exclusive_night": coefs.get("exclusive_night", none2)[0],
+        "formula_base_exclusive_night": coefs.get("exclusive_night", none2)[1],
+    }
 
 
 def _extract_injection(
@@ -346,6 +363,7 @@ def _extract_injection(
         base = base_pdf_cents / 100.0
         formula = injection_match.group(0)
     month_indexed = False
+    forward_indexed = False
     if kind == "variable" and current is not None:
         # The same EPEXDAM story as the energy leg: "Les prix d'injection sont
         # indexes en utilisant le parametre EPEXDAM. La valeur du EPEXDAM du
@@ -357,21 +375,23 @@ def _extract_injection(
         # one per TOU slot, which travel on the per-slot fields above: writing
         # its Normal row here as well would store a fourth formula that
         # nothing reads, because the per-slot rates win. The ENDEX101 cards
-        # are excluded by the formula regex itself, which requires the literal
-        # EPEXDAM; their index is a futures average published in ADVANCE, so
-        # their printed figure is the billed rate with no lag to correct.
+        # name a futures average published in ADVANCE, so their printed figure
+        # is the billed rate with no lag to correct, and their pair is kept
+        # for a signing cohort alone (``forward_indexed``).
         #
         # Injection is not grossed on either edition: residential is exempt,
         # and a professional card is HTVA throughout with vat_applies carrying
         # the 21% for apply_vat. The card proves it - its injection formula
         # reproduces the printed figure with no 1,06 while the energy one
         # needs it.
-        inj_coefs = _epexdam_formulas(text, current, 1.0)
-        single = inj_coefs.get("single")
-        if single is not None:
-            factor, base = single
-            month_indexed = True
-            formula = f"{base * 100.0:.4f} + ({factor / 10.0:.4f} x EPEXDAM)"
+        for index in ("EPEXDAM", "ENDEX101"):
+            single = _index_formulas(text, current, 1.0, index).get("single")
+            if single is not None:
+                factor, base = single
+                month_indexed = index == "EPEXDAM"
+                forward_indexed = not month_indexed
+                formula = f"{base * 100.0:.4f} + ({factor / 10.0:.4f} x {index})"
+                break
     if slot_coefs is not None:
         month_indexed = True
         formula = "Flextime: " + "; ".join(
@@ -390,6 +410,7 @@ def _extract_injection(
         base=base,
         formula=formula,
         month_indexed=month_indexed,
+        forward_indexed=forward_indexed,
         peak=peak,
         transition=transition,
         offpeak=offpeak,
@@ -431,11 +452,16 @@ _FORMULA_RE = re.compile(
 # Two spellings, both on cards in the tree:
 #   Empower     "- Normal = 2,1552 + (0,1171 x EPEXDAM)", one row per band
 #   Empty House "3,2150 + (0,2150 x EPEXDAM)", bare, one row full stop
-_EPEXDAM_FORMULA_RE = re.compile(
-    rf"(?:[-\u2013]\s*([^=\n]{{1,44}}?)\s*=\s*)?"
-    rf"([{SIGN_CHARS}]?)\s*(\d+[,.]\d+)\s*\+\s*\((\d+[,.]\d+)\s*x\s*EPEXDAM\)",
-    re.IGNORECASE,
-)
+# Easy Variable prints the first over ENDEX101: "- Normal = 2,6113 + (0,1152 x
+# ENDEX101)".
+_INDEX_FORMULA_RES: dict[str, re.Pattern[str]] = {
+    index: re.compile(
+        rf"(?:[-\u2013]\s*([^=\n]{{1,44}}?)\s*=\s*)?"
+        rf"([{SIGN_CHARS}]?)\s*(\d+[,.]\d+)\s*\+\s*\((\d+[,.]\d+)\s*x\s*{index}\)",
+        re.IGNORECASE,
+    )
+    for index in ("EPEXDAM", "ENDEX101")
+}
 # Exact labels, never a substring. The Empower card prints SEVEN energy rows,
 # and "Flextime Heures pleines" contains "heures pleines": a substring match
 # binds the Flextime band to the bi-hourly meter, 0,1388 against 0,1264 on the
@@ -458,16 +484,24 @@ _EPEXDAM_BAND: dict[str, str] = {
 _FLEXTIME_BANDS: tuple[str, ...] = ("flex_peak", "flex_transition", "flex_offpeak")
 
 
-def _epexdam_index(text: str) -> float | None:
-    """The EUR/MWh index the card's printed prices were computed at."""
-    match = _EPEXDAM_INDEX_RE.search(text)
+def _card_index(text: str, index: str) -> float | None:
+    """The EUR/MWh value of ``index`` the card's printed prices were computed
+    at."""
+    match = _INDEX_VALUE_RES[index].search(text)
     return to_float(match.group(1)) if match else None
 
 
-# "(Mars 2026: 92,57 EUR/MWh)" - the index the printed prices were computed at.
-_EPEXDAM_INDEX_RE = re.compile(
-    r"EPEXDAM\s+connue\s*\([^)]*?(\d+[,.]\d+)\s*€?\s*/\s*MWh", re.IGNORECASE
-)
+# "(Mars 2026: 92,57 EUR/MWh)" - the index the printed prices were computed at,
+# and Easy Variable's "calcule sur la base du parametre ENDEX101 du mois =
+# 118,12 EUR/MWh, d'application pour Aout 2026", the delivery month's own.
+_INDEX_VALUE_RES: dict[str, re.Pattern[str]] = {
+    "EPEXDAM": re.compile(
+        r"EPEXDAM\s+connue\s*\([^)]*?(\d+[,.]\d+)\s*€?\s*/\s*MWh", re.IGNORECASE
+    ),
+    "ENDEX101": re.compile(
+        r"ENDEX101\s+du\s+mois\s*=\s*(\d+[,.]\d+)\s*€?\s*/\s*MWh", re.IGNORECASE
+    ),
+}
 # The same sentence with the month it names: "connue (Septembre 2026: 156,41
 # EUR/MWh)", with or without a space before the colon.
 _EPEXDAM_NAMED_RE = re.compile(

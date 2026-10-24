@@ -500,13 +500,15 @@ _DEGRADED_MIN_SCHEMA_VERSION = 16
 # ``index_realised`` joined the list when the EBEM and Trevion settlements
 # added it: measured on the 1.686 stored rows, 1.683 carry an injection leg
 # and every one of them would have been rewritten with the field at null.
-# ``settled_as_stated`` joined both lists for Mega's stated settlements, and
-# ``spp_redistributed`` for Bolt's variable cards.
+# ``settled_as_stated`` joined both lists for Mega's stated settlements,
+# ``spp_redistributed`` for Bolt's variable cards, and ``forward_indexed``
+# both for Engie's Easy Variable.
 _INJECTION_OPTIONAL_KEYS = (
     "bi_hourly",
     "index_realised",
     "settled_as_stated",
     "spp_redistributed",
+    "forward_indexed",
 )
 _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
 # The same rule for the tax overlay, from v73.
@@ -544,6 +546,8 @@ _ENERGY_OPTIONAL_KEYS = (
     # Set by resolve_volume_tier on a resolved leg, never on a card as parsed.
     "tier_formula_share",
     "tier_base",
+    # Engie's Easy Variable, indexed on a forward price its card names.
+    "forward_indexed",
 )
 # The RLP pair is optional on the Impact leg alone: VariableRates and
 # SpotMonthlyRates have carried it since before the archive went live, and

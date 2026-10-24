@@ -76,7 +76,7 @@ them, matching the framework note at `_rates.py`.
 | contract_id | label | kind | regions | Notes |
 | --- | --- | --- | --- | --- |
 | `engie_easy_fixed` | Engie Easy Fixed | fixed | V, W, B | GREEN, F. Standard 12-month (V/W), 36-month (B). |
-| `engie_easy_variable` | Engie Easy Variable | variable | V, W, B | GREEN, I. Monthly-indexed. |
+| `engie_easy_variable` | Engie Easy Variable | variable | V, W, B | GREEN, I. Indexed monthly on ENDEX101, printed in advance. |
 | `engie_direct_online` | Engie Direct Online | variable | V, W, B | GREEN, I. Online-only variable. |
 | `engie_basic_online` | Engie Basic Online | variable | V, W | GREY, I. No Brussels document (`months_per_region` has no `_B`). |
 | `engie_dynamic` | Engie Dynamic | dynamic | V, W, B | GREY, I. `quarter_hourly` from the index the card names (see below). |
@@ -481,9 +481,27 @@ contract:
 
 - Monthly-indicative-only (`current`): the first `Injection(3)` row's first
   column (`_engie_cards.py`, divided by 100). The second `Injection(3)` row is the
-  annual estimate and is ignored. The fixed contracts and both Easy Variable
-  editions carry only this (test `test_easy_fixed_extracts_bihourly_rates`
-  `tests/test_engie.py`: `current` set, `factor`/`base` None).
+  annual estimate and is ignored. The fixed contracts carry only this (test
+  `test_easy_fixed_extracts_bihourly_rates` `tests/test_engie.py`: `current`
+  set, `factor`/`base` None).
+- Forward-indexed (`current` plus `factor` / `base`, `forward_indexed`): both Easy
+  Variable editions. Their energy and feed-in formulas read ENDEX101, the ICE Endex
+  month-ahead base-load futures averaged over the month BEFORE delivery, and the
+  card names its own month's value ("calcule sur la base du parametre ENDEX101 du
+  mois = 118,12 EUR/MWh, d'application pour Aout 2026"), so the printed figures
+  are the month's own and are billed as printed. The formulas are "valables pour
+  tous les contrats conclus en <mois>", so `_extract_energy` and
+  `_extract_injection` keep the pairs (`_index_formulas` over ENDEX101, each bound
+  by reproducing the printed figure) with the value as `index_realised` on the
+  energy leg, and a signing cohort bills its own pairs at each later month's
+  value (`_at_forward_index`, `cohort_legs.py`): a static rate, keyed or not, on
+  the live tick and every walk. Held on all 147 archived cards from November 2023
+  to October 2026, residential and professional, where each pair reproduces its
+  printed band at the card's own ENDEX101. A January 2026 signer was otherwise
+  billed each month's new-customer price, up to 1,28 c/kWh under its contract
+  (`test_easy_variable_carries_its_endex101_formulas`,
+  `test_easy_variable_cohort_bills_its_signing_formulas_at_each_months_endex101`,
+  `test_an_easy_variable_cohort_is_billed_without_a_key`).
 - Month-indexed single band (`current` plus `factor` / `base`, `month_indexed`):
   the other variable products in `_EPEXDAM_INJECTION_CONTRACTS` (Empower
   Variable, Flow, Direct Online, Basic Online, Empty House and their
@@ -576,7 +594,8 @@ re-index monthly, so they are frozen snapshots, not forever-facts.
 | `engie_dynamic_b.pdf` | Dynamic, Brussels (Sibelga row, Brugel OSP, brussels renewables). |
 | `engie_dynamic_v_2025-09.pdf` | Dynamic, Flanders, **September 2025**, from `monthOffset`. Both formulas name the hourly `eSpot`, as every card before October 2025 does. |
 | `engie_easy_fixed_v.pdf` | Easy Fixed, Flanders (bi-hourly + excl-night, indicative injection). |
-| `engie_easy_indexed_v.pdf` | Easy Variable, Flanders (`Prix mensuels` vs annual estimate). |
+| `engie_easy_indexed_v.pdf` | Easy Variable, Flanders (`Prix mensuels` vs annual estimate, ENDEX101 formulas). |
+| `engie_easy_indexed_v_2026-08.pdf` | Easy Variable, Flanders, **August 2026**: the month an April 2026 cohort is billed at on April's formulas. |
 | `engie_empower_flextime_w.pdf` | Empower Flextime, Wallonia (7-price TOU triplet, per-slot injection). |
 | `engie_empower_variable_v.pdf` | Empower Variable, Flanders (7-price row, Flextime columns skipped). |
 | `engie_empty_house_v.pdf` | Empty House, Flanders (mono-only, `sans domicile` energy fund). |

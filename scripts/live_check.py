@@ -3952,6 +3952,10 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         (``month_indexed``). Eneco's Belpex-injectie is the case. The flag
         carries the same weight: without it the coefficients read as a
         per-hour formula and the credit follows the current slot's spot.
+      * ``"forward"`` - the same, on a forward price the card names for its
+        own month (``forward_indexed``): Engie Easy Variable's ENDEX101. The
+        printed figure is the month's credit, and the pair re-prices only a
+        signing cohort, so the flag is what keeps a spot price off it.
       * ``"bihourly"`` - a static current / peak / offpeak credit with no
         transition slot or index formula, flagged ``bi_hourly`` so the
         engine reads the pair as the meter's registers. Trevion Vast is
@@ -4014,12 +4018,15 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
             f"offpeak={offpeak}, factor={factor}, base={base}, "
             f"bi_hourly={getattr(injection, 'bi_hourly', None)}",
         )
-    elif shape in ("spp", "month"):
-        # Both shapes are month coefficients plus the card's printed
-        # indicative; they differ only in WHICH monthly mean they name, and
-        # the flag that says so is the part that must not go missing.
-        flag = "spp_indexed" if shape == "spp" else "month_indexed"
-        index = "SPP" if shape == "spp" else "month"
+    elif shape in ("spp", "month", "forward"):
+        # All three are month coefficients plus the card's printed
+        # indicative; they differ only in WHICH index they name, and the flag
+        # that says so is the part that must not go missing.
+        flag, index = {
+            "spp": ("spp_indexed", "SPP"),
+            "month": ("month_indexed", "month"),
+            "forward": ("forward_indexed", "forward"),
+        }[shape]
         _expect(
             f"{prefix}: {index}-indexed injection (formula + indicative + flag)",
             current is not None
@@ -4056,7 +4063,7 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
             -0.10 <= current <= 0.20,
             detail=f"current={current}",
         )
-    if shape not in ("spp", "month"):
+    if shape not in ("spp", "month", "forward"):
         # A per-slot formula, whatever the card prints beside it: the shapes
         # above bound theirs; every Bolt and Cociter card and every dynamic
         # card carries one, and it billed without a bound.
@@ -4206,6 +4213,11 @@ _INJECTION_SHAPE: dict[str, str] = {
     "engie_pro_empower_variable": "month",
     "engie_pro_flow": "month",
     "engie_pro_empty_house": "month",
+    # Easy Variable's credit is "-0,8490 + (0,0548 x ENDEX101)" on the value
+    # its card names for its own month, so the printed figure is the month's
+    # and the pair is a signing cohort's.
+    "engie_easy_variable": "forward",
+    "engie_pro_easy_variable": "forward",
     # Every non-dynamic TotalEnergies feed-in offer prints "f * BELPEXM - b"
     # beside a figure the card says is computed from "la derniere valeur
     # connue du Belpex_M": on the product card until September 2026, on the

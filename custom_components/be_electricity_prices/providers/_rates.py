@@ -237,7 +237,9 @@ class VariableRates:
     # index"), so an archived month is settled on the figure the supplier
     # itself bills, and ``current`` is then that figure rather than the
     # printed estimate. None while the month is still running or the next
-    # card is not out yet.
+    # card is not out yet. On a card indexed on a forward price
+    # (``forward_indexed``) the card itself names its month's value, so it is
+    # set from the day the card is out.
     index_realised: float | None = None
     # True when the rates are the figures the supplier STATES the month
     # settled at rather than this card's formulas at ``index_realised``. Mega
@@ -263,6 +265,15 @@ class VariableRates:
     # mean. The re-price keys on it as on ``month_indexed``, which such a card
     # leaves False so a version without this flag bills the printed rates.
     quarter_indexed: bool = False
+    # True when the index is a forward price the supplier publishes BEFORE the
+    # delivery month, so the printed rates are that month's own and are billed
+    # as printed. Engie's Easy Variable indexes on ENDEX101, the month-ahead
+    # Belgian base-load futures averaged over the month before delivery, and
+    # each card names its month's value (``index_realised``). Its formulas are
+    # "valables pour tous les contrats conclus en <mois>", so a signing cohort
+    # bills them at each later month's printed value, which no spot price
+    # enters (``cohort_legs._at_forward_index``).
+    forward_indexed: bool = False
     # The same coefficients for a bi-hourly meter's two bands, when the card
     # prints them per meter. Mega does: mono "Epex x 1,1095 + 3,6", peak
     # "x 1,3275 + 3,6", off-peak "x 0,94 + 3,6". Billing a bi-hourly cohort at
@@ -780,6 +791,12 @@ class InjectionRates:
     # one or the other, never both. Either way the coefficients are month
     # coefficients, so the pricing engine must never hand them an hourly spot.
     month_indexed: bool = False
+    # True when the formula reads a forward price each month's card names in
+    # advance (``VariableRates.forward_indexed``), Engie's ENDEX101. The card's
+    # printed ``current`` is that month's credit; the pair only re-prices a
+    # signing cohort, at the value the energy leg of the month's card carries,
+    # since the card prints one ENDEX101 for both legs.
+    forward_indexed: bool = False
     # The supplier's own published value of the index this credit is formulated
     # on, for the ONE delivery month the leg is applied to, in EUR/kWh. EBEM
     # names the month just closed on the FOLLOWING month's card ("de SPP0

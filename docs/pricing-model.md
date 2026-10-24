@@ -513,7 +513,13 @@ cache at all, and drops them only for a month that has not settled, which then
 bills its printed rate as an entry with no start date does. Its rate and nothing
 else: the standing charge does not depend on the index, so such a month, the
 live tick and the projections bill the signing card's
-(`_with_standing_charge`, `cohort_legs.py`), as a keyed cohort does every month. Every supplier that
+(`_with_standing_charge`, `cohort_legs.py`), as a keyed cohort does every month.
+Engie's Easy Variable needs no key at all: its formulas read ENDEX101, a futures
+average each month's card names for its own month before the month starts
+(`forward_indexed`), so a cohort is billed its signing pairs at the value the
+card of the month billed prints, the running month's included, as a static rate
+(`_at_forward_index`, `cohort_legs.py`). A month whose card names none keeps its
+printed rate with the signed standing charge. Every supplier that
 settles a month records the index its own formula reads (the RLP-weighted one
 at Eneco, EBEM and TotalEnergies, the quarter's per register at Bolt, one BELIX
 for Cociter's three bands), so the signing card's formula at that index is the

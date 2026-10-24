@@ -46,6 +46,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .cohort_legs import (
+    _at_forward_index,
     _cohort_card,
     _cohort_energy_from_archived,
     _cohort_injection_from_archived,
@@ -422,6 +423,17 @@ async def _cohort_legs(
                     unbilled = "not re-priced while the month runs: no ENTSO-E key"
                 else:
                     cohort = replace(cohort, index_realised=settled)
+            elif getattr(snap_start.energy, "forward_indexed", False):
+                # A forward index is named on the month's own card, the running
+                # month's too, so the cohort is priced on the card of the month
+                # billed: the current one on the live tick. One naming none
+                # keeps its printed rate with the standing charge signed for.
+                cohort = _at_forward_index(
+                    snap_start.energy, month_snapshot or current_snapshot
+                )
+                if cohort is None:
+                    unindexed = snap_start.energy
+                    unbilled = "not re-priced: the month's card names no index"
             archived = cohort
     # The typed rate overlays whichever card was retrieved, so a user who
     # filled in only some boxes keeps the archived signing-month values for

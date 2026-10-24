@@ -246,10 +246,15 @@ def test_pro_flextime_binds_its_formulas_on_the_ex_vat_basis() -> None:
 
 def test_endex_injection_keeps_its_printed_rate() -> None:
     """Easy Variable prints a structurally identical injection formula on
-    ENDEX101, and it must not be swept in: that index is a futures average
-    over the month BEFORE delivery and the card states its value outright, so
-    the printed figure is the billed rate with no lag to correct. ENTSO-E
-    cannot produce it either."""
+    ENDEX101, and it must not be swept in as a month or spot formula: that
+    index is a futures average over the month BEFORE delivery and the card
+    states its value outright, so the printed figure is the billed rate with
+    no lag to correct. ENTSO-E cannot produce it either. The pair is kept,
+    flagged, for a signing cohort alone."""
+    from custom_components.be_electricity_prices.injection import (
+        _injection_is_spot_formula,
+    )
+
     snap = parse_snapshot(
         "engie_easy_variable",
         {REGION_FLANDERS: fixture_text("engie_easy_indexed_v.pdf")},
@@ -257,8 +262,9 @@ def test_endex_injection_keeps_its_printed_rate() -> None:
     inj = snap.injection
     assert inj is not None
     assert inj.current == pytest.approx(0.04446)
-    assert inj.factor is None
-    assert inj.month_indexed is False
+    assert inj.month_indexed is False and inj.spp_indexed is False
+    assert inj.forward_indexed is True
+    assert not _injection_is_spot_formula(inj, snap.energy)
 
 
 def test_empower_flextime_dsos_match_wallonia_set() -> None:
@@ -560,8 +566,15 @@ def test_empty_house_energy_carries_its_bare_epexdam_formula() -> None:
 
 def test_endex_indexed_card_keeps_its_printed_rate() -> None:
     """Easy Variable indexes on ENDEX101, which is published in ADVANCE, so
-    its printed rate is the contract and must not be swept into the EPEXDAM
-    fix. Its card names no EPEXDAM at all, which is what keeps it out."""
+    its printed rate is the month's price and must not be swept into the
+    EPEXDAM fix: an entry naming no signing month bills it as printed, key
+    or no key. Its formulas are kept for a signing cohort, flagged as the
+    forward index they are."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _month_indexed_leg,
+    )
     from custom_components.be_electricity_prices.providers._rates import VariableRates
 
     snap = parse_snapshot(
@@ -571,7 +584,9 @@ def test_endex_indexed_card_keeps_its_printed_rate() -> None:
     energy = snap.energy
     assert isinstance(energy, VariableRates)
     assert energy.month_indexed is False
-    assert energy.formula_factor is None
+    assert energy.forward_indexed is True
+    keyed = SimpleNamespace(data={"api_key": "k"})
+    assert _month_indexed_leg(snap, keyed) is None  # type: ignore[arg-type]
 
 
 def test_epexdam_bands_are_not_lifted_from_the_other_leg() -> None:
@@ -580,17 +595,193 @@ def test_epexdam_bands_are_not_lifted_from_the_other_leg() -> None:
     Normal row with the INJECTION block's Heures pleines, which is a factor
     of two out. Each block is grouped from its own Normal row instead."""
     from custom_components.be_electricity_prices.providers._engie_cards import (
-        _epexdam_formulas,
+        _index_formulas,
     )
 
     text = fixture_text("engie_empower_variable_v.pdf")
-    energy = _epexdam_formulas(text, 0.13775, 1.06)
-    injection = _epexdam_formulas(text, 0.04918, 1.0)
+    energy = _index_formulas(text, 0.13775, 1.06)
+    injection = _index_formulas(text, 0.04918, 1.0)
     # Each leg's bands belong to its own block.
     assert energy["peak"][0] == pytest.approx(0.1264 * 10.0 * 1.06)
     assert injection["peak"][0] == pytest.approx(0.0528 * 10.0)
     # And a price no block reproduces binds nothing at all.
-    assert _epexdam_formulas(text, 0.999, 1.06) == {}
+    assert _index_formulas(text, 0.999, 1.06) == {}
+
+
+def test_easy_variable_carries_its_endex101_formulas() -> None:
+    """Easy Variable indexes on ENDEX101, a futures average its card names for
+    its own month ("du mois = 100,86 EUR/MWh, d'application pour Avril
+    2026"), so the printed rates are the month's own and are billed as
+    printed: not month-indexed. Its formulas are what a contract signed that
+    month pays in every later month, so they are kept, each one reproducing
+    the band it is printed beside, on both legs."""
+    snap = parse_snapshot(
+        "engie_easy_variable",
+        {REGION_FLANDERS: fixture_text("engie_easy_indexed_v.pdf")},
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.forward_indexed and not energy.month_indexed
+    assert energy.index_realised == pytest.approx(0.10086)
+    # "Normal = 3,3713 + (0,1169 x ENDEX101)" hors TVA, at 6%.
+    assert energy.formula_factor == pytest.approx(0.1169 * 10.0 * 1.06)
+    assert energy.formula_base == pytest.approx(3.3713 / 100.0 * 1.06)
+    for rate, factor, base in (
+        (energy.current, energy.formula_factor, energy.formula_base),
+        (energy.peak, energy.formula_factor_peak, energy.formula_base_peak),
+        (energy.offpeak, energy.formula_factor_offpeak, energy.formula_base_offpeak),
+        (
+            energy.exclusive_night,
+            energy.formula_factor_exclusive_night,
+            energy.formula_base_exclusive_night,
+        ),
+    ):
+        assert factor is not None and base is not None
+        assert factor * 0.10086 + base == pytest.approx(rate, abs=2e-5)
+    injection = snap.injection
+    assert injection is not None
+    assert injection.forward_indexed and not injection.month_indexed
+    assert injection.factor is not None and injection.base is not None
+    assert injection.factor == pytest.approx(0.0525 * 10.0)
+    assert injection.base == pytest.approx(-0.8490 / 100.0)
+    assert injection.factor * 0.10086 + injection.base == pytest.approx(
+        injection.current, abs=2e-5
+    )
+
+
+def test_easy_variable_cohort_bills_its_signing_formulas_at_each_months_endex101() -> (
+    None
+):
+    """The formulas are "valables pour tous les contrats conclus en Avril
+    2026" and the price "indexé mensuellement" on ENDEX101, which each month's
+    card names. So an April signer is billed August on April's formulas at
+    August's 118,12 EUR/MWh, and credited the same way, where it used to be
+    billed August's new-customer price: a January 2026 signer up to 1,28
+    c/kWh under its contract."""
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _at_forward_index,
+        _cohort_energy_from_archived,
+        _cohort_injection_from_archived,
+    )
+
+    april = parse_snapshot(
+        "engie_easy_variable",
+        {REGION_FLANDERS: fixture_text("engie_easy_indexed_v.pdf")},
+    )
+    august = parse_snapshot(
+        "engie_easy_variable",
+        {REGION_FLANDERS: fixture_text("engie_easy_indexed_v_2026-08.pdf")},
+    )
+    assert isinstance(april.energy, VariableRates)
+    energy = _at_forward_index(april.energy, august)
+    assert energy is not None
+    assert energy.current == pytest.approx((3.3713 + 0.1169 * 118.12) * 1.06 / 100)
+    assert energy.peak == pytest.approx((3.2813 + 0.1264 * 118.12) * 1.06 / 100)
+    assert energy.exclusive_night == pytest.approx(
+        (3.3773 + 0.1006 * 118.12) * 1.06 / 100
+    )
+    assert energy.yearly_fixed_fee == pytest.approx(april.energy.yearly_fixed_fee)
+    injection = _cohort_injection_from_archived(april, august)
+    assert injection is not None
+    assert injection.current == pytest.approx((-0.8490 + 0.0525 * 118.12) / 100)
+    # The signing month is its own card as printed, to the rounding the card
+    # prints its rates at.
+    signed = _at_forward_index(april.energy, april)
+    assert signed is not None
+    assert signed.current == pytest.approx(april.energy.current, abs=1e-5)
+    # And the leg never becomes one a spot mean resolves.
+    assert _cohort_energy_from_archived(april) is None
+
+
+async def test_an_easy_variable_cohort_is_billed_without_a_key(
+    hass: Any, freezer: Any
+) -> None:
+    """Through the cohort lookup the live tick and the month walk share, on an
+    entry with no ENTSO-E key: the April cohort's August is the April
+    formulas at August's ENDEX101 on both, a static rate no spot reaches."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.be_electricity_prices.cohort import (
+        _cohort_legs,
+        _effective_snapshot_for_month,
+    )
+    from custom_components.be_electricity_prices.const import DOMAIN
+    from custom_components.be_electricity_prices.providers.base import (
+        SupplierExtractor,
+        SupplierSnapshot,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
+    )
+
+    freezer.move_to("2026-08-20 12:00:00+02:00")
+    april = parse_snapshot(
+        "engie_easy_variable",
+        {REGION_FLANDERS: fixture_text("engie_easy_indexed_v.pdf")},
+    )
+    august = parse_snapshot(
+        "engie_easy_variable",
+        {REGION_FLANDERS: fixture_text("engie_easy_indexed_v_2026-08.pdf")},
+    )
+
+    async def _signing_card(*_a: object, **_k: object) -> SupplierSnapshot:
+        return april
+
+    async def _month(*_a: object, **_k: object) -> SupplierSnapshot:
+        return august
+
+    extractor = SupplierExtractor(
+        id="engie",
+        label="Engie",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_signing_card,
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "engie",
+            "contract": "engie_easy_variable",
+            "region": REGION_FLANDERS,
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "contract_start_date": "2026-04-10",
+        },
+    )
+    _monthly_snapshots(hass).clear()
+    live = await _cohort_legs(
+        hass,
+        MagicMock(),
+        extractor,
+        "engie_easy_variable",
+        REGION_FLANDERS,
+        entry,
+        august,
+    )
+    with patch(
+        "custom_components.be_electricity_prices.cohort._snapshot_for_month", _month
+    ):
+        month = await _effective_snapshot_for_month(
+            hass,
+            MagicMock(),
+            extractor,
+            "engie_easy_variable",
+            REGION_FLANDERS,
+            date(2026, 8, 1),
+            august,
+            entry,
+        )
+    for billed in (live.splice(august), month):
+        assert isinstance(billed.energy, VariableRates)
+        assert billed.energy.current == pytest.approx(
+            (3.3713 + 0.1169 * 118.12) * 1.06 / 100
+        )
+        assert billed.injection is not None
+        assert billed.injection.current == pytest.approx(
+            (-0.8490 + 0.0525 * 118.12) / 100
+        )
 
 
 def test_empty_house_is_mono_only() -> None:

@@ -290,6 +290,40 @@ def test_the_spp_redistributed_flag_is_written_only_where_a_card_sets_it() -> No
     assert _snapshot_from_dict(row).injection == flagged.injection
 
 
+def test_the_forward_index_flag_is_written_only_where_a_card_sets_it() -> None:
+    """Engie's Easy Variable names its forward index on both legs; every other
+    row leaves the flag out and stays byte-identical, and a flagged one reads
+    back as written."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        VariableRates,
+    )
+
+    plain = make_snapshot(
+        energy=VariableRates(current=0.17), injection=InjectionRates(current=0.05)
+    )
+    row = _snapshot_to_dict(plain, NOW)
+    assert "forward_indexed" not in row["energy"]
+    assert "forward_indexed" not in row["injection"]
+    flagged = make_snapshot(
+        energy=VariableRates(
+            current=0.17192,
+            formula_factor=1.22112,
+            formula_base=0.02768,
+            forward_indexed=True,
+            index_realised=0.11812,
+        ),
+        injection=InjectionRates(
+            current=0.05624, factor=0.548, base=-0.00849, forward_indexed=True
+        ),
+    )
+    row = _snapshot_to_dict(flagged, NOW)
+    assert row["energy"]["forward_indexed"] is True
+    assert row["injection"]["forward_indexed"] is True
+    back = _snapshot_from_dict(row)
+    assert back.energy == flagged.energy
+    assert back.injection == flagged.injection
+
+
 def test_the_codec_writes_every_snapshot_field() -> None:
     """The encoder names the top-level fields by hand, and nothing held the
     list to the dataclass: a field added to SupplierSnapshot without a line

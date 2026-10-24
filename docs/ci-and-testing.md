@@ -757,6 +757,10 @@ runs these gates:
   None), `"spot"` (`factor`/`base` set), `"spp"` (a formula indexed on the solar-weighted monthly
   mean: `current`, `factor`/`base` AND `spp_indexed` all set, with the coefficients bounds-checked),
   `"month"` (the same on the plain arithmetic monthly mean, flagged `month_indexed`),
+  `"forward"` (the same on a forward price the card names for its own month, flagged
+  `forward_indexed`, which only Engie Easy Variable has: the printed figure is the month's
+  credit and the pair re-prices only a signing cohort),
+  `"bihourly"` (a static current / peak / offpeak credit flagged `bi_hourly`, Trevion Vast),
   `"triplet"` (a per-slot peak/transition/offpeak feed-in tariff with its three month coefficient
   pairs and `month_indexed`, which only Empower Flextime has),
   or `"present"` (`factor`/`base` set). Per-contract

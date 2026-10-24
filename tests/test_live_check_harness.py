@@ -1545,6 +1545,34 @@ def test_a_month_indexed_card_losing_its_flag_fails() -> None:
     assert rows and rows[0].ok
 
 
+def test_an_easy_variable_card_losing_its_forward_flag_fails() -> None:
+    """Easy Variable's credit is a formula on ENDEX101 beside the month's own
+    printed figure, flagged ``forward_indexed``. Without the flag the pair
+    looks like any month formula, so the card read on the fixture has to pass
+    with it and fail without it."""
+    from custom_components.be_electricity_prices.const import REGION_FLANDERS
+    from custom_components.be_electricity_prices.providers.engie import parse_snapshot
+    from tests import fixture_text
+
+    assert lc._expected_injection_shape("engie_easy_variable") == "forward"
+    snap = parse_snapshot(
+        "engie_easy_variable",
+        {REGION_FLANDERS: fixture_text("engie_easy_indexed_v.pdf")},
+    )
+    lc.CHECKS.clear()
+    lc._validate_injection("x", snap, "forward")
+    assert all(c.ok for c in lc.CHECKS), [c for c in lc.CHECKS if not c.ok]
+    assert snap.injection is not None
+    lc.CHECKS.clear()
+    lc._validate_injection(
+        "x",
+        SimpleNamespace(injection=replace(snap.injection, forward_indexed=False)),
+        "forward",
+    )
+    rows = [c for c in lc.CHECKS if "forward-indexed injection" in c.label]
+    assert rows and not rows[0].ok
+
+
 def test_every_month_indexed_eneco_card_is_pinned_in_the_shape_map() -> None:
     """An unpinned Eneco card derives the WRONG shape, not a weaker one.
 

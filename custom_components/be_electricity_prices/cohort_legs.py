@@ -231,9 +231,14 @@ def _cohort_energy_from_archived(
     ``None`` when the archived card exposes no re-priceable rate (a variable
     card whose coefficients couldn't be parsed, a TOU / Impact card that
     prints resolved bands without a monthly formula behind them, or a
-    variable card whose Impact bands are resolved rates beside its formula).
+    variable card whose Impact bands are resolved rates beside its formula),
+    and for a card indexed on a forward price, which each month's card names
+    and :func:`_at_forward_index` re-prices on: a mean of spot prices is a
+    different index altogether.
     """
     energy = archived.energy
+    if isinstance(energy, VariableRates) and energy.forward_indexed:
+        return None
     if isinstance(energy, ImpactRates) and energy.month_indexed:
         # A Tarif Impact card indexed per band monthly (Cociter trihoraire)
         # becomes the three-band monthly leg on the CWaPE schedule, carrying
@@ -339,6 +344,60 @@ def _cohort_energy_from_archived(
             single_under_impact=energy.single_under_impact,
         )
     return None
+
+
+def _forward_index(delivery: SupplierSnapshot) -> float | None:
+    """The forward index the card of the month billed names for that month,
+    or ``None`` where the card is not indexed on one or names no value."""
+    energy = delivery.energy
+    if not getattr(energy, "forward_indexed", False):
+        return None
+    return getattr(energy, "index_realised", None)
+
+
+def _at_forward_index(
+    signed: EnergyRates, delivery: SupplierSnapshot
+) -> VariableRates | None:
+    """``signed`` re-priced on the forward index the card of the month billed
+    names, or ``None`` where it names none.
+
+    Engie's Easy Variable formulas are "valables pour tous les contrats
+    conclus en <mois>" and indexed monthly on ENDEX101, the futures average
+    of the month before delivery, which each month's card prints for its own
+    month. So a cohort's month is the pairs it signed for at that printed
+    value: a static rate on every path, which no spot price enters, keyed or
+    not. The signing card's standing charge comes with it. Every band the
+    signing card prints has its own pair, or nothing is re-priced.
+    """
+    index = _forward_index(delivery)
+    if index is None or not (
+        isinstance(signed, VariableRates) and signed.forward_indexed
+    ):
+        return None
+
+    def at(factor: float | None, base: float | None) -> float | None:
+        return None if factor is None or base is None else factor * index + base
+
+    current = at(signed.formula_factor, signed.formula_base)
+    peak = at(signed.formula_factor_peak, signed.formula_base_peak)
+    offpeak = at(signed.formula_factor_offpeak, signed.formula_base_offpeak)
+    night = at(
+        signed.formula_factor_exclusive_night, signed.formula_base_exclusive_night
+    )
+    printed = (signed.peak, signed.offpeak, signed.exclusive_night)
+    if current is None or any(
+        band is not None and rate is None
+        for band, rate in zip(printed, (peak, offpeak, night), strict=True)
+    ):
+        return None
+    return replace(
+        signed,
+        current=current,
+        peak=None if signed.peak is None else peak,
+        offpeak=None if signed.offpeak is None else offpeak,
+        exclusive_night=None if signed.exclusive_night is None else night,
+        index_realised=index,
+    )
 
 
 def _with_standing_charge(energy: EnergyRates, signed: EnergyRates) -> EnergyRates:
@@ -499,6 +558,22 @@ def _cohort_injection_from_archived(
         return None
     if old.fixed_for_term:
         return None if old == leg else old
+    if old.forward_indexed:
+        # Easy Variable credits the pair it signed for at the ENDEX101 the
+        # month's card names, which that card prints once for both legs
+        # (``_at_forward_index``). Only ``current`` is ever credited on such
+        # a leg: the pair is not a formula over a spot price.
+        index = _forward_index(delivery)
+        if index is None or old.factor is None or old.base is None:
+            return None
+        frozen = replace(
+            leg,
+            current=old.factor * index + old.base,
+            factor=old.factor,
+            base=old.base,
+            formula=old.formula,
+        )
+        return None if frozen == leg else frozen
     slots = _slot_coefficients(old)
     if slots is None and old.factor is None and old.base is None:
         return None
