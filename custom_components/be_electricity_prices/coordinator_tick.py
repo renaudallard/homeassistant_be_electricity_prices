@@ -112,6 +112,7 @@ from .providers import (
 from .providers._rates import EnergyRates
 from .snapshot_resolve import analog_meter
 from .snapshot_store import cached_month_card
+from .spot_stats import _injection_is_quarter_hourly
 from .vat_rates import ensure_vat_rates
 
 _LOGGER = logging.getLogger(__name__)
@@ -459,6 +460,17 @@ class _TickMixin:
         static_inj_peak, static_inj_offpeak = _static_injection_bands(
             injection_snapshot.injection
         )
+        # On the curve's own slots where the card credits the feed-in per
+        # quarter-hour: a Bolt fixed card's price table is hourly, its feed-in
+        # is not.
+        injection_hourly = self._build_injection_hourly(
+            injection_snapshot,
+            priced.energy,
+            spot_prices,
+            spot_prices.keys()
+            if _injection_is_quarter_hourly(priced, self.entry.data)
+            else hourly.keys(),
+        )
 
         return CoordinatorData(
             hourly=hourly,
@@ -487,8 +499,11 @@ class _TickMixin:
             capacity_cost_eur=capacity_cost,
             prosumer_cost_eur=prosumer_cost,
             injection_price_eur_per_kwh=injection_price,
-            injection_hourly=self._build_injection_hourly(
-                injection_snapshot, priced.energy, spot_prices, hourly.keys()
+            injection_hourly=injection_hourly,
+            injection_resolution=(
+                RESOLUTION_QUARTER
+                if any(slot.minute for slot in injection_hourly)
+                else RESOLUTION_HOURLY
             ),
             yearly_fixed_fee_eur=yearly_fixed_fee_for_meter(
                 priced.energy,

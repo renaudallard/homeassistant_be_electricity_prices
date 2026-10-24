@@ -94,6 +94,31 @@ def _energy_is_quarter_hourly(energy: EnergyRates) -> bool:
     return isinstance(energy, DynamicRates) and energy.quarter_hourly
 
 
+def _injection_is_quarter_hourly(
+    snapshot: SupplierSnapshot, data: Mapping[str, Any]
+) -> bool:
+    """True when the feed-in credit settles per quarter-hour whatever the
+    energy leg does.
+
+    Bolt's credit per settlement slot (``InjectionRates.slot_indexed``), the
+    only one there is: its fixed cards say "l'injection par quart d'heure est
+    multipliee par la valeur Belpex pour ce quart d'heure", and a variable
+    card says the same of its dynamic settlement. A fixed card prices its
+    energy on no spot at all, so asking the energy leg alone fetched the
+    hourly curve for it, and the feed-in sensor and its arrays showed each
+    hour's mean of the four quarters the card credits. Only on the injection
+    regime, the one the credit is paid on.
+    """
+    inj = snapshot.injection
+    return (
+        data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
+        and inj is not None
+        and inj.slot_indexed
+        and inj.factor is not None
+        and inj.base is not None
+    )
+
+
 def _group_spot_quarters_by_hour(
     spots: dict[datetime, float],
 ) -> dict[datetime, list[float]]:
@@ -645,18 +670,22 @@ def _spp_weighting_enabled(
     )
 
 
-def _now_slot_spot(
-    energy: EnergyRates, spot_prices: dict[datetime, float]
-) -> float | None:
-    """ENTSO-E spot for the current billing slot, matching the grid the
-    contract bills on so an Engie injection price tracks the current
-    quarter-hour, not the hourly mean. Falls back to the nearest cached spot
-    within one billing slot (15 min quarter-hourly, 1 h otherwise); returns
-    None when none are cached or none are within range."""
+def _now_slot_spot(spot_prices: dict[datetime, float]) -> float | None:
+    """ENTSO-E spot for the current slot of ``spot_prices``, on the grid the
+    curve was fetched on, which is the one the contract settles on, so an
+    Engie or a Bolt fixed injection price tracks the current quarter-hour,
+    not the hourly mean. Read off the curve's own keys, the way the price
+    table's resolution is, rather than off the energy leg: a fixed card's
+    feed-in settles per quarter-hour on an energy leg that needs no spot.
+    Falls back to the nearest cached spot within one slot (15 min on the
+    quarter grid, 1 h otherwise); returns None when none are cached or none
+    are within range."""
     if not spot_prices:
         return None
     resolution = (
-        RESOLUTION_QUARTER if _energy_is_quarter_hourly(energy) else RESOLUTION_HOURLY
+        RESOLUTION_QUARTER
+        if any(slot.minute for slot in spot_prices)
+        else RESOLUTION_HOURLY
     )
     now_slot = slot_start(dt_util.utcnow(), resolution)
     spot = spot_prices.get(now_slot)

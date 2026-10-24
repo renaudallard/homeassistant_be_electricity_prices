@@ -99,7 +99,7 @@ def _current_injection(data: CoordinatorData) -> float | None:
     rule, so the sensor shows an adjacent slot's rate. The tick's scalar is
     the last resort, for a table with nothing inside the window.
     """
-    rate = _current_slot_value(data.injection_hourly, data.resolution)
+    rate = _current_slot_value(data.injection_hourly, data.injection_resolution)
     return data.injection_price_eur_per_kwh if rate is None else rate
 
 

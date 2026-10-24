@@ -632,9 +632,29 @@ def test_injection_price_tracks_the_quarter_slot(freezer: Any) -> None:
         injection_hourly=inj,
         injection_price_eur_per_kwh=0.0,
         resolution=RESOLUTION_QUARTER,
+        injection_resolution=RESOLUTION_QUARTER,
     )
     freezer.move_to(midnight + timedelta(hours=7, minutes=40))
     assert _current_injection(data) == pytest.approx(0.030)  # the 07:30 quarter
+
+
+def test_injection_price_tracks_its_own_quarter_under_an_hourly_table(
+    freezer: Any,
+) -> None:
+    # A Bolt fixed card: an hourly price table, a feed-in credited per
+    # quarter-hour. The feed-in reads its own grid, not the table's.
+    midnight = _fixed_today_local()
+    inj = {
+        dt_util.as_utc(midnight + timedelta(minutes=15 * i)): 0.001 * i
+        for i in range(96)
+    }
+    data = CoordinatorData(
+        injection_hourly=inj,
+        injection_price_eur_per_kwh=0.0,
+        injection_resolution=RESOLUTION_QUARTER,
+    )
+    freezer.move_to(midnight + timedelta(hours=7, minutes=40))
+    assert _current_injection(data) == pytest.approx(0.030)
 
 
 def test_split_injection_keeps_the_contract_grid() -> None:

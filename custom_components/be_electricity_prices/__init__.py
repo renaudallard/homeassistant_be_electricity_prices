@@ -441,12 +441,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
 
     # Re-evaluate the price sensors at every slot boundary without
     # re-fetching: current_price / next_hour_price read the wall clock
-    # live, so a push at :00 (and :15/:30/:45 for a 15-minute supplier)
-    # keeps them aligned to the slot the user is actually billed for. The
+    # live, so a push at :00 (and :15/:30/:45 where the price table or the
+    # feed-in is per quarter-hour, as on Bolt's fixed cards) keeps them
+    # aligned to the slot the user is actually billed for. The
     # coordinator's own 60-minute tick is not clock-aligned, so without
     # this the current price could lag the slot boundary by most of an
-    # hour. The cadence follows the table's resolution and is re-registered
-    # whenever that moves: it was fixed once from coordinator.data here,
+    # hour. The cadence follows those two grids and is re-registered
+    # whenever one moves: it was fixed once from coordinator.data here,
     # which is None after a first refresh that was tolerated for an
     # unreadable card, so a quarter-hourly Ecofix entry set up that way was
     # pushed hourly for as long as it lived, its price sitting on a stale
@@ -460,7 +461,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     @callback
     def _track_slot_boundary() -> None:
         data = coordinator.data
-        resolution = data.resolution if data is not None else RESOLUTION_HOURLY
+        grids = () if data is None else (data.resolution, data.injection_resolution)
+        quarter = RESOLUTION_QUARTER in grids
+        resolution = RESOLUTION_QUARTER if quarter else RESOLUTION_HOURLY
         if resolution == slot_push["resolution"]:
             return
         if slot_push["cancel"] is not None:

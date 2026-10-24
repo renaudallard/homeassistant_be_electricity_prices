@@ -73,6 +73,7 @@ from .spot_stats import (
     _energy_is_rlp_indexed,
     _energy_month_spot,
     _group_spot_quarters_by_hour,
+    _injection_is_quarter_hourly,
     _mean_of_month,
     _rlp_blend_for,
     spots_available,
@@ -742,10 +743,14 @@ class _SpotsMixin(_ProfilesMixin):
         now_local = dt_util.now()
         want_tomorrow = now_local.hour >= 11
         # Keep the native 15-minute slots only for a leg that bills on them
-        # (Engie Dynamic); everyone else gets the hourly aggregate. The leg,
-        # not the card: a cohort can splice one onto a card of another kind.
+        # (Engie Dynamic, or a Bolt fixed card's feed-in); everyone else gets
+        # the hourly aggregate. The leg, not the card: a cohort can splice one
+        # onto a card of another kind.
         snap = self._billing_snapshot()
-        quarter_hourly = snap is not None and _energy_is_quarter_hourly(snap.energy)
+        quarter_hourly = snap is not None and (
+            _energy_is_quarter_hourly(snap.energy)
+            or _injection_is_quarter_hourly(snap, self.entry.data)
+        )
         # A curve cached on the other grid is not served: a monthly card can
         # turn quarter-hourly after the midnight fetch, and the hourly curve
         # would then price a quarter-hour leg for the rest of the day.

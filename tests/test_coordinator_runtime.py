@@ -1158,6 +1158,83 @@ async def test_fetch_spot_prices_uses_quarter_hourly_for_quarter_contract(
     assert captured["quarter_hourly"] is False
 
 
+async def test_a_feed_in_credited_per_quarter_hour_is_shown_per_quarter_hour(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Bolt's fixed cards credit the feed-in per quarter-hour ("l'injection
+    par quart d'heure est multipliee par la valeur Belpex pour ce quart
+    d'heure") on an energy leg priced on no spot at all. The live curve was
+    fetched on the energy leg's grid, hourly, so injection_price and its
+    arrays showed each hour's mean of the four quarters the card credits.
+    The price table stays hourly; the feed-in follows its own quarters."""
+    from custom_components.be_electricity_prices.const import (
+        RESOLUTION_HOURLY,
+        RESOLUTION_QUARTER,
+    )
+    from custom_components.be_electricity_prices.sensor_values import (
+        _current_injection,
+    )
+
+    freezer.move_to("2026-10-23 10:30:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "bolt",
+            "contract": "bolt_fix",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="bolt",
+        contract="bolt_fix",
+        injection=InjectionRates(
+            current=0.0531, factor=0.94, base=-0.01133, slot_indexed=True
+        ),
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    captured: dict[str, bool] = {}
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        captured["quarter_hourly"] = quarter_hourly
+        step = timedelta(minutes=15 if quarter_hourly else 60)
+        prices: dict[datetime, float] = {}
+        when = start
+        while when < end:
+            # Every quarter its own price, so an hour's mean is none of them.
+            prices[when] = 0.05 + (when - start) / timedelta(minutes=15) / 1000
+            when += step
+        return prices
+
+    with (
+        _patch_spot_fetch(_fake_fetch),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._update_body()
+
+    assert captured["quarter_hourly"] is True
+    assert data.resolution == RESOLUTION_HOURLY
+    assert data.injection_resolution == RESOLUTION_QUARTER
+    now = datetime(2026, 10, 23, 8, 30, tzinfo=UTC)
+    spot = coord._spot_cache[now]
+    assert _current_injection(data) == pytest.approx(0.94 * spot - 0.01133)
+    assert data.injection_price_eur_per_kwh == pytest.approx(0.94 * spot - 0.01133)
+    assert len([s for s in data.injection_hourly if s.date() == now.date()]) > 24
+
+
 async def test_the_spot_grid_follows_the_leg_the_tick_prices_on(
     hass: HomeAssistant, freezer: Any
 ) -> None:

@@ -131,6 +131,10 @@ class CoordinatorData:
     # flat or monthly-indexed feed-in fills every slot with the scalar above.
     # A slot whose spot is not known yet has no row.
     injection_hourly: dict[datetime, float] = field(default_factory=dict)
+    # Grid resolution of the keys in ``injection_hourly``, which is finer than
+    # ``resolution`` where the card credits the feed-in per quarter-hour on an
+    # energy leg billed by the hour (Bolt's fixed cards).
+    injection_resolution: str = RESOLUTION_HOURLY
     # Supplier yearly fixed fee (EUR/year) and Flemish energy-fund
     # monthly charge (EUR/month). Both are parsed from the tariff card
     # but don't enter the per-kWh all-in number; surfacing them as

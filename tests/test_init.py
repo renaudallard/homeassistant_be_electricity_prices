@@ -209,6 +209,57 @@ async def test_the_slot_push_follows_the_resolution_the_table_ends_up_with(
         assert len([r for r in registered if r["hour"] is None]) == 2
 
 
+async def test_the_slot_push_follows_a_feed_in_credited_per_quarter_hour(
+    hass: HomeAssistant,
+) -> None:
+    """A Bolt fixed card prices energy on an hourly table and credits the
+    feed-in per quarter-hour. Pushed on the table's grid alone, the
+    injection_price sensor was read again only at the hour and showed its
+    first quarter for the whole of it."""
+    from custom_components.be_electricity_prices.const import (
+        RESOLUTION_HOURLY,
+        RESOLUTION_QUARTER,
+    )
+    from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
+
+    registered: list[dict[str, Any]] = []
+
+    def _capture(
+        _hass: HomeAssistant,
+        action: Any,
+        hour: Any = None,
+        minute: Any = None,
+        second: Any = None,
+    ) -> Any:
+        registered.append({"hour": hour, "minute": minute, "second": second})
+        return lambda: None
+
+    async def _no_backfill(*_a: object, **_kw: object) -> None:
+        return None
+
+    entry = make_entry(solar_regime="injection")
+    entry.add_to_hass(hass)
+    with (
+        patch.object(BePricesCoordinator, "async_load_persistent", AsyncMock()),
+        patch.object(
+            BePricesCoordinator, "async_config_entry_first_refresh", AsyncMock()
+        ),
+        patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()),
+        patch(f"{_MODULE}.async_track_time_change", _capture),
+        patch(f"{_MODULE}.backfill_if_missing", _no_backfill),
+    ):
+        assert await async_setup_entry(hass, entry) is True
+        entry.runtime_data.async_set_updated_data(
+            CoordinatorData(
+                hourly={},
+                resolution=RESOLUTION_HOURLY,
+                injection_resolution=RESOLUTION_QUARTER,
+            )
+        )
+    slot = [r for r in registered if r["hour"] is None]
+    assert slot[-1]["minute"] == [0, 15, 30, 45]
+
+
 async def test_the_daily_compare_stops_with_the_entry(hass: HomeAssistant) -> None:
     """The sweep fetches a card from every supplier in the region and runs for
     minutes. Home Assistant runs a coroutine time listener as a background

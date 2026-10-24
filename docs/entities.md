@@ -294,8 +294,11 @@ injection chart drawing for such a contract too (issue #108; until 0.34.0 those
 contracts emitted no array). The sensor returns `{}` only off the injection
 regime or on a card that prints no feed-in price. A slot the card cannot price
 (a spot formula before the day-ahead publishes, or with no key) has no row
-rather than a zero. The rows carry the contract's own grid, like
-`current_price`, `tomorrow` fills in once the day-ahead publishes (~13:00 CET)
+rather than a zero. The rows carry the grid the feed-in settles on, which is
+the contract's own, like `current_price`, except on a Bolt fixed card: its
+price table is hourly and its feed-in is credited per quarter-hour, so its rows
+and the state follow the quarters (`injection_resolution`). `tomorrow` fills
+in once the day-ahead publishes (~13:00 CET)
 on a spot-indexed contract, and it stays empty on the last day the card covers,
 like the price arrays.
 

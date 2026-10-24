@@ -334,7 +334,8 @@ Numbered walkthrough:
    running year-to-date cost.
 9. The three platforms are forwarded and a slot-boundary push is registered (`__init__.py`). Because `current_price` and
    `next_hour_price` read the wall clock live, the push at each `:00` (and `:15/:30/:45` for a
-   quarter-hourly supplier) re-evaluates the sensors without a re-fetch, keeping them aligned to
+   quarter-hourly supplier, or a feed-in credited per quarter-hour as on Bolt's fixed cards)
+   re-evaluates the sensors without a re-fetch, keeping them aligned to
    the slot the user is actually billed for.
 10. A backfill background task (`__init__.py`) populates the recorder only if it has
     no statistics at the Jan 1 anchor, so a normal restart adds no work. It runs once more an

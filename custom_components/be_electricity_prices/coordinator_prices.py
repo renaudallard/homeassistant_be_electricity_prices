@@ -622,8 +622,10 @@ class _PricesMixin:
         spot_prices: dict[datetime, float],
         grid_keys: Iterable[datetime],
     ) -> dict[datetime, float]:
-        """Per-slot injection price (EUR/kWh) over the same today+tomorrow grid
-        as ``hourly``, for the injection sensor's today/tomorrow arrays.
+        """Per-slot injection price (EUR/kWh) over ``grid_keys``, the slots of
+        ``hourly`` or, where the card credits the feed-in per quarter-hour on
+        an energy leg billed by the hour, the curve's own quarters, for the
+        injection sensor's state and its today/tomorrow arrays.
 
         Empty off the injection regime and on a card that prints no feed-in.
         Every other shape gets a row per slot, a flat or monthly-indexed one

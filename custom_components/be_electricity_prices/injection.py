@@ -653,7 +653,7 @@ def _compute_injection_price(
     return _injection_price_for_slot(
         inj,
         snapshot.energy,
-        _now_slot_spot(snapshot.energy, spot_prices),
+        _now_slot_spot(spot_prices),
         dt_util.now(),
         meter=entry.data.get(CONF_METER, METER_MONO),
         region=entry.data.get(CONF_REGION, REGION_FLANDERS),
