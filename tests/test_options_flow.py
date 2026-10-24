@@ -515,6 +515,40 @@ async def test_ticking_the_settlement_box_makes_the_key_mandatory(
     assert await _walk(True) == ["dynamic", "api_key"]
 
 
+@pytest.mark.parametrize(
+    ("supplier", "contract", "shown"),
+    [("bolt", "bolt_variable", False), ("frank", "frank_dynamic_hv", True)],
+)
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_another_supplier_asks_the_settlement_afresh(
+    hass: HomeAssistant, supplier: str, contract: str, shown: bool
+) -> None:
+    """The answer belongs to the household's account with its supplier, Frank's
+    app or Bolt's settlement on request. Carried to another supplier, the box
+    came up ticked where a new setup leaves it unticked, and submitted as shown
+    it made a Bolt variable card dynamic. Another product of the same supplier
+    keeps it, since the account's grid does not change with the product."""
+    entry = make_entry(
+        supplier="frank",
+        contract="frank_dynamic",
+        region="flanders",
+        dso="fluvius_zenne_dijle",
+        meter="dynamic",
+        quarter_hourly=True,
+    )
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": supplier, "region": "flanders"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": contract}
+    )
+    assert result["step_id"] == "settlement"
+    assert _shown_values(result)["quarter_hourly"] is shown
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_switching_off_frank_drops_a_stored_quarter_hourly_answer(
     hass: HomeAssistant,

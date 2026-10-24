@@ -57,6 +57,7 @@ from .const import (
     CONF_MANUAL_ENERGY_SINGLE,
     CONF_MANUAL_YEARLY_FEE,
     CONF_PREVIOUS_CONTRACTS,
+    CONF_QUARTER_HOURLY,
     CONF_REGION,
     CONF_SUPPLIER,
     CONF_SWITCH_DATE,
@@ -166,8 +167,8 @@ def _another_contract(stored: Mapping[str, Any], data: Mapping[str, Any]) -> boo
 def _drop_left_contract_answers(
     stored: Mapping[str, Any], data: dict[str, Any]
 ) -> None:
-    """Forget the stored contract's dates once an edit has moved to another
-    supplier or region, so the contract step offers them empty.
+    """Forget the stored contract's dates and settlement once an edit has moved
+    to another supplier or region, so their steps start from nothing.
 
     Run on the entry step, before a contract is picked, where moving off the
     stored supplier or region is what ``_another_contract`` reads. Pre-filled,
@@ -176,13 +177,20 @@ def _drop_left_contract_answers(
     start date does not override (``_tariff_card_month``). A supply that
     starts on 1 January cannot be recorded as a switch, so this edit is how
     such a change is made. The box billing the year from the start date goes
-    with them, as ``_record_switch`` drops it. Only an answer still holding
-    the stored value goes: the start date a recorded switch has just moved to
-    the switch day is the new contract's own.
+    with them, as ``_record_switch`` drops it. So does the settlement answer,
+    which is the household's arrangement with the supplier it leaves: ticked
+    for Frank's quarter-hour grid and submitted as shown, it made a Bolt
+    variable card dynamic. Only an answer still holding the stored value goes:
+    the start date a recorded switch has just moved to the switch day is the
+    new contract's own.
     """
     if not _another_contract(stored, data):
         return
-    for key in (*_CONTRACT_DATE_KEYS, CONF_YTD_FROM_CONTRACT_START):
+    for key in (
+        *_CONTRACT_DATE_KEYS,
+        CONF_YTD_FROM_CONTRACT_START,
+        CONF_QUARTER_HOURLY,
+    ):
         if key in data and data[key] == stored.get(key):
             del data[key]
 

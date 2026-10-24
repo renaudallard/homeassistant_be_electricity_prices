@@ -825,12 +825,14 @@ opens a menu of four options, five once a supplier switch has been recorded this
   contract's start date, tariff card month, end date and the box billing the
   year from the start date empty, since they described the contract you left;
   a supply that began on 1 January, which cannot be recorded as a switch, is
-  set up this way with its own dates. Picking another contract of the same
-  supplier keeps the dates shown but asks the tariff card month again, empty,
-  because the month shown was the old contract's and it wins over the start
-  date: enter it again if the new contract was signed on the same card. The
-  integration reloads automatically when you
-  finish, picking the new tariff card on the next refresh. A sensor your new
+  set up this way with its own dates. The settlement question of Bolt's
+  variable cards and Frank starts unticked too, as on a new setup, since your
+  answer was an arrangement with the supplier you left. Picking another
+  contract of the same supplier keeps the dates shown but asks the tariff
+  card month again, empty, because the month shown was the old contract's and
+  it wins over the start date: enter it again if the new contract was signed
+  on the same card. The integration reloads automatically when you finish,
+  picking the new tariff card on the next refresh. A sensor your new
   settings no longer create (the EV rate after unticking its box, the band
   sensors after leaving a bi-hourly meter, the capacity sensors after leaving
   Flanders) is removed rather than left unavailable; its history stays.
