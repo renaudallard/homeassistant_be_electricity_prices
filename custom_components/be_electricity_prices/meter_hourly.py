@@ -396,13 +396,20 @@ async def _read_daily_before(
     every contract after a switch, then spread after the fact on the
     seventh, which moved a cost already shown, and a closed contract shorter
     than a week was never spread at all. The same sensor's days before the
-    window say what it is from the window's first day. Kept for the day.
+    window say what it is from the window's first day. Kept for the day, but
+    only from a read the recorder answered: a failed read looks like a meter
+    that moved on no day, and kept, it billed a meter read once a day at the
+    hour each reading arrived until midnight. Such a verdict serves its own
+    call, and the failure still reaches the caller's collector
+    (``noting_failed_reads``).
     """
     today = dt_util.now().date()
     key = (today, side, _kwh_sensor_ids(entry, side), start)
-    if key not in _READ_DAILY_BEFORE:
-        if _READ_DAILY_BEFORE and next(iter(_READ_DAILY_BEFORE))[0] != today:
-            _READ_DAILY_BEFORE.clear()
+    if key in _READ_DAILY_BEFORE:
+        return _READ_DAILY_BEFORE[key]
+    if _READ_DAILY_BEFORE and next(iter(_READ_DAILY_BEFORE))[0] != today:
+        _READ_DAILY_BEFORE.clear()
+    with energy_meters.noting_failed_reads() as failed:
         metered = await _side_hourly_kwh(
             hass,
             entry,
@@ -410,9 +417,10 @@ async def _read_daily_before(
             start - timedelta(days=_READ_DAILY_SPAN_DAYS),
             start - timedelta(days=1),
         )
-        moving, polled = _polled_days(metered.kwh if metered else {}, start)
+    moving, polled = _polled_days(metered.kwh if metered else {}, start)
+    if not failed:
         _READ_DAILY_BEFORE[key] = (moving, len(polled))
-    return _READ_DAILY_BEFORE[key]
+    return moving, len(polled)
 
 
 def _spread_daily_readings(

@@ -15036,6 +15036,55 @@ def test_a_failed_read_reaches_every_enclosing_collector() -> None:
     assert outer == {"sensor.cons", "sensor.inj"}
 
 
+async def test_a_daily_meter_verdict_from_a_failed_read_is_not_kept(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The days before a window say whether a meter reports once a day, and
+    the verdict is kept for the day. One taken from a read the recorder did
+    not answer read as "no day moved" and was kept until midnight, so a meter
+    read once a day was billed at the hour each reading arrived. The failed
+    read now serves its own call, reaches the caller's collector, and the
+    next call reads again."""
+    from custom_components.be_electricity_prices import energy_meters, meter_hourly
+    from custom_components.be_electricity_prices.meter_hourly import MeteredHours
+
+    freezer.move_to("2026-01-04 09:00:30+01:00")
+    entry = MockConfigEntry(domain=DOMAIN, data={"consumption_kwh": "sensor.cons"})
+    polled: dict[datetime, float] = {}
+    for back in range(1, 29):
+        day = date(2026, 1, 1) - timedelta(days=back)
+        first = dt_util.start_of_local_day(day).astimezone(UTC)
+        for hour in range(24):
+            polled[first + timedelta(hours=hour)] = 9.6 if hour == 23 else 0.0
+    answers: list[MeteredHours | None] = [
+        None,
+        MeteredHours(kwh=polled, sensors=("sensor.cons",)),
+    ]
+
+    async def _read(*_args: Any) -> MeteredHours | None:
+        answer = answers.pop(0)
+        if answer is None:
+            energy_meters._note_failed_read("sensor.cons")
+        return answer
+
+    meter_hourly._READ_DAILY_BEFORE.clear()
+    with (
+        patch.object(meter_hourly, "_side_hourly_kwh", _read),
+        energy_meters.noting_failed_reads() as failed,
+    ):
+        busy = await meter_hourly._read_daily_before(
+            hass, entry, "consumption", date(2026, 1, 1)
+        )
+        assert failed == {"sensor.cons"}
+        assert not meter_hourly._READ_DAILY_BEFORE
+        answered = await meter_hourly._read_daily_before(
+            hass, entry, "consumption", date(2026, 1, 1)
+        )
+    assert busy == (0, 0)
+    assert answered == (28, 28)
+    assert list(meter_hourly._READ_DAILY_BEFORE.values()) == [(28, 28)]
+
+
 async def test_welcome_credit_is_read_from_the_signing_month_card(
     hass: HomeAssistant, freezer: Any
 ) -> None:
