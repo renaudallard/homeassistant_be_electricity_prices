@@ -71,6 +71,7 @@ from .fees import (
     _compensation_kva,
     _prosumer_monthly_fee,
     _welcome_credit_eur,
+    billed_peak_for,
     bills_gross_network,
     first_year_net_kwh,
     gross_network_rebate,
@@ -551,8 +552,14 @@ async def _accrue_cost(
     # The kW the Flemish capacity tariff is charged on. Read from the live
     # coordinator so the backfilled series accrues it exactly as the live
     # _ytd_capacity does; the rolling mean is not reconstructable per past
-    # month, so both use the current one (see _ytd_capacity).
-    billed_peak_kw = coordinator._billed_peak_kw() if region == REGION_FLANDERS else 0.0
+    # month, so both use the current one (see _ytd_capacity). Asked of the
+    # contract's own settings, as price_previous_periods asks it: one held
+    # earlier on an analog meter was billed the flat charge.
+    billed_peak_kw = (
+        billed_peak_for(entry.data, coordinator._billed_peak_kw())
+        if region == REGION_FLANDERS
+        else 0.0
+    )
 
     # One bulk fetch per recorder entity; bin into UTC-hour totals.
     # _recorder_rows treats the start/end arguments as local-day

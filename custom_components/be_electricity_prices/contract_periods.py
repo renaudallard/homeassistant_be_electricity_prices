@@ -80,6 +80,7 @@ from .energy_meters import (
     _kwh_sensor_ids,
     _recorder_daily_kwh,
 )
+from .fees import billed_peak_for
 from .flow_contracts import _contract_is_month_indexed
 from .meter_daily import _measured_kwh
 from .meter_faults import _without_today
@@ -803,7 +804,10 @@ async def price_previous_periods(
     feed-in credited on the contract's own terms and a compensation net settled
     within the period. The household's own inputs come from ``coordinator``:
     the year's day-ahead spots, the load and solar profiles and the Flemish
-    capacity peak, none of which depend on the supplier.
+    capacity peak, none of which depend on the supplier. The peak is billed on
+    the meter the period ran on, asked of its own settings
+    (``billed_peak_for``): a contract held on an analog meter was billed the
+    flat charge whatever the digital meter after it measures.
 
     ``overrides`` re-prices the periods under a what-if the compare page quotes
     both sides on, a solar regime or a DSO tariff mode. Network access is
@@ -856,8 +860,10 @@ async def price_previous_periods(
                     "rlp_index_weights": _coordinator_rlp_index_weights(
                         coordinator.entry, card
                     ),
+                    # The peak of the meter the contract ran on, not of the
+                    # one the household has now (billed_peak_for).
                     "billed_peak_kw": (
-                        coordinator._billed_peak_kw()
+                        billed_peak_for(proxy.data, coordinator._billed_peak_kw())
                         if proxy.data.get(CONF_REGION) == REGION_FLANDERS
                         else 0.0
                     ),

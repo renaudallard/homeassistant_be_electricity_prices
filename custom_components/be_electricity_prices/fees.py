@@ -71,7 +71,7 @@ from .providers.base import (
     DsoOverlay,
     SupplierSnapshot,
 )
-from .snapshot_resolve import entry_annual_kwh
+from .snapshot_resolve import analog_meter, entry_annual_kwh
 
 
 def bills_capacity(data: Mapping[str, Any]) -> bool:
@@ -102,6 +102,25 @@ def bills_capacity(data: Mapping[str, Any]) -> bool:
     if data.get(CONF_REGION) != REGION_FLANDERS:
         return False
     return data.get(CONF_METER) != METER_EXCLUSIVE_NIGHT
+
+
+def billed_peak_for(data: Mapping[str, Any], peak_kw: float) -> float:
+    """The kW a contract on the connection ``data`` describes is charged the
+    capacity tariff on, ``peak_kw`` being the household's own, measured or
+    stated.
+
+    None where the contract bills no charge of its own (:func:`bills_capacity`),
+    the minimum peak on an analog meter, which Fluvius cannot measure, and
+    ``peak_kw`` on any other. Asked of each contract's own settings, which is
+    what a contract kept at a recorded switch needs: one held on an analog
+    meter was billed the flat charge, whatever the digital meter that replaced
+    it has measured since.
+    """
+    if not bills_capacity(data):
+        return 0.0
+    if analog_meter(data):
+        return capacity_floor_kw()
+    return peak_kw
 
 
 def _capacity_monthly_eur(overlay: DsoOverlay | None, peak_kw: float) -> float:

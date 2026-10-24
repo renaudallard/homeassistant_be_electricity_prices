@@ -60,7 +60,6 @@ from .const import (
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     DOMAIN,
-    REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
     WELCOME_CREDIT_ANNIVERSARY,
@@ -83,7 +82,7 @@ from .coordinator_data import (
     ytd_window_reset,
 )
 from .coordinator_persist import settings_digest
-from .fees import grants_a_welcome_credit, last_credited_day
+from .fees import billed_peak_for, grants_a_welcome_credit, last_credited_day
 from .projected_cost import _compute_projected_year_cost
 from .projected_volume import _compute_projected_year_kwh, _compute_rolling_year_kwh
 from .providers import (
@@ -696,11 +695,14 @@ class _CostsMixin:
         )
 
     def _previous_peak_kw(self, periods: list[ContractPeriod]) -> float:
-        """The billed peak the earlier contracts are priced on: the household's
-        own in Flanders, as ``price_previous_periods`` takes it, else none."""
-        if any(p.data.get(CONF_REGION) == REGION_FLANDERS for p in periods):
-            return self._billed_peak_kw()
-        return 0.0
+        """The billed peak the earlier contracts are priced on, each asked of
+        its own settings as ``price_previous_periods`` asks it: the household's
+        own where one bills on it, else the analog minimum or none. One figure
+        is enough to watch, since the household's is the only one that moves."""
+        return max(
+            (billed_peak_for(p.data, self._billed_peak_kw()) for p in periods),
+            default=0.0,
+        )
 
     async def _price_previous(self, periods: list[ContractPeriod], today: date) -> None:
         """Price the earlier contracts, keep the result and ask for a refresh.

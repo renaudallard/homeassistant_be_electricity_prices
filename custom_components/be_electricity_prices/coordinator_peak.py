@@ -50,7 +50,7 @@ from .const import (
     CONF_CAPACITY_MODE,
     CONF_CAPACITY_PEAK_SENSOR,
 )
-from .fees import bills_capacity
+from .fees import billed_peak_for, bills_capacity
 from .fluvius import capacity_floor_kw
 from .providers.base import SupplierSnapshot
 from .snapshot_resolve import analog_meter
@@ -261,17 +261,17 @@ class _PeakMixin:
         to it count from the next tick.
 
         0.0 on a connection billed no charge of its own (``bills_capacity``),
-        whatever is stored: every path pricing the charge multiplies this, so
-        a night circuit's entry, whose quarter-hours Fluvius bills with the
+        and the minimum on an analog meter, whatever is stored
+        (``billed_peak_for``): every path pricing the charge multiplies this,
+        so a night circuit's entry, whose quarter-hours Fluvius bills with the
         main meter's, is charged nothing on any of them.
         """
-        if not bills_capacity(self.entry.data):
-            return 0.0
+        return billed_peak_for(self.entry.data, self._household_peak_kw())
+
+    def _household_peak_kw(self) -> float:
+        """The peak this household states or measures, at least the minimum:
+        what a digital meter on the connection is billed on."""
         floor = capacity_floor_kw()
-        if analog_meter(self.entry.data):
-            # "Je betaalt dan een forfaitair bedrag voor 2.5 kW als maandpiek":
-            # the sheet's "Vaste term" of an analog meter, whatever is stored.
-            return floor
         if self.entry.data.get(CONF_CAPACITY_MODE) == CAPACITY_MODE_FIXED:
             fixed = self.entry.data.get(CONF_CAPACITY_FIXED_KW, floor)
             return max(float(fixed), floor)

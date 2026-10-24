@@ -523,3 +523,214 @@ def test_an_earlier_contract_takes_the_meters_analog_answer() -> None:
             {**entry, **_held(**held)}, date(2026, 1, 1), date(2026, 10, 23)
         )
         assert [analog_meter(p.data) for p in periods] == [analog], held
+
+
+async def test_an_earlier_contract_is_billed_its_own_meters_peak(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A contract kept at a recorded switch is billed the peak of the meter it
+    ran on: the minimum on an analog meter, none on a night circuit or outside
+    Flanders, the household's own on a digital one. Billing an analog half-year
+    on the 5,2 kW the digital meter after it measures charged 70,70 EUR too
+    much on Fluvius Antwerpen."""
+    from datetime import date
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices import contract_periods
+    from custom_components.be_electricity_prices.compare_inputs import _QuoteEntry
+    from tests import make_stub_extractor
+
+    freezer.move_to("2026-10-23 13:00:00+02:00")
+    card = _card()
+    seen: list[float] = []
+
+    async def _cost(*_args: Any, **kwargs: Any) -> float:
+        seen.append(kwargs["billed_peak_kw"])
+        return 0.0
+
+    async def _period_card(
+        _hass: Any, _session: Any, coordinator: Any, period: Any, _overrides: Any = None
+    ) -> Any:
+        proxy = _QuoteEntry(data=dict(period.data), runtime_data=coordinator)
+        return proxy, make_stub_extractor(), card, False, False, False, None
+
+    for held, peak in (
+        ({}, 5.2),
+        ({"analog_meter": True}, 2.5),
+        ({"meter": "exclusive_night"}, 0.0),
+        ({"region": "wallonia", "dso": "ores"}, 0.0),
+    ):
+        earlier = {**_flemish("mono").data, **held}
+        entry = _flemish(
+            "mono",
+            capacity_mode="sensor",
+            capacity_peak_sensor=_PEAK,
+            previous_contracts=[{"until": "2026-07-01", "data": earlier}],
+        )
+        entry.add_to_hass(hass)
+        coord = BePricesCoordinator(hass, entry)
+        coord._peak_history = {"2026-08-01": 5.2, "2026-09-01": 5.2}
+        periods = contract_periods.previous_periods(
+            entry.data, date(2026, 1, 1), date(2026, 10, 23)
+        )
+        seen.clear()
+        with (
+            patch.object(contract_periods, "period_card", new=_period_card),
+            patch.object(contract_periods, "_compute_current_year_cost", new=_cost),
+        ):
+            await contract_periods.price_previous_periods(
+                hass,
+                None,  # type: ignore[arg-type]
+                coord,
+                periods,
+                month_start=date(2026, 10, 1),
+            )
+        assert seen == [pytest.approx(peak)], held
+        # The one peak watched for a re-pricing is the one each is billed on.
+        assert coord._previous_peak_kw(periods) == pytest.approx(peak), held
+
+
+async def test_the_backfill_bills_a_contract_on_its_own_meters_peak(
+    hass: HomeAssistant,
+) -> None:
+    """The backfill asks each contract's own settings too, so an analog one
+    accrues the flat charge whatever peak the coordinator measures."""
+    from datetime import UTC, date, datetime, timedelta
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices import backfill as bf
+    from custom_components.be_electricity_prices import (
+        cohort,
+        energy_meters,
+        ytd_cost,
+        ytd_energy,
+    )
+    from custom_components.be_electricity_prices.cohort import _CohortLegs
+    from custom_components.be_electricity_prices.const import DOMAIN
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
+    from tests import make_stub_extractor
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.20, yearly_fixed_fee=60.0),
+        dsos={
+            "fluvius_antwerpen": DsoOverlay(
+                distribution_single=0.10,
+                transport=0.0145,
+                capacity_eur_per_kw_year=52.37,
+                data_management_per_year=18.0,
+            )
+        },
+        taxes=TaxOverlay(federal_excise=0.04876, energy_contribution=0.0),
+    )
+    entry = _flemish(
+        "mono",
+        analog_meter=True,
+        solar_regime="none",
+        consumption_kwh="sensor.cons_total",
+    )
+    entry.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_current_year_cost",
+        suggested_object_id="analog_current_year_cost",
+        config_entry=entry,
+    )
+    start = dt_util.start_of_local_day(date(2026, 1, 1)).astimezone(UTC)
+    stop = dt_util.start_of_local_day(date(2026, 2, 1)).astimezone(UTC)
+    hours: list[datetime] = []
+    when = start
+    while when < stop:
+        hours.append(when)
+        when += timedelta(hours=1)
+    per_hour = {h: 0.4 for h in hours}
+    per_day: dict[date, float] = {}
+    for h in hours:
+        local_day = dt_util.as_local(h).date()
+        per_day[local_day] = per_day.get(local_day, 0.0) + 0.4
+    coordinator = SimpleNamespace(
+        hass=hass,
+        _snapshot=snap,
+        _session=None,
+        _historical_spots={},
+        _historical_spot_quarters={},
+        _spp_weights={},
+        _rlp_weights={},
+        _ensure_historical_spots=AsyncMock(),
+        _ensure_spp_weights=AsyncMock(),
+        _ensure_rlp_weights=AsyncMock(),
+        # What a digital meter measures; the analog contract is billed 2,5 kW.
+        _billed_peak_kw=lambda: 5.0,
+    )
+    entry.runtime_data = coordinator  # type: ignore[misc]
+
+    async def fake_hourly(
+        _h: Any, entity_id: str, _s: Any, _e: Any
+    ) -> dict[datetime, float]:
+        return dict(per_hour) if entity_id == "sensor.cons_total" else {}
+
+    async def fake_daily(
+        _h: Any, entity_id: str, _s: Any, _e: Any
+    ) -> dict[date, float]:
+        return dict(per_day) if entity_id == "sensor.cons_total" else {}
+
+    captured: list[dict[str, Any]] = []
+
+    def fake_import(_h: Any, _meta: Any, stats: Any) -> None:
+        captured.extend(stats)
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
+        patch.object(energy_meters, "_recorder_daily_kwh", new=fake_daily),
+        patch.object(ytd_energy, "_top_up_today_hourly", new=AsyncMock()),
+        patch.object(
+            cohort, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
+        ),
+        patch.object(
+            ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
+        ),
+        patch.object(
+            ytd_cost, "_cohort_legs", AsyncMock(return_value=_CohortLegs(None, None))
+        ),
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+        patch(
+            "homeassistant.util.dt.now",
+            lambda: (
+                dt_util.start_of_local_day(date(2026, 1, 31))
+                + timedelta(hours=23, minutes=59)
+            ),
+        ),
+    ):
+        await bf._backfill_cost_sensor(
+            hass,
+            entry,
+            coordinator,  # type: ignore[arg-type]
+            hours,
+            {},
+            {},
+        )
+        live = {
+            peak: await ytd_cost._compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                snap,
+                entry,
+                billed_peak_kw=peak,
+            )
+            for peak in (2.5, 5.0)
+        }
+    assert captured, "the backfill imported nothing"
+    assert live[2.5] is not None and live[5.0] is not None
+    assert live[5.0] - live[2.5] > 10.0
+    assert captured[-1]["sum"] == pytest.approx(live[2.5], abs=1e-3)

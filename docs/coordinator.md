@@ -564,7 +564,11 @@ after filling the year's day-ahead when an earlier contract settles on it, with
 the ENTSO-E key the old contract's settings kept when the entry holds none, and
 asks for a refresh when it lands. The result is kept as
 `PricedPeriods` with `periods_key`, the days and settings it was priced for,
-and served only for those. A stand-in caused by the old supplier's site or an
+and served only for those. Each period's capacity term is billed on the peak of
+the meter it ran on, asked of its own settings (`billed_peak_for`, `fees.py`):
+none on an exclusive-night circuit, the minimum on an analog meter, else the
+household's, so the one peak `_previous_peak_kw` watches is the household's. A
+stand-in caused by the old supplier's site or an
 archive not answering (`period_card` tells it from cards no archive kept: a
 transient fetch error on the current card, or a month `month_card_failed`
 names) is `read_failed`; a stand-in for cards nobody kept is settled for the
