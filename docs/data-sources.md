@@ -1318,7 +1318,9 @@ is resolved, and for every year a backfill window spans, and so does
 `ensure_analog_surcharge` on an analog meter, and for every year an earlier
 contract held on one covers, before it is priced or backfilled
 (`ensure_period_analog_rates`). It reads the year before off
-the same listing when the listing has no sheet for the year yet:
+the same listing when the listing has no sheet for the year yet, or the one it
+has no longer reads, which leaves a layout change last year's rate rather than
+none:
 `cached_analog_surcharge` answers the year's figure, else the latest earlier
 one held, never a later one. The listing is kept five minutes, and so is a
 failure to fetch it (`_fetch_listing`): the sheets one tick or one backfill

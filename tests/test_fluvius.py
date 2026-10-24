@@ -291,6 +291,45 @@ async def test_a_year_not_published_yet_stands_on_the_year_before() -> None:
     assert session.asked.count(fluvius._LISTING_URL) == 1
 
 
+async def test_a_sheet_that_no_longer_reads_stands_on_the_year_before(
+    caplog: Any,
+) -> None:
+    """A layout change leaving the year's sheet unreadable dropped the analog
+    rate to none, about 129 EUR a year short on Kempen at 3.500 kWh where the
+    year before stands within some 15. It stands in, and the sheet that no
+    longer reads is warned of. A network error still asks for nothing more."""
+    session: Any = _Session()
+    page_2027 = _PUBLICATION.replace("2026", "2027")
+    workbook_2027 = _WORKBOOK.replace("2026", "2027")
+    session.pages[fluvius._LISTING_URL] = (
+        f'<a href="{page_2027}">2027</a><a href="{_PUBLICATION}">2026</a>'
+    ).encode()
+    session.pages[fluvius._SITE + page_2027] = (
+        f'<a href="{workbook_2027}">XLSX</a>'.encode()
+    )
+    # The 2026 workbook under the 2027 page: it does not title itself 2027.
+    session.pages[fluvius._SITE + workbook_2027] = _SHEET_2026
+    assert (
+        await fluvius.ensure_analog_surcharge(session, 2027, "fluvius_zenne_dijle")
+        is None
+    )
+    assert fluvius.cached_analog_surcharge(2027, "fluvius_zenne_dijle") == 0.0360809
+    warned = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any("the 2026 one" in message for message in warned), warned
+    # The workbook not fetched at all: that heals, and nothing more is asked.
+    fluvius._analog.clear()
+    fluvius._analog_failed_at.clear()
+    fluvius._listing = None
+    del session.pages[fluvius._SITE + workbook_2027]
+    session.asked.clear()
+    assert (
+        await fluvius.ensure_analog_surcharge(session, 2027, "fluvius_zenne_dijle")
+        is None
+    )
+    assert fluvius.cached_analog_surcharge(2027, "fluvius_zenne_dijle") is None
+    assert fluvius._SITE + _PUBLICATION not in session.asked
+
+
 async def test_a_closed_year_without_a_sheet_is_not_warned_of(
     caplog: Any, freezer: Any
 ) -> None:
