@@ -461,6 +461,37 @@ async def test_the_options_menu_records_a_switch_and_sets_up_the_new_contract(
     assert record["data"][CONF_CONTRACT_START_DATE] == "2025-03-01"
 
 
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_switch_to_another_supplier_offers_the_switch_day_as_its_start(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Moving to another supplier empties the dates the contract being left
+    still holds, but the start date the switch step set to the switch day is
+    the new contract's own and stays on the form."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    entry = make_entry(contract_start_date="2025-03-01", tariff_card_date="2025-02-01")
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "switch"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_SWITCH_DATE: "2026-06-15"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "cociter", "region": "wallonia"}
+    )
+    assert result["step_id"] == "contract"
+    schema = result["data_schema"]
+    assert schema is not None
+    shown = {
+        str(marker.schema): (marker.description or {}).get("suggested_value")
+        for marker in schema.schema
+    }
+    assert shown[CONF_CONTRACT_START_DATE] == "2026-06-15"
+    assert shown[CONF_TARIFF_CARD_DATE] is None
+
+
 def test_removing_the_last_switch_puts_the_settings_back_as_they_were() -> None:
     first = _held("bolt", "bolt_variable")
     data = dict(

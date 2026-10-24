@@ -48,7 +48,6 @@ from .const import (
     CONF_API_KEY,
     CONF_CAPACITY_PEAK_SENSOR,
     CONF_CONTRACT,
-    CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
     CONF_DAY_HOURS,
     CONF_DIRECT_DEBIT,
@@ -116,8 +115,11 @@ from .flow_schemas_meters import (
     _solar_schema,
 )
 from .flow_switch import (
+    _CONTRACT_DATE_KEYS,
     _MANUAL_RATE_KEYS,
     _another_contract,
+    _carried_card_month,
+    _drop_left_contract_answers,
     _validate_contract_dates,
 )
 from .providers import (
@@ -146,6 +148,9 @@ class _WizardStepsMixin:
     # The translation key of this flow's entry step. It stays per-flow because
     # the two are separate strings: config.step.user and options.step.edit.
     _entry_step_id = "user"
+    # The card month the contract step set aside when it asked again for
+    # another contract (``_carried_card_month``), until it is put back.
+    _left_card_month: str | None = None
 
     if TYPE_CHECKING:
         hass: HomeAssistant
@@ -187,6 +192,9 @@ class _WizardStepsMixin:
                     data_schema=_user_schema(self._data),
                     errors=errors,
                 )
+            stored = self._stored_data()
+            if stored is not None:
+                _drop_left_contract_answers(stored, self._data)
             return await self.async_step_contract()
         return self.async_show_form(
             step_id=self._entry_step_id, data_schema=_user_schema(self._data)
@@ -202,15 +210,36 @@ class _WizardStepsMixin:
         errors: dict[str, str] = {}
         if user_input is not None:
             errors = _validate_contract_dates(user_input, self._data)
-            if not errors:
+            stored = self._stored_data()
+            put_back = False
+            if _carried_card_month(stored, self._data, user_input):
+                # Set aside and asked again, empty: whatever comes back is
+                # this contract's own.
+                self._left_card_month = self._data.pop(CONF_TARIFF_CARD_DATE)
+                user_input = {
+                    key: value
+                    for key, value in user_input.items()
+                    if key != CONF_TARIFF_CARD_DATE
+                }
+                errors[CONF_TARIFF_CARD_DATE] = "card_date_of_other_contract"
+            elif (
+                self._left_card_month is not None
+                and stored is not None
+                and user_input.get(CONF_CONTRACT) == stored.get(CONF_CONTRACT)
+                and CONF_TARIFF_CARD_DATE not in user_input
+            ):
+                # Back on the contract the month was set for, its box emptied
+                # by that question: shown again as it was, to keep or to clear.
+                month = self._left_card_month
+                self._left_card_month = None
+                self._data[CONF_TARIFF_CARD_DATE] = month
+                user_input = {**user_input, CONF_TARIFF_CARD_DATE: month}
+                put_back = True
+            if not errors and not put_back:
                 # A cleared (blanked) optional date is absent from user_input;
                 # drop it so "leave blank" removes the date instead of keeping
                 # the previously stored one.
-                for key in (
-                    CONF_CONTRACT_START_DATE,
-                    CONF_TARIFF_CARD_DATE,
-                    CONF_CONTRACT_END_DATE,
-                ):
+                for key in _CONTRACT_DATE_KEYS:
                     if key not in user_input:
                         self._data.pop(key, None)
                 self._data.update(user_input)
@@ -228,13 +257,7 @@ class _WizardStepsMixin:
             # answers go back in or every box reverts to the stored value.
             # A date left blank stays blank.
             schema = self.add_suggested_values_to_schema(
-                schema,
-                {
-                    CONF_CONTRACT_START_DATE: None,
-                    CONF_TARIFF_CARD_DATE: None,
-                    CONF_CONTRACT_END_DATE: None,
-                    **user_input,
-                },
+                schema, {**dict.fromkeys(_CONTRACT_DATE_KEYS), **user_input}
             )
         return self.async_show_form(
             step_id="contract", data_schema=schema, errors=errors

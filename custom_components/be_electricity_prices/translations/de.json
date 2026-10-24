@@ -268,6 +268,7 @@
       "start_date_in_future": "Das Vertragsbeginndatum darf nicht in der Zukunft liegen.",
       "start_date_before_switch": "Der Vertragsbeginn darf nicht vor dem letzten für diesen Eintrag erfassten Lieferantenwechsel liegen.",
       "card_date_in_future": "Der Monat der Tarifkarte kann nicht in der Zukunft liegen.",
+      "card_date_of_other_contract": "Dieser Monat der Tarifkarte gehörte zum vorherigen Vertrag. Geben Sie den Monat an, in dem dieser Vertrag unterzeichnet wurde (erneut denselben Monat, wenn er weiterhin gilt), oder lassen Sie das Feld leer, um den Monat des Vertragsbeginns zu verwenden.",
       "end_before_start": "Das Vertragsende muss nach dem Vertragsbeginn liegen.",
       "register_pair_incomplete": "Geben Sie sowohl das Tag- als auch das Nachtregister an, oder stattdessen den Gesamtsensor, oder lassen Sie alle drei leer. Mit einem Register des Paares und ohne Gesamtwert können die Kosten dieses Jahres Ihren Verbrauch nicht aufteilen und fallen auf die reinen Gebühren zurück.",
       "meter_sensor_reused": "Dieser Sensor ist bereits in einem anderen Feld gewählt. Jedes Feld braucht seinen eigenen Zähler, sonst werden die kWh doppelt gezählt.",

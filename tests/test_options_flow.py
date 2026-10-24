@@ -5975,6 +5975,214 @@ async def test_options_flow_clears_contract_dates_when_blanked(
     assert "contract_end_date" not in entry.data
 
 
+async def _walk_rest(
+    hass: HomeAssistant, result: ConfigFlowResult, answers: dict[str, dict[str, Any]]
+) -> ConfigFlowResult:
+    """Submit each remaining step with its answer from ``answers``, else
+    empty, until the flow ends. Bounded: a step re-showing itself fails the
+    test instead of hanging it."""
+    for _ in range(12):
+        if result["type"] != data_entry_flow.FlowResultType.FORM:
+            break
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], answers.get(result["step_id"], {})
+        )
+    return result
+
+
+_WALLONIA_ANSWERS: dict[str, dict[str, Any]] = {
+    "dso": {"dso": "ores"},
+    "meter": {"meter": "mono"},
+    "dso_tariff_mode": {"dso_tariff_mode": "simple"},
+    "api_key": {"keyless_spots": True},
+    "solar": {"solar_kva": 0.0, "solar_regime": "none"},
+}
+
+
+@pytest.mark.parametrize(
+    ("supplier", "region"), [("engie", "wallonia"), ("eneco", "flanders")]
+)
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_an_edit_to_another_supplier_or_region_offers_the_dates_empty(
+    hass: HomeAssistant, supplier: str, region: str
+) -> None:
+    """The dates and the box describe the contract being left. Pre-filled,
+    they were submitted as the new contract's own: the card month put it on
+    the card of the month the old contract was signed, which on Luminus Comfy
+    billed 0,1747 against 0,2443 EUR/kWh, and a newly typed start date did not
+    help, since the card month wins over it. A supply that starts on 1
+    January cannot be recorded as a switch, so this edit is how that one is
+    made."""
+    entry = make_entry(
+        contract_start_date="2026-03-01",
+        tariff_card_date="2026-02-15",
+        contract_end_date="2027-02-28",
+        ytd_from_contract_start=True,
+    )
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": supplier, "region": region}
+    )
+    assert result["step_id"] == "contract"
+    shown = _shown_values(result)
+    for key in ("contract_start_date", "tariff_card_date", "contract_end_date"):
+        assert shown[key] is None, key
+    assert shown["ytd_from_contract_start"] is False
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_an_edit_to_another_supplier_stores_none_of_the_old_dates(
+    hass: HomeAssistant,
+) -> None:
+    """Submitted as the form shows it, the new contract holds no date of the
+    old one."""
+    entry = make_entry(
+        contract_start_date="2026-03-01",
+        tariff_card_date="2026-02-15",
+        contract_end_date="2027-02-28",
+        ytd_from_contract_start=True,
+    )
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "engie", "region": "wallonia"}
+    )
+    as_shown = {k: v for k, v in _shown_values(result).items() if v is not None}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**as_shown, "contract": "engie_easy_fixed"}
+    )
+    result = await _walk_rest(hass, result, _WALLONIA_ANSWERS)
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["supplier"] == "engie"
+    for key in (
+        "contract_start_date",
+        "tariff_card_date",
+        "contract_end_date",
+        "ytd_from_contract_start",
+    ):
+        assert key not in entry.data, key
+
+
+@pytest.mark.parametrize("retyped", [True, False])
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_another_contract_of_the_same_supplier_asks_the_card_month_again(
+    hass: HomeAssistant, retyped: bool
+) -> None:
+    """The contract step's schema is built before the contract is picked, so
+    an edit that keeps the supplier offers the card month the contract being
+    left was signed, and that month wins over the start date. Submitted as
+    shown on another contract, the box comes back empty with the reason, and
+    what is typed then, the same month included, is the new contract's own."""
+    entry = make_entry(contract_start_date="2026-07-01", tariff_card_date="2026-06-18")
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    assert _shown_values(result)["tariff_card_date"] == "2026-06-18"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "contract": "power_flex",
+            "contract_start_date": "2026-07-01",
+            "tariff_card_date": "2026-06-18",
+        },
+    )
+    assert result["step_id"] == "contract"
+    assert result["errors"] == {"tariff_card_date": "card_date_of_other_contract"}
+    shown = _shown_values(result)
+    assert shown["tariff_card_date"] is None
+    assert shown["contract"] == "power_flex"
+    assert shown["contract_start_date"] == "2026-07-01"
+
+    answer = {"contract": "power_flex", "contract_start_date": "2026-07-01"}
+    if retyped:
+        answer["tariff_card_date"] = "2026-06-18"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], answer
+    )
+    assert result["step_id"] != "contract"
+    result = await _walk_rest(hass, result, _WALLONIA_ANSWERS)
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["contract"] == "power_flex"
+    assert entry.data["contract_start_date"] == "2026-07-01"
+    assert entry.data.get("tariff_card_date") == ("2026-06-18" if retyped else None)
+
+
+@pytest.mark.parametrize("kept", [True, False])
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_the_stored_contract_picked_back_gets_its_card_month_back(
+    hass: HomeAssistant, kept: bool
+) -> None:
+    """Asked again for another contract, the box comes back empty. Picking the
+    stored contract back and submitting the form as shown lost the month, and
+    billed a July 2026 signer of Zon & Wind Vast on August's card. The month is
+    shown again, without the error, to keep as shown or to clear."""
+    entry = make_entry(contract_start_date="2026-08-01", tariff_card_date="2026-07-15")
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "contract": "power_fix_one",
+            "contract_start_date": "2026-08-01",
+            "tariff_card_date": "2026-07-15",
+        },
+    )
+    assert result["errors"] == {"tariff_card_date": "card_date_of_other_contract"}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"contract": "power_fix", "contract_start_date": "2026-08-01"},
+    )
+    assert result["step_id"] == "contract"
+    assert not result["errors"]
+    as_shown = {k: v for k, v in _shown_values(result).items() if v is not None}
+    assert as_shown["tariff_card_date"] == "2026-07-15"
+    if not kept:
+        del as_shown["tariff_card_date"]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], as_shown
+    )
+    result = await _walk_rest(hass, result, _WALLONIA_ANSWERS)
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["contract"] == "power_fix"
+    assert entry.data.get("tariff_card_date") == ("2026-07-15" if kept else None)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_the_card_month_is_kept_on_the_contract_it_was_set_for(
+    hass: HomeAssistant,
+) -> None:
+    """Keeping the contract asks nothing again: the month shown is its own."""
+    entry = make_entry(contract_start_date="2026-07-01", tariff_card_date="2026-06-18")
+    entry.add_to_hass(hass)
+
+    result = await _enter_edit_branch(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "eneco", "region": "wallonia"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "contract": "power_fix",
+            "contract_start_date": "2026-07-01",
+            "tariff_card_date": "2026-06-18",
+        },
+    )
+    assert result["step_id"] == "signed_rate"
+    result = await _walk_rest(hass, result, _WALLONIA_ANSWERS)
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["tariff_card_date"] == "2026-06-18"
+
+
 async def test_compare_prosumer_term_matches_the_live_ytd_sensor(
     hass: HomeAssistant, freezer: Any
 ) -> None:

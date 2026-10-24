@@ -268,6 +268,7 @@
       "start_date_in_future": "The contract start date cannot be in the future.",
       "start_date_before_switch": "The contract start date cannot be before the last supplier switch recorded on this entry.",
       "card_date_in_future": "The tariff card month cannot be in the future.",
+      "card_date_of_other_contract": "This tariff card month belonged to the previous contract. Enter the month this contract was signed (the same month again if it still applies), or leave it blank to use the month of the start date.",
       "end_before_start": "The contract end date must be after the start date.",
       "register_pair_incomplete": "Fill in both the day and the night register, or fill in the total sensor instead, or leave all of them empty. With one register of the pair and no total, the year-to-date cost cannot split your consumption and falls back to fees only.",
       "meter_sensor_reused": "This sensor is already picked in another field. Each field needs its own meter, or its kWh are counted twice.",

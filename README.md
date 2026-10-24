@@ -821,7 +821,15 @@ opens a menu of four options, five once a supplier switch has been recorded this
 - **Edit settings** — walks the same chain of steps, pre-filled with the
   current values. Change supplier, contract, region, DSO, meter, DSO
   billing mode, ENTSO-E API key, capacity peak source, or solar
-  parameters — anything. The integration reloads automatically when you
+  parameters — anything. Moving to another supplier or region offers the
+  contract's start date, tariff card month, end date and the box billing the
+  year from the start date empty, since they described the contract you left;
+  a supply that began on 1 January, which cannot be recorded as a switch, is
+  set up this way with its own dates. Picking another contract of the same
+  supplier keeps the dates shown but asks the tariff card month again, empty,
+  because the month shown was the old contract's and it wins over the start
+  date: enter it again if the new contract was signed on the same card. The
+  integration reloads automatically when you
   finish, picking the new tariff card on the next refresh. A sensor your new
   settings no longer create (the EV rate after unticking its box, the band
   sensors after leaving a bi-hourly meter, the capacity sensors after leaving
@@ -1004,7 +1012,9 @@ billed its year from its own start date keeps doing so: the days before it
 began stay out of the year, the contracts it left out included, so a later
 switch moves neither the figure nor its long-term statistics, and the
 comparison pages measure both sides from that day too. The new contract's start date
-cannot be set before the switch.
+cannot be set before the switch. A new contract that began on 1 January is not
+a switch during the year, since the contract you left supplied none of it: set
+it up with **Edit settings**, which offers its dates empty.
 
 The switch step keeps your settings *as they stand* as the contract you left.
 If you already set the entry up for the new contract before recording the

@@ -64,7 +64,7 @@ the "Shown when" column gives the gate.
 | Step id | Method | Asks | Writes | Shown when / branch |
 | --- | --- | --- | --- | --- |
 | `user` | `async_step_user` (`config_flow.py`) | Supplier, region | `CONF_SUPPLIER`, `CONF_REGION` | Always (install entry step) |
-| `contract` | `async_step_contract` (`flow_wizard.py`) | Contract (region-filtered), optional start / tariff card / end date | `CONF_CONTRACT`, `CONF_CONTRACT_START_DATE`, `CONF_TARIFF_CARD_DATE`, `CONF_CONTRACT_END_DATE` | Always. A supplier/region mismatch is now caught on the step where BOTH are chosen (`_region_mismatch_error`) and re-shows that form with `supplier_region_unavailable` on the supplier field, instead of aborting a step later and discarding every other edit made in the same options run; rejects a future start, a future tariff card month, an end not after the start, or a start before the last recorded supplier switch (`start_date_before_switch`), since the contract configured is the one supplying since that switch, and a rejected form comes back with the answers typed (`add_suggested_values_to_schema`), as does a refused `switch` date. The card month is deliberately NOT ordered against the start date: a switcher signs before supply begins and a renewal re-signs a years-old supply onto a recent card |
+| `contract` | `async_step_contract` (`flow_wizard.py`) | Contract (region-filtered), optional start / tariff card / end date | `CONF_CONTRACT`, `CONF_CONTRACT_START_DATE`, `CONF_TARIFF_CARD_DATE`, `CONF_CONTRACT_END_DATE` | Always. A supplier/region mismatch is now caught on the step where BOTH are chosen (`_region_mismatch_error`) and re-shows that form with `supplier_region_unavailable` on the supplier field, instead of aborting a step later and discarding every other edit made in the same options run; rejects a future start, a future tariff card month, an end not after the start, or a start before the last recorded supplier switch (`start_date_before_switch`), since the contract configured is the one supplying since that switch, and a rejected form comes back with the answers typed (`add_suggested_values_to_schema`), as does a refused `switch` date. The card month is deliberately NOT ordered against the start date: a switcher signs before supply begins and a renewal re-signs a years-old supply onto a recent card. In Edit settings the dates and the year-to-date box are offered empty after a move to another supplier or region, and another contract of the same supplier asks the card month again ([Edit path](#edit-path)) |
 | `settlement` | `async_step_settlement` (`flow_wizard.py`) | Which settlement this household is on | `CONF_QUARTER_HOURLY` | Only on a contract whose supplier sells both (`Contract.quarter_hourly_option`); runs directly after `contract` |
 | `signed_rate` | `async_step_signed_rate` (`flow_wizard.py`) | The rate actually signed at: single / peak / offpeak / exclusive night, or spot factor / base, plus the yearly fee | The 7 `CONF_MANUAL_*` keys (`_MANUAL_RATE_KEYS`) | `_needs_manual_rate` true (`flow_wizard.py`): a start date or a tariff card month is set on a fixed, dynamic or spot-monthly contract of a non-custom supplier (the two spot-priced kinds sign a coefficient pair, so they get the factor / base boxes; fixed gets the rate boxes). Offered whether or not the supplier archives past cards, because what is typed wins over the archived card. The kind test is `takes_signing_rate` (`providers/__init__.py`), which the runtime shares: when the step is skipped the keys are dropped (`_after_settlement`), and so are they when an edit moves the entry to another supplier, contract or region (`_another_contract`, `flow_switch.py`), so the boxes start empty rather than offering the old contract's rate for the new card, and `_cohort_legs` (`cohort.py`) refuses a typed rate on any other kind, so a rate left on an entry moved to a variable card is never billed on it. In Edit settings each box also shows what the current card gives it (`_card_figures`, `config_flow.py`), per-kWh figures as the entry holds them, which is how a typed one is read, and the fee including VAT; setup shows none, since the card is not fetched until the entry exists, and neither does an edit that moves the entry to another supplier, contract or region, which recording a switch always does, since the card loaded is the one being left |
 | `dso` | `async_step_dso` (`flow_wizard.py`) | Distribution operator | `CONF_DSO` | Always |
@@ -729,6 +729,25 @@ that added or dropped a product since install shows the current catalogue. The
 kind-dependent meter narrowing and every region branch re-evaluate against the
 edited values, so changing region from Flanders to Wallonia mid-edit drops the
 capacity step and adds the `dso_tariff_mode` step on the next pass.
+
+A move to another supplier or region also leaves the old contract's dates
+behind. The entry step drops the stored start date, tariff card month, end date
+and `CONF_YTD_FROM_CONTRACT_START` while they still hold the stored values
+(`_drop_left_contract_answers`, `flow_switch.py`), so the contract step offers
+them empty, as `_record_switch` does for a switch. Pre-filled, they were
+submitted as the new contract's own, and the card month put it on the card of
+the month the old contract was signed, which a newly typed start date does not
+override (`_tariff_card_month`, `cohort.py`). A supply that starts on 1 January
+cannot be recorded as a switch, so this path is how that change is made. Only a
+value still equal to the stored one goes, so the start date a switch has just
+moved to the switch day stays. Another contract of the same supplier and region
+is only known once the contract step is submitted: when it comes back with the
+stored card month as shown (`_carried_card_month`, `flow_switch.py`), the step
+is re-shown with `card_date_of_other_contract` and the box empty, and what is
+submitted then is taken as typed, the same month included. The month is set
+aside meanwhile (`_left_card_month`, `flow_wizard.py`): picking the stored
+contract back with the box left empty shows it again, without the error, to
+keep or to clear.
 
 `_finalize` (`config_flow.py`):
 

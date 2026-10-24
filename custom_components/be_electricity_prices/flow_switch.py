@@ -64,6 +64,13 @@ from .const import (
     CONF_YTD_FROM_CONTRACT_START,
 )
 
+# The three optional dates the contract step asks.
+_CONTRACT_DATE_KEYS: tuple[str, ...] = (
+    CONF_CONTRACT_START_DATE,
+    CONF_TARIFF_CARD_DATE,
+    CONF_CONTRACT_END_DATE,
+)
+
 
 def _add_contract_date_fields(fields: dict[Any, Any], defaults: dict[str, Any]) -> None:
     """Append the optional contract start / tariff card / end date pickers.
@@ -75,11 +82,7 @@ def _add_contract_date_fields(fields: dict[Any, Any], defaults: dict[str, Any]) 
     making the date unclearable.
     """
     date_selector = DateSelector()
-    for key in (
-        CONF_CONTRACT_START_DATE,
-        CONF_TARIFF_CARD_DATE,
-        CONF_CONTRACT_END_DATE,
-    ):
+    for key in _CONTRACT_DATE_KEYS:
         stored = defaults.get(key)
         if stored:
             fields[vol.Optional(key, description={"suggested_value": stored})] = (
@@ -158,6 +161,50 @@ def _another_contract(stored: Mapping[str, Any], data: Mapping[str, Any]) -> boo
         data.get(key) != stored.get(key)
         for key in (CONF_SUPPLIER, CONF_CONTRACT, CONF_REGION)
     )
+
+
+def _drop_left_contract_answers(
+    stored: Mapping[str, Any], data: dict[str, Any]
+) -> None:
+    """Forget the stored contract's dates once an edit has moved to another
+    supplier or region, so the contract step offers them empty.
+
+    Run on the entry step, before a contract is picked, where moving off the
+    stored supplier or region is what ``_another_contract`` reads. Pre-filled,
+    the dates were submitted as the new contract's own, and the card month put
+    it on the card of the month the old one was signed, which a newly typed
+    start date does not override (``_tariff_card_month``). A supply that
+    starts on 1 January cannot be recorded as a switch, so this edit is how
+    such a change is made. The box billing the year from the start date goes
+    with them, as ``_record_switch`` drops it. Only an answer still holding
+    the stored value goes: the start date a recorded switch has just moved to
+    the switch day is the new contract's own.
+    """
+    if not _another_contract(stored, data):
+        return
+    for key in (*_CONTRACT_DATE_KEYS, CONF_YTD_FROM_CONTRACT_START):
+        if key in data and data[key] == stored.get(key):
+            del data[key]
+
+
+def _carried_card_month(
+    stored: Mapping[str, Any] | None,
+    data: Mapping[str, Any],
+    user_input: Mapping[str, Any],
+) -> bool:
+    """Whether the contract step came back on another contract with the stored
+    contract's card month as the form showed it.
+
+    The step's schema is built before the contract is picked, so on an edit
+    that keeps the supplier and region the box offers the month the contract
+    being left was signed, and that month wins over the start date. A month
+    typed differently is the new contract's own, and so is any month once the
+    box has been asked again empty (``data`` then holds none).
+    """
+    if stored is None or user_input.get(CONF_CONTRACT) == stored.get(CONF_CONTRACT):
+        return False
+    month = user_input.get(CONF_TARIFF_CARD_DATE)
+    return month is not None and month == data.get(CONF_TARIFF_CARD_DATE)
 
 
 def _switch_schema(today: date) -> vol.Schema:
