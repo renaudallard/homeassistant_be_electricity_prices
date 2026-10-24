@@ -265,9 +265,9 @@ class _TickMixin:
             year = dt_util.now().year
             await ensure_tariff_sheet(self._session, year)
             if analog_meter(self.entry.data):
-                dso = str(self.entry.data.get(CONF_DSO, ""))
-                if await ensure_analog_surcharge(self._session, year, dso) is None:
-                    await ensure_analog_surcharge(self._session, year - 1, dso)
+                await ensure_analog_surcharge(
+                    self._session, year, str(self.entry.data.get(CONF_DSO, ""))
+                )
         # The month's VAT rate, read before the card is resolved like the term
         # above, and from the card archive, so only where the entry reads it.
         if self.entry.data.get(CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE):

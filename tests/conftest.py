@@ -197,6 +197,7 @@ def _fluvius_sheets_as_published() -> Iterator[None]:
         fluvius._failed_at.clear()
         fluvius._analog.clear()
         fluvius._analog_failed_at.clear()
+        fluvius._listing = None
 
     _forget()
     # Every sheet from 2023 to 2026 gives a 2,50 kW minimum peak.

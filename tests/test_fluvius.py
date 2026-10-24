@@ -60,6 +60,7 @@ def _nothing_held() -> None:
     fluvius._failed_at.clear()
     fluvius._analog.clear()
     fluvius._analog_failed_at.clear()
+    fluvius._listing = None
 
 
 def test_the_ceiling_and_floor_are_read_off_the_years_sheet() -> None:
@@ -236,6 +237,58 @@ async def test_an_area_sheet_that_cannot_be_read_never_raises() -> None:
         is None
     )
     assert session.asked == [], "the backoff did not hold"
+
+
+async def test_one_listing_serves_every_sheet_a_tick_reads() -> None:
+    """The year's sheet and an analog meter's area sheet are found from the
+    same listing, downloaded once for both."""
+    session: Any = _Session()
+    assert await fluvius.ensure_tariff_sheet(session, 2026) is not None
+    assert (
+        await fluvius.ensure_analog_surcharge(session, 2026, "fluvius_zenne_dijle")
+        == 0.0360809
+    )
+    assert session.asked.count(fluvius._LISTING_URL) == 1
+
+
+async def test_a_listing_that_does_not_answer_is_asked_for_once() -> None:
+    """A Fluvius that does not answer cost one 30 s timeout per sheet a tick
+    read, three on an analog meter's first tick, with the year before asked as
+    well; now one, and no year before after a network error."""
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices.providers.base import (
+        ExtractorError,
+    )
+
+    asked: list[str] = []
+
+    async def _hangs(_session: Any, url: str, **_k: Any) -> str:
+        asked.append(url)
+        raise ExtractorError("network error fetching the listing: timeout")
+
+    session: Any = _Session()
+    with patch.object(fluvius, "fetch_text", _hangs):
+        assert await fluvius.ensure_tariff_sheet(session, 2026) is None
+        assert (
+            await fluvius.ensure_analog_surcharge(session, 2026, "fluvius_zenne_dijle")
+            is None
+        )
+    assert asked == [fluvius._LISTING_URL]
+    assert set(fluvius._analog_failed_at) == {(2026, "fluvius_zenne_dijle")}
+
+
+async def test_a_year_not_published_yet_stands_on_the_year_before() -> None:
+    """In January, before Fluvius publishes the year, the year before is read
+    off the same listing and answers for it; the year is asked again later."""
+    session: Any = _Session()
+    assert (
+        await fluvius.ensure_analog_surcharge(session, 2027, "fluvius_zenne_dijle")
+        is None
+    )
+    assert fluvius.cached_analog_surcharge(2027, "fluvius_zenne_dijle") == 0.0360809
+    assert (2027, "fluvius_zenne_dijle") in fluvius._analog_failed_at
+    assert session.asked.count(fluvius._LISTING_URL) == 1
 
 
 @pytest.mark.parametrize(

@@ -1314,11 +1314,15 @@ then not be the whole difference, and a figure outside 0 to 0,2 EUR/kWh.
 
 `ensure_tariff_sheet` runs in the tick of a Flemish entry, before the card
 is resolved, and for every year a backfill window spans, and so does
-`ensure_analog_surcharge` on an analog meter, which in the tick also asks for
-the year before when this year's sheet is not out yet:
+`ensure_analog_surcharge` on an analog meter, which reads the year before off
+the same listing when the listing has no sheet for the year yet:
 `cached_analog_surcharge` answers the year's figure, else the latest earlier
-one held, never a later one. A sheet read is held for the life of the process;
-a failure is held for six hours, and an analog meter whose area sheet is not
+one held, never a later one. The listing is kept five minutes, and so is a
+failure to fetch it (`_fetch_listing`): the sheets one tick or one backfill
+reads are found from one download, and a Fluvius that does not answer costs
+one timeout, after which nothing more is asked, the year before included. A
+sheet read is held for the life of the process; a failure is held for six
+hours, and an analog meter whose area sheet is not
 read is billed as a digital one and logged. Without the
 year's figure `resolve_vreg_network_ceiling` leaves the card exactly as
 printed, which is what the integration did before the sheet was read.

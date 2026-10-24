@@ -374,8 +374,9 @@ async def test_the_tick_reads_the_areas_sheet_and_the_year_before_it(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """Until Fluvius publishes the year, the year before stands in, and the
-    card in hand is re-resolved the moment the rate arrives. The tick bills
-    the minimum peak's charge, 130,92 EUR a year."""
+    card in hand is re-resolved the moment the rate arrives. The tick asks
+    once: the reader finds the stand-in year on the listing it already holds.
+    The tick bills the minimum peak's charge, 130,92 EUR a year."""
     from unittest.mock import AsyncMock, patch
 
     from custom_components.be_electricity_prices import fluvius
@@ -391,9 +392,9 @@ async def test_the_tick_reads_the_areas_sheet_and_the_year_before_it(
     assert booted.dsos["fluvius_antwerpen"].distribution_single == 0.0535
 
     async def _read(_session: Any, year: int, dso: str) -> float | None:
-        if year == 2026:
-            fluvius._analog[(year, dso)] = _ANTWERPEN_2026
-            return _ANTWERPEN_2026
+        # As fluvius reads it in January: no sheet for the year yet, so the
+        # year before is read off the same listing to stand in.
+        fluvius._analog[(year - 1, dso)] = _ANTWERPEN_2026
         return None
 
     read = AsyncMock(side_effect=_read)
@@ -417,8 +418,7 @@ async def test_the_tick_reads_the_areas_sheet_and_the_year_before_it(
     ):
         data = await coord._update_body()
     assert [call.args[1:] for call in read.await_args_list] == [
-        (2027, "fluvius_antwerpen"),
-        (2026, "fluvius_antwerpen"),
+        (2027, "fluvius_antwerpen")
     ]
     resolved = coord._snapshot
     assert resolved is not None and resolved is not booted

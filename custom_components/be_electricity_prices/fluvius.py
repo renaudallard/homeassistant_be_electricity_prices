@@ -123,6 +123,11 @@ _AREA_SLUGS: Final[dict[str, str]] = {
 _SHEET_RE: Final = re.compile(r'href="(/sites/fluvius/files/[^"]+\.xlsx)"')
 _TIMEOUT: Final = 30
 _FAILURE_RETRY_S: Final = 6 * 3600
+# How long the listing every sheet is found from is kept, its failure too: the
+# few minutes one tick or one backfill spends reading sheets. The year's sheet
+# and an analog meter's area sheet then cost one listing download between
+# them, and a Fluvius that does not answer one timeout rather than one a sheet.
+_LISTING_TTL_S: Final = 300
 # A sheet is about 25 KB zipped and a few hundred KB unpacked. The cap on the
 # unpacked size refuses a zip bomb before anything is read out of it.
 _MAX_UNPACKED_BYTES: Final = 4 * 1024 * 1024
@@ -176,6 +181,8 @@ _analog: dict[tuple[int, str], float] = {}
 _analog_failed_at: dict[tuple[int, str], datetime] = {}
 # One fetch per sheet at a time, for the reason brugel.py gives.
 _locks: dict[Hashable, asyncio.Lock] = {}
+# The listing as last fetched, or what fetching it raised, and when.
+_listing: tuple[datetime, str | Exception] | None = None
 
 
 def _lock(key: Hashable) -> asyncio.Lock:
@@ -251,7 +258,10 @@ async def ensure_analog_surcharge(
     is held, and return it or ``None``, never raising.
 
     Only for an entry on an analog meter, which nothing else needs the area's
-    own sheet for. ``None`` for a key that is not a Fluvius area.
+    own sheet for. ``None`` for a key that is not a Fluvius area. Where the
+    listing has no sheet for the year yet, the year before is read off the same
+    listing to stand in (:func:`cached_analog_surcharge`); a listing that
+    could not be had asks for nothing more.
     """
     area = _AREA_SLUGS.get(dso)
     if area is None:
@@ -260,7 +270,7 @@ async def ensure_analog_surcharge(
         (year, dso),
         _analog,
         _analog_failed_at,
-        lambda: _fetch_analog_surcharge(session, year, area),
+        lambda: _fetch_analog_surcharge(session, year, dso, area),
         f"{year} {area} tariff sheet",
     )
 
@@ -300,7 +310,8 @@ async def _held_or_read[K: Hashable, V](
 
 async def _fetch_sheet(session: aiohttp.ClientSession, year: int) -> SheetTerms | None:
     """The year's first sheet, read for the rules of the whole of Flanders."""
-    payload = await _fetch_workbook(session, _PUBLICATION_RE.format(year=year))
+    listing = await _fetch_listing(session)
+    payload = await _fetch_workbook(session, listing, _PUBLICATION_RE.format(year=year))
     if payload is None:
         _LOGGER.debug("Fluvius gives no %d tariff sheet yet", year)
         return None
@@ -316,21 +327,31 @@ async def _fetch_sheet(session: aiohttp.ClientSession, year: int) -> SheetTerms 
 
 
 async def _fetch_analog_surcharge(
-    session: aiohttp.ClientSession, year: int, area: str
+    session: aiohttp.ClientSession, year: int, dso: str, area: str
 ) -> float | None:
-    """The analog surcharge off one area's sheet for ``year``."""
-    payload = await _fetch_workbook(
-        session, _AREA_PUBLICATION_RE.format(area=area, year=year)
-    )
-    if payload is None:
-        _LOGGER.warning(
-            "Fluvius gives no %d tariff sheet for %s: an analog meter there is "
-            "billed the peak-metered kWh rate until it does",
-            year,
-            area,
-        )
+    """The analog surcharge off one area's sheet for ``year``, the year
+    before read in its place where the listing has no sheet for it yet."""
+    listing = await _fetch_listing(session)
+    if re.search(_AREA_PUBLICATION_RE.format(area=area, year=year), listing) is None:
+        stand_in = None
+        if re.search(_AREA_PUBLICATION_RE.format(area=area, year=year - 1), listing):
+            stand_in = await ensure_analog_surcharge(session, year - 1, dso)
+        if stand_in is None:
+            _LOGGER.warning(
+                "Fluvius gives no %d tariff sheet for %s: an analog meter there "
+                "is billed the peak-metered kWh rate until it does",
+                year,
+                area,
+            )
+        else:
+            _LOGGER.debug(
+                "Fluvius gives no %d tariff sheet for %s yet: its %d one stands in",
+                year,
+                area,
+                year - 1,
+            )
         return None
-    surcharge = parse_analog_surcharge(payload, year)
+    surcharge = await read_analog_surcharge(session, year, area)
     if surcharge is None:
         _LOGGER.warning(
             "Fluvius %d tariff sheet for %s gives no analog kWh rate: an analog "
@@ -341,12 +362,47 @@ async def _fetch_analog_surcharge(
     return surcharge
 
 
+async def read_analog_surcharge(
+    session: aiohttp.ClientSession, year: int, area: str
+) -> float | None:
+    """One area's analog surcharge for ``year`` as its sheet gives it, or
+    ``None`` where the listing has no such sheet or it does not read. Raises on
+    a network error, for the live check to tell the two apart."""
+    listing = await _fetch_listing(session)
+    payload = await _fetch_workbook(
+        session, listing, _AREA_PUBLICATION_RE.format(area=area, year=year)
+    )
+    return None if payload is None else parse_analog_surcharge(payload, year)
+
+
+async def _fetch_listing(session: aiohttp.ClientSession) -> str:
+    """The listing every sheet is found from, fetched once in a while
+    (``_LISTING_TTL_S``), and what fetching it raised kept as long."""
+    global _listing
+    async with _lock(_LISTING_URL):
+        now = dt_util.utcnow()
+        if (
+            _listing is not None
+            and (now - _listing[0]).total_seconds() < _LISTING_TTL_S
+        ):
+            held = _listing[1]
+            if isinstance(held, Exception):
+                raise held
+            return held
+        try:
+            text = await fetch_text(session, _LISTING_URL, timeout=_TIMEOUT)
+        except Exception as err:
+            _listing = (now, err)
+            raise
+        _listing = (now, text)
+        return text
+
+
 async def _fetch_workbook(
-    session: aiohttp.ClientSession, publication_re: str
+    session: aiohttp.ClientSession, listing: str, publication_re: str
 ) -> bytes | None:
-    """The listing, the publication page ``publication_re`` finds on it, then
-    its workbook, or ``None`` where either link is missing."""
-    listing = await fetch_text(session, _LISTING_URL, timeout=_TIMEOUT)
+    """The publication page ``publication_re`` finds on ``listing``, then its
+    workbook, or ``None`` where either link is missing."""
     publication = re.search(publication_re, listing)
     if publication is None:
         return None
