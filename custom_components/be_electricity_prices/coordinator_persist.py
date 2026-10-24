@@ -60,6 +60,7 @@ from .excise_law import restore as restore_excise_law
 from .providers.base import SupplierSnapshot
 from .snapshot_codec import _MigratingStore, _snapshot_from_dict, _snapshot_to_dict
 from .snapshot_months import monthly_rows_to_store, restore_monthly_rows
+from .spot_stats import spots_available
 from .vat_rates import held_table as held_vat_table
 from .vat_rates import restore as restore_vat_rates
 
@@ -298,9 +299,17 @@ class _PersistMixin:
         # supplier they're never queried again but would otherwise be
         # re-saved for a year (the prune keeps a trailing year), wasting
         # up to ~0,4 MB of disk and memory.
+        #
+        # And none at all for an entry left with no day-ahead source, its key
+        # removed or the keyless setting unticked. Nothing refreshes the cache
+        # it built while it had one, and the month means read off it priced a
+        # month-indexed feed-in on the days cached before the source went,
+        # where such an entry bills the figure its card prints. Dropped, it is
+        # priced on every path exactly as an entry that never had a source.
+        keep_spots = not tuple_mismatch and spots_available(self.entry.data)
         hist = stored.get("historical_spots")
         dropped_spots = 0
-        if isinstance(hist, dict) and not tuple_mismatch:
+        if isinstance(hist, dict) and keep_spots:
             for k, v in hist.items():
                 if not isinstance(k, str) or not isinstance(v, (int, float)):
                     continue
@@ -322,7 +331,7 @@ class _PersistMixin:
                     continue
                 self._historical_spots[when] = float(v)
         quarters = stored.get("historical_spot_quarters")
-        if isinstance(quarters, dict) and not tuple_mismatch:
+        if isinstance(quarters, dict) and keep_spots:
             for k, v in quarters.items():
                 if not isinstance(k, str) or not isinstance(v, list) or not v:
                     continue
@@ -348,7 +357,7 @@ class _PersistMixin:
                     continue
                 self._historical_spot_quarters[when] = [float(q) for q in v]
         grid_days = stored.get("historical_spot_quarter_days")
-        if isinstance(grid_days, list) and not tuple_mismatch:
+        if isinstance(grid_days, list) and keep_spots:
             for k in grid_days:
                 if isinstance(k, str):
                     try:
@@ -368,7 +377,7 @@ class _PersistMixin:
         # rest when it is on the same grid (_fetch_spot_prices); served whole
         # only when the fetch fails.
         cached_curve = stored.get("spot_cache")
-        if isinstance(cached_curve, dict) and not tuple_mismatch:
+        if isinstance(cached_curve, dict) and keep_spots:
             for k, v in cached_curve.items():
                 if not isinstance(k, str) or not isinstance(v, (int, float)):
                     continue

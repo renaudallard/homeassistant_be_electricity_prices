@@ -5326,6 +5326,54 @@ async def test_load_persistent_keeps_historical_spots_on_tuple_match(
     assert coord._historical_spots == expected
 
 
+@pytest.mark.parametrize(
+    ("source", "restored"),
+    [({}, False), ({"keyless_spots": True}, True), ({"api_key": "k"}, True)],
+)
+async def test_an_entry_left_without_a_day_ahead_source_restores_no_spots(
+    hass: HomeAssistant, freezer: Any, source: dict[str, Any], restored: bool
+) -> None:
+    """A key removed, or the keyless setting unticked, reloads the entry with
+    the day-ahead it gathered still on disk, and nothing refreshes it after
+    that. Restored, the month means read two cached days of May as the
+    month: a month-indexed feed-in credited -0,00004 EUR/kWh where the card
+    prints 0,05059. Such an entry restores none of it and is priced as one
+    that never had a source; one that can still fetch keeps its cache."""
+    freezer.move_to("2026-05-20 14:30:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_flex",
+            "region": "flanders",
+            "dso": "fluvius_antwerpen",
+            "meter": "mono",
+            "solar_regime": "injection",
+            **source,
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    hour = datetime(2026, 5, 2, 10, 0, tzinfo=UTC)
+    today = datetime(2026, 5, 20, 10, 0, tzinfo=UTC)
+    payload: dict[str, object] = {
+        "entry_supplier": "eneco",
+        "entry_contract": "power_flex",
+        "entry_region": "flanders",
+        "historical_spots": {hour.isoformat(): 0.03},
+        "historical_spot_quarters": {hour.isoformat(): [0.03] * 4},
+        "historical_spot_quarter_days": ["2026-05-02"],
+        "spot_cache": {today.isoformat(): 0.05},
+    }
+    with patch.object(coord._store, "async_load", AsyncMock(return_value=payload)):
+        await coord.async_load_persistent()
+
+    assert bool(coord._historical_spots) is restored
+    assert bool(coord._historical_spot_quarters) is restored
+    assert bool(coord._quarter_grid_days) is restored
+    assert bool(coord._spot_cache) is restored
+
+
 async def test_evict_bumps_tuple_generation_blocks_inflight_write(
     hass: HomeAssistant,
 ) -> None:

@@ -348,8 +348,8 @@ class _SpotsMixin(_ProfilesMixin):
             # is gated on, so a cached year would be restored and re-persisted
             # for as long as the entry lived, and the replay would keep
             # crediting those hours per slot while the sensor beside it
-            # credits the hour. Cleared here, above the key check, because an
-            # entry with no key still replays whatever is already cached.
+            # credits the hour. Cleared here, above the source check, whether
+            # or not this walk can fetch anything.
             self._historical_spot_quarters.clear()
             self._spot_generation += 1
         api_key = api_key or self.entry.data.get(CONF_API_KEY)

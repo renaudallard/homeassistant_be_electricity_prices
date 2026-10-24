@@ -515,15 +515,15 @@ def _keyless_stale_spots(
 ) -> bool:
     """Whether this entry holds day-ahead it can no longer bring up to date.
 
-    An entry whose key was removed keeps the cache it built while it had one,
-    and nothing refreshes it after that, so it stops at the day the key went.
-    The compare pages read such a cache as present: the quote then never
-    borrows the key typed on the page, and the ranking credits its
-    candidates' spot-indexed feed-in only up to that day. Read as no cache at
-    all, it is the state a never-keyed entry is already priced in. The
-    household's own row keeps reading it, since its current_year_cost sensor
-    bills on it. Stale means it misses some day of the window, which for a
-    keyless entry is the days since its key was removed.
+    An entry with no source of its own restores no day-ahead, but it still
+    fetches the year of a contract it held earlier with that contract's key,
+    and nothing refreshes those days past the switch. The compare pages read
+    such a cache as present: the quote then never borrows the key typed on
+    the page, and the ranking credits its candidates' spot-indexed feed-in
+    only up to that day. Read as no cache at all, it is the state a
+    never-keyed entry is already priced in. The household's own row keeps
+    reading it, since its current_year_cost sensor bills on it. Stale means
+    it misses some day of the window.
 
     Only an entry with no day-ahead source. One with a key or the keyless
     setting keeps its cache current, and a day or two that was never

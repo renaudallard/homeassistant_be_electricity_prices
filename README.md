@@ -804,7 +804,11 @@ from, and is priced exactly as an entry with a key. The difference is only
 where the prices come from: with a key ENTSO-E is the source and those two
 back it up, while without one they are the only sources, so an outage of both
 leaves the entry on its cached curve. The setting can be turned on or off at
-any time through **Configure → Edit settings**.
+any time through **Configure → Edit settings**. Removing the key, or unticking
+the box with no key left, also drops the day-ahead history the entry gathered,
+since nothing would bring it up to date any more: the entry is then priced
+exactly as one that never had either, and adding one again fetches the year
+anew.
 
 Please use a key if you can get one. energy-charts and SMARD are free public
 services, and every installation of this integration shares them as its backup;
