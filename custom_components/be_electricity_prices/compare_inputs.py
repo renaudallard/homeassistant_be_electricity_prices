@@ -521,9 +521,11 @@ def _keyless_stale_spots(
     such a cache as present: the quote then never borrows the key typed on
     the page, and the ranking credits its candidates' spot-indexed feed-in
     only up to that day. Read as no cache at all, it is the state a
-    never-keyed entry is already priced in. The household's own row keeps
-    reading it, since its current_year_cost sensor bills on it. Stale means
-    it misses some day of the window.
+    never-keyed entry is already priced in. The household's own row reads
+    none of it whatever this answers: it is priced on the entry's own
+    day-ahead (``own_day_ahead``), as its current_year_cost sensor is, and
+    that is nothing for an entry with no source. Stale means it misses some
+    day of the window.
 
     Only an entry with no day-ahead source. One with a key or the keyless
     setting keeps its cache current, and a day or two that was never

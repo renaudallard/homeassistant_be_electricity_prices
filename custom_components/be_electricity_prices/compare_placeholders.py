@@ -723,13 +723,14 @@ class _PlaceholdersMixin(OptionsFlow):
             # that floors exposes no archive, and threaded so it stays
             # unreachable rather than latent.
             hist_quarters = coord._historical_spot_quarters
-            # A keyless entry's cache that stops short of the window is what an
-            # earlier key left: it would credit the target's spot-indexed
-            # feed-in only up to the day that key was removed. The target reads
-            # it as no cache, as the ranking's candidates do and as the token
-            # step and the annual note say, so with no key typed the credit is
-            # left out whole. The own row keeps it whatever is typed, since the
-            # current_year_cost sensor bills on it (``_own_year``).
+            # The cache of an entry with no source that stops short of the
+            # window is what a contract it held earlier left: it would credit
+            # the target's spot-indexed feed-in only up to the switch. The
+            # target reads it as no cache, as the ranking's candidates do and as
+            # the token step and the annual note say, so with no key typed the
+            # credit is left out whole. The own row reads none of it whatever
+            # is typed: it is priced on the entry's own day-ahead, as the
+            # current_year_cost sensor is (``_own_year``, ``own_day_ahead``).
             stale = _keyless_stale_spots(current, hist_spots, ytd_from, today_local)
             # A key typed on the page, or the keyless setting ticked there.
             typed = bool(
