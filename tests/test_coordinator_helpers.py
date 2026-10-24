@@ -6311,6 +6311,76 @@ async def test_a_stand_in_row_must_print_the_entrys_area() -> None:
             assert await stand_in(*args, make_entry(dso="")) is not None
 
 
+async def test_a_stand_in_row_carries_no_settlement_of_its_month(
+    freezer: Any,
+) -> None:
+    """A row adopted as the entry's card for a later month stands in for
+    every month after its own, so the index its month closed at and the mark
+    that its figures are the settled ones come off it. Carried across, a
+    withdrawn Trevion LifePowr entry priced off its September 2026 row billed
+    October on September's index in the year to date while the live tick
+    billed October's own mean. The running month's own row keeps them: a
+    card indexed on a forward price names that month's value from the day it
+    is out."""
+    from custom_components.be_electricity_prices import snapshot_stand_ins
+
+    freezer.move_to("2026-10-20 12:00:00+02:00")
+    card = make_snapshot(
+        dsos={"ores": DsoOverlay(distribution_single=0.1, transport=0.0)},
+        energy=VariableRates(
+            current=0.20,
+            month_indexed=True,
+            formula_factor=1.0,
+            formula_base=0.03,
+            index_realised=0.16547,
+            settled_as_stated=True,
+        ),
+        injection=InjectionRates(
+            current=0.07,
+            factor=0.8,
+            base=-0.005,
+            month_indexed=True,
+            index_realised=0.10053,
+            settled_as_stated=True,
+        ),
+    )
+    october = date(2026, 10, 1)
+
+    async def _september_only(
+        _s: object, _sup: str, _con: str, _reg: str, month: date
+    ) -> snapshot_months.ArchivedCard | None:
+        if month == october:
+            return None
+        return snapshot_months.ArchivedCard(card, read_by_ocr=True)
+
+    day = date(2026, 10, 20)
+    args = (MagicMock(), "trevion", "lifepowr", "wallonia", day, make_entry(dso="ores"))
+    with patch.object(snapshot_months, "_archived_card_from_github", _september_only):
+        newest = await snapshot_stand_ins.newest_archived_card(*args)
+        assert newest is not None and newest[0] == date(2026, 9, 1)
+        rows = [newest[1], await snapshot_stand_ins.card_of_month_before(*args)]
+    for row in rows:
+        assert row is not None and row.read_by_ocr
+        snap = row.snapshot
+        assert snap.injection is not None
+        assert snap.energy.index_realised is None  # type: ignore[union-attr]
+        assert not snap.energy.settled_as_stated  # type: ignore[union-attr]
+        assert snap.injection.index_realised is None
+        assert not snap.injection.settled_as_stated
+        # Nothing else of the card moves.
+        assert snap.energy.current == 0.20  # type: ignore[union-attr]
+        assert snap.injection.current == 0.07
+        assert snap.dsos == card.dsos
+
+    # The running month's own row prices its own month and keeps them.
+    read = AsyncMock(return_value=snapshot_months.ArchivedCard(card, read_by_ocr=False))
+    with patch.object(snapshot_months, "_archived_card_from_github", read):
+        own = await snapshot_stand_ins.card_for_unreadable_month(*args)
+        newest = await snapshot_stand_ins.newest_archived_card(*args)
+    assert own is not None and own.snapshot is card
+    assert newest is not None and newest == (october, own)
+
+
 @pytest.mark.parametrize("kind", ["static", "dynamic"])
 async def test_year_cost_cached_only_reaches_no_archive(
     hass: HomeAssistant, freezer: Any, kind: str

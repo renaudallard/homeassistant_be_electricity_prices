@@ -37,13 +37,17 @@ imported by name, so a patch on its reader there reaches these too.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
+from typing import Any
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.util import dt as dt_util
 
 from . import snapshot_months
 from .const import CONF_DSO
+from .providers.base import SupplierSnapshot
 from .snapshot_months import ArchivedCard, _archive_allowed
 
 
@@ -69,14 +73,53 @@ async def _stand_in(
     entry's own card it would leave an entry on that area with no network
     figures, and every tick failing on it, where the stale card held still
     prices it.
+
+    The row takes the place of the entry's own card, which prices the
+    running month. A row of an earlier month has what settled its own month
+    taken off it (:func:`_unsettled`); the running month's row keeps it, since
+    that month is its own: a card indexed on a forward price names its own
+    month's value from the day it is out.
     """
     archived = await snapshot_months._archived_card_from_github(
         session, supplier, contract, region, month
     )
     dso = entry.data.get(CONF_DSO, "") if entry is not None else ""
-    if archived is not None and dso and dso not in archived.snapshot.dsos:
+    if archived is None or (dso and dso not in archived.snapshot.dsos):
         return None
-    return archived
+    if month == dt_util.now().date().replace(day=1):
+        return archived
+    card = _unsettled(archived.snapshot)
+    return archived if card is archived.snapshot else replace(archived, snapshot=card)
+
+
+def _unsettled(snapshot: SupplierSnapshot) -> SupplierSnapshot:
+    """``snapshot`` without what settled the month it is the card of: the
+    index that month closed at (``index_realised``) and the mark that its
+    figures are the ones the supplier stated it settled at
+    (``settled_as_stated``), on both legs.
+
+    Both describe that one month. A row adopted as the entry's card for a
+    later month stands in for every month after its own, and carrying them
+    across settled each of those on the row's month: a withdrawn Trevion
+    LifePowr entry priced off its September 2026 row billed October's energy
+    at September's index in the year to date, 0,20358 EUR/kWh where the live
+    tick billed 0,12932 on October's own mean. The same object back when
+    there is nothing to take.
+    """
+
+    def leg(rates: Any) -> Any:
+        changes: dict[str, object] = {}
+        if getattr(rates, "index_realised", None) is not None:
+            changes["index_realised"] = None
+        if getattr(rates, "settled_as_stated", False):
+            changes["settled_as_stated"] = False
+        return replace(rates, **changes) if changes else rates
+
+    energy = leg(snapshot.energy)
+    injection = None if snapshot.injection is None else leg(snapshot.injection)
+    if energy is snapshot.energy and injection is snapshot.injection:
+        return snapshot
+    return replace(snapshot, energy=energy, injection=injection)
 
 
 async def card_for_unreadable_month(
