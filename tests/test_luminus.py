@@ -371,7 +371,7 @@ def test_maxxflex_energy_carries_the_monthly_formula() -> None:
     )
 
 
-def test_quarterly_and_tou_cards_get_no_energy_formula() -> None:
+def test_quarterly_and_tou_cards_get_no_monthly_energy_formula() -> None:
     """Three traps on one supplier, all resolved by gating on the
     arithmetic-mean sentence rather than the formula.
 
@@ -384,26 +384,78 @@ def test_quarterly_and_tou_cards_get_no_energy_formula() -> None:
     """
     from custom_components.be_electricity_prices.providers._luminus_cards import (
         _monthly_energy_coefficients,
+        _quarterly_energy_coefficients,
     )
-    from custom_components.be_electricity_prices.providers._rates import VariableRates
 
-    for cid, fixture, region in (
-        ("luminus_comfyflex", "luminus_comfyflex_v.pdf", "flanders"),
-        ("luminus_comfyflex_plus", "luminus_comfyflex_plus_w.pdf", "wallonia"),
+    for fixture in ("luminus_comfyflex_v.pdf", "luminus_comfyflex_plus_w.pdf"):
+        assert _monthly_energy_coefficients(fixture_text(fixture)) == ({}, False)
+    for fixture in ("luminus_smartflex_w.pdf", "luminus_comfy_w.pdf"):
+        assert _monthly_energy_coefficients(fixture_text(fixture)) == ({}, False)
+        assert _quarterly_energy_coefficients(fixture_text(fixture)) == {}
+    # MaxxFlex is indexed on the month, and so not on the quarter.
+    assert _quarterly_energy_coefficients(fixture_text("luminus_maxxflex_w.pdf")) == {}
+
+
+def test_comfyflex_energy_is_indexed_on_the_delivery_quarter() -> None:
+    """ "Votre tarif sera indexe tous les trimestres ... Les prix affiches sont
+    calcules sur la base de la derniere valeur Belpex connue (trimestre
+    precedent) ... Sur le decompte, Luminus appliquera les valeurs moyennes
+    trimestrielles." Read as resolved rates, every quarter was billed on the
+    one before: ComfyFlex in Flanders 4,33 c/kWh under in the third quarter
+    of 2026.
+
+    April's card wraps "Compteur mono-\\nhoraire" after the hyphen, which a
+    label without the wrap read as no mono row and so no formula at all.
+    """
+    for cid, fixture, region, base in (
+        ("luminus_comfyflex", "luminus_comfyflex_v.pdf", "flanders", 4.2102),
+        ("luminus_comfyflex_plus", "luminus_comfyflex_plus_w.pdf", "wallonia", 6.3302),
     ):
         energy = parse_snapshot(cid, fixture_text(fixture), region).energy
         assert isinstance(energy, VariableRates), cid
+        # On the quarter and not on the month, as Bolt's variable cards are.
+        assert energy.quarter_indexed is True, cid
         assert energy.month_indexed is False, cid
-        assert energy.formula_factor is None, cid
+        assert energy.rlp_indexed is False, cid
+        # c/kWh HTVA per EUR/MWh of index, printed TVAC: x10 and x1,06.
+        assert energy.formula_factor == pytest.approx(0.1096 * 10.0 * 1.06), cid
+        assert energy.formula_base == pytest.approx(base / 100.0 * 1.06), cid
+        # Each printed rate is its own pair at "Belpex = 95,75 EUR/MWh (valeur
+        # de l'indice du 1re trimestre 2026)", to the printed digit.
+        for printed, factor, b in (
+            (energy.current, energy.formula_factor, energy.formula_base),
+            (energy.peak, energy.formula_factor_peak, energy.formula_base_peak),
+            (
+                energy.offpeak,
+                energy.formula_factor_offpeak,
+                energy.formula_base_offpeak,
+            ),
+            (
+                energy.exclusive_night,
+                energy.formula_factor_exclusive_night,
+                energy.formula_base_exclusive_night,
+            ),
+        ):
+            assert factor is not None and b is not None, cid
+            assert factor * 0.09575 + b == pytest.approx(printed, abs=1e-4), cid
+    for c in EXTRACTORS["luminus"].contracts:
+        if c.id in ("luminus_comfyflex", "luminus_comfyflex_plus"):
+            assert c.month_indexed_energy and c.spot_indexed_injection, c.id
 
-    assert _monthly_energy_coefficients(fixture_text("luminus_smartflex_w.pdf")) == (
-        {},
-        False,
+
+def test_a_weighted_endex_term_is_not_read_as_a_formula() -> None:
+    """Every row carries a second term on Endex 1-0-3, at 0,0000 on every
+    card since January 2026. A card giving it weight prices on a forward
+    index nothing here resolves, so it keeps its printed rates."""
+    from custom_components.be_electricity_prices.providers._luminus_cards import (
+        _quarterly_energy_coefficients,
     )
-    assert _monthly_energy_coefficients(fixture_text("luminus_comfy_w.pdf")) == (
-        {},
-        False,
-    )
+
+    text = fixture_text("luminus_comfyflex_v.pdf")
+    assert _quarterly_energy_coefficients(text)
+    weighted = text.replace("+   0,0000  x  Endex", "+   0,0150  x  Endex", 1)
+    assert weighted != text
+    assert _quarterly_energy_coefficients(weighted) == {}
 
 
 def test_basicflex_energy_is_indexed_on_the_delivery_months_rlp_belpex() -> None:
@@ -476,15 +528,18 @@ def test_monthly_cards_carry_the_injection_formula() -> None:
         assert inj.factor * 0.09261 + inj.base == pytest.approx(0.0381, abs=1e-4), cid
 
 
-def test_quarterly_cards_keep_their_printed_figure() -> None:
+def test_quarterly_cards_carry_the_injection_formula() -> None:
     """ComfyFlex and ComfyFlex+ print the IDENTICAL formula and index it
     QUARTERLY: "Votre tarif sera indexe tous les trimestres", against "la
-    valeur de l'indice du 1re trimestre 2026". There is no quarterly mean to
-    resolve that against, and resolving it monthly would be strictly worse
-    than the lag: measured, the printed figure is 1,9% from the truth while
-    April's month mean is 16,3% from it the other way.
+    valeur de l'indice du 1re trimestre 2026". Read as a printed figure alone,
+    every quarter was credited on the one before, for good: 3,89 c/kWh in the
+    third quarter of 2026 where its own index gives 5,68.
 
-    So the gate is the cadence sentence, never the formula.
+    The credit is month indexed, the one period flag a feed-in leg carries:
+    its months settle on the quarter's index once the next quarter's card
+    names it, and the printed figure stays for an entry with no day-ahead
+    prices until then. A formula with no cadence beside it still reads as
+    none, since its coefficients would be taken for a per-hour formula.
     """
     for cid, fixture, region in (
         ("luminus_comfyflex", "luminus_comfyflex_v.pdf", "flanders"),
@@ -494,8 +549,18 @@ def test_quarterly_cards_keep_their_printed_figure() -> None:
         inj = snap.injection
         assert inj is not None, cid
         assert inj.current == pytest.approx(0.0396), cid
-        assert inj.factor is None, cid
-        assert inj.month_indexed is False, cid
+        assert inj.factor == pytest.approx(0.481), cid
+        assert inj.base == pytest.approx(-0.006392), cid
+        assert inj.month_indexed is True, cid
+        assert inj.factor is not None and inj.base is not None
+        assert inj.factor * 0.09575 + inj.base == pytest.approx(0.0396, abs=1e-4)
+
+    text = fixture_text("luminus_comfyflex_v.pdf")
+    uncadenced = text.replace("Votre tarif sera indexé tous les trimestres", "")
+    assert uncadenced != text
+    inj = parse_snapshot("luminus_comfyflex", uncadenced, "flanders").injection
+    assert inj is not None
+    assert inj.factor is None and inj.month_indexed is False
 
 
 def test_injection_uses_applicable_rate_not_annual_estimate() -> None:
@@ -1067,6 +1132,180 @@ async def test_a_closed_month_is_settled_in_place_on_the_index_the_next_card_nam
     assert kept == held
     assert "productId=id-maxxflex&" in asked[0] and "date=2026-05" in asked[0]
     assert EXTRACTORS["luminus"].settle_month is luminus.settle_month
+
+
+async def test_a_closed_quarter_settles_its_months_on_the_next_quarters_card(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """ComfyFlex prints its rates at the previous quarter's index, and the
+    first card of the quarter after names the quarter's own: "Belpex = 94,25
+    EUR/MWh (valeur de l'indice du 2ieme trimestre 2026)" on July's. Every
+    month of the quarter settles there, each register on its own pair and the
+    feed-in on its formula, and the leg stays indexed on the quarter."""
+    from custom_components.be_electricity_prices.providers import luminus
+    from custom_components.be_electricity_prices.providers._settle import (
+        is_settled,
+    )
+
+    held = _comfyflex_v()  # April 2026, printed at the first quarter's 95,75
+    energy0, inj0 = held.energy, held.injection
+    assert isinstance(energy0, VariableRates) and inj0 is not None
+    july = "Index (HTVA): Belpex = 94,25 €/MWh (valeur de l'indice du 2ième trimestre 2026)"
+    asked: list[str] = []
+
+    async def _next_card(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        return july
+
+    async def settle(month: date) -> SupplierSnapshot:
+        return await luminus.settle_month(
+            None,  # type: ignore[arg-type]
+            "luminus_comfyflex",
+            "flanders",
+            month,
+            held,
+        )
+
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _next_card)
+    # The second quarter still runs: its index is not known, nothing is asked.
+    freezer.move_to("2026-06-20 12:00:00+02:00")
+    assert await settle(date(2026, 5, 1)) == replace(held, provisional=True)
+    assert asked == []
+
+    freezer.move_to("2026-07-10 12:00:00+02:00")
+    for month in (date(2026, 4, 1), date(2026, 6, 1)):
+        asked.clear()
+        out = await settle(month)
+        # July runs, so its card is the live one.
+        assert len(asked) == 1 and "documentSlug=comfyflex&" in asked[0]
+        energy, inj = out.energy, out.injection
+        assert isinstance(energy, VariableRates) and inj is not None
+        assert energy.quarter_indexed and not energy.month_indexed
+        assert energy.index_realised == pytest.approx(0.09425)
+        for rate, factor, base in (
+            (energy.current, energy0.formula_factor, energy0.formula_base),
+            (energy.peak, energy0.formula_factor_peak, energy0.formula_base_peak),
+            (
+                energy.offpeak,
+                energy0.formula_factor_offpeak,
+                energy0.formula_base_offpeak,
+            ),
+            (
+                energy.exclusive_night,
+                energy0.formula_factor_exclusive_night,
+                energy0.formula_base_exclusive_night,
+            ),
+        ):
+            assert factor is not None and base is not None
+            assert rate == pytest.approx(factor * 0.09425 + base)
+        assert inj.current == pytest.approx(0.481 * 0.09425 - 0.006392)
+        assert inj.index_realised == pytest.approx(0.09425)
+        assert is_settled(out) and not out.provisional
+        assert replace(out, energy=energy0, injection=inj0) == held
+
+    # A live card naming another quarter leaves the month to be asked again,
+    # and a closed one naming another settles nothing.
+    july = (
+        "Index (HTVA): Belpex = 95,75 €/MWh (valeur de l'indice du 1re trimestre 2026)"
+    )
+    assert await settle(date(2026, 5, 1)) == replace(held, provisional=True)
+
+    async def _product(*_a: object) -> str:
+        return "id-comfyflex"
+
+    monkeypatch.setattr(luminus, "_resolve_archive_product_id", _product)
+    freezer.move_to("2026-08-10 12:00:00+02:00")
+    asked.clear()
+    assert await settle(date(2026, 5, 1)) == held
+    assert "productId=id-comfyflex&" in asked[0] and "date=2026-07" in asked[0]
+
+
+async def test_the_month_cache_bills_a_closed_quarter_on_its_own_index(
+    hass: Any, freezer: Any
+) -> None:
+    """The card archive holds April 2026 as the walk caught it, at the first
+    quarter's index. Asked for it in July, the month cache settles it on the
+    live card's second quarter index, so an entry without day-ahead prices no
+    longer bills a closed quarter on the one before it."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from custom_components.be_electricity_prices import snapshot_months
+    from custom_components.be_electricity_prices.providers import luminus
+    from custom_components.be_electricity_prices.snapshot_months import (
+        ArchivedCard,
+        _snapshot_for_month,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
+    )
+
+    freezer.move_to("2026-07-10 10:00:00+02:00")
+    caught = _comfyflex_v()
+    github = AsyncMock(
+        return_value=ArchivedCard(
+            snapshot=caught, read_by_ocr=False, captured_live=True
+        )
+    )
+    fetched = AsyncMock(
+        return_value=(
+            "Index (HTVA): Belpex = 94,25 €/MWh (valeur de l'indice du 2ième "
+            "trimestre 2026)"
+        )
+    )
+    _monthly_snapshots(hass).clear()
+    with (
+        patch.object(snapshot_months, "_archived_card_from_github", github),
+        patch.object(luminus, "fetch_pdf_text", fetched),
+    ):
+        may = await _snapshot_for_month(
+            hass,
+            MagicMock(),
+            EXTRACTORS["luminus"],
+            "luminus_comfyflex",
+            "flanders",
+            date(2026, 5, 1),
+            caught,
+        )
+    energy = may.energy
+    assert isinstance(energy, VariableRates) and not may.provisional
+    assert energy.index_realised == pytest.approx(0.09425)
+    assert energy.formula_factor is not None and energy.formula_base is not None
+    assert energy.current == pytest.approx(
+        energy.formula_factor * 0.09425 + energy.formula_base
+    )
+    assert fetched.await_count == 1
+
+
+def test_a_comfyflex_cohort_bills_each_register_on_its_own_pair() -> None:
+    """Bolt prints one formula and carries each register's spread off the
+    mono rate. ComfyFlex prints a pair per register instead, 0,1234 x Belpex
+    on the day register against 0,1096 mono on April's card, so a spread read
+    at one index is wrong at every other: the signed leg keeps the pairs."""
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _cohort_energy_from_archived,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+
+    held = _comfyflex_v()
+    energy = held.energy
+    assert isinstance(energy, VariableRates)
+    leg = _cohort_energy_from_archived(held)
+    assert isinstance(leg, SpotMonthlyRates) and leg.quarter_indexed
+    assert (leg.factor, leg.base) == (energy.formula_factor, energy.formula_base)
+    assert (leg.factor_peak, leg.base_peak) == (
+        energy.formula_factor_peak,
+        energy.formula_base_peak,
+    )
+    assert (leg.factor_offpeak, leg.base_offpeak) == (
+        energy.formula_factor_offpeak,
+        energy.formula_base_offpeak,
+    )
+    assert (leg.factor_exclusive_night, leg.base_exclusive_night) == (
+        energy.formula_factor_exclusive_night,
+        energy.formula_base_exclusive_night,
+    )
 
 
 def test_the_new_customer_campaign_is_read_off_the_card() -> None:

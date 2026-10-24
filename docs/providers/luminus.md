@@ -58,18 +58,18 @@ all label regexes below are French.
 
 Ten user-selectable products, all available in both Flanders and Wallonia (each
 `Contract.regions` is `_LUMINUS_REGIONS`, so `EXTRACTOR.regions()` is
-`{flanders, wallonia}`). Seven set `spot_indexed_injection` (Comfy, Comfy Plus,
-MaxxFix, MaxxFlex, BasicFix, BasicFlex, SmartFlex), so the flow offers the ENTSO-E
-key on the injection regime; ComfyFlex and ComfyFlex Plus leave it off, and Dynamic
-collects the key through its energy formula already. MaxxFlex, SmartFlex and
-BasicFlex also carry `month_indexed_energy`, which offers the key on every solar
-regime.
+`{flanders, wallonia}`). Nine set `spot_indexed_injection` (Comfy, Comfy Plus,
+ComfyFlex, ComfyFlex Plus, MaxxFix, MaxxFlex, BasicFix, BasicFlex, SmartFlex), so
+the flow offers the ENTSO-E key on the injection regime; Dynamic collects the key
+through its energy formula already. ComfyFlex, ComfyFlex Plus, MaxxFlex, SmartFlex
+and BasicFlex also carry `month_indexed_energy`, which offers the key on every
+solar regime.
 
 | Contract id | Label | Kind | Slug | Notes |
 | --- | --- | --- | --- | --- |
 | `luminus_comfy` | Luminus Comfy | fixed | `comfy` | Fixed price, bi-hourly + exclusive-night columns |
 | `luminus_comfy_plus` | Luminus Comfy+ | fixed | `comfy-plus` | Fixed variant |
-| `luminus_comfyflex` | Luminus ComfyFlex | variable | `comfyflex` | Monthly-indexed variable |
+| `luminus_comfyflex` | Luminus ComfyFlex | variable | `comfyflex` | Indexed on the delivery quarter's Belpex |
 | `luminus_comfyflex_plus` | Luminus ComfyFlex+ | variable | `comfyflex-plus` | Variable variant (drop-in, same parse path) |
 | `luminus_maxxfix` | Luminus MaxxFix | fixed | `maxxfix` | Fixed variant |
 | `luminus_maxxflex` | Luminus MaxxFlex | variable | `maxxflex` | Variable variant |
@@ -80,14 +80,34 @@ regime.
 
 MaxxFlex, SmartFlex and BasicFlex carry `month_indexed_energy`, the registry twin of
 the parsed `month_indexed`, which offers the optional ENTSO-E key on every solar
-regime; ComfyFlex and ComfyFlex+ index on a quarter and do not. MaxxFlex and
-SmartFlex index on the plain monthly Belpex. BasicFlex prints "x Belpex RLP M" and
+regime, and ComfyFlex and ComfyFlex+ carry it for the parsed `quarter_indexed`.
+MaxxFlex and SmartFlex index on the plain monthly Belpex. BasicFlex prints "x Belpex RLP M" and
 weights the month "avec une ponderation RLP ... basee sur la moyenne arithmetique des
 profils de consommation RLP des differents gestionnaires", so its leg is
 `rlp_indexed` on the `columns` blend, which reproduces the Belpex RLP M Luminus
 published for January to September 2026 to 0,01 EUR/MWh. Its rows have a pattern
 of their own (`_rlp_band_formula_re`), so the bare-Belpex rows stay as narrow as
 they were.
+
+ComfyFlex and ComfyFlex+ print the same per-meter rows with a second term,
+"Compteur mono-horaire = 0,1099 x Belpex + 0,0000 x Endex 1-0-3 + 4,5041", and index
+them on the delivery QUARTER: "Votre tarif sera indexe tous les trimestres ... Les
+prix affiches sont calcules sur la base de la derniere valeur Belpex connue
+(trimestre precedent) ... Sur le decompte, Luminus appliquera les valeurs moyennes
+trimestrielles". `_quarterly_energy_coefficients` (`_luminus_cards.py`) reads them,
+gated on that sentence and on the energy block naming a quarter
+("valeur de l'indice du 3ieme trimestre 2026"), and only at a zero Endex factor,
+which every card since January 2026 prints: a card giving the forward index weight
+keeps its printed rates. The leg is `quarter_indexed` and not `month_indexed`, as
+Bolt's variable cards are, so an entry with day-ahead prices bills the running
+quarter on its mean to date, each register on its own pair
+(`cohort_legs._quarter_leg`), and a closed quarter settles on the next quarter's
+card (below). The index is the quarter's plain mean: the monthly values Luminus
+prints for MaxxFlex average back to the second and third quarters of 2026
+(94,25 and 131,39). Read as printed figures before, every closed quarter of 2026
+billed on the one before it: 4,33 c/kWh under on ComfyFlex in Flanders in the
+third, the feed-in 1,79 under. The April to June 2026 cards wrap the mono label
+after its hyphen ("Compteur mono-\nhoraire"), which `_ENERGY_BANDS` allows for.
 
 Declared in `_CONTRACTS` (`luminus.py`); `_CONTRACTS_BY_ID` indexes them
 (`luminus.py`); `EXTRACTOR.contracts` is built from them (`luminus.py`).
@@ -158,14 +178,22 @@ card for the running month, as it does for Mega.
 
 The month-indexed rates (MaxxFlex, SmartFlex and BasicFlex energy, and the monthly
 feed-in of every card but ComfyFlex, ComfyFlex+ and Dynamic) are printed at the
-previous month's index, and the next card names the month's own: "Belpex = 156,41
-EUR/MWh (valeur de l'indice de septembre 2026)", and "Belpex RLP M = 164,42" on
-BasicFlex (`published_indices`, `_luminus_cards.py`). `settle_month` (`luminus.py`)
-re-prices the card held for a closed month on that index, through `settled_energy`
-and `settled_injection` (`_settle.py`), and records it as `index_realised`. The
-next card is the live one while its month runs and the archive's after it. Not out
-yet, or naming another month while it is the live one, the month stays
-`provisional`; a closed next card naming another month settles nothing.
+previous month's index, and the next card names the month's own: "Belpex = 156,41 EUR/MWh (valeur de l'indice
+de septembre 2026)", and "Belpex RLP M = 164,42" on BasicFlex (`published_indices`,
+`_luminus_cards.py`). `settle_month` (`luminus.py`) re-prices the card held for a
+closed month on that index, through `settled_energy` and `settled_injection`
+(`_settle.py`), and records it as `index_realised`. The next card is the live one
+while its month runs and the archive's after it. Not out yet, or naming another
+month while it is the live one, the month stays `provisional`; a closed next card
+naming another month settles nothing.
+
+ComfyFlex and ComfyFlex+ settle the same way a quarter at a time: every month of a
+quarter, energy and feed-in, settles on the index the first card of the quarter
+after names for it ("Belpex = 131,39 EUR/MWh (valeur de l'indice du 3ieme trimestre
+2026)" on October's), read by `published_indices(text, quarterly=True)`. The
+energy leg is settled register by register on its own pairs, and stays
+`quarter_indexed`. Until then an entry without day-ahead prices bills the printed
+rates, the previous quarter's.
 
 It is IN PLACE (`EXTRACTOR.settle_month`), never a replacement by
 `fetch_for_month`'s answer: the archive serves a month without its new-customer
@@ -468,18 +496,22 @@ contract kind and by the card's indexation sentence:
   `InjectionRates.current` (`_luminus_cards.py`). Where the card also prints
   `Formule tarifaire de l'énergie injectée = <factor> x Belpex <sign> <base>`
   followed by `Votre tarif sera indexé tous les mois` (or `chaque mois`),
-  `_INJECTION_MONTHLY_RE` reads the formula: `factor = factor_pdf * 10.0`,
+  `_INJECTION_INDEXED_RE` reads the formula: `factor = factor_pdf * 10.0`,
   `base = base_pdf_cents / 100.0`, no VAT (the block is HTVA at 0%), and
   `month_indexed = True`. The credit then settles on the delivery month's Belpex
   mean, and the printed `current`, computed on the previous month's value, is
   only the fallback while that mean is unpublished. Comfy, Comfy Plus, MaxxFix,
   MaxxFlex, BasicFix, BasicFlex and SmartFlex print it, which is why they set
   `spot_indexed_injection` (`_MONTHLY_INJECTION_CONTRACTS`, `luminus.py`).
-- **ComfyFlex and ComfyFlex+ -> monthly-indicative-only.** They print the same
-  formula but index it quarterly (`tous les trimestres`), so the regex, gated on
-  the cadence sentence rather than the formula, does not match: `factor` /
-  `base` stay `None` and the engine credits the printed `current`, with no spot
-  needed.
+- **ComfyFlex and ComfyFlex+ -> the same formula, indexed on the quarter.** They
+  print it under `Votre tarif sera indexé tous les trimestres`, which the same
+  regex (`_INJECTION_INDEXED_RE`) accepts. A feed-in leg has no quarter flag, so
+  the leg is `month_indexed`: every month of a quarter settles on the quarter's
+  index once the next quarter's card names it, and until then an entry with
+  day-ahead prices is credited on the delivery month's mean, the value Luminus
+  states it bills a period on whose quarter is not known at settlement, and one
+  without on the printed figure. Read as printed before, every closed quarter was
+  credited on the one before it, for good.
 - **dynamic -> hourly `factor*spot + base`.** `_INJECTION_FORMULA_RE`
   (`_luminus_cards.py`) parses `Injection (...) = <factor> x Belpex H <sign>
   <base>`. Residential injection is VAT-exempt, so **no VAT multiplier is
@@ -496,8 +528,8 @@ Illustrative: dynamic Wallonia injection `0,1019 x Belpex H - 1,2737` yields
 (`test_monthly_cards_carry_the_injection_formula`): Comfy, MaxxFlex and
 SmartFlex Wallonia print `0,0481 x Belpex - 0,6392`, so `factor == 0.481` and
 `base == -0.006392`, which reproduces the printed `0.0381` at the card's index;
-`test_quarterly_cards_keep_their_printed_figure` pins the two quarterly cards
-to their printed figure.
+`test_quarterly_cards_carry_the_injection_formula` pins the two quarterly cards
+to the same formula, month indexed.
 
 Two anchoring subtleties in the indicative regex (`_luminus_cards.py`):
 

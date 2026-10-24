@@ -87,9 +87,11 @@ from ._pdf import (
 )
 from ._rates import (
     Contract,
+    EnergyRates,
     TariffKind,
+    VariableRates,
 )
-from ._settle import settled_energy, settled_injection
+from ._settle import indexed_energy, settled_energy, settled_injection
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
@@ -454,23 +456,36 @@ async def settle_month(
     closed month a month behind: BasicFlex 3,26 c/kWh under in September
     2026, 2,61 over in February.
 
+    ComfyFlex and ComfyFlex+ are the same on the delivery quarter: every
+    month of it settles on "Belpex = 131,39 EUR/MWh (valeur de l'indice du
+    3ieme trimestre 2026)", which the first card of the quarter after names.
+    Every closed quarter of 2026 was billed on the one before: 4,33 c/kWh
+    under in the third on ComfyFlex in Flanders.
+
     In place, never by replacing the card: Luminus's archive serves a month
     without its new-customer campaign, and on 5 October 2026 it still served
     the first October edition the live card had corrected. So the energy
-    formula rows (MaxxFlex, SmartFlex, BasicFlex) and the monthly feed-in
-    are re-priced, and every other field of ``held`` stays.
+    formula rows (MaxxFlex, SmartFlex, BasicFlex, ComfyFlex) and the indexed
+    feed-in are re-priced, and every other field of ``held`` stays.
 
     The next card is the live one while its month runs and the archive's
-    after. Not out yet, or naming another month while it is the live one
+    after. Not out yet, or naming another period while it is the live one
     (the live card of the 1st was a month behind in October 2026), and the
     month is ``provisional`` so it is asked again. A next card of a closed
-    month that names another month, or no index a leg needs, settles nothing.
+    month that names another period, or no index a leg needs, settles
+    nothing.
     """
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None or region not in _REGION_TO_TAB:
         return held
     first = date(year_month.year, year_month.month, 1)
-    following = date(first.year + (first.month == 12), first.month % 12 + 1, 1)
+    quarterly = getattr(held.energy, "quarter_indexed", False)
+    span = 3 if quarterly else 1
+    # The first month of the period ``first`` is billed on, and of the one
+    # after, whose first card names its index.
+    start = first.replace(month=(first.month - 1) // span * span + 1)
+    after = start.month - 1 + span
+    following = date(start.year + after // 12, after % 12 + 1, 1)
     running = dt_util.now().date().replace(day=1)
     if following > running:
         return replace(held, provisional=True)
@@ -493,12 +508,14 @@ async def settle_month(
         return replace(held, provisional=True) if live else held
     named = {
         name: value
-        for name, (month, value) in published_indices(text).items()
-        if month == first
+        for name, (period, value) in published_indices(
+            text, quarterly=quarterly
+        ).items()
+        if period == start
     }
     energy, injection = held.energy, held.injection
     energy_index = injection_index = None
-    if getattr(energy, "month_indexed", False):
+    if indexed_energy(energy):
         rlp = getattr(energy, "rlp_indexed", False)
         energy_index = named.get("Belpex RLP M" if rlp else "Belpex")
         if energy_index is None:
@@ -509,13 +526,29 @@ async def settle_month(
             return replace(held, provisional=True) if live else held
     return replace(
         held,
-        energy=energy if energy_index is None else settled_energy(energy, energy_index),
+        energy=energy if energy_index is None else _settled(energy, energy_index),
         injection=(
             injection
             if injection is None or injection_index is None
             else settled_injection(injection, injection_index)
         ),
     )
+
+
+def _settled(energy: EnergyRates, index: float) -> EnergyRates:
+    """``energy`` settled on ``index``, the value its period closed at.
+
+    ``settled_energy`` settles a leg indexed on its month and leaves a
+    quarter-indexed one as it is, since Bolt's settle register by register,
+    each on an index of its own. ComfyFlex prices each register on a pair of
+    its own against the one quarterly Belpex, which is the monthly shape over
+    a quarter, so it is settled as one.
+    """
+    if isinstance(energy, VariableRates) and energy.quarter_indexed:
+        settled = settled_energy(replace(energy, month_indexed=True), index)
+        assert isinstance(settled, VariableRates)  # it keeps the leg's type
+        return replace(settled, month_indexed=False)
+    return settled_energy(energy, index)
 
 
 def parse_snapshot(
@@ -588,15 +621,16 @@ def _extract_publication_month(text: str) -> str:
 
 _LUMINUS_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
 
-# Contracts whose card indexes the feed-in credit MONTHLY, so the credit needs
-# ENTSO-E spots their own energy leg does not fetch. ComfyFlex and ComfyFlex+
-# are absent on purpose: they print the same formula and index it quarterly,
-# and there is no quarterly mean here to resolve it against. Dynamic collects
-# its key through its own Belpex H energy formula.
+# Contracts whose card indexes the feed-in credit, so the credit needs ENTSO-E
+# spots their own energy leg does not fetch: on the month, and on ComfyFlex and
+# ComfyFlex+ on the quarter, whose months settle on the next quarter's card.
+# Dynamic collects its key through its own Belpex H energy formula.
 _MONTHLY_INJECTION_CONTRACTS: frozenset[str] = frozenset(
     {
         "luminus_comfy",
         "luminus_comfy_plus",
+        "luminus_comfyflex",
+        "luminus_comfyflex_plus",
         "luminus_maxxfix",
         "luminus_maxxflex",
         "luminus_basicfix",
@@ -604,12 +638,18 @@ _MONTHLY_INJECTION_CONTRACTS: frozenset[str] = frozenset(
         "luminus_smartflex",
     }
 )
-# Contracts whose ENERGY is a monthly formula too: MaxxFlex prints one per
-# meter and SmartFlex one per band, both on the delivery month's Belpex, and
-# BasicFlex one per meter on the delivery month's Belpex RLP M. ComfyFlex and
-# ComfyFlex+ index theirs on a quarter, so their energy is billed as printed.
+# Contracts whose ENERGY is an indexed formula too: MaxxFlex prints one per
+# meter and SmartFlex one per band, both on the delivery month's Belpex,
+# BasicFlex one per meter on the delivery month's Belpex RLP M, and ComfyFlex
+# and ComfyFlex+ one per meter on the delivery quarter's Belpex.
 _MONTHLY_ENERGY_CONTRACTS: frozenset[str] = frozenset(
-    {"luminus_maxxflex", "luminus_smartflex", "luminus_basicflex"}
+    {
+        "luminus_comfyflex",
+        "luminus_comfyflex_plus",
+        "luminus_maxxflex",
+        "luminus_smartflex",
+        "luminus_basicflex",
+    }
 )
 
 

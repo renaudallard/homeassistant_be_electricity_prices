@@ -366,23 +366,38 @@ def _quarter_leg(energy: VariableRates, factor: float) -> SpotMonthlyRates:
     c/kWh, the most on the Eco band), against 39 EUR/MWh for the index. A
     cohort billed on a settled month of a later quarter is handed its signing
     card rebuilt on that quarter's indices (:func:`_on_settled_quarter`).
+
+    Luminus's ComfyFlex prints a formula per meter register instead, all on
+    the one quarterly Belpex, and a register with a pair of its own bills it.
     """
     base = energy.formula_base or 0.0
 
-    def pair(rate: float | None) -> tuple[float | None, float | None]:
+    def pair(
+        rate: float | None, own: tuple[float | None, float | None]
+    ) -> tuple[float | None, float | None]:
+        if own[0] is not None and own[1] is not None:
+            return own
         if rate is None:
             return None, None
         return factor, base + rate - energy.current
 
     (f_peak, b_peak), (f_off, b_off), (f_night, b_night) = (
-        pair(energy.peak),
-        pair(energy.offpeak),
-        pair(energy.exclusive_night),
+        pair(energy.peak, (energy.formula_factor_peak, energy.formula_base_peak)),
+        pair(
+            energy.offpeak, (energy.formula_factor_offpeak, energy.formula_base_offpeak)
+        ),
+        pair(
+            energy.exclusive_night,
+            (
+                energy.formula_factor_exclusive_night,
+                energy.formula_base_exclusive_night,
+            ),
+        ),
     )
     (f_pic, b_pic), (f_medium, b_medium), (f_eco, b_eco) = (
-        pair(energy.impact_pic),
-        pair(energy.impact_medium),
-        pair(energy.impact_eco),
+        pair(energy.impact_pic, (None, None)),
+        pair(energy.impact_medium, (None, None)),
+        pair(energy.impact_eco, (None, None)),
     )
     return SpotMonthlyRates(
         factor=factor,

@@ -33,6 +33,7 @@ Luminus charges for power, as opposed to what it collects for someone else.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import date
 
@@ -220,6 +221,20 @@ def _rlp_band_formula_re(label: str) -> re.Pattern[str]:
     )
 
 
+def _quarterly_band_formula_re(label: str) -> re.Pattern[str]:
+    """ComfyFlex's per-meter row, "x Belpex + 0,0000 x Endex 1-0-3 + 4,5041".
+
+    The second term is matched only at a zero factor, which every card since
+    January 2026 prints. A card giving Endex weight prices on a forward index
+    nothing here resolves, and its row then reads as no formula at all.
+    """
+    return re.compile(
+        rf"{label}\s*=\s*({_NUM})\s*x\s*Belpex\s*\+\s*0+(?:,0+)?\s*x\s*Endex\s+1-0-3"
+        rf"\s*([{SIGN_CHARS}])\s*({_NUM})(?![\d,])(?!\s*x)",
+        re.S,
+    )
+
+
 def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     fee = _extract_yearly_fee(text)
     if kind == "tou":
@@ -322,6 +337,13 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         yearly_fixed_fee_exclusive_night=excl_night_fee,
     )
     coefs, rlp = _monthly_energy_coefficients(text)
+    # ComfyFlex and ComfyFlex+ index the same per-meter rows on the delivery
+    # QUARTER instead. Quarter indexed and not month indexed, as Bolt's
+    # variable cards are, so the running quarter resolves on its mean to date
+    # and a closed one settles on the index the next quarter's card names.
+    quarterly = not coefs
+    if quarterly:
+        coefs = _quarterly_energy_coefficients(text)
     if not coefs:
         return rates
     if rlp:
@@ -335,7 +357,8 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     none2: tuple[float | None, float | None] = (None, None)
     return replace(
         rates,
-        month_indexed=True,
+        month_indexed=not quarterly,
+        quarter_indexed=quarterly,
         formula_factor=coefs["single"][0],
         formula_base=coefs["single"][1],
         formula_factor_peak=coefs.get("peak", none2)[0],
@@ -364,16 +387,12 @@ def _monthly_tou_coefficients(text: str) -> dict[str, tuple[float, float]]:
         return {}
     if _MONTHLY_INDEX_ATTRIBUTION_RE.search(block.group(0)) is None:
         return {}
-    vat = _vat_multiplier(text)
-    out: dict[str, tuple[float, float]] = {}
-    for key, label in (*_TOU_BANDS, ("sunday", _HAPPY_SUNDAY_LABEL)):
-        match = _band_formula_re(label).search(block.group(0))
-        if match is None:
-            continue
-        out[key] = (
-            to_float(match.group(1)) * 10.0 * vat,
-            parse_sign(match.group(2)) * to_float(match.group(3)) / 100.0 * vat,
-        )
+    out = _formula_pairs(
+        text,
+        block.group(0),
+        (*_TOU_BANDS, ("sunday", _HAPPY_SUNDAY_LABEL)),
+        _band_formula_re,
+    )
     return out if all(key in out for key, _ in _TOU_BANDS) else {}
 
 
@@ -401,21 +420,62 @@ def _monthly_energy_coefficients(
     block = _ENERGY_FORMULA_BLOCK_RE.search(text)
     if block is None:
         return {}, False
-    # The row prints c/kWh HTVA against an index in EUR/MWh, while the energy
-    # row itself is TVAC, so both coefficients take the x10 / 100 conversion
-    # and the VAT multiplier. Round-trips to the printed 14,41 at the card's
-    # own 92,61 index.
+    out = _formula_pairs(text, block.group(0), _ENERGY_BANDS, row)
+    return (out, rlp) if "single" in out else ({}, False)
+
+
+def _quarterly_energy_coefficients(text: str) -> dict[str, tuple[float, float]]:
+    """Per-meter ``(factor, base)`` for a card that indexes energy on the
+    delivery QUARTER, or ``{}``.
+
+    ComfyFlex and ComfyFlex+: "Votre tarif sera indexe tous les trimestres
+    ... Les prix affiches sont calcules sur la base de la derniere valeur
+    Belpex connue (trimestre precedent) ... Sur le decompte, Luminus
+    appliquera les valeurs moyennes trimestrielles". So the printed rates are
+    the previous quarter's index, the quarter is billed on its own, and the
+    next quarter's card names it: "Belpex = 131,39 EUR/MWh (valeur de
+    l'indice du 3ieme trimestre 2026)". That is the quarter's plain mean: the
+    monthly values Luminus publishes for MaxxFlex average back to it for the
+    second and third quarters of 2026.
+
+    Gated on the cadence sentence and on the energy block naming a quarter,
+    and empty unless the mono row reads, as for the monthly cards.
+    """
+    if _QUARTERLY_CADENCE_RE.search(text) is None:
+        return {}
+    block = _ENERGY_FORMULA_BLOCK_RE.search(text)
+    if block is None or _QUARTER_ATTRIBUTION_RE.search(block.group(0)) is None:
+        return {}
+    out = _formula_pairs(
+        text, block.group(0), _ENERGY_BANDS, _quarterly_band_formula_re
+    )
+    return out if "single" in out else {}
+
+
+def _formula_pairs(
+    text: str,
+    block: str,
+    bands: Iterable[tuple[str, str]],
+    row: Callable[[str], re.Pattern[str]],
+) -> dict[str, tuple[float, float]]:
+    """``(factor, base)`` per band whose ``row`` reads in ``block``.
+
+    The rows print c/kWh HTVA against an index in EUR/MWh, while the energy
+    rows are TVAC, so both coefficients take the x10 / 100 conversion and the
+    card's VAT multiplier. MaxxFlex round-trips to its printed 14,41 at its
+    own 92,61 index.
+    """
     vat = _vat_multiplier(text)
     out: dict[str, tuple[float, float]] = {}
-    for key, label in _ENERGY_BANDS:
-        match = row(label).search(block.group(0))
+    for key, label in bands:
+        match = row(label).search(block)
         if match is None:
             continue
         out[key] = (
             to_float(match.group(1)) * 10.0 * vat,
             parse_sign(match.group(2)) * to_float(match.group(3)) / 100.0 * vat,
         )
-    return (out, rlp) if "single" in out else ({}, False)
+    return out
 
 
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
@@ -458,8 +518,14 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # the printed figure is not it: "Votre tarif sera indexe tous les mois.
         # La valeur Belpex du mois en cours n'est connue qu'a la fin du mois.
         # Les prix affiches sont calcules sur la base de la derniere valeur
-        # Belpex connue (mois precedent)."
-        monthly = _INJECTION_MONTHLY_RE.search(text)
+        # Belpex connue (mois precedent)." ComfyFlex and ComfyFlex+ say it of
+        # the quarter. Their credit is month indexed all the same, the one
+        # period flag a feed-in leg has: the quarter's months settle on the
+        # index the next quarter's card names, and until then an entry with
+        # day-ahead prices is credited on the delivery month's mean, the one
+        # Luminus states it falls back to for a period not known at
+        # settlement, and one without on the printed figure.
+        monthly = _INJECTION_INDEXED_RE.search(text)
         if monthly is not None:
             # c/kWh per EUR/MWh of index, and the block is HTVA with the card
             # noting "La TVA s'eleve a 0%", so nothing is grossed.
@@ -572,25 +638,26 @@ _DYNAMIC_FORMULA_RE = re.compile(
     re.S,
 )
 # A non-dynamic card's feed-in formula, accepted ONLY when that same block
-# says the tariff is indexed monthly.
+# says the tariff is indexed, on the month or on the quarter. A formula with no
+# cadence beside it is not read as one: the engine would take its coefficients
+# for a per-hour formula.
 #
-# The cadence sentence is the whole point. ComfyFlex and ComfyFlex+ print the
-# IDENTICAL "0,0481 x Belpex - 0,6392" and index it QUARTERLY ("Votre tarif
-# sera indexe tous les trimestres", against "du 1re trimestre 2026"). Keying on
-# the formula would sweep them onto a monthly mean the contract never mentions:
-# measured, their printed quarterly figure is 1,9% off the truth while April's
-# month mean is 16,3% off it in the other direction, so the "fix" would be
-# strictly worse than the lag it replaces.
+# ComfyFlex and ComfyFlex+ print the IDENTICAL "0,0481 x Belpex - 0,6392" and
+# index it QUARTERLY ("Votre tarif sera indexe tous les trimestres", against
+# "du 1re trimestre 2026"). Read, with the printed figure kept as the
+# fallback, its months settle on the quarter's own index once the next
+# quarter's card names it; the printed figure alone credited the quarter
+# before's for good, 1,79 c/kWh under in the third quarter of 2026.
 #
 # The leading guard keeps the scan inside the injection block: the SmartFlex
 # card carries a second, MaxxFlex-identical block for a non-SMR3 meter.
-_INJECTION_MONTHLY_RE = re.compile(
+_INJECTION_INDEXED_RE = re.compile(
     r"Formule\s+tarifaire\s+de\s+l['\u2019\u00a9]énergie\s+injectée"
     r"(?:(?!Formule\s+tarifaire).)*?"
     rf"=\s*((?P<factor>{_NUM})\s*x\s*Belpex\s*"
     rf"(?P<sign>[{SIGN_CHARS}])\s*(?P<base>{_NUM}))"
     r"(?:(?!Formule\s+tarifaire|Votre\s+tarif\s+sera\s+indexé).){0,400}?"
-    r"Votre\s+tarif\s+sera\s+indexé\s+(?:chaque|tous\s+les)\s+mois\b",
+    r"Votre\s+tarif\s+sera\s+indexé\s+(?:chaque|tous\s+les)\s+(?:mois|trimestres)\b",
     re.S,
 )
 # MaxxFlex indexes the COMMODITY on the delivery month too: "Le parametre
@@ -625,7 +692,9 @@ _ENERGY_FORMULA_BLOCK_RE = re.compile(
     re.S,
 )
 _ENERGY_BANDS: tuple[tuple[str, str], ...] = (
-    ("single", r"Compteur\s+mono-horaire"),
+    # The label wraps after its hyphen on the April to June 2026 ComfyFlex
+    # cards: "Compteur mono-\nhoraire".
+    ("single", r"Compteur\s+mono-\s*horaire"),
     ("peak", r"Heures\s+pleines(?:\s*\([^)]*\))?"),
     ("offpeak", r"Heures\s+creuses"),
     ("exclusive_night", r"Exclusif\s+nuit"),
@@ -665,6 +734,18 @@ _HAPPY_SUNDAY_LABEL = r"Pr[ée]l[èe]vement\s+Happy\s+Sunday"
 _MONTHLY_INDEX_ATTRIBUTION_RE = re.compile(
     r"valeur\s+de\s+l['\u2019\u00a9]indice\s+de\s+(?!\s*\d)\w+", re.IGNORECASE
 )
+# ComfyFlex's: "(valeur de l'indice du 3ieme trimestre 2026)", and "1re",
+# "2ieme" and "4ieme" on the cards of 2026.
+_QUARTER_ATTRIBUTION_RE = re.compile(
+    r"valeur\s+de\s+l['\u2019\u00a9]indice\s+du\s+[1-4][^\W\d_]*\s+trimestre\b",
+    re.IGNORECASE,
+)
+# The sentence a quarterly card states its cadence in, under the feed-in
+# block, where it governs both legs: "Votre tarif sera indexe tous les
+# trimestres. Les trimestres commencent le 1er janvier, 1er avril, ..."
+_QUARTERLY_CADENCE_RE = re.compile(
+    r"Votre\s+tarif\s+sera\s+indexé\s+tous\s+les\s+trimestres\b"
+)
 
 
 _INJECTION_FORMULA_RE = re.compile(
@@ -689,25 +770,37 @@ def _vat_multiplier(text: str) -> float:
 
 # "Index (HTVA) : Belpex RLP M = 164,42 EUR/MWh (valeur de l'indice de
 # septembre 2026)": the month the card's own figures were computed on. The
-# SmartFlex card writes "de de septembre" and "156,4100000" in places, and
-# ComfyFlex's "du 3ieme trimestre" names no month, so it is not read.
+# SmartFlex card writes "de de septembre" and "156,4100000" in places.
 _PUBLISHED_INDEX_RE = re.compile(
     r"Index\s*\(HTVA\)\s*:?\s*(Belpex(?:\s+RLP\s+M)?)\s*=\s*(\d+,\d+)\s*€/MWh\s*"
     r"\(valeur\s+de\s+l['\u2019]indice\s+(?:de\s+)+([^\W\d_]+)\s+(20\d{2})\)"
 )
+# ComfyFlex's: "Index (HTVA): Belpex = 131,39 EUR/MWh (valeur de l'indice du
+# 3ieme trimestre 2026)", the quarter's number in its first group of digits.
+_PUBLISHED_QUARTER_INDEX_RE = re.compile(
+    r"Index\s*\(HTVA\)\s*:?\s*(Belpex)\s*=\s*(\d+,\d+)\s*€/MWh\s*"
+    r"\(valeur\s+de\s+l['\u2019]indice\s+du\s+([1-4])[^\W\d_]*\s+trimestre\s+(20\d{2})\)"
+)
 
 
-def published_indices(text: str) -> dict[str, tuple[date, float]]:
-    """The indices a card names for the month before its own, by name
-    ("Belpex", "Belpex RLP M"), as ``(month, EUR/kWh)``.
+def published_indices(
+    text: str, *, quarterly: bool = False
+) -> dict[str, tuple[date, float]]:
+    """The indices a card names for the period before its own, by name
+    ("Belpex", "Belpex RLP M"), as ``(first month of it, EUR/kWh)``.
 
-    Luminus computes a card's figures on the last value known, which is the
-    previous month's, and says which: that is what the previous month is
-    billed on. Two different values under one name make the name unusable.
+    Luminus computes a card's figures on the last value known and says which:
+    the previous month's, or with ``quarterly`` the previous quarter's on
+    ComfyFlex, and that is what the period is billed on. Two different values
+    under one name make the name unusable.
     """
+    pattern = _PUBLISHED_QUARTER_INDEX_RE if quarterly else _PUBLISHED_INDEX_RE
     found: dict[str, set[tuple[date, float]]] = {}
-    for match in _PUBLISHED_INDEX_RE.finditer(" ".join(text.split())):
-        number = _MONTH_NAMES.get(match.group(3).lower())
+    for match in pattern.finditer(" ".join(text.split())):
+        if quarterly:
+            number: int | None = (int(match.group(3)) - 1) * 3 + 1
+        else:
+            number = _MONTH_NAMES.get(match.group(3).lower())
         if number is None:
             continue
         found.setdefault(" ".join(match.group(1).split()), set()).add(

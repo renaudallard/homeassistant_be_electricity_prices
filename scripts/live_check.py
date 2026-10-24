@@ -4247,11 +4247,11 @@ _INJECTION_SHAPE: dict[str, str] = {
     "luminus_basicfix": "month",
     "luminus_basicflex": "month",
     "luminus_smartflex": "month",
-    # Pinned explicitly rather than left to derive: these two print the
-    # IDENTICAL formula and index it QUARTERLY, so the pin is what records
-    # that leaving them on the printed figure is deliberate.
-    "luminus_comfyflex": "monthly",
-    "luminus_comfyflex_plus": "monthly",
+    # The same formula indexed QUARTERLY, "tous les trimestres": month indexed
+    # all the same, the one period flag a feed-in leg has, and its months
+    # settle on the index the next quarter's card names.
+    "luminus_comfyflex": "month",
+    "luminus_comfyflex_plus": "month",
     # Ecopower's July 2026 card split the feed-in credit 50/50: "VAST 50% x
     # 0,02 euro / VARIABEL +50% ... volgt de formule 0,9 x <index> [EPEX SPP]
     # - 0,01", footnote 2 naming the index as the delivery month's realized
