@@ -180,9 +180,10 @@ def _vat_table_holds_nothing() -> Iterator[None]:
 
 @pytest.fixture(autouse=True)
 def _fluvius_sheets_as_published() -> Iterator[None]:
-    """The tick reads the VREG network ceiling off Fluvius's tariff sheets.
-    Tests see the figures the sheets print instead of the network, and
-    whatever a test holds is gone before the next one."""
+    """The tick reads the VREG network ceiling off Fluvius's tariff sheets,
+    and an analog meter's kWh rate off its area's. Tests see the figures the
+    sheets print instead of the network, no analog rate unless a test holds
+    one, and whatever a test holds is gone before the next one."""
     from unittest.mock import AsyncMock, patch
 
     from custom_components.be_electricity_prices import (
@@ -191,8 +192,13 @@ def _fluvius_sheets_as_published() -> Iterator[None]:
         fluvius,
     )
 
-    fluvius._cache.clear()
-    fluvius._failed_at.clear()
+    def _forget() -> None:
+        fluvius._cache.clear()
+        fluvius._failed_at.clear()
+        fluvius._analog.clear()
+        fluvius._analog_failed_at.clear()
+
+    _forget()
     # Every sheet from 2023 to 2026 gives a 2,50 kW minimum peak.
     fluvius._cache.update(
         {
@@ -203,10 +209,11 @@ def _fluvius_sheets_as_published() -> Iterator[None]:
     with (
         patch.object(coordinator_tick, "ensure_tariff_sheet", AsyncMock()),
         patch.object(backfill_window, "ensure_tariff_sheet", AsyncMock()),
+        patch.object(coordinator_tick, "ensure_analog_surcharge", AsyncMock()),
+        patch.object(backfill_window, "ensure_analog_surcharge", AsyncMock()),
     ):
         yield
-    fluvius._cache.clear()
-    fluvius._failed_at.clear()
+    _forget()
 
 
 _JUSTEL_PAGE = ROOT / "tests" / "fixtures" / "justel_loi_programme_2004_fr.html"

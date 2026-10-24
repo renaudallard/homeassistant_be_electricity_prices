@@ -50,10 +50,12 @@
         "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique. Le circuit exclusif nuit ne sert qu'à une seconde entrée couvrant un compteur séparé qui ne compte que la nuit : choisi ici, il facture toute l'entrée au tarif de nuit, et en Flandre sans tarif capacitaire : Fluvius facture au ménage un seul pic mensuel, sur l'entrée principale.",
         "data": {
           "meter": "Compteur",
-          "day_hours": "Heures du tarif jour"
+          "day_hours": "Heures du tarif jour",
+          "analog_meter": "Compteur analogique"
         },
         "data_description": {
-          "day_hours": "Fluvius facture le tarif jour de 07:00 à 22:00 en semaine, sauf dans les communes de sa liste, où il court de 06:00 à 21:00. Pour une commune marquée d'un astérisque sur la liste, l'heure de basculement a été fixée à la pose du compteur : vérifiez le vôtre. Utilisé uniquement avec un compteur bi-horaire ou numérique."
+          "day_hours": "Fluvius facture le tarif jour de 07:00 à 22:00 en semaine, sauf dans les communes de sa liste, où il court de 06:00 à 21:00. Pour une commune marquée d'un astérisque sur la liste, l'heure de basculement a été fixée à la pose du compteur : vérifiez le vôtre. Utilisé uniquement avec un compteur bi-horaire ou numérique.",
+          "analog_meter": "Cochez si votre compteur est encore un compteur analogique (classique) que Fluvius n'a pas encore remplacé par un compteur numérique. Fluvius ne peut pas en mesurer le pic : il facture le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh."
         }
       },
       "professional": {
@@ -404,10 +406,12 @@
         "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique. Le circuit exclusif nuit ne sert qu'à une seconde entrée couvrant un compteur séparé qui ne compte que la nuit : choisi ici, il facture toute l'entrée au tarif de nuit, et en Flandre sans tarif capacitaire : Fluvius facture au ménage un seul pic mensuel, sur l'entrée principale.",
         "data": {
           "meter": "Compteur",
-          "day_hours": "Heures du tarif jour"
+          "day_hours": "Heures du tarif jour",
+          "analog_meter": "Compteur analogique"
         },
         "data_description": {
-          "day_hours": "Fluvius facture le tarif jour de 07:00 à 22:00 en semaine, sauf dans les communes de sa liste, où il court de 06:00 à 21:00. Pour une commune marquée d'un astérisque sur la liste, l'heure de basculement a été fixée à la pose du compteur : vérifiez le vôtre. Utilisé uniquement avec un compteur bi-horaire ou numérique."
+          "day_hours": "Fluvius facture le tarif jour de 07:00 à 22:00 en semaine, sauf dans les communes de sa liste, où il court de 06:00 à 21:00. Pour une commune marquée d'un astérisque sur la liste, l'heure de basculement a été fixée à la pose du compteur : vérifiez le vôtre. Utilisé uniquement avec un compteur bi-horaire ou numérique.",
+          "analog_meter": "Cochez si votre compteur est encore un compteur analogique (classique) que Fluvius n'a pas encore remplacé par un compteur numérique. Fluvius ne peut pas en mesurer le pic : il facture le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh."
         }
       },
       "professional": {

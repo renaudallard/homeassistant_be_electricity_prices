@@ -44,6 +44,7 @@ from homeassistant.config_entries import (
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_ANALOG_METER,
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_API_KEY,
     CONF_CAPACITY_PEAK_SENSOR,
@@ -128,6 +129,7 @@ from .providers import (
     settlement_answer,
     takes_signing_rate,
 )
+from .snapshot_resolve import analog_meter, offers_analog_meter
 
 
 class _WizardStepsMixin:
@@ -388,6 +390,9 @@ class _WizardStepsMixin:
                 # move to another region would be inert, and would come back
                 # into force if the entry moved back without being asked.
                 self._data.pop(CONF_DAY_HOURS, None)
+            if not offers_analog_meter(self._data):
+                # Likewise, and on the digital meter a dynamic contract needs.
+                self._data.pop(CONF_ANALOG_METER, None)
             return await self._ask_professional()
         return self.async_show_form(
             step_id="meter",
@@ -810,7 +815,8 @@ class _WizardStepsMixin:
         # Not on an exclusive-night circuit: its quarter-hours are billed with
         # the main meter's, on the main entry, so there is no peak to ask for
         # here and the household's DSMR peak sensor must not be offered again.
-        if bills_capacity(self._data):
+        # Nor on an analog meter, billed the minimum peak with nothing to read.
+        if bills_capacity(self._data) and not analog_meter(self._data):
             return await self.async_step_capacity()
         return await self._before_solar()
 

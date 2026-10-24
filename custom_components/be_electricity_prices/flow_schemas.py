@@ -61,6 +61,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import EntsoeAuthError, EntsoeClient, EntsoeError
 from .const import (
+    CONF_ANALOG_METER,
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_API_KEY,
     CONF_CONNECTION_KVA_TIER,
@@ -129,6 +130,7 @@ from .flow_contracts import (
     _supplier_options,
 )
 from .flow_switch import _add_contract_date_fields
+from .snapshot_resolve import offers_analog_meter
 
 
 def _professional_schema(defaults: dict[str, Any]) -> vol.Schema:
@@ -451,6 +453,18 @@ def _meter_schema(
                 translation_key="day_hours",
             )
         )
+    # Whether Fluvius still reads the meter as analog, asked where it may
+    # (offers_analog_meter) of any meter the form can pick but the digital
+    # one a dynamic contract needs; the step drops the answer on that one.
+    if kind not in SMART_METER_CONTRACT_KINDS and offers_analog_meter(
+        {**defaults, CONF_METER: METER_MONO}
+    ):
+        fields[
+            vol.Required(
+                CONF_ANALOG_METER,
+                default=bool(defaults.get(CONF_ANALOG_METER, False)),
+            )
+        ] = BooleanSelector()
     return vol.Schema(fields)
 
 

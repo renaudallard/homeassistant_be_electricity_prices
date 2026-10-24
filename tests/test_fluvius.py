@@ -58,6 +58,8 @@ def _nothing_held() -> None:
     """conftest holds the published figures; these tests read them."""
     fluvius._cache.clear()
     fluvius._failed_at.clear()
+    fluvius._analog.clear()
+    fluvius._analog_failed_at.clear()
 
 
 def test_the_ceiling_and_floor_are_read_off_the_years_sheet() -> None:
@@ -91,6 +93,40 @@ def test_a_figure_outside_the_bounds_is_refused(tmp_path: Path) -> None:
                 )
             dst.writestr(info, data)
     assert fluvius.parse_sheet(out.read_bytes(), 2026) is None
+
+
+def test_the_analog_surcharge_is_the_two_kwh_rates_apart() -> None:
+    """An analog meter's kWh rate less the peak-metered one, from the area's own
+    sheet: 0,0631932 - 0,0271123 on Zenne-Dijle in 2026, and in 2023, when the
+    analog column was headed "klassieke meter" and sat one column further,
+    0,0276308 - 0,0090800 on Antwerpen. The public service and surcharge rates
+    agree between the two columns on every sheet from 2023 to 2026."""
+    assert fluvius.parse_analog_surcharge(_SHEET_2026, 2026) == 0.0360809
+    assert fluvius.parse_analog_surcharge(_SHEET_2023, 2023) == 0.0185508
+    assert fluvius.parse_analog_surcharge(_SHEET_2026, 2025) is None
+
+
+def test_an_analog_column_billing_other_public_service_rates_is_refused(
+    tmp_path: Path,
+) -> None:
+    """The kWh rates are the whole difference only while the rest of the
+    per-kWh network term is the same for both meters."""
+    out = tmp_path / "split.xlsx"
+    with (
+        zipfile.ZipFile(_FIXTURES / "fluvius_zenne_dijle_2026.xlsx") as src,
+        zipfile.ZipFile(out, "w") as dst,
+    ):
+        for info in src.infolist():
+            data = src.read(info)
+            if info.filename == "xl/worksheets/sheet1.xml":
+                cell = b'<c r="O30" s="'
+                assert data.count(cell) == 1
+                start = data.index(cell)
+                value = data.index(b"<v>", start) + 3
+                end = data.index(b"</v>", value)
+                data = data[:value] + b"0.03" + data[end:]
+            dst.writestr(info, data)
+    assert fluvius.parse_analog_surcharge(out.read_bytes(), 2026) is None
 
 
 class _Response:
@@ -153,6 +189,55 @@ async def test_a_year_not_listed_yet_yields_nothing_until_the_backoff() -> None:
     assert session.asked == [], "the backoff did not hold"
 
 
+async def test_an_analog_meter_reads_its_own_areas_sheet() -> None:
+    """Not the first one listed: the surcharge is the area's. Kept, standing
+    in for a later year Fluvius has not published, never for an earlier one."""
+    session: Any = _Session()
+    # Antwerpen's page listed first, as Fluvius orders them: the first sheet is
+    # not the one an analog meter on Zenne-Dijle reads.
+    antwerpen = _PUBLICATION.replace("zenne-dijle", "antwerpen")
+    session.pages[fluvius._LISTING_URL] = (
+        f'<a href="{antwerpen}">Antwerpen</a><a href="{_PUBLICATION}">Zenne-Dijle</a>'
+    ).encode()
+    session.pages[fluvius._SITE + antwerpen] = b"<html></html>"
+    surcharge = await fluvius.ensure_analog_surcharge(
+        session, 2026, "fluvius_zenne_dijle"
+    )
+    assert surcharge == 0.0360809
+    assert session.asked == [
+        fluvius._LISTING_URL,
+        fluvius._SITE + _PUBLICATION,
+        fluvius._SITE + _WORKBOOK,
+    ]
+    session.asked.clear()
+    assert (
+        await fluvius.ensure_analog_surcharge(session, 2026, "fluvius_zenne_dijle")
+        == surcharge
+    )
+    assert session.asked == [], "a held sheet was fetched again"
+    assert fluvius.cached_analog_surcharge(2027, "fluvius_zenne_dijle") == surcharge
+    assert fluvius.cached_analog_surcharge(2025, "fluvius_zenne_dijle") is None
+    assert fluvius.cached_analog_surcharge(2026, "fluvius_antwerpen") is None
+    # Not a Fluvius area: nothing to ask for.
+    assert await fluvius.ensure_analog_surcharge(session, 2026, "ores") is None
+    assert session.asked == []
+
+
+async def test_an_area_sheet_that_cannot_be_read_never_raises() -> None:
+    session: Any = _Session(b"<html>maintenance</html>")
+    assert (
+        await fluvius.ensure_analog_surcharge(session, 2026, "fluvius_zenne_dijle")
+        is None
+    )
+    assert (2026, "fluvius_zenne_dijle") in fluvius._analog_failed_at
+    session.asked.clear()
+    assert (
+        await fluvius.ensure_analog_surcharge(session, 2026, "fluvius_zenne_dijle")
+        is None
+    )
+    assert session.asked == [], "the backoff did not hold"
+
+
 @pytest.mark.parametrize(
     ("label", "body"),
     [
@@ -183,11 +268,16 @@ def test_the_sheet_is_read_before_the_card_is_resolved() -> None:
 
     body = inspect.getsource(BePricesCoordinator._update_body)
     assert body.index("ensure_tariff_sheet(") < body.index("_maybe_refresh_snapshot()")
+    # An analog meter's area sheet likewise.
+    assert body.index("ensure_analog_surcharge(") < body.index(
+        "_maybe_refresh_snapshot()"
+    )
     resolver = inspect.getsource(snapshot_resolve._resolve_snapshot)
     assert "cached_network_ceiling(month.year)" in resolver
     # A backfill asks for every year its window prices, not just this one.
     context = inspect.getsource(backfill._build_context)
     assert "ensure_tariff_sheet(coordinator._session, year)" in context
+    assert "coordinator._session, year, str(entry.data[CONF_DSO])" in context
 
 
 async def test_a_restart_puts_the_ceiling_on_the_stored_card(hass: Any) -> None:

@@ -77,7 +77,7 @@ from .contract_periods import (
 )
 from .coordinator import BePricesCoordinator
 from .day_night import day_start_for
-from .fluvius import ensure_tariff_sheet
+from .fluvius import ensure_analog_surcharge, ensure_tariff_sheet
 from .injection import _injection_hourly_on_cohort
 from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
@@ -89,7 +89,11 @@ from .snapshot_months import (
     month_card_failed,
     nearer_card_not_read,
 )
-from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
+from .snapshot_resolve import (
+    analog_meter,
+    entry_annual_injection_kwh,
+    entry_annual_kwh,
+)
 from .spot_stats import (
     _energy_is_rlp_indexed,
     _rlp_blend_for,
@@ -393,10 +397,15 @@ async def _build_context(
     if region == REGION_BRUSSELS:
         for year in years:
             await ensure_power_term(coordinator._session, year)
-    # The VREG network ceiling of a Flemish entry, for the same reason.
+    # The VREG network ceiling of a Flemish entry, for the same reason, and an
+    # analog meter's kWh rate off its area's sheet.
     if region == REGION_FLANDERS:
         for year in years:
             await ensure_tariff_sheet(coordinator._session, year)
+            if analog_meter(entry.data):
+                await ensure_analog_surcharge(
+                    coordinator._session, year, str(entry.data[CONF_DSO])
+                )
     return _BackfillContext(
         region=region,
         day_start=day_start_for(entry.data),

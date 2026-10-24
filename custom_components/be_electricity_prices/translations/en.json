@@ -50,10 +50,12 @@
         "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts. The exclusive-night circuit is only for a second entry covering a separate night-only meter: chosen here, it bills the whole entry at the night rate, and in Flanders no capacity tariff: Fluvius bills the household one monthly peak, on the main entry.",
         "data": {
           "meter": "Meter",
-          "day_hours": "Day tariff hours"
+          "day_hours": "Day tariff hours",
+          "analog_meter": "Analog meter"
         },
         "data_description": {
-          "day_hours": "Fluvius bills the day rate from 07:00 to 22:00 on weekdays, except in the municipalities on its list, where it runs from 06:00 to 21:00. Where the list marks a municipality with an asterisk, the switch time was set when the meter was installed, so check yours. Only used with a dual-time or digital meter."
+          "day_hours": "Fluvius bills the day rate from 07:00 to 22:00 on weekdays, except in the municipalities on its list, where it runs from 06:00 to 21:00. Where the list marks a municipality with an asterisk, the switch time was set when the meter was installed, so check yours. Only used with a dual-time or digital meter.",
+          "analog_meter": "Tick if your meter is still an analog (classic) one that Fluvius has not yet replaced by a digital meter. Fluvius cannot measure its peak: it bills the capacity tariff on a flat 2.5 kW and a higher network rate per kWh."
         }
       },
       "professional": {
@@ -404,10 +406,12 @@
         "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts. The exclusive-night circuit is only for a second entry covering a separate night-only meter: chosen here, it bills the whole entry at the night rate, and in Flanders no capacity tariff: Fluvius bills the household one monthly peak, on the main entry.",
         "data": {
           "meter": "Meter",
-          "day_hours": "Day tariff hours"
+          "day_hours": "Day tariff hours",
+          "analog_meter": "Analog meter"
         },
         "data_description": {
-          "day_hours": "Fluvius bills the day rate from 07:00 to 22:00 on weekdays, except in the municipalities on its list, where it runs from 06:00 to 21:00. Where the list marks a municipality with an asterisk, the switch time was set when the meter was installed, so check yours. Only used with a dual-time or digital meter."
+          "day_hours": "Fluvius bills the day rate from 07:00 to 22:00 on weekdays, except in the municipalities on its list, where it runs from 06:00 to 21:00. Where the list marks a municipality with an asterisk, the switch time was set when the meter was installed, so check yours. Only used with a dual-time or digital meter.",
+          "analog_meter": "Tick if your meter is still an analog (classic) one that Fluvius has not yet replaced by a digital meter. Fluvius cannot measure its peak: it bills the capacity tariff on a flat 2.5 kW and a higher network rate per kWh."
         }
       },
       "professional": {

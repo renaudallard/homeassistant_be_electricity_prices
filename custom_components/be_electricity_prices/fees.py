@@ -70,7 +70,7 @@ from .providers.base import (
     DsoOverlay,
     SupplierSnapshot,
 )
-from .snapshot_resolve import entry_annual_kwh
+from .snapshot_resolve import analog_meter, entry_annual_kwh
 
 
 def bills_capacity(data: Mapping[str, Any]) -> bool:
@@ -87,6 +87,8 @@ def bills_capacity(data: Mapping[str, Any]) -> bool:
     entry carries the household's charge and this one none: billing both
     charged the household twice, a full charge on the night entry with the
     peak sensor the capacity step offered it, and the 2,5 kW minimum without.
+    An analog night meter has no quarter-hours to add, and pays the flat charge
+    every analog meter does (``analog_meter``).
 
     Asked of the entry's own data, never of a comparison proxy's: the charge
     belongs to the connection, so a what-if meter does not move it. The quote
@@ -95,7 +97,7 @@ def bills_capacity(data: Mapping[str, Any]) -> bool:
     """
     if data.get(CONF_REGION) != REGION_FLANDERS:
         return False
-    return data.get(CONF_METER) != METER_EXCLUSIVE_NIGHT
+    return data.get(CONF_METER) != METER_EXCLUSIVE_NIGHT or analog_meter(data)
 
 
 def _capacity_monthly_eur(overlay: DsoOverlay | None, peak_kw: float) -> float:

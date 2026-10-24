@@ -50,10 +50,12 @@
         "description": "Eintarifzähler (mono), Doppeltarifzähler (Tag/Nacht), oder intelligenter Zähler für dynamische Verträge. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet, in Flandern ohne Kapazitätstarif: Fluvius berechnet dem Haushalt eine einzige Monatsspitze, auf dem Haupteintrag.",
         "data": {
           "meter": "Zähler",
-          "day_hours": "Stunden des Tagtarifs"
+          "day_hours": "Stunden des Tagtarifs",
+          "analog_meter": "Analoger Zähler"
         },
         "data_description": {
-          "day_hours": "Fluvius berechnet werktags den Tagtarif von 07:00 bis 22:00, außer in den Gemeinden auf seiner Liste, wo er von 06:00 bis 21:00 gilt. Ist eine Gemeinde auf der Liste mit einem Sternchen markiert, wurde der Umschaltzeitpunkt beim Einbau des Zählers festgelegt: prüfen Sie dann Ihren Zähler. Nur bei einem Doppeltarif- oder digitalen Zähler verwendet."
+          "day_hours": "Fluvius berechnet werktags den Tagtarif von 07:00 bis 22:00, außer in den Gemeinden auf seiner Liste, wo er von 06:00 bis 21:00 gilt. Ist eine Gemeinde auf der Liste mit einem Sternchen markiert, wurde der Umschaltzeitpunkt beim Einbau des Zählers festgelegt: prüfen Sie dann Ihren Zähler. Nur bei einem Doppeltarif- oder digitalen Zähler verwendet.",
+          "analog_meter": "Ankreuzen, wenn Ihr Zähler noch ein analoger (klassischer) Zähler ist, den Fluvius noch nicht durch einen digitalen Zähler ersetzt hat. Fluvius kann seine Spitze nicht messen: Es berechnet den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh."
         }
       },
       "professional": {
@@ -404,10 +406,12 @@
         "description": "Eintarifzähler (mono), Doppeltarifzähler (Tag/Nacht), oder intelligenter Zähler für dynamische Verträge. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet, in Flandern ohne Kapazitätstarif: Fluvius berechnet dem Haushalt eine einzige Monatsspitze, auf dem Haupteintrag.",
         "data": {
           "meter": "Zähler",
-          "day_hours": "Stunden des Tagtarifs"
+          "day_hours": "Stunden des Tagtarifs",
+          "analog_meter": "Analoger Zähler"
         },
         "data_description": {
-          "day_hours": "Fluvius berechnet werktags den Tagtarif von 07:00 bis 22:00, außer in den Gemeinden auf seiner Liste, wo er von 06:00 bis 21:00 gilt. Ist eine Gemeinde auf der Liste mit einem Sternchen markiert, wurde der Umschaltzeitpunkt beim Einbau des Zählers festgelegt: prüfen Sie dann Ihren Zähler. Nur bei einem Doppeltarif- oder digitalen Zähler verwendet."
+          "day_hours": "Fluvius berechnet werktags den Tagtarif von 07:00 bis 22:00, außer in den Gemeinden auf seiner Liste, wo er von 06:00 bis 21:00 gilt. Ist eine Gemeinde auf der Liste mit einem Sternchen markiert, wurde der Umschaltzeitpunkt beim Einbau des Zählers festgelegt: prüfen Sie dann Ihren Zähler. Nur bei einem Doppeltarif- oder digitalen Zähler verwendet.",
+          "analog_meter": "Ankreuzen, wenn Ihr Zähler noch ein analoger (klassischer) Zähler ist, den Fluvius noch nicht durch einen digitalen Zähler ersetzt hat. Fluvius kann seine Spitze nicht messen: Es berechnet den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh."
         }
       },
       "professional": {

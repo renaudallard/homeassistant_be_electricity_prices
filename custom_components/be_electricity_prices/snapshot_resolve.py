@@ -41,6 +41,7 @@ back.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import date
 from typing import Any
@@ -50,25 +51,31 @@ from homeassistant.util import dt as dt_util
 
 from .brugel import cached_power_term
 from .const import (
+    CONF_ANALOG_METER,
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_CUSTOM_PROFESSIONAL,
     CONF_CUSTOM_VAT_RATE,
     CONF_DIRECT_DEBIT,
+    CONF_DSO,
     CONF_INCLUDE_VAT,
     CONF_METER,
     CONF_QUARTER_HOURLY,
+    CONF_REGION,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_DIRECT_DEBIT,
     DEFAULT_INCLUDE_VAT,
+    METER_BI,
+    METER_EXCLUSIVE_NIGHT,
     METER_MONO,
+    REGION_FLANDERS,
     SOLAR_REGIME_INJECTION,
     SUPPLIER_CUSTOM,
     SUPPLIER_SOCIAL,
 )
 from .excise_law import household_schedule
-from .fluvius import cached_network_ceiling
+from .fluvius import cached_analog_surcharge, cached_network_ceiling
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
 from .providers._resolve import (
     apply_vat,
@@ -164,6 +171,87 @@ def _custom_professional(entry: ConfigEntry, snap: SupplierSnapshot) -> bool:
     if snap.supplier != SUPPLIER_CUSTOM:
         return False
     return bool(entry.data.get(CONF_CUSTOM_PROFESSIONAL, False))
+
+
+def offers_analog_meter(data: Mapping[str, Any]) -> bool:
+    """Whether this entry's meter may be one Fluvius still reads as analog.
+
+    A Flemish mono, bi-hourly or exclusive-night meter: a dynamic contract is
+    billed off a digital meter's quarter-hours, and only Fluvius bills the two
+    apart. Not on the custom supplier, whose network figures are the ones the
+    household typed for its own meter, nor on the social tariff, whose network
+    component is the CREG's.
+    """
+    return (
+        data.get(CONF_REGION) == REGION_FLANDERS
+        and data.get(CONF_METER, METER_MONO)
+        in (METER_MONO, METER_BI, METER_EXCLUSIVE_NIGHT)
+        and data.get(CONF_SUPPLIER) not in (SUPPLIER_CUSTOM, SUPPLIER_SOCIAL)
+    )
+
+
+def analog_meter(data: Mapping[str, Any]) -> bool:
+    """Whether this entry is on a meter Fluvius still reads as analog.
+
+    Fluvius cannot measure such a meter's peak: "Je betaalt dan een forfaitair
+    bedrag voor 2.5 kW als maandpiek en een aanvullend tarief voor je verbruik
+    in kWh". So the capacity tariff is billed on the minimum peak
+    (``_billed_peak_kw``), the maximumtarief does not apply, and every kWh,
+    normal or exclusive-night, carries the analog column's kWh rate in place of
+    the peak-metered one (:func:`_resolve_analog_meter`).
+
+    Asked of the entry's data, which a comparison proxy carries with the meter
+    the quote is priced on: a dynamic target is sold on a digital meter, so it
+    is quoted digital, on the minimum peak the household would start from.
+    """
+    return offers_analog_meter(data) and bool(data.get(CONF_ANALOG_METER, False))
+
+
+def entry_analog_surcharge(entry: ConfigEntry, year: int) -> float | None:
+    """What this entry's analog meter pays per kWh over a peak-metered one in
+    ``year``, EUR/kWh excl. VAT, or ``None`` on a digital meter or before the
+    area's sheet has been read (``fluvius.cached_analog_surcharge``)."""
+    if not analog_meter(entry.data):
+        return None
+    return cached_analog_surcharge(year, str(entry.data.get(CONF_DSO, "")))
+
+
+def _resolve_analog_meter(
+    entry: ConfigEntry, snap: SupplierSnapshot, month: date
+) -> SupplierSnapshot:
+    """The entry's own network overlay as an analog meter is billed.
+
+    Every distribution rate, the exclusive-night one included, takes the
+    analog surcharge of the delivery year, put onto the basis the card prints
+    on (``on_card_basis``), and the maximumtarief goes, since the regulator's
+    sheet sets none for an analog meter. The capacity rate stays: the charge is
+    billed on the minimum peak, the sheet's "Vaste term" to the cent.
+
+    Identity on a digital meter, before the sheet is read, and on a card whose
+    network is not Fluvius's tariffs (custom, social). Only the entry's own
+    area, since the surcharge is that area's.
+    """
+    surcharge = entry_analog_surcharge(entry, month.year)
+    if surcharge is None or snap.supplier in (SUPPLIER_CUSTOM, SUPPLIER_SOCIAL):
+        return snap
+    dso = str(entry.data.get(CONF_DSO, ""))
+    overlay = snap.dsos.get(dso)
+    if overlay is None:
+        return snap
+    extra = on_card_basis(snap, month, surcharge)
+
+    def plus(rate: float | None) -> float | None:
+        return None if rate is None else rate + extra
+
+    analog = replace(
+        overlay,
+        distribution_single=overlay.distribution_single + extra,
+        distribution_peak=plus(overlay.distribution_peak),
+        distribution_offpeak=plus(overlay.distribution_offpeak),
+        distribution_exclusive_night=plus(overlay.distribution_exclusive_night),
+        network_ceiling_eur_per_kwh=None,
+    )
+    return replace(snap, dsos={**snap.dsos, dso: analog})
 
 
 def entry_annual_kwh(entry: ConfigEntry, coordinator: Any = None) -> float:
@@ -338,6 +426,9 @@ def _resolve_snapshot(
     resolved = resolve_vreg_network_ceiling(
         resolved, month, cached_network_ceiling(month.year)
     )
+    # After the ceiling, which an analog meter does not have, and before
+    # apply_vat for the reason Brugel's term goes first.
+    resolved = _resolve_analog_meter(entry, resolved, month)
     resolved = apply_vat(resolved, include_vat=_include_vat(entry))
     # The two federal levies, both defined by the month being billed rather
     # than by the card that prints them. A business on the custom supplier

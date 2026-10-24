@@ -92,7 +92,7 @@ from .creg_ev import (
 )
 from .excise_law import ensure_excise_law
 from .fees import _compute_capacity, _compute_prosumer, bills_capacity
-from .fluvius import ensure_tariff_sheet
+from .fluvius import ensure_analog_surcharge, ensure_tariff_sheet
 from .injection import (
     _compute_injection_price,
     _static_injection_bands,
@@ -110,6 +110,7 @@ from .providers import (
     get as get_extractor,
 )
 from .providers._rates import EnergyRates
+from .snapshot_resolve import analog_meter
 from .snapshot_store import cached_month_card
 from .vat_rates import ensure_vat_rates
 
@@ -257,9 +258,15 @@ class _TickMixin:
         if self.entry.data.get(CONF_REGION) == REGION_BRUSSELS:
             await ensure_power_term(self._session, dt_util.now().year)
         # The VREG network ceiling, off Fluvius's tariff sheet, for a Flemish
-        # entry and for the same reason.
+        # entry and for the same reason, and on an analog meter its own area's
+        # kWh rate, the year before standing in until Fluvius publishes one.
         if self.entry.data.get(CONF_REGION) == REGION_FLANDERS:
-            await ensure_tariff_sheet(self._session, dt_util.now().year)
+            year = dt_util.now().year
+            await ensure_tariff_sheet(self._session, year)
+            if analog_meter(self.entry.data):
+                dso = str(self.entry.data.get(CONF_DSO, ""))
+                if await ensure_analog_surcharge(self._session, year, dso) is None:
+                    await ensure_analog_surcharge(self._session, year - 1, dso)
         # The month's VAT rate, read before the card is resolved like the term
         # above, and from the card archive, so only where the entry reads it.
         if self.entry.data.get(CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE):

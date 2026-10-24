@@ -1276,11 +1276,31 @@ the hundredth the cents allow gives the floor: 2,50 kW on every sheet from
 2023 to 2026. A floor outside 0,5 to 10 kW, or a sheet without the sentence,
 leaves the floor unread and the ceiling stands.
 
+An entry on an analog meter (see
+[the pricing model](pricing-model.md#analog-meters)) also reads its own area's
+sheet, through the publication page named after the area
+(`fluvius-<area>-distributienettarief-afname-elektriciteit-01012026-31122026`),
+which exists from 2025, when the eight areas took the names the DSO keys stand
+for; before it the listing names the merged operators, which match no key one
+to one. From it `parse_analog_surcharge` reads what an analog meter pays per
+kWh over a peak-metered one: the "kWh-tarief" in the column of the "Vaste term"
+row's first figure (the analog meter's, headed "analoge meter", "klassieke
+meter" up to 2024) less the "kWh-tarief" in the capacity rate's column, 0,0257935
+EUR/kWh excluding VAT on Antwerpen in 2026. It refuses the sheet when the
+public service rates ("kWh-tarief normaal", "kWh-tarief exclusief nacht") or
+the surcharges row differ between the two columns, since the kWh rates would
+then not be the whole difference, and a figure outside 0 to 0,2 EUR/kWh.
+
 ### Caching and failure
 
 `ensure_tariff_sheet` runs in the tick of a Flemish entry, before the card
-is resolved, and for every year a backfill window spans. A year read is held
-for the life of the process; a failure is held for six hours. Without the
+is resolved, and for every year a backfill window spans, and so does
+`ensure_analog_surcharge` on an analog meter, which in the tick also asks for
+the year before when this year's sheet is not out yet:
+`cached_analog_surcharge` answers the year's figure, else the latest earlier
+one held, never a later one. A sheet read is held for the life of the process;
+a failure is held for six hours, and an analog meter whose area sheet is not
+read is billed as a digital one and logged. Without the
 year's figure `resolve_vreg_network_ceiling` leaves the card exactly as
 printed, which is what the integration did before the sheet was read.
 `capacity_floor_kw` answers the floor of the year's sheet, else of the latest
@@ -1294,4 +1314,6 @@ or minimum contribution cannot be read, and compares the cards' printed
 ceilings against it.
 
 The parser is tested on the 2026 Zenne-Dijle sheet and the 2023 Antwerpen one
-as Fluvius served them on 2026-10-19 (`tests/fixtures/fluvius_*.xlsx`).
+as Fluvius served them on 2026-10-19 (`tests/fixtures/fluvius_*.xlsx`), and
+`parse_analog_surcharge` was run on every area's sheet of 2025 and 2026 and the
+2023 and 2024 sheets of all ten operators of the time.

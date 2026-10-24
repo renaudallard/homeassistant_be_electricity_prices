@@ -53,6 +53,7 @@ from .const import (
 from .fees import bills_capacity
 from .fluvius import capacity_floor_kw
 from .providers.base import SupplierSnapshot
+from .snapshot_resolve import analog_meter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -150,9 +151,10 @@ class _PeakMixin:
             self._peak_kw = 0.0
 
         mode = self.entry.data.get(CONF_CAPACITY_MODE)
-        if mode == CAPACITY_MODE_FIXED:
+        if not self._measures_peak():
             # Nothing is measured, and _billed_peak_kw reads the configured
-            # value directly. Writing it here banked it into every closed
+            # value directly, or the minimum on an analog meter, which has no
+            # peak to read. Writing it here banked it into every closed
             # month as if measured, and after a switch to the peak sensor the
             # running maximum could not come down below it for the rest of
             # the month, nor the mean for a year. With the running month at
@@ -199,6 +201,14 @@ class _PeakMixin:
                 if value > self._peak_kw:
                     self._peak_kw = value
 
+    def _measures_peak(self) -> bool:
+        """Whether this entry reads its monthly peak off a sensor: neither a
+        stated fixed peak nor an analog meter, whose peak Fluvius cannot
+        measure, has one to read."""
+        if analog_meter(self.entry.data):
+            return False
+        return self.entry.data.get(CONF_CAPACITY_MODE) != CAPACITY_MODE_FIXED
+
     def _peak_terms(self) -> list[float]:
         """The monthly peaks that go into the mean, newest last.
 
@@ -218,9 +228,10 @@ class _PeakMixin:
         ``len(self._peak_history) + 1`` claimed a month the mean had not taken
         for as long as the in-progress one stayed unmeasured. None in fixed
         mode, which bills the configured kW and takes no mean, whatever
-        measured months it keeps for a return to the sensor.
+        measured months it keeps for a return to the sensor, and none on an
+        analog meter, which is billed the minimum.
         """
-        if self.entry.data.get(CONF_CAPACITY_MODE) == CAPACITY_MODE_FIXED:
+        if not self._measures_peak():
             return []
         peaks = list(self._peak_history.values())
         if self._peak_kw > 0.0:
@@ -257,6 +268,10 @@ class _PeakMixin:
         if not bills_capacity(self.entry.data):
             return 0.0
         floor = capacity_floor_kw()
+        if analog_meter(self.entry.data):
+            # "Je betaalt dan een forfaitair bedrag voor 2.5 kW als maandpiek":
+            # the sheet's "Vaste term" of an analog meter, whatever is stored.
+            return floor
         if self.entry.data.get(CONF_CAPACITY_MODE) == CAPACITY_MODE_FIXED:
             fixed = self.entry.data.get(CONF_CAPACITY_FIXED_KW, floor)
             return max(float(fixed), floor)

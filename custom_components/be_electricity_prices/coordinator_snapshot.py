@@ -77,6 +77,7 @@ from .snapshot_codec import (
 from .snapshot_months import ArchivedCard
 from .snapshot_resolve import (
     _resolve_snapshot,
+    entry_analog_surcharge,
     entry_annual_kwh,
 )
 from .snapshot_stand_ins import (
@@ -161,6 +162,7 @@ class _SnapshotMixin:
     _snapshot_annual_kwh: float | None
     _snapshot_power_term: tuple[float, float] | None
     _snapshot_ceiling: float | None
+    _snapshot_analog: float | None
     _snapshot_vat: tuple[float, float]
     _snapshot_excise: tuple[float | None, float | None]
     _snapshot_month: tuple[int, int] | None
@@ -409,16 +411,18 @@ class _SnapshotMixin:
         after an upgrade, when no store holds the law yet: the stored card is
         resolved on its own printed excise, and only this puts the law's
         back once the tick has read it, and so is the VREG ceiling, read off
-        Fluvius's sheet on the tick like Brugel's term. The month is the last
-        input: the resolver reads the ceiling of the year it runs in, so a
-        December card held into January kept the ceiling of a year that had
-        ended. Every input is stamped, and any of them moving re-resolves.
+        Fluvius's sheet on the tick like Brugel's term, and an analog meter's
+        kWh rate off its area's sheet. The month is the last input: the
+        resolver reads the ceiling of the year it runs in, so a December card
+        held into January kept the ceiling of a year that had ended. Every
+        input is stamped, and any of them moving re-resolves.
         """
         if self._snapshot_raw is None:
             return
         annual_kwh = entry_annual_kwh(self.entry, self)
         power_term = cached_power_term(dt_util.now().year)
         ceiling = cached_network_ceiling(dt_util.now().year)
+        analog = entry_analog_surcharge(self.entry, dt_util.now().year)
         vat = _vat_now()
         excise = _excise_now()
         month = _month_now()
@@ -426,6 +430,7 @@ class _SnapshotMixin:
             self._snapshot_annual_kwh == annual_kwh
             and self._snapshot_power_term == power_term
             and self._snapshot_ceiling == ceiling
+            and self._snapshot_analog == analog
             and self._snapshot_vat == vat
             and self._snapshot_excise == excise
             and self._snapshot_month == month
@@ -437,6 +442,7 @@ class _SnapshotMixin:
         self._snapshot_annual_kwh = annual_kwh
         self._snapshot_power_term = power_term
         self._snapshot_ceiling = ceiling
+        self._snapshot_analog = analog
         self._snapshot_vat = vat
         self._snapshot_excise = excise
         self._snapshot_month = month
@@ -472,6 +478,7 @@ class _SnapshotMixin:
         self._snapshot_annual_kwh = annual_kwh
         self._snapshot_power_term = cached_power_term(dt_util.now().year)
         self._snapshot_ceiling = cached_network_ceiling(dt_util.now().year)
+        self._snapshot_analog = entry_analog_surcharge(self.entry, dt_util.now().year)
         self._snapshot_vat = _vat_now()
         self._snapshot_excise = _excise_now()
         self._snapshot_month = _month_now()

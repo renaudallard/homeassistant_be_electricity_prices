@@ -1673,6 +1673,42 @@ The `capacity_cost` sensor carries `billed_peak_kw` and `months_counted`
 attributes so the two numbers can be told apart, the latter reaching 12 once a
 full year of history has accumulated.
 
+### Analog meters
+
+Fluvius cannot measure an analog meter's peak: *"Je betaalt dan een forfaitair
+bedrag voor 2.5 kW als maandpiek en een aanvullend tarief voor je verbruik in
+kWh."* Its tariff sheet prints the analog meter a column of its own, a "Vaste
+term" in EUR a year and a kWh rate, and no maximumtarief. The vaste term is 2,5
+kW times the capacity rate of the piekmeting column, to the cent on every sheet
+from 2023 to 2026 (all areas and the merged operators before them), and the
+public service and surcharge rates are the same in both columns. An entry that
+ticks `CONF_ANALOG_METER` (`analog_meter`, `snapshot_resolve.py`) is billed
+accordingly:
+
+- `_billed_peak_kw` (`coordinator_peak.py`) answers the minimum peak whatever is
+  stored, `_track_monthly_peak` measures nothing, as in fixed mode, and the flow
+  asks no peak source, so `capacity_cost` is the vaste term on the card's own
+  capacity rate (130,92 EUR a year with VAT on Fluvius Antwerpen in 2026, the
+  figure Luminus prints in its "Compteur classique" column). An analog
+  exclusive-night meter is billed it too (`bills_capacity`, `fees.py`): it has
+  no quarter-hours to add to the main meter's.
+- `_resolve_analog_meter` (`snapshot_resolve.py`) adds the analog surcharge, the
+  analog kWh rate less the piekmeting one, to every distribution rate of the
+  entry's own overlay, the exclusive-night one included, and clears the
+  ceiling. The surcharge is read off the area's own sheet of the delivery year
+  (`fluvius.cached_analog_surcharge`, the year before standing in for a year
+  not published yet) and put on the card's VAT basis with `on_card_basis`: 2,73
+  c/kWh with VAT on Fluvius Antwerpen in 2026, which lands on Luminus's 8,09 and
+  7,55 c/kWh to the card's rounding. Until the area's sheet is read, and for
+  the years before 2025, whose sheets are the merged operators', it is identity.
+
+Not offered on a dynamic meter, which a contract only a digital meter carries
+forces, nor on the custom supplier, whose network figures are typed for the
+household's own meter, nor on the social tariff, whose CREG component replaces
+the operator's tariffs. The answer rides the comparison proxy with the meter the
+quote is priced on, so a dynamic target is quoted digital, on the minimum peak
+the household would start from.
+
 ## Prosumer term
 
 The prosumer (compensation-regime) fee is Walloon-only and monthly

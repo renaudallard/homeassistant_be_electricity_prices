@@ -50,10 +50,12 @@
         "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten. Het exclusief-nachtcircuit is alleen voor een tweede invoer voor een aparte meter die enkel 's nachts telt: hier gekozen rekent het de hele invoer tegen het nachttarief aan, en in Vlaanderen zonder capaciteitstarief: Fluvius rekent het gezin één maandpiek aan, op de hoofdinvoer.",
         "data": {
           "meter": "Meter",
-          "day_hours": "Uren van het dagtarief"
+          "day_hours": "Uren van het dagtarief",
+          "analog_meter": "Analoge meter"
         },
         "data_description": {
-          "day_hours": "Fluvius rekent op weekdagen het dagtarief aan van 07:00 tot 22:00, behalve in de gemeenten op zijn lijst, waar het van 06:00 tot 21:00 loopt. Staat een gemeente met een sterretje op de lijst, dan werd het schakelmoment bij de plaatsing van de meter bepaald: kijk dan uw meter na. Enkel gebruikt bij een tweevoudige of digitale meter."
+          "day_hours": "Fluvius rekent op weekdagen het dagtarief aan van 07:00 tot 22:00, behalve in de gemeenten op zijn lijst, waar het van 06:00 tot 21:00 loopt. Staat een gemeente met een sterretje op de lijst, dan werd het schakelmoment bij de plaatsing van de meter bepaald: kijk dan uw meter na. Enkel gebruikt bij een tweevoudige of digitale meter.",
+          "analog_meter": "Vink aan als je meter nog een analoge (klassieke) meter is die Fluvius nog niet door een digitale meter heeft vervangen. Fluvius kan de piek ervan niet meten: het rekent het capaciteitstarief aan op een forfaitaire 2,5 kW en een hoger nettarief per kWh."
         }
       },
       "professional": {
@@ -404,10 +406,12 @@
         "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten. Het exclusief-nachtcircuit is alleen voor een tweede invoer voor een aparte meter die enkel 's nachts telt: hier gekozen rekent het de hele invoer tegen het nachttarief aan, en in Vlaanderen zonder capaciteitstarief: Fluvius rekent het gezin één maandpiek aan, op de hoofdinvoer.",
         "data": {
           "meter": "Meter",
-          "day_hours": "Uren van het dagtarief"
+          "day_hours": "Uren van het dagtarief",
+          "analog_meter": "Analoge meter"
         },
         "data_description": {
-          "day_hours": "Fluvius rekent op weekdagen het dagtarief aan van 07:00 tot 22:00, behalve in de gemeenten op zijn lijst, waar het van 06:00 tot 21:00 loopt. Staat een gemeente met een sterretje op de lijst, dan werd het schakelmoment bij de plaatsing van de meter bepaald: kijk dan uw meter na. Enkel gebruikt bij een tweevoudige of digitale meter."
+          "day_hours": "Fluvius rekent op weekdagen het dagtarief aan van 07:00 tot 22:00, behalve in de gemeenten op zijn lijst, waar het van 06:00 tot 21:00 loopt. Staat een gemeente met een sterretje op de lijst, dan werd het schakelmoment bij de plaatsing van de meter bepaald: kijk dan uw meter na. Enkel gebruikt bij een tweevoudige of digitale meter.",
+          "analog_meter": "Vink aan als je meter nog een analoge (klassieke) meter is die Fluvius nog niet door een digitale meter heeft vervangen. Fluvius kan de piek ervan niet meten: het rekent het capaciteitstarief aan op een forfaitaire 2,5 kW en een hoger nettarief per kWh."
         }
       },
       "professional": {

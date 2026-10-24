@@ -56,6 +56,7 @@ from homeassistant.util import dt as dt_util
 from .cohort import _tariff_card_month, ytd_window_start
 from .compare_inputs import _coordinator_rlp_index_weights, _QuoteEntry
 from .const import (
+    CONF_ANALOG_METER,
     CONF_API_KEY,
     CONF_CONNECTION_KVA_TIER,
     CONF_CONTRACT,
@@ -252,9 +253,10 @@ _HOUSEHOLD_BLANKS = (
 )
 
 # Questions a copy recorded before they were asked cannot answer. Whether the
-# meter counts draw and injection apart is the meter's own, so a copy that
-# answers keeps its answer; one that does not say at all takes the entry's.
-_UNASKED_FACTS = (CONF_DOUBLE_FLOW_METER,)
+# meter counts draw and injection apart is the meter's own, and so is whether
+# Fluvius still reads it as analog, so a copy that answers keeps its answer;
+# one that does not say at all takes the entry's.
+_UNASKED_FACTS = (CONF_DOUBLE_FLOW_METER, CONF_ANALOG_METER)
 
 # Facts every contract takes from the entry, whatever its copy holds. The
 # hours a Flemish day register counts were set when the meter was installed

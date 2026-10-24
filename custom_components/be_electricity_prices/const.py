@@ -454,6 +454,10 @@ DSO_TARIFF_MODES: Final = (DSO_MODE_SIMPLE, DSO_MODE_BI_HORAIRE, DSO_MODE_IMPACT
 CONF_CAPACITY_MODE: Final = "capacity_mode"
 CONF_CAPACITY_PEAK_SENSOR: Final = "capacity_peak_sensor"
 CONF_CAPACITY_FIXED_KW: Final = "capacity_fixed_kw"
+# A Flemish meter Fluvius still reads as analog: no peak, the capacity tariff on
+# the minimum peak and a higher kWh rate (snapshot_resolve.analog_meter). Off
+# unless ticked, so an entry saved before it was asked bills as it did.
+CONF_ANALOG_METER: Final = "analog_meter"
 
 # Brussels contractual connection power (kVA), used only to pick the Brugel
 # OSP (Obligations de Service Public) annual-fee tier off the Sibelga card.
