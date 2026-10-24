@@ -575,7 +575,8 @@ dropped rather than billed on the new card.
    the Solar panels step, to every
    contract whose energy is indexed on the delivery month's mean and whose
    card prints last month's figure, on any solar regime — Aspiravi Eco Plus
-   Flex, Cociter Variable and Trihoraire, Ecopower Groene Burgerstroom,
+   Flex, Cociter Variable and Trihoraire, Ecofix Flexy and Flexy Online,
+   Ecopower Groene Burgerstroom,
    Elegant Flex and ComfortFlex, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex,
    OCTA+ Smart Variable, Boost Flex, Eco Boost Flex, Basic Online and the
    withdrawn Flux and Eco Flux, Eneco Flex and Flex One, EBEM
@@ -759,7 +760,8 @@ variable card billed per quarter-hour) and the monthly-mean shape (energie.be Va
 other static cards), 78 contracts across 17 suppliers between them, and the
 re-price of a month-indexed contract on the delivery month's own mean, cohort
 or not, for which the flow offers the key on every solar regime (Aspiravi
-Eco Plus Flex, Cociter Variable and Trihoraire, Ecopower Groene Burgerstroom,
+Eco Plus Flex, Cociter Variable and Trihoraire, Ecofix Flexy and Flexy Online,
+Ecopower Groene Burgerstroom,
 Elegant Flex and ComfortFlex, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Variable, Boost Flex, Eco Boost
 Flex, Basic Online and the withdrawn Flux and Eco Flux, Eneco Flex and Flex
 One, EBEM Groen Variabel and B@sic+, the withdrawn DATS 24 Groen Variabel,

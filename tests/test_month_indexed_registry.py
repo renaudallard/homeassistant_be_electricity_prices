@@ -28,6 +28,7 @@ from custom_components.be_electricity_prices.providers import (
     cociter,
     dats24,
     ebem,
+    ecofix,
     ecopower,
     elegant,
     eneco,
@@ -102,6 +103,24 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
         lambda: elegant.parse_snapshot(
             "elegant_zeker_vast",
             fixture_text("elegant_zeker_vast_2026-10.pdf", layout=True),
+        ),
+    ),
+    (
+        "ecofix",
+        "ecofix_flexy",
+        lambda: ecofix.parse_snapshot(
+            "ecofix_flexy",
+            fixture_text("ecofix_flexy.pdf", layout=True),
+            REGION_FLANDERS,
+        ),
+    ),
+    (
+        "ecofix",
+        "ecofix_motion",
+        lambda: ecofix.parse_snapshot(
+            "ecofix_motion",
+            fixture_text("ecofix_motion.pdf", layout=True),
+            REGION_FLANDERS,
         ),
     ),
     (

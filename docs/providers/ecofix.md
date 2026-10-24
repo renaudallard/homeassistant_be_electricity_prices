@@ -179,6 +179,9 @@ the registry (`ecofix.py`). All three carry `regions = {flanders, wallonia}`
 The dynamic pair leave `spot_indexed_injection` at its default `False`, collecting
 the ENTSO-E key via their energy formula; **Flexy sets it**, because its injection
 indexes on the monthly `BELPEX-SPP-M` and its variable energy leg fetches no spots.
+Flexy and Flexy Online also set `month_indexed_energy`, since their energy is indexed
+on the delivery month's `BELPEX-RLP-M`, so the flow offers the optional key on every
+solar regime.
 
 | Contract id | Label | TariffKind | Slug (filename stem) | quarter_hourly | Product |
 | --- | --- | --- | --- | --- | --- |
@@ -375,12 +378,46 @@ A missing `Afname` formula is fatal (`ExtractorError`).
 exclusive_night)` that hold the same rate for every meter type today; all four are
 surfaced into a `VariableRates`. The lookup is bounded to the `Verbruik` block,
 because the `Injectie` block below prints a `Maandprijs` row of its own and a
-lookup that reaches it bills consumption at the feed-in credit. The `BELPEX-RLP-M` indexation expression is
-surfaced as the `formula` diagnostic string only (no cross-check against the rates;
-a miss just leaves `formula` None). Illustrative: `Maandprijs: 11,81 11,81 11,81
-11,81` gives `current = peak = offpeak = exclusive_night = 0.1181`
-(`test_flexy_is_variable_with_indicative_monthly_rate`, `tests/test_ecofix.py`).
-A missing `Maandprijs` row is fatal.
+lookup that reaches it bills consumption at the feed-in credit. Illustrative:
+`Maandprijs: 11,81 11,81 11,81 11,81` gives `current = peak = offpeak =
+exclusive_night = 0.1181` (`test_flexy_is_variable_with_indicative_monthly_rate`,
+`tests/test_ecofix.py`). A missing `Maandprijs` row is fatal.
+
+The card bills the month on its own index: *"worden berekend op basis van de index
+die van toepassing is tijdens de periode waarvoor je wordt gefactureerd"*, on one
+formula per register under "Formules voor verbruik & injectie (€cent/kWh excl
+BTW)", `(BELPEX-RLP-M * 0,1020) + 1,2000` on Flexy and `(BELPEX-RLP-M * 0,1010) +
+0,74` on Flexy Online. The `Maandprijs` is that formula at an earlier month's
+index, and which month varies from card to card:
+
+| Card | Flexy `Maandprijs` | Index it inverts to | Month whose mean that is |
+| --- | --- | --- | --- |
+| May 2026 | 11,81 | 97,47 EUR/MWh | March (97,41) |
+| August 2026 | 14,32 | 120,68 | June (120,79) |
+| September 2026 | 14,32 | 120,68 | June again |
+| October 2026 | 19,04 | 164,34 | September (164,42) |
+
+So `_register_formulas` reads the four formulas (a x10 onto a EUR/kWh spot and a
+/100 base, both grossed by the card's VAT) and `_extract_energy` keeps them with
+`month_indexed` and `rlp_indexed` on the `columns` blend, the mean over every DSO
+column of the Synergrid sheet, which is what the printed figures give back: the
+means in the table are that blend's, within 0,11 EUR/MWh of the indices the figures
+invert to, where the Flemish curve alone runs 0,4 to 0,9 above them and the equal
+mean of the three regional curves 0,6 to 1,6 below. With an
+ENTSO-E key or the keyless setting, every month bills on its own mean, a month no
+archive holds a card for included, where the current card standing in for it used
+to bill its printed figure: 19,04 c/kWh on every month before August 2026, about
+106 EUR over January to September at 3.500 kWh. A card missing one of the four
+formulas keeps its printed figures alone, which the live check reports against the
+registry flag (`test_flexy_energy_resolves_the_delivery_month_on_its_formulas`,
+`test_flexy_missing_a_register_formula_keeps_the_printed_figures`,
+`test_a_month_with_no_card_bills_its_own_index`).
+
+An entry with no day-ahead prices bills the printed figure, the month's own card's
+where the archive holds one and the current card's otherwise. No next card settles
+it: Ecofix prints no index, and which month a later card's figure belongs to is
+not stated and does not follow a rule (the September card repeated June's), so
+taking it would bill most months on another month's index.
 
 ## DSO overlay coverage
 

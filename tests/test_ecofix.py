@@ -28,19 +28,28 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import date, datetime
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
+from custom_components.be_electricity_prices.cohort import (
+    _effective_snapshot_for_month,
+)
+from custom_components.be_electricity_prices.cohort_legs import _month_indexed_leg
 from custom_components.be_electricity_prices.const import (
     FLUVIUS_CARD_LABELS,
     FLUVIUS_KEYS,
 )
+from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
 from custom_components.be_electricity_prices.providers import EXTRACTORS, ecofix
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
+    SpotMonthlyRates,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.base import ExtractorError
@@ -53,7 +62,8 @@ from custom_components.be_electricity_prices.providers.ecofix import (
     _head_probe_ids,
     parse_snapshot,
 )
-from tests import fixture_text
+from custom_components.be_electricity_prices.snapshot_resolve import _resolve_snapshot
+from tests import fixture_text, make_entry
 
 _MOTION_ONLINE = "ecofix_motion_online.pdf"
 _MOTION = "ecofix_motion.pdf"
@@ -274,6 +284,91 @@ def test_flexy_is_variable_with_indicative_monthly_rate() -> None:
     assert snap.energy.exclusive_night == pytest.approx(0.1181)
     assert snap.energy.yearly_fixed_fee == pytest.approx(60.0)
     assert snap.energy.formula is not None and "BELPEX-RLP-M" in snap.energy.formula
+
+
+def test_flexy_energy_resolves_the_delivery_month_on_its_formulas() -> None:
+    """The card bills "op basis van de index die van toepassing is tijdens de
+    periode waarvoor je wordt gefactureerd" on (BELPEX-RLP-M * 0,1020) +
+    1,2000 c/kWh excl. VAT per register, and prints its Maandprijs at an
+    earlier month's index: the Mei 2026 card's 11,81 inverts to 97,47
+    EUR/MWh, March's mean over every DSO column. With day-ahead prices the
+    delivery month is billed on its own mean; without, the printed figure."""
+    snap = parse_snapshot("ecofix_flexy", _layout(_FLEXY), "flanders", "test://f")
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed and energy.rlp_indexed
+    assert energy.rlp_blend == "columns"
+    for factor, base, printed in (
+        (energy.formula_factor, energy.formula_base, energy.current),
+        (energy.formula_factor_peak, energy.formula_base_peak, energy.peak),
+        (energy.formula_factor_offpeak, energy.formula_base_offpeak, energy.offpeak),
+        (
+            energy.formula_factor_exclusive_night,
+            energy.formula_base_exclusive_night,
+            energy.exclusive_night,
+        ),
+    ):
+        assert factor is not None and base is not None and printed is not None
+        # c/kWh per EUR/MWh -> x10 onto a EUR/kWh spot, /100 base, both + VAT.
+        assert factor == pytest.approx(0.1020 * 10.0 * 1.06)
+        assert base == pytest.approx(1.2 / 100.0 * 1.06)
+        assert (printed - base) / factor == pytest.approx(0.09747, abs=5e-5)
+    leg = _month_indexed_leg(snap, SimpleNamespace(data={"api_key": "k"}))  # type: ignore[arg-type]
+    assert isinstance(leg, SpotMonthlyRates)
+    assert leg.rlp_indexed and leg.rlp_blend == "columns"
+    noon = datetime(2026, 1, 15, 12, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    assert energy_eur_per_kwh(leg, noon, 0.11095, meter="mono") == pytest.approx(
+        (110.95 * 0.1020 + 1.2) * 1.06 / 100.0
+    )
+    assert _month_indexed_leg(snap, SimpleNamespace(data={})) is None  # type: ignore[arg-type]
+
+
+def test_flexy_missing_a_register_formula_keeps_the_printed_figures() -> None:
+    """A card that stops printing one of the four formulas keeps the printed
+    figures for every register rather than billing a register on another's
+    formula; the live check reports it against the registry flag."""
+    text = _layout(_FLEXY)
+    cut = text.replace("Uitsluitend nachtmeter:", "Uitsluitend:", 1)
+    assert cut != text
+    energy = parse_snapshot("ecofix_flexy", cut, "flanders", "test://f").energy
+    assert isinstance(energy, VariableRates)
+    assert not energy.month_indexed
+    assert energy.formula_factor is None
+    assert energy.current == pytest.approx(0.1181)
+
+
+async def test_a_month_with_no_card_bills_its_own_index(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """No archive holds an Ecofix card for January 2026, so the current card
+    stands in for it, and its printed Maandprijs is another month's price:
+    19,04 c/kWh on the October card went on every month before August. An
+    entry with day-ahead prices bills the stand-in on its formula at the
+    month's own mean instead."""
+    freezer.move_to("2026-10-23 12:00:00+02:00")
+    raw = parse_snapshot("ecofix_flexy", _layout(_FLEXY), "flanders", "test://f")
+    entry = make_entry(
+        supplier="ecofix",
+        contract="ecofix_flexy",
+        region="flanders",
+        dso="fluvius_antwerpen",
+        api_key="k",
+    )
+    current = _resolve_snapshot(entry, raw)
+    snap = await _effective_snapshot_for_month(
+        hass,
+        MagicMock(),
+        EXTRACTORS["ecofix"],
+        "ecofix_flexy",
+        "flanders",
+        date(2026, 1, 1),
+        current,
+        entry,
+        current_raw=raw,
+    )
+    assert isinstance(snap.energy, SpotMonthlyRates)
+    assert snap.energy.factor == pytest.approx(0.1020 * 10.0 * 1.06)
+    assert snap.energy.rlp_indexed and snap.energy.index_realised is None
 
 
 def test_the_archive_is_asked_for_the_may_2026_cards() -> None:

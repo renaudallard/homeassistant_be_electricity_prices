@@ -52,7 +52,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 import aiohttp
@@ -91,6 +91,7 @@ from ._rates import (
     DynamicRates,
     EnergyRates,
     InjectionRates,
+    RlpBlend,
     TariffKind,
     VariableRates,
 )
@@ -410,6 +411,46 @@ def _dynamic_formula_match(text: str, label: str) -> re.Match[str] | None:
     )
 
 
+# Flexy's formulas, one per meter register under "Formules voor verbruik &
+# injectie (€cent/kWh excl BTW)":
+#     Enkelvoudige meter: (BELPEX-RLP-M * 0,1020) + 1,2000
+_RLP_FORMULA = rf"\(BELPEX-RLP-M\s*\*\s*([\d,]+)\)\s*([{SIGN_CHARS}])\s*([\d,]+)"
+_REGISTER_FORMULAS = {
+    "mono": re.compile(rf"Enkelvoudige meter:\s*{_RLP_FORMULA}"),
+    "peak": re.compile(rf"Tweevoudige meter dag:\s*{_RLP_FORMULA}"),
+    "offpeak": re.compile(rf"Tweevoudige meter nacht:\s*{_RLP_FORMULA}"),
+    "excl_night": re.compile(rf"Uitsluitend nachtmeter:\s*{_RLP_FORMULA}"),
+}
+# The card defines Belpex_RLP as the RLP-weighted mean "dat het rekenkundige
+# gemiddelde is van de profielen van de verschillende distributienetbeheerders
+# in België", words Eneco, energie.be and DATS 24 use for two different
+# blends, so the blend is the one the card's own figures give back: the
+# October 2026 card's 19,04 is the formula at 164,34 EUR/MWh, September's
+# mean over every DSO column of the Synergrid sheet at 164,42, against 165,19
+# on the Flemish curve alone and 162,88 on the equal mean of the three
+# regional curves. The May and August cards agree, at March's and June's.
+_RLP_BLEND: RlpBlend = "columns"
+
+
+def _register_formulas(text: str, vat: float) -> dict[str, tuple[float, float]] | None:
+    """Each register's ``(factor, base)`` onto a EUR/kWh spot, VAT included,
+    or ``None`` when the card does not print all four.
+
+    The card states c€/kWh excluding VAT per EUR/MWh of index, so the factor
+    takes a x10 and the base a /100, both grossed by the VAT the card's
+    printed figures include.
+    """
+    out: dict[str, tuple[float, float]] = {}
+    for register, pattern in _REGISTER_FORMULAS.items():
+        match = pattern.search(text)
+        if match is None:
+            return None
+        factor_c = to_float(match.group(1))
+        base_c = parse_sign(match.group(2)) * to_float(match.group(3))
+        out[register] = (factor_c * 10.0 * vat, base_c / 100.0 * vat)
+    return out
+
+
 def _extract_energy(text: str, kind: TariffKind, yearly_fee: float) -> EnergyRates:
     if kind == "dynamic":
         # Dynamic cards print the consumption formula on the line directly
@@ -440,7 +481,7 @@ def _extract_energy(text: str, kind: TariffKind, yearly_fee: float) -> EnergyRat
             quarter_hourly=True,
         )
 
-    # Variable (Flexy): formula on page 4, indicative monthly rate on page 1.
+    # Variable (Flexy): formulas on page 4, indicative monthly rate on page 1.
     #   "Maandprijs: 11,81 11,81 11,81 11,81"
     # The four columns are (mono, peak, off-peak, exclusive_night) at the
     # same rate for every meter type today, so we surface them all.
@@ -457,15 +498,7 @@ def _extract_energy(text: str, kind: TariffKind, yearly_fee: float) -> EnergyRat
     offpeak = to_float(consumption[2]) / 100.0
     excl = to_float(consumption[3]) / 100.0
 
-    # Surface the BELPEX-RLP-M indexation formula as a diagnostic string
-    # alongside the printed indicative rates. This is informational only
-    # (no cross-check against the rates is performed); a miss just leaves
-    # ``formula`` None.
-    formula_match = re.search(
-        rf"Enkelvoudige meter:\s*\(BELPEX-RLP-M\s*\*\s*([\d,]+)\)\s*"
-        rf"([{SIGN_CHARS}])\s*([\d,]+)",
-        text,
-    )
+    formula_match = _REGISTER_FORMULAS["mono"].search(text)
     formula_str: str | None = None
     if formula_match:
         formula_str = (
@@ -473,13 +506,40 @@ def _extract_energy(text: str, kind: TariffKind, yearly_fee: float) -> EnergyRat
             f"{formula_match.group(2)} {formula_match.group(3)} c€/kWh ex-VAT"
         )
 
-    return VariableRates(
+    rates = VariableRates(
         current=mono,
         peak=peak,
         offpeak=offpeak,
         exclusive_night=excl,
         yearly_fixed_fee=yearly_fee,
         formula=formula_str,
+    )
+    # The contract bills "op basis van de index die van toepassing is tijdens
+    # de periode waarvoor je wordt gefactureerd", so a month settles on its
+    # own BELPEX-RLP-M. The Maandprijs is the same formula at an earlier
+    # month's index, and which one varies: March's on the May 2026 card,
+    # June's on August's and still on September's, September's on October's.
+    # The formulas are kept with ``month_indexed`` and resolved against the
+    # delivery month's mean, the printed figures staying what an entry with
+    # no day-ahead prices is billed. A card missing one of the four keeps its
+    # printed figures alone, which the live check reports against the
+    # registry flag.
+    formulas = _register_formulas(text, vat_multiplier(text, _VAT_RE))
+    if formulas is None:
+        return rates
+    return replace(
+        rates,
+        formula_factor=formulas["mono"][0],
+        formula_base=formulas["mono"][1],
+        formula_factor_peak=formulas["peak"][0],
+        formula_base_peak=formulas["peak"][1],
+        formula_factor_offpeak=formulas["offpeak"][0],
+        formula_base_offpeak=formulas["offpeak"][1],
+        formula_factor_exclusive_night=formulas["excl_night"][0],
+        formula_base_exclusive_night=formulas["excl_night"][1],
+        month_indexed=True,
+        rlp_indexed=True,
+        rlp_blend=_RLP_BLEND,
     )
 
 
@@ -887,6 +947,9 @@ EXTRACTOR = SupplierExtractor(
             # variable energy leg fetches no spots for. The dynamic pair
             # collects the key through their own energy formula.
             spot_indexed_injection=c.kind != "dynamic",
+            # And its energy on the delivery month's BELPEX-RLP-M, where the
+            # card prints an earlier month's figure.
+            month_indexed_energy=c.kind == "variable",
         )
         for c in _CONTRACTS
     ),
