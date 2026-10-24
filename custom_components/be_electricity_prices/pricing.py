@@ -56,7 +56,7 @@ from .const import (
     REGION_WALLONIA,
     RESOLUTION_QUARTER,
 )
-from .day_night import is_belgian_holiday, is_offpeak
+from .day_night import _WALLONIA_SCHEDULE_FROM, is_belgian_holiday, is_offpeak
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -733,6 +733,20 @@ def dso_impact_band(when: datetime) -> ImpactBand:
     return "eco"  # 01-07 + 11-17
 
 
+def _tariff_mode_at(dso_tariff_mode: DsoTariffMode, when: datetime) -> DsoTariffMode:
+    """``dso_tariff_mode`` as it stood at ``when``.
+
+    The CWaPE Impact configuration took effect on 1 January 2026, with the
+    Walloon schedule (``_WALLONIA_SCHEDULE_FROM``), so an hour before it was
+    billed on the bi-hourly one whatever the entry is on now. Only a backfill
+    reaching into 2025 meets such an hour, and it banded the energy leg by
+    the CWaPE bands on a card whose network leg had none to give.
+    """
+    if dso_tariff_mode == "impact" and when.date() < _WALLONIA_SCHEDULE_FROM:
+        return "bi_horaire"
+    return dso_tariff_mode
+
+
 def network_eur_per_kwh(
     dso: DsoOverlay,
     when: datetime,
@@ -879,6 +893,7 @@ def compute_breakdown(
     instead of being rolled into the taxes component.
     """
     overlay = _require_overlay(snapshot, dso_key)
+    dso_tariff_mode = _tariff_mode_at(dso_tariff_mode, when)
     energy = energy_eur_per_kwh(
         snapshot.energy,
         when,
@@ -927,6 +942,7 @@ def compute_network_and_taxes(
     one.
     """
     overlay = _require_overlay(snapshot, dso_key)
+    dso_tariff_mode = _tariff_mode_at(dso_tariff_mode, when)
     network = network_eur_per_kwh(
         overlay, when, meter, dso_tariff_mode, region, day_start=day_start
     )

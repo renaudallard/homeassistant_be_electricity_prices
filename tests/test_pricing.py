@@ -41,6 +41,7 @@ from custom_components.be_electricity_prices.pricing import (
     DsoTariffMode,
     MeterType,
     compute_breakdown,
+    compute_network_and_taxes,
     dso_impact_band,
     energy_eur_per_kwh,
     network_eur_per_kwh,
@@ -339,6 +340,48 @@ def test_bihourly_energy_follows_impact_bands_under_impact_mode() -> None:
     assert energy_eur_per_kwh(e, night_medium, None, "mono", "wallonia", "impact") == (
         0.2055
     )
+
+
+def test_an_impact_entry_bills_2025_on_the_bi_hourly_configuration() -> None:
+    """The CWaPE Impact configuration took effect on 1 January 2026. A
+    backfill reaching into 2025 for an entry now on it banded the energy leg
+    by the CWaPE bands, a weekday noon billed at the night rate and a
+    Saturday evening at the day rate, while the network leg beside it had no
+    band to give. Before 2026 an hour is billed as bi-hourly, both legs."""
+    snap = make_snapshot(
+        energy=FixedRates(single=0.1829, peak=0.1829, offpeak=0.1442),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.11,
+                distribution_offpeak=0.08,
+                distribution_pic=0.15,
+                distribution_medium=0.10,
+                distribution_eco=0.05,
+                transport=0.02,
+            )
+        },
+    )
+    brussels = ZoneInfo("Europe/Brussels")
+    for when in (
+        datetime(2025, 5, 14, 12, 0, tzinfo=brussels),  # weekday noon, ECO
+        datetime(2025, 5, 17, 19, 0, tzinfo=brussels),  # Saturday, PIC
+        datetime(2025, 12, 31, 23, 0, tzinfo=brussels),  # last hour, MEDIUM
+    ):
+        impact = compute_breakdown(snap, "ores", "wallonia", when, None, "bi", "impact")
+        bi_hourly = compute_breakdown(
+            snap, "ores", "wallonia", when, None, "bi", "bi_horaire"
+        )
+        assert impact == bi_hourly, when
+        # An hour with no spot bills its network leg alike.
+        assert compute_network_and_taxes(
+            snap, "ores", "wallonia", when, "bi", "impact"
+        ).network == pytest.approx(bi_hourly.network), when
+    # From 2026 on the bands apply: a weekday noon is ECO on both legs.
+    noon = datetime(2026, 5, 13, 12, 0, tzinfo=brussels)
+    impact = compute_breakdown(snap, "ores", "wallonia", noon, None, "bi", "impact")
+    assert impact.energy == pytest.approx(0.1442)
+    assert impact.network == pytest.approx(0.05 + 0.02)
 
 
 def test_tou_slot_weekend_no_peak_rule() -> None:

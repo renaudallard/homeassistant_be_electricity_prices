@@ -1238,7 +1238,11 @@ else falls back to single/current (`pricing.py`).
 `DsoTariffMode` (`"simple" | "bi_horaire" | "impact"`, `pricing.py`,
 `const.py`) is orthogonal to the supplier meter: it is the billing mode
 set on the user's grid connection, and the coordinator falls back automatically
-when the DSO does not publish Impact rates (`const.py`).
+when the DSO does not publish Impact rates (`const.py`). The Impact configuration
+took effect on 2026-01-01, with the Walloon schedule below, so an hour before it
+is billed bi-horaire on both legs whatever the entry is on now
+(`_tariff_mode_at`, `pricing.py`): a backfill reaching into 2025 banded the
+energy leg by the CWaPE bands while the network leg had none.
 
 ### is_offpeak schedule, per region
 
