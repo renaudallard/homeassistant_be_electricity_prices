@@ -318,10 +318,12 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
         """Which settlement to quote the TARGET on.
 
         Asked on the target's own side, defaulted from the household's answer
-        only where their own contract offers the same choice. Reading it off
-        the entry unconditionally would quote a Bolt card per quarter-hour
-        because the user happens to be on Frank's quarter-hourly settlement,
-        which is the target-side hazard this page keeps having to relearn.
+        only where the target is another card of the household's own supplier
+        and their own contract offers the same choice. The settlement is an
+        arrangement with the supplier, so reading it off the entry for another
+        one would quote a Bolt card per quarter-hour because the user happens
+        to be on Frank's quarter-hourly settlement, which is the target-side
+        hazard this page keeps having to relearn.
         """
         if user_input is not None:
             self._compare.update(user_input)
@@ -329,7 +331,8 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
         current = self.config_entry.data
         own_answer = (
             bool(current.get(CONF_QUARTER_HOURLY, False))
-            if offers_quarter_hourly(
+            if current.get(CONF_SUPPLIER) == self._compare[CONF_SUPPLIER]
+            and offers_quarter_hourly(
                 current.get(CONF_SUPPLIER), current.get(CONF_CONTRACT)
             )
             else False

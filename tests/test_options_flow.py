@@ -10829,6 +10829,46 @@ async def test_compare_prices_the_own_row_as_the_sensor_on_the_fallback_too(
 
 @pytest.mark.usefixtures("enable_custom_integrations")
 @pytest.mark.parametrize(
+    ("contract", "default"), [("frank_dynamic_plus", True), ("bolt_plenty", False)]
+)
+async def test_compare_settlement_defaults_only_from_the_own_supplier(
+    hass: HomeAssistant, contract: str, default: bool
+) -> None:
+    """A Frank household on the quarter-hour grid quoting Bolt's variable card
+    had the target's box pre-ticked from its own answer, which quotes the Bolt
+    card dynamic. The grid is an arrangement with the supplier, so another
+    Frank tier starts from the household's answer and Bolt's card unticked."""
+    entry = make_entry(
+        supplier="frank",
+        contract="frank_dynamic",
+        region="flanders",
+        dso="fluvius_zenne_dijle",
+        meter="dynamic",
+        quarter_hourly=True,
+    )
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(
+        hass, entry, _stub_snapshot("frank", "frank_dynamic", 0.18)
+    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "compare"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": contract.split("_")[0]}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"contract": contract}
+    )
+    assert result["step_id"] == "compare_settlement"
+    schema = result["data_schema"]
+    assert schema is not None
+    box = next(k for k in schema.schema if str(k) == "quarter_hourly")
+    assert box.default() is default
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+@pytest.mark.parametrize(
     ("own_quarter_hourly", "quoted_quarter_hourly"), [(True, False), (False, True)]
 )
 async def test_compare_ytd_quotes_the_target_on_the_settlement_asked(
