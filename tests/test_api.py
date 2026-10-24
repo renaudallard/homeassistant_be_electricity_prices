@@ -833,6 +833,33 @@ async def test_smard_answers_an_outage_energy_charts_cannot() -> None:
     assert len(prices) == 24
 
 
+@pytest.mark.parametrize("stamps", [[], [1.7923608e12]])
+async def test_a_smard_index_with_no_week_stamp_is_an_ordinary_failure(
+    stamps: list[object],
+) -> None:
+    """An index listing no integer week stamp made the week walk raise a bare
+    ValueError, which no caller catches, so the tick failed instead of
+    keeping the hours ENTSO-E served. SMARD is asked every day before the
+    auction, for tomorrow, so this is the ordinary path."""
+    session = _FakeSession(
+        entsoe=_today_only_doc(),
+        fallback_body="no content available",
+        smard={"index_quarterhour.json": json.dumps({"timestamps": stamps})},
+    )
+    with pytest.raises(EntsoeError, match="no week stamp"):
+        await SmardClient(session).fetch_day_ahead(  # type: ignore[arg-type]
+            _TOMORROW_START, _WINDOW_END
+        )
+    prices, source = await fetch_day_ahead_or_fallback(
+        "key",
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _WINDOW_END,
+    )
+    assert source == "entsoe"
+    assert len(prices) == 24
+
+
 async def test_an_outage_of_every_source_names_each_cause() -> None:
     """Each failure is in the message: which keyless source broke is what the
     reader of last_error needs next."""

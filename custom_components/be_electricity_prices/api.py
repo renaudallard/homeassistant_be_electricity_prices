@@ -579,6 +579,10 @@ class SmardClient:
         if not isinstance(stamps, list):
             raise EntsoeError("smard: index carried no timestamps")
         weeks = sorted(t for t in stamps if type(t) is int)
+        if not weeks:
+            # The strict zip below raises a ValueError on an empty list, and
+            # no caller of the fallback catches one.
+            raise EntsoeError("smard: index carried no week stamp")
         start_ms = period_start.timestamp() * 1000
         end_ms = period_end.timestamp() * 1000
         # A week file runs from its own stamp to the next one's.
