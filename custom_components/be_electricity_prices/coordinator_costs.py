@@ -46,6 +46,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from . import energy_meters
 from .cohort import (
     _effective_snapshot_for_month,
     _parse_iso_date,
@@ -586,12 +587,16 @@ class _CostsMixin:
         and was priced under the entry's settings: a new year or month, or a
         setting edited since, leaves it unknown until that refresh lands
         rather than show a period it does not cover. No breakdown is kept:
-        the attributes come back with the figures they explain.
+        the attributes come back with the figures they explain. Without the
+        recorder nothing is served: no meter can be read, so a figure kept
+        from before would stay frozen while the year runs on.
         """
         assert self._snapshot is not None
         window_now = dt_util.now()
         today = window_now.date()
-        held = self._held_costs or {}
+        held = (
+            (self._held_costs or {}) if energy_meters.recorder_loaded(self.hass) else {}
+        )
         priced_under = held.get("inputs") == settings_digest(self.entry)
         same_year = (
             priced_under

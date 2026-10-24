@@ -32,6 +32,7 @@ import threading
 from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -125,6 +126,21 @@ def _forget_read_daily_shapes() -> None:
     from custom_components.be_electricity_prices import meter_hourly
 
     meter_hourly._READ_DAILY_BEFORE.clear()
+
+
+@pytest.fixture(autouse=True)
+def _recorder_as_loaded() -> Iterator[None]:
+    """Count Home Assistant's recorder as running, as it is in production.
+
+    The tests read the meters through stubs on a Home Assistant that never
+    loads the recorder, and without it the cost sensors stay unknown on
+    purpose (``energy_meters.recorder_loaded``). A test of that case patches
+    it back to False.
+    """
+    from custom_components.be_electricity_prices import energy_meters
+
+    with patch.object(energy_meters, "recorder_loaded", lambda _hass: True):
+        yield
 
 
 @pytest.fixture(autouse=True)

@@ -889,6 +889,10 @@
       "title": "{supplier} ({contract}) tarifie la domiciliation et cette entrée n'a pas été interrogée",
       "description": "La carte tarifaire de {contract} tarifie différemment un ménage qui paie par domiciliation : selon la carte, le payeur par domiciliation paie une redevance fixe plus basse, ou reçoit une ristourne de bienvenue, ou une plus grande.\n\nCette entrée a été créée avant que la question ne soit posée : aucune réponse n'est enregistrée et la différence est donc omise plutôt que devinée. Ouvrez les options de l'intégration et répondez « Je paie par domiciliation » pour qu'elle soit facturée. Cet avis disparaît dès qu'une réponse, quelle qu'elle soit, est enregistrée."
     },
+    "recorder_missing": {
+      "title": "L'enregistreur de Home Assistant ne fonctionne pas",
+      "description": "Les capteurs de coût de {supplier} ({contract}) sont calculés à partir de l'historique de vos compteurs, que conserve l'enregistreur (recorder) de Home Assistant, et celui-ci n'est pas chargé. Les coûts de l'année et du mois, le coût sur douze mois glissants, le coût en fin d'année et les volumes projetés et glissants restent inconnus tant qu'il ne fonctionne pas. Les capteurs de prix ne sont pas concernés.\n\nActivez l'enregistreur (il fait partie de default_config, ou ajoutez `recorder:` à configuration.yaml) et redémarrez Home Assistant."
+    },
     "excise_law_unread": {
       "title": "{supplier} ({contract}) attend l'accise du client protégé",
       "description": "Un client protégé paie un droit d'accise spécial qui lui est propre, que le tarif social n'inclut pas et que la loi fixe : l'article 419 de la loi-programme du 27 décembre 2004, lu sur Justel (ejustice.just.fgov.be). Il n'a pas encore pu être lu : les prix de cette entrée omettraient l'accise ou factureraient le taux des ménages, et ni l'un ni l'autre n'est votre facture. Les capteurs restent indisponibles jusqu'à ce qu'il soit lu.\n\nLa loi est relue toutes les six heures et cet avis disparaît de lui-même dès qu'elle l'est. S'il persiste, vérifiez que Home Assistant peut joindre ejustice.just.fgov.be."

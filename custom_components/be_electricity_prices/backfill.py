@@ -62,6 +62,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.util import dt as dt_util
 
+from . import energy_meters
 from .backfill_cost import (
     _backfill_cost_sensor,
     _injection_rate_for_hour,
@@ -418,6 +419,11 @@ async def backfill_range(
         raise RuntimeError("entry has no live coordinator; reload the entry first")
     if coordinator._snapshot is None:
         raise RuntimeError("supplier snapshot not loaded; refresh the entry first")
+    if not energy_meters.recorder_loaded(hass):
+        raise ServiceValidationError(
+            "the recorder is not loaded, so there are no statistics to write to; "
+            "enable it and restart Home Assistant"
+        )
     # Both passes read the coordinator's own spot cache and yield to the loop
     # once a day, and every tick prunes that cache to the trailing year. A
     # window older than that lost every hour the pass had not reached when a
@@ -739,6 +745,11 @@ async def backfill_if_missing(
             "backfill skipped: no supplier snapshot for %s",
             entry.entry_id,
         )
+        return None
+    if not energy_meters.recorder_loaded(hass):
+        # Nothing to write to, and a probe it cannot answer would otherwise
+        # be asked again for as long as Home Assistant runs.
+        _LOGGER.debug("backfill skipped: the recorder is not loaded")
         return None
     sid = _stat_id(hass, entry, "current_price")
     if sid is None:

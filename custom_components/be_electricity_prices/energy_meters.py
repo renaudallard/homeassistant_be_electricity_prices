@@ -691,6 +691,17 @@ def noting_failed_reads() -> Iterator[set[str]]:
             enclosing.update(failed)
 
 
+def recorder_loaded(hass: HomeAssistant) -> bool:
+    """Whether Home Assistant runs its recorder, which keeps the meters'
+    history every cost is priced from.
+
+    Without it every meter read fails the way a busy recorder's does, but
+    asking again never helps, so the callers that wait out a busy recorder
+    ask this first rather than wait for ever.
+    """
+    return "recorder" in hass.config.components
+
+
 def _note_failed_read(entity_id: str) -> None:
     failed = _FAILED_READS.get()
     if failed is not None:

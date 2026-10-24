@@ -726,6 +726,7 @@ def test_readme_documents_every_repairs_issue() -> None:
         17: "Seventeen",
         18: "Eighteen",
         19: "Nineteen",
+        20: "Twenty",
     }
     stated = re.search(r"(\w+) repair issues surface", readme)
     assert stated is not None, "the README sentence counting the issues is gone"

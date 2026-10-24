@@ -1186,7 +1186,7 @@ If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. `last_error` always names the
 failing exception, so a CDN timeout reads `network error fetching <url>:
-TimeoutError` rather than trailing off after the colon. Nineteen repair issues surface
+TimeoutError` rather than trailing off after the colon. Twenty repair issues surface
 under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; the fetch-related ones auto-clear on the next
 successful refresh:
@@ -1335,6 +1335,11 @@ successful refresh:
   billing the household rate would both be wrong, so the sensors stay
   unavailable until it is read; the law is retried every six hours and the
   card clears by itself.
+- **`recorder_missing_<entry>`** — Home Assistant runs without its recorder,
+  which keeps the meters' history every cost is priced from. The cost sensors
+  stay unknown rather than show a year priced at fees alone, the price sensors
+  are not affected, and no backfill runs; the card clears once the recorder
+  runs.
 - **`register_pair_incomplete_<entry>`** — one register of a day/night pair
   records nothing, or stopped while its twin carries on (a rename, an
   integration swap, a meter replacement). The pair is billed only on the

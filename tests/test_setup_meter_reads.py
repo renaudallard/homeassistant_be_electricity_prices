@@ -598,6 +598,41 @@ async def test_a_tick_the_recorder_did_not_answer_keeps_the_last_costs(
         await hass.async_block_till_done()
 
 
+async def test_without_the_recorder_the_costs_are_unknown_and_repairs_says_why(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Without Home Assistant's recorder no meter can be read, now or later.
+    The cost sensors are unknown rather than a year priced at fees alone or
+    a figure held from before, frozen while the year runs on; a Repairs card
+    says why, the prices still publish, and both clear once it runs."""
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.be_electricity_prices import energy_meters
+
+    freezer.move_to("2026-06-20 10:30:00+02:00")
+    recorder = _Recorder()
+    with _a_frank_entry(hass, recorder) as entry:
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await _settle(hass, freezer)
+        coord = entry.runtime_data
+        assert coord.data.current_year_cost_eur is not None
+        issue_id = f"recorder_missing_{entry.entry_id}"
+        registry = ir.async_get(hass)
+        assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+        with patch.object(energy_meters, "recorder_loaded", lambda _hass: False):
+            await coord.async_refresh()
+            assert all(value is None for value in _figures(entry).values())
+            assert coord.data.hourly, "the prices still publish"
+            assert registry.async_get_issue(DOMAIN, issue_id) is not None
+
+        await coord.async_refresh()
+        assert coord.data.current_year_cost_eur is not None
+        assert registry.async_get_issue(DOMAIN, issue_id) is None
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
 async def test_the_costs_alone_moving_leaves_the_entry_blob_unwritten(
     hass: HomeAssistant,
 ) -> None:

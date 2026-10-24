@@ -42,6 +42,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 
+from . import energy_meters
 from .brugel import (
     any_cached_power_term,
     cached_power_term,
@@ -105,6 +106,7 @@ _ISSUE_KINDS: Final = (
     "direct_debit_unanswered",
     "brussels_power_term_missing",
     "excise_law_unread",
+    "recorder_missing",
 )
 
 
@@ -255,6 +257,18 @@ class _IssuesMixin:
                 "last_error": self._last_error or "unknown",
             },
             fixable=True,
+        )
+
+    def _sync_recorder_issue(self) -> None:
+        """Flag a Home Assistant running without its recorder.
+
+        Every cost is priced from the meters' history the recorder keeps, so
+        without it the cost sensors stay unknown for good. Unknown with no
+        reason given reads like a frozen sensor; this says why, and clears as
+        soon as the recorder runs.
+        """
+        self._sync_issue(
+            "recorder_missing", not energy_meters.recorder_loaded(self.hass)
         )
 
     def _sync_exclusive_night_gap_issue(self) -> None:

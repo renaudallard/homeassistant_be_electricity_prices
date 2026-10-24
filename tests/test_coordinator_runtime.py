@@ -3826,6 +3826,7 @@ _REPAIR_ISSUE_KINDS = (
     "brussels_power_term_missing",
     "compensation_kva_missing",
     "excise_law_unread",
+    "recorder_missing",
 )
 
 

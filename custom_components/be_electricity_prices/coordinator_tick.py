@@ -44,6 +44,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 
+from . import energy_meters
 from .brugel import ensure_power_term
 from .cohort import (
     _cohort_legs,
@@ -167,6 +168,7 @@ class _TickMixin:
         def _sync_direct_debit_unanswered_issue(
             self, signing: SupplierSnapshot | None
         ) -> None: ...
+        def _sync_recorder_issue(self) -> None: ...
         def _sync_exclusive_night_gap_issue(self) -> None: ...
         def _sync_impact_gap_issue(self) -> None: ...
         def _sync_prosumer_gap_issue(self) -> None: ...
@@ -387,7 +389,8 @@ class _TickMixin:
         injection_price = _compute_injection_price(
             injection_snapshot, self.entry, spot_prices
         )
-        if deferred:
+        if deferred or not energy_meters.recorder_loaded(self.hass):
+            # Without the recorder no meter can be read, now or later.
             costs = await self._held_tick_costs()
         else:
             with noting_failed_reads() as failed:
@@ -421,6 +424,7 @@ class _TickMixin:
         age = self._snapshot_age_hours()
         stale = self._snapshot_overdue()
         self._sync_stale_issue(stale)
+        self._sync_recorder_issue()
         self._sync_exclusive_night_gap_issue()
         self._sync_impact_gap_issue()
         self._sync_connection_fee_issue()

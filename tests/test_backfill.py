@@ -60,6 +60,9 @@ from custom_components.be_electricity_prices.const import (
     DOMAIN,
 )
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+from custom_components.be_electricity_prices.energy_meters import (
+    recorder_loaded as _real_recorder_loaded,
+)
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import get as get_extractor
 from custom_components.be_electricity_prices.providers._rates import (
@@ -3758,6 +3761,42 @@ def _metered_hours(start: datetime, end: datetime) -> list[dict[str, float]]:
         rows.append({"start": hour.timestamp(), "change": 1.0, "sum": len(rows) + 1.0})
         hour += timedelta(hours=1)
     return rows
+
+
+async def test_no_backfill_runs_without_the_recorder(hass: HomeAssistant) -> None:
+    """Without Home Assistant's recorder there are no statistics to write
+    to, and its probe fails like a busy one's: the automatic backfill asked
+    again every hour for as long as Home Assistant ran. It now returns at
+    once, and the service says why."""
+    from homeassistant.exceptions import ServiceValidationError
+
+    from custom_components.be_electricity_prices import energy_meters
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    _register_sensors(hass, entry, ["current_price"])
+    entry.runtime_data = await _make_coordinator(entry)
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    with (
+        patch.object(energy_meters, "recorder_loaded", lambda _hass: False),
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        assert await bf.backfill_if_missing(hass, entry) is None
+        with pytest.raises(ServiceValidationError, match="recorder is not loaded"):
+            await bf.backfill_range(hass, entry, None, None)
+    instance.async_add_executor_job.assert_not_awaited()
+
+
+def test_the_recorder_counts_as_loaded_once_home_assistant_runs_it(
+    hass: HomeAssistant,
+) -> None:
+    """The check the cost sensors and the backfill ask (the suite's conftest
+    counts it as running, as it is in production)."""
+    assert not _real_recorder_loaded(hass)
+    hass.config.components.add("recorder")
+    assert _real_recorder_loaded(hass)
 
 
 @pytest.mark.parametrize("recorded", [True, False])
