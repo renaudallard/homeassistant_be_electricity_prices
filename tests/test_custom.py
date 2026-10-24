@@ -1237,6 +1237,65 @@ def test_the_business_answer_stays_on_the_custom_card() -> None:
     assert snap.taxes.energy_contribution == 0.0
 
 
+@pytest.mark.parametrize(
+    ("professional", "factor"),
+    [
+        # The tax step's reading of a 0 rate: VAT-inclusive figures typed.
+        (False, 1.06),
+        # A business typing 0 deducts VAT: its figures are excluding it.
+        (True, 1.0),
+    ],
+)
+def test_a_business_deducting_vat_bills_regulated_figures_excluding_it(
+    professional: bool, factor: float
+) -> None:
+    """The Flemish network ceiling and Brugel's power term are published
+    excluding VAT and put onto the basis the entry typed on. A business at a
+    0 rate typed excluding VAT, so neither may be grossed by 6%."""
+    from datetime import date
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices import snapshot_resolve
+
+    month = date(2026, 10, 1)
+    for region, dso in (
+        (const.REGION_FLANDERS, "fluvius_antwerpen"),
+        (const.REGION_BRUSSELS, const.DSO_SIBELGA),
+    ):
+        data = {
+            const.CONF_SUPPLIER: const.SUPPLIER_CUSTOM,
+            const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+            const.CONF_REGION: region,
+            const.CONF_DSO: dso,
+            const.CONF_CUSTOM_ENERGY_SINGLE: 0.10,
+            const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.05,
+            const.CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR: 13.90,
+            const.CONF_CUSTOM_VAT_RATE: 0.0,
+            const.CONF_CUSTOM_PROFESSIONAL: professional,
+        }
+        with patch.object(
+            snapshot_resolve, "cached_power_term", lambda year: (47.24, 94.48)
+        ):
+            snap = snapshot_resolve._resolve_snapshot(
+                SimpleNamespace(data=data),  # type: ignore[arg-type]
+                build_snapshot(data, region, dso),
+                annual_kwh=1000.0,
+                delivery_month=month,
+            )
+        overlay = snap.dsos[dso]
+        if region == const.REGION_FLANDERS:
+            assert overlay.network_ceiling_eur_per_kwh == pytest.approx(
+                0.3276168 * factor
+            )
+        else:
+            assert overlay.data_management_per_year == pytest.approx(
+                13.90 + 47.24 * factor
+            )
+            assert overlay.brussels_power_term_above_13kva == pytest.approx(
+                13.90 + 94.48 * factor
+            )
+
+
 def test_the_custom_tax_step_asks_whether_the_contract_is_a_business() -> None:
     from custom_components.be_electricity_prices.flow_schemas_custom import (
         _custom_tax_schema,

@@ -80,6 +80,7 @@ from ..const import (
     CONF_CUSTOM_INJECTION_FACTOR,
     CONF_CUSTOM_INJECTION_FLOOR,
     CONF_CUSTOM_INJECTION_MODE,
+    CONF_CUSTOM_PROFESSIONAL,
     CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION,
     CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH,
     CONF_CUSTOM_TAX_FEDERAL_EXCISE,
@@ -222,6 +223,7 @@ def _build_dso(data: Mapping[str, Any], region: str) -> DsoOverlay:
 
 def _build_taxes(data: Mapping[str, Any], region: str) -> TaxOverlay:
     renewables = _num(data, CONF_CUSTOM_TAX_REGIONAL_RENEWABLES)
+    vat_rate = _num(data, CONF_CUSTOM_VAT_RATE, residential_vat(dt_util.now().date()))
     return TaxOverlay(
         federal_excise=_num(data, CONF_CUSTOM_TAX_FEDERAL_EXCISE),
         energy_contribution=_num(data, CONF_CUSTOM_TAX_ENERGY_CONTRIBUTION),
@@ -237,8 +239,14 @@ def _build_taxes(data: Mapping[str, Any], region: str) -> TaxOverlay:
             else 0.0
         ),
         energy_fund_eur_per_month=_num(data, CONF_CUSTOM_TAX_ENERGY_FUND_PER_MONTH),
-        vat_rate=_num(
-            data, CONF_CUSTOM_VAT_RATE, residential_vat(dt_util.now().date())
+        vat_rate=vat_rate,
+        # A 0 rate reads as VAT-inclusive figures, the residential convention
+        # the tax step offers. A business typing 0 deducts VAT instead and its
+        # figures are excluding VAT, so it states 0 as its own rate: a
+        # regulated figure it does not type, the Flemish network ceiling or
+        # Brugel's power term, is then put onto that basis rather than grossed.
+        card_vat_rate=(
+            0.0 if not vat_rate and data.get(CONF_CUSTOM_PROFESSIONAL) else None
         ),
     )
 

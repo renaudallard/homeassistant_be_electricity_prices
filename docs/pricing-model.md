@@ -174,11 +174,15 @@ month being billed (`vat_rates.residential_vat`), sets an ex-VAT card's assumed
 professional card the month's standard rate. The regulated figures published
 excluding VAT - the flat excise, the VREG network ceiling and Brugel's power term -
 are put onto a VAT-inclusive card at the rate it states, or else the month's
-(`card_residential_vat`). A signing cohort keeps the coefficients it signed for but
-not the VAT of the month it signed in: `_CohortLegs.vat_rate` records the rate its
-leg carries and `energy_on` moves it onto the month delivered (`cohort.py`). Every
-rate is the delivery month's and none is applied backwards; with no table held the
-months take the constants, so all of this is identity today.
+(`card_residential_vat`), by one rule, `on_card_basis`. A custom business entry
+typing a 0 rate deducts VAT and typed every figure excluding it, which a 0
+`vat_rate` alone would read as VAT-inclusive, so `providers/custom.py` records 0
+as its card's own rate and those figures stay as published. A signing cohort
+keeps the coefficients it signed for but not the VAT of the month it signed in:
+`_CohortLegs.vat_rate` records the rate its leg carries and `energy_on` moves it
+onto the month delivered (`cohort.py`). Every rate is the delivery month's and
+none is applied backwards; with no table held the months take the constants, so
+all of this is identity today.
 
 `apply_vat` is called per config entry, from `_resolve_snapshot`
 (`snapshot_resolve.py`), never before the shared snapshot cache: that cache is

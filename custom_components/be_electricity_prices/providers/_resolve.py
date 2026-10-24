@@ -443,12 +443,13 @@ def resolve_federal_excise(
 
 
 def on_card_basis(snapshot: SupplierSnapshot, month: date, rate: float) -> float:
-    """``rate``, a levy the law sets excluding VAT, on the basis the card
-    prints its levies on: grossed at the rate the card states or else the
+    """``rate``, a levy the law or a regulator sets excluding VAT, on the
+    basis the card prints on: grossed at the rate the card states or else the
     month's, or as it is on an ex-VAT card, which the engine grosses later.
     The basis is the one the card printed on: apply_vat runs first and zeroes
     vat_rate for an entry that deducts VAT, which leaves the card ex-VAT all
-    the same."""
+    the same. A custom business entry that typed a 0 rate states 0 as its
+    card's own (``custom._build_taxes``), so its figures stay ex-VAT too."""
     taxes = snapshot.taxes
     if (taxes.published_vat_rate or taxes.vat_rate) > 0.0:
         return rate
@@ -655,10 +656,7 @@ def resolve_vreg_network_ceiling(
         # The CREG's network component replaces the operator's tariffs and
         # carries no capacity term for the ceiling to cap.
         return snapshot
-    if snapshot.taxes.vat_rate <= 0.0:
-        # A VAT-inclusive card, so the regulator's ex-VAT figure is grossed,
-        # at the rate the card states or else the month's.
-        ceiling *= 1.0 + card_residential_vat(snapshot, delivery_month)
+    ceiling = on_card_basis(snapshot, delivery_month, ceiling)
     changed = {
         key: replace(overlay, network_ceiling_eur_per_kwh=ceiling)
         for key, overlay in snapshot.dsos.items()
@@ -679,12 +677,8 @@ def _brussels_terms_on_card_basis(
     """Brugel's ex-VAT pair put onto the basis this card prints on, at the
     rate the card states or else ``month``'s (today's when None)."""
     low, high = terms
-    if snapshot.taxes.vat_rate <= 0.0:
-        # A VAT-inclusive card, so the ex-VAT figures have to be grossed.
-        rate = card_residential_vat(snapshot, month or dt_util.now().date())
-        low *= 1.0 + rate
-        high *= 1.0 + rate
-    return low, high
+    month = month or dt_util.now().date()
+    return on_card_basis(snapshot, month, low), on_card_basis(snapshot, month, high)
 
 
 def omits_brussels_power_term(
