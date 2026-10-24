@@ -81,7 +81,7 @@ Each of these has a section of its own further down; this is the scan.
 
 - **Ranked comparison of every alternative** — prices every contract sold in your region against your own settings and sorts them cheapest first, with your own row badged and every gap signed. Optionally once a day in the background, publishing the best saving as a sensor.
 - **One-off contract comparison** — quotes one supplier and contract against your settings, including your own contract (except on the social tariff or the expert custom supplier, neither of which can be a comparison target), which answers *what would this cost me on a bi-hourly meter* and *what would it cost off the compensation regime*. Your own contract is quoted at the rates you signed and with what is left of your own welcome credit, never as a new signer on today's card. Both live under [Reconfiguring later](#reconfiguring-later).
-- **Signing-cohort pricing** — set a contract start date and past months bill at the rate you actually signed, not at today's card, for the suppliers listed under `current_year_cost` in [Sensors](#sensors), and for every supplier through the project's [card archive](#the-card-archive) for a signing month from August 2026 on and within the twelve months it keeps. The months of the year before the start date or the tariff card month, whichever is later, which the year-to-date counts unless you bill it from the start date, bill on their own month's card. A variable contract's settled months bill the formula you signed even without an ENTSO-E key. The months still open bill it on the month's own spot mean with a key, and without one keep the card's printed rate with the standing charge you signed. The feed-in credit follows the formula you signed, and where the card fixes its feed-in price for the term too (Mega's fixed range, Trevion Groene Energie Vast, EnergyVision's fixed-injection card) the price you signed at. See [Configuration](#configuration).
+- **Signing-cohort pricing** — set a contract start date and past months bill at the rate you actually signed, not at today's card, for the suppliers listed under `current_year_cost` in [Sensors](#sensors), and for every supplier through the project's [card archive](#the-card-archive) for a signing month from August 2026 on and within the 36 months it keeps. The months of the year before the start date or the tariff card month, whichever is later, which the year-to-date counts unless you bill it from the start date, bill on their own month's card. A variable contract's settled months bill the formula you signed even without an ENTSO-E key. The months still open bill it on the month's own spot mean with a key, and without one keep the card's printed rate with the standing charge you signed. The feed-in credit follows the formula you signed, and where the card fixes its feed-in price for the term too (Mega's fixed range, Trevion Groene Energie Vast, EnergyVision's fixed-injection card) the price you signed at. See [Configuration](#configuration).
 - **Renewal reminder** — set your contract's end date and a timestamp sensor carries it, so an automation can remind you before the contract rolls over.
 
 **Running it**
@@ -1922,7 +1922,7 @@ three ids the integration uses, which are the directory names under
    checking a figure against the card without opening the PDF. A card is filed under the month its
 own label names, which is what a supplier publishing in arrears (Ecopower's
 definitive card) or ahead needs; a month is rewritten only when the parse
-changed, and months more than twelve before the running one are dropped.
+changed, and months more than 36 before the running one are dropped.
 
 The cards themselves are kept as well, as the real thing a parser can be
 re-run against later: every PDF the archive has not seen before is uploaded
@@ -1972,7 +1972,7 @@ and nothing else, and the month lookup only asks for a month the archive can
 hold: a closed one, and for a supplier with no archive of its own not before May
 2026, the earliest month filed for one (Ecofix's May cards, filed by hand before
 the daily captures began). A signing month older than
-the twelve kept, which the supplier's own archive does not hold either, bills
+the 36 kept, which the supplier's own archive does not hold either, bills
 each month on that month's own card as an entry with no signing month does,
 unless you typed the rate you signed. A signing card an installation has read is kept on disk until an
 update changes the stored card format, so this matters when the entry is

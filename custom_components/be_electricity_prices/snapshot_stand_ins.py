@@ -134,7 +134,7 @@ async def card_of_month_before(
 
 
 # How far back the card archive is asked for a card to stand in, a month at a
-# time: as far as it keeps rows.
+# time: a year, as gas does, though the archive keeps 36 months of rows.
 _ARCHIVE_MONTHS_BACK = 12
 
 
