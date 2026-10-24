@@ -554,6 +554,50 @@ async def test_costs_priced_before_an_edit_are_held_under_their_settings(
         await hass.async_block_till_done()
 
 
+async def test_a_tick_the_recorder_did_not_answer_keeps_the_last_costs(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A busy recorder answers a meter read with nothing, which prices the
+    year as fees alone. The cost sensors are TOTAL, so a short figure for one
+    hour stayed in the long-term statistics as a dip and a jump. Such a tick
+    publishes the last costs instead and holds nothing new, and the next tick
+    the recorder answers prices the year again."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices import energy_meters
+    from custom_components.be_electricity_prices.coordinator_costs import (
+        _CostsMixin,
+    )
+
+    freezer.move_to("2026-06-20 10:30:00+02:00")
+    recorder = _Recorder()
+    with _a_frank_entry(hass, recorder) as entry:
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await _settle(hass, freezer)
+        coord = entry.runtime_data
+        before = _figures(entry)
+        held = dict(coord._held_costs or {})
+        assert before["current_year_cost_eur"] is not None
+        priced = _CostsMixin._tick_costs
+
+        async def _busy(self: Any, *args: Any) -> Any:
+            costs = await priced(self, *args)
+            energy_meters._note_failed_read("sensor.day_consumption")
+            return replace(costs, current_year_cost=1.0, month_cost=1.0)
+
+        freezer.tick(timedelta(minutes=5))
+        with patch.object(_CostsMixin, "_tick_costs", _busy):
+            await coord.async_refresh()
+        assert _figures(entry) == before
+        assert coord._held_costs == held
+
+        await coord.async_refresh()
+        assert entry.runtime_data.data.current_year_cost_eur is not None
+        assert entry.runtime_data.data.current_year_cost_eur != 1.0
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
+
 async def test_the_costs_alone_moving_leaves_the_entry_blob_unwritten(
     hass: HomeAssistant,
 ) -> None:

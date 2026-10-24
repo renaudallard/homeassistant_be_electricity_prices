@@ -631,6 +631,9 @@ async def test_the_tick_walks_the_year_end_only_when_its_inputs_move(
             AsyncMock(return_value=0.0),
         ),
         patch.object(coordinator_costs, "_compute_year_end_cost", walk),
+        # A recorder that answers and holds nothing: a tick whose reads
+        # failed publishes the last costs rather than its own.
+        patch.object(energy_meters, "_query_rows", AsyncMock(return_value=[])),
     ):
         await tick()
         freezer.tick(timedelta(minutes=5))

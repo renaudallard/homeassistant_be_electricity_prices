@@ -90,6 +90,7 @@ from .creg_ev import (
 from .creg_ev import (
     rate_for as ev_rate_for,
 )
+from .energy_meters import noting_failed_reads
 from .excise_law import ensure_excise_law
 from .fees import _compute_capacity, _compute_prosumer, bills_capacity
 from .fluvius import ensure_analog_surcharge, ensure_tariff_sheet
@@ -389,16 +390,30 @@ class _TickMixin:
         if deferred:
             costs = await self._held_tick_costs()
         else:
-            costs = await self._tick_costs(
-                priced,
-                injection_snapshot,
-                energy_mean,
-                spp_weighted,
-                rlp_weighted,
-                allocating,
-                billed_peak,
-            )
-            self._held_costs = held_costs_blob(self.entry, costs, inputs)
+            with noting_failed_reads() as failed:
+                costs = await self._tick_costs(
+                    priced,
+                    injection_snapshot,
+                    energy_mean,
+                    spp_weighted,
+                    rlp_weighted,
+                    allocating,
+                    billed_peak,
+                )
+            if failed:
+                # A busy recorder answers a read with nothing, which prices
+                # the year as fees alone, and the cost sensors are TOTAL: a
+                # short figure for one hour is a dip and a jump kept in the
+                # long-term statistics for good. The last costs published
+                # stand in, or unknown where they no longer cover the window,
+                # and the next tick reads again.
+                _LOGGER.debug(
+                    "Recorder did not answer for %s; keeping the last costs",
+                    ", ".join(sorted(failed)),
+                )
+                costs = await self._held_tick_costs()
+            else:
+                self._held_costs = held_costs_blob(self.entry, costs, inputs)
         self.meter_reads_pending = deferred
 
         await self._save_persistent()
