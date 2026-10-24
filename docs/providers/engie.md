@@ -502,6 +502,13 @@ contract:
   (`test_easy_variable_carries_its_endex101_formulas`,
   `test_easy_variable_cohort_bills_its_signing_formulas_at_each_months_endex101`,
   `test_an_easy_variable_cohort_is_billed_without_a_key`).
+  The residential cards of November 2023 to February 2025 print three different
+  feed-in figures, each with its own formula: Normal 6,749 against Heures pleines
+  8,159 and Heures creuses 3,117 c/kWh in November 2023. Only the Normal one is
+  read, so a day/night meter is credited it on both registers. Left that way on
+  purpose: on a solar profile exporting 3.000 kWh a year, the sixteen months
+  credit 124,74 EUR where the two registers give 123,49, 1,25 EUR in all. The
+  three figures are equal from March 2025 on.
 - Month-indexed single band (`current` plus `factor` / `base`, `month_indexed`):
   the other variable products in `_EPEXDAM_INJECTION_CONTRACTS` (Empower
   Variable, Flow, Direct Online, Basic Online, Empty House and their
