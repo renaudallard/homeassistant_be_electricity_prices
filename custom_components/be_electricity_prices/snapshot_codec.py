@@ -474,7 +474,17 @@ class _MigratingStore(Store[dict[str, Any]]):
 # card whose network table misses an area.
 # v83: Bolt's variable cards carry the feed-in figures their variable
 # settlement credits per meter register, at the quarter's SPP-weighted index.
-_SNAPSHOT_SCHEMA_VERSION = 83
+# v84: Bolt's feed-in figures carry their own settled mark, its fixed cards
+# the figures their index table stands for and its Walloon variable cards
+# the Impact bands; Luminus ComfyFlex bills its quarter's index and Luminus
+# Dynamic the table's data-management fee; EnergyVision's older cards pay
+# the welcome credit at the anniversary; Ecofix Flexy carries its RLP
+# formulas; Engie's Easy Variable its ENDEX101 pairs; Eneco reads RESA's
+# TECTEO row, and Engie, Mega and OCTA+ their Walloon tables before 2026;
+# Luminus Dynamic's cards before September 2025 parse; a card splitting
+# ORES's sub-areas leaves ORES out at Eneco too, and Aspiravi's 2024 cards
+# no longer read PBE's row as Kempen.
+_SNAPSHOT_SCHEMA_VERSION = 84
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
