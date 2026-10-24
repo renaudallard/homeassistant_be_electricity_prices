@@ -1850,7 +1850,9 @@ async def test_the_backfilled_year_ends_on_what_the_two_contracts_cost_live(
             "_effective_snapshot_for_month",
             new=AsyncMock(side_effect=own_card),
         ),
-        patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+        patch.object(
+            ytd_cost, "_cohort_legs", AsyncMock(return_value=_CohortLegs(None, None))
+        ),
         patch.object(
             backfill_window,
             "period_card",
@@ -2204,7 +2206,9 @@ async def test_an_earlier_card_on_another_blend_nets_on_the_entrys_profile(
             "_effective_snapshot_for_month",
             new=AsyncMock(side_effect=own_card),
         ),
-        patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+        patch.object(
+            ytd_cost, "_cohort_legs", AsyncMock(return_value=_CohortLegs(None, None))
+        ),
         patch.object(backfill_window, "period_card", old),
         patch.object(contract_periods, "period_card", old),
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),

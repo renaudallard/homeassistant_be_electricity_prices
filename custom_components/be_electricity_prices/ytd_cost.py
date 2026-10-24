@@ -45,7 +45,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .cohort import (
-    _cohort_energy_leg,
+    _cohort_legs,
     _effective_snapshot_for_month,
     _month_snapshot_cache,
     _parse_iso_date,
@@ -293,28 +293,31 @@ async def _compute_current_year_cost(
     # Dispatch on the EFFECTIVE energy leg. A variable contract with a start
     # date re-prices its signing cohort to a SpotMonthlyRates leg, which bills
     # on the monthly-mean hourly path rather than the variable static daily
-    # path. _cohort_energy_leg returns None for the compare flow, leaving the
-    # current card's kind, and for a contract without a start date unless its
-    # card is month indexed and the entry has a key: that card is re-priced
-    # on the monthly mean too (_month_indexed_leg). The per-month walk
-    # resolves the same cohort leg through
+    # path. _cohort_legs leaves the energy leg None for the compare flow, so
+    # the current card's kind stands, and for a contract without a start
+    # date unless its card is month indexed and the entry has a key: that
+    # card is re-priced on the monthly mean too (_month_indexed_leg). The
+    # per-month walk resolves the same cohort leg through
     # _effective_snapshot_for_month, so dispatch and per-month pricing agree.
+    cohort = await _cohort_legs(
+        hass, session, extractor, contract, region, entry, snapshot
+    )
+    eff_energy = snapshot.energy if cohort.energy is None else cohort.energy
     # The entry's own opt-in belongs to the side it was made on; a contract
     # that is not this entry's is judged only by what its card prints. Same
     # split the comparison page's own month-mean resolver makes, and for the
     # same reason: a custom monthly entry that ticked the SPP box must not
     # re-price a foreign card's formula onto an index that card never names.
+    # Asked of the leg the running month is credited on, the signing cohort's
+    # where one is spliced, which is what the live tick and the backfill
+    # decide the profile on: asked of today's card, a cohort indexed
+    # otherwise was weighted three ways by the three paths.
     if spp_weights is not None and not (
-        _spp_weighting_enabled(entry, snapshot)
+        _spp_weighting_enabled(entry, cohort.splice(snapshot))
         if contract == entry.data.get(CONF_CONTRACT)
         else _injection_is_spp_indexed(snapshot)
     ):
         spp_weights = None
-
-    cohort_energy = await _cohort_energy_leg(
-        hass, session, extractor, contract, region, entry, snapshot
-    )
-    eff_energy = snapshot.energy if cohort_energy is None else cohort_energy
 
     # The window every leg below accumulates over. Normally the year-to-date
     # one; ``window_start_override`` narrows it to the running month for the

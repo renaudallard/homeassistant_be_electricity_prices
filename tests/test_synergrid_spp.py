@@ -957,6 +957,78 @@ async def test_ytd_credits_the_card_indicative_for_an_spp_card_without_a_profile
     assert cost == pytest.approx(-0.03)
 
 
+@pytest.mark.parametrize("today_on_spp", [False, True])
+async def test_ytd_weighs_a_cohort_feed_in_on_the_index_its_own_card_names(
+    hass: HomeAssistant, freezer: Any, today_on_spp: bool
+) -> None:
+    """A signing cohort credits the feed-in on the formula its signing card
+    prints, and the live tick and the backfill decide the solar profile on
+    that leg. The year-to-date walk asked today's card instead, so a cohort
+    signed on a Belpex_SPP formula under a card now on the plain mean had the
+    profile dropped and was credited the printed figure, while a cohort on
+    the plain mean under a card now on Belpex_SPP was weighted by it."""
+    from custom_components.be_electricity_prices import cohort, ytd_cost
+    from custom_components.be_electricity_prices.cohort import _CohortLegs
+
+    freezer.move_to("2026-06-20 12:00:00+02:00")
+    plain = InjectionRates(current=0.03, factor=0.5, base=0.0, month_indexed=True)
+    spp = InjectionRates(current=0.03, factor=0.5, base=0.0, spp_indexed=True)
+    snap = make_snapshot(
+        supplier="octaplus",
+        contract="octaplus_fixed",
+        energy=SpotMonthlyRates(factor=1.0, base=0.0),
+        injection=spp if today_on_spp else plain,
+    )
+    entry = _entry(
+        **{
+            const.CONF_SUPPLIER: "octaplus",
+            const.CONF_CONTRACT: "octaplus_fixed",
+            const.CONF_REGION: const.REGION_WALLONIA,
+            const.CONF_DSO: const.DSO_ORES,
+            const.CONF_METER: const.METER_MONO,
+            const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+            const.CONF_INJECTION_KWH: "sensor.inj_total",
+            const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_BI_HORAIRE,
+        }
+    )
+    # flat mean 0.20; SPP-weighted 0.15 (hour 10 weighted 3x vs hour 11)
+    spots = {
+        datetime(2026, 6, 15, 10, tzinfo=UTC): 0.10,
+        datetime(2026, 6, 15, 11, tzinfo=UTC): 0.30,
+    }
+    weights = {(6, 15, 10): 3.0, (6, 15, 11): 1.0}
+    signed = plain if today_on_spp else spp
+
+    async def _legs(*_a: object, **_k: object) -> _CohortLegs:
+        return _CohortLegs(energy=None, injection=signed)
+
+    async def _fake_hourly(
+        _hass: object, entity_id: str, _start: date, _end: date
+    ) -> dict[datetime, float]:
+        if entity_id == "sensor.inj_total":
+            return {datetime(2026, 6, 15, 10, tzinfo=UTC): 1.0}
+        return {}
+
+    with (
+        patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+        patch.object(cohort, "_cohort_legs", new=_legs),
+        patch.object(ytd_cost, "_cohort_legs", new=_legs),
+    ):
+        cost = await _compute_current_year_cost(
+            hass,
+            None,  # type: ignore[arg-type]
+            _stub_extractor(),
+            snap,
+            entry,
+            historical_spots=spots,
+            # Handed whenever the live tick loaded it, as for an SPP cohort.
+            spp_weights=weights,
+        )
+    # 1 kWh injected, no consumption. The SPP cohort on its weighted mean
+    # 0,15; the plain one on the flat mean 0,20, never on the profile.
+    assert cost == pytest.approx(-(0.5 * (0.20 if today_on_spp else 0.15)))
+
+
 def test_workbook_xml_entity_expansion_is_refused() -> None:
     """The four parses here run over a REMOTE workbook.
 

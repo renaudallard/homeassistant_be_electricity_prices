@@ -54,6 +54,7 @@ from custom_components.be_electricity_prices import (
     energy_meters,
     snapshot_months,
 )
+from custom_components.be_electricity_prices.cohort import _CohortLegs
 from custom_components.be_electricity_prices.const import (
     CARD_ARCHIVE_FIRST_MONTH,
     DOMAIN,
@@ -1301,7 +1302,9 @@ async def test_cost_backfill_meets_the_live_walk_across_the_spring_change(
         patch.object(
             ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
         ),
-        patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+        patch.object(
+            ytd_cost, "_cohort_legs", AsyncMock(return_value=_CohortLegs(None, None))
+        ),
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
@@ -1434,7 +1437,11 @@ async def test_cost_backfill_meets_the_live_walk_on_a_double_flow_meter(
                 "_effective_snapshot_for_month",
                 AsyncMock(return_value=snap),
             ),
-            patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+            patch.object(
+                ytd_cost,
+                "_cohort_legs",
+                AsyncMock(return_value=_CohortLegs(None, None)),
+            ),
             patch.object(bf, "BePricesCoordinator", SimpleNamespace),
             patch(
                 "homeassistant.components.recorder.statistics.async_import_statistics",
@@ -2065,7 +2072,11 @@ async def test_cost_backfill_skips_an_hour_one_register_did_not_report(
             patch.object(
                 ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
             ),
-            patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+            patch.object(
+                ytd_cost,
+                "_cohort_legs",
+                AsyncMock(return_value=_CohortLegs(None, None)),
+            ),
             patch.object(bf, "BePricesCoordinator", SimpleNamespace),
             patch(
                 "homeassistant.components.recorder.statistics.async_import_statistics",
@@ -2209,7 +2220,9 @@ async def test_cost_backfill_caps_the_capacity_charge_on_the_cards_vat_basis(
         patch.object(
             ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=snap)
         ),
-        patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+        patch.object(
+            ytd_cost, "_cohort_legs", AsyncMock(return_value=_CohortLegs(None, None))
+        ),
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
@@ -2920,7 +2933,9 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         patch.object(ytd_energy, "_top_up_today_hourly", side_effect=noop),
         patch.object(cohort, "_effective_snapshot_for_month", new=_month_card),
         patch.object(ytd_cost, "_effective_snapshot_for_month", new=_month_card),
-        patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+        patch.object(
+            ytd_cost, "_cohort_legs", AsyncMock(return_value=_CohortLegs(None, None))
+        ),
         # The signing month's card is the current one here; what is under test
         # is that the backfill reads the same card the live walk does.
         patch.object(
@@ -3064,7 +3079,9 @@ async def test_the_credit_cap_reads_each_month_own_green_levy(
         patch.object(
             ytd_cost, "_effective_snapshot_for_month", AsyncMock(return_value=january)
         ),
-        patch.object(ytd_cost, "_cohort_energy_leg", AsyncMock(return_value=None)),
+        patch.object(
+            ytd_cost, "_cohort_legs", AsyncMock(return_value=_CohortLegs(None, None))
+        ),
     ):
         await ytd_cost._compute_current_year_cost(
             hass,
@@ -3912,3 +3929,69 @@ async def test_a_register_pair_read_once_a_day_is_billed_by_register_hour_by_hou
             hass, entry, snap, last, per_hour, spots=spots
         )
     assert live["read daily"] == pytest.approx(live["in band"], abs=0.01)
+
+
+@pytest.mark.parametrize("signed_indexed", [True, False])
+async def test_the_backfill_decides_the_profiles_on_the_signed_leg(
+    hass: HomeAssistant, signed_indexed: bool
+) -> None:
+    """The live tick loads the load and solar profiles for the leg it prices,
+    the signing cohort's spliced onto today's card, and current_year_cost
+    weights it on them. The backfill asked today's card: a Mega Pro Smart
+    Flex entry signed on a card indexed on the RLP-weighted mean was
+    backfilled on the plain mean under a card printing no formula, and a
+    cohort credited on a Belpex_SPP formula lost the solar profile."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        VariableRates,
+    )
+
+    entry = make_entry(
+        supplier="mega",
+        contract="mega_pro_smart_flex",
+        solar_regime="injection",
+        api_key="k",
+        contract_start_date="2026-02-10",
+    )
+    entry.add_to_hass(hass)
+    indexed = (
+        SpotMonthlyRates(factor=1.113, base=0.0275, rlp_indexed=True),
+        InjectionRates(factor=0.8, base=-0.02, spp_indexed=True),
+    )
+    plain = (
+        VariableRates(current=0.2),
+        InjectionRates(current=0.03, factor=0.8, base=-0.02, month_indexed=True),
+    )
+    today, signed = (plain, indexed) if signed_indexed else (indexed, plain)
+    snap = make_snapshot(
+        supplier="mega",
+        contract="mega_pro_smart_flex",
+        energy=today[0],
+        injection=today[1],
+    )
+    coordinator = SimpleNamespace(
+        hass=hass,
+        entry=entry,
+        _session=None,
+        _snapshot=snap,
+        _snapshot_raw=snap,
+        _rlp_weights={(1, 1, 0): 1.0},
+        _spp_weights={(1, 1, 0): 1.0},
+        _ensure_rlp_weights=AsyncMock(),
+        _ensure_spp_weights=AsyncMock(),
+    )
+
+    async def _legs(*_a: object, **_k: object) -> _CohortLegs:
+        return _CohortLegs(energy=signed[0], injection=signed[1])
+
+    with patch.object(backfill_window, "_cohort_legs", new=_legs):
+        context = await backfill_window._build_context(
+            hass,
+            entry,
+            coordinator,  # type: ignore[arg-type]
+            [],
+        )
+    assert coordinator._ensure_rlp_weights.await_count == int(signed_indexed)
+    assert coordinator._ensure_spp_weights.await_count == int(signed_indexed)
+    assert (context.rlp_weights is not None) is signed_indexed
+    assert (context.spp_weights is not None) is signed_indexed

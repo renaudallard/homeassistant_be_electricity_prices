@@ -48,6 +48,7 @@ from homeassistant.util import dt as dt_util
 
 from .brugel import ensure_power_term
 from .cohort import (
+    _cohort_legs,
     _month_snapshot_cache,
     _tariff_card_month,
     signing_month_snapshot,
@@ -359,8 +360,20 @@ async def _build_context(
     extractor = get_extractor(entry.data[CONF_SUPPLIER])
     contract = entry.data[CONF_CONTRACT]
     region = entry.data.get(CONF_REGION, "")
+    # The profiles are decided on the leg the live tick decides them on, the
+    # signing cohort's spliced onto today's card, so that a contract signed on
+    # a card indexed otherwise than today's is weighted alike in the
+    # backfilled rows and in current_year_cost. Asked of today's card alone,
+    # a Mega Pro Smart Flex cohort signed on an RLP-indexed card was billed
+    # on the plain mean here and on the weighted one by the sensor.
+    gated = snap
+    if snapshot is None:
+        cohort = await _cohort_legs(
+            hass, coordinator._session, extractor, contract, region, entry, snap
+        )
+        gated = cohort.splice(snap)
     spp_weights = None
-    if _spp_weighting_enabled(entry, snap):
+    if _spp_weighting_enabled(entry, gated):
         await coordinator._ensure_spp_weights()
         spp_weights = coordinator._spp_weights
     # The RLP profile serves two things here: the month mean of an energy leg
@@ -378,9 +391,9 @@ async def _build_context(
         if _energy_is_rlp_indexed(snap.energy) or regime == SOLAR_REGIME_COMPENSATION:
             rlp_weights = coordinator._rlp_weights or None
     elif (
-        _energy_is_rlp_indexed(snap.energy) and spots_available(entry.data)
+        _energy_is_rlp_indexed(gated.energy) and spots_available(entry.data)
     ) or regime == SOLAR_REGIME_COMPENSATION:
-        await coordinator._ensure_rlp_weights(_rlp_blend_for(snap.energy))
+        await coordinator._ensure_rlp_weights(_rlp_blend_for(gated.energy))
         rlp_weights = coordinator._rlp_weights or None
     # A cache hit whenever the live tick has run, which resolves the same row
     # to freeze the signed energy rate; identity for an entry with no start
