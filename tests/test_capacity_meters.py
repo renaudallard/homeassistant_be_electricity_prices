@@ -946,6 +946,9 @@ async def test_the_backfill_reads_the_rate_before_the_contracts_card(
         (False, {"analog_meter": False}, False),
         # A copy kept before the question existed takes the entry's answer.
         (True, {}, False),
+        # Leaving the social tariff, whose meter step never asks, on the same
+        # analog meter: the copy holds the entry's answer.
+        (True, {"supplier": "social", "contract": "social_engie"}, False),
     ],
 )
 def test_a_quoted_ytd_is_left_out_across_a_replaced_meter(

@@ -73,6 +73,7 @@ from .compare_weighting import (
     _tou_weighted_per_kwh,
 )
 from .const import (
+    CONF_ANALOG_METER,
     CONF_API_KEY,
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
@@ -110,7 +111,6 @@ from .pricing import MeterType
 from .providers import get as get_extractor
 from .providers import settlement_answer
 from .providers.base import SupplierSnapshot
-from .snapshot_resolve import analog_meter
 from .spot_stats import (
     _energy_is_rlp_indexed,
     _injection_is_spp_indexed,
@@ -135,10 +135,15 @@ def _meters_rewired(entry: ConfigEntry, today: date) -> bool:
     analog kWh rate) and a quoted contract replays them on today's, 21 to 71
     EUR apart over half a year on the same card. The year-to-date of a quoted
     side is left out instead.
+
+    The meter's kind is its stored answer, not ``analog_meter``: that one
+    leaves the social tariff out, whose network is the CREG's, and a household
+    leaving it for a commercial contract keeps the analog meter it had, which
+    the copy kept at the switch holds as the entry's (``_UNASKED_FACTS``).
     """
     data = entry.data
     return any(
-        analog_meter(period.data) != analog_meter(data)
+        bool(period.data.get(CONF_ANALOG_METER)) != bool(data.get(CONF_ANALOG_METER))
         or any(
             (period.data.get(key) or None) != (data.get(key) or None)
             for key in METER_SENSOR_KEYS
