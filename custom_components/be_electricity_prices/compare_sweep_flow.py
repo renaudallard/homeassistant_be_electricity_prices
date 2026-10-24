@@ -77,7 +77,9 @@ async def async_run_daily_compare(
         return
     if isinstance(result, str):
         # No cell to rank, which is an answer rather than a fault: the entry's
-        # contract is the only one of its kind sold where it lives.
+        # contract is the only one of its kind sold where it lives. Or the
+        # recorder did not answer, and yesterday's ranking stands until the
+        # next night rather than one priced on no meter.
         _LOGGER.debug("Scheduled comparison skipped for %s: %s", entry.title, result)
         return
     coord.daily_compare = result

@@ -1547,6 +1547,105 @@ async def test_a_failed_year_to_date_pass_keeps_the_annual_ranking(
     assert [r.ytd for r in result.rows] == [None]
 
 
+@pytest.mark.parametrize("busy", ["household", "row"])
+async def test_a_busy_recorder_keeps_yesterday_s_ranking(
+    hass: HomeAssistant, busy: str
+) -> None:
+    """A busy recorder answers each read with nothing, which priced the
+    household's year on the 3.500 kWh default: a 1.500 kWh household read
+    1250,61 EUR for its own contract where it pays 678,69, and every gap and
+    the potential saving moved with it. The ranking is kept until the next
+    night and across restarts, so a run that could not read the meters, for
+    the household or for a row, publishes nothing and yesterday's stands."""
+    from custom_components.be_electricity_prices import energy_meters
+    from custom_components.be_electricity_prices.compare_engine import _SweepEngine
+    from custom_components.be_electricity_prices.compare_sweep_flow import (
+        async_run_daily_compare,
+    )
+
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    yesterday = _result(
+        rows=(RankedRow(label="Mine", annual=678.69, is_own=True),), own=678.69
+    )
+    coord = SimpleNamespace(
+        daily_compare=yesterday,
+        async_update_listeners=lambda: None,
+        _save_persistent=AsyncMock(),
+    )
+
+    async def household(*_a: Any, **_k: Any) -> None:
+        if busy == "household":
+            energy_meters._note_failed_read("sensor.cons")
+
+    async def row(*_a: Any, **_k: Any) -> RankedRow:
+        if busy == "row":
+            energy_meters._note_failed_read("sensor.cons")
+        return RankedRow(label="Mega Online Fixed", annual=1148.86)
+
+    with (
+        patch.object(
+            _SweepEngine,
+            "build_sweep",
+            return_value={"candidates": [("mega", "x", False)], "rows": []},
+        ),
+        patch.object(_SweepEngine, "_resolve_household", household),
+        patch.object(
+            _SweepEngine,
+            "_sweep_own_row",
+            AsyncMock(
+                return_value=RankedRow(label="Mine", annual=1250.61, is_own=True)
+            ),
+        ),
+        patch.object(_SweepEngine, "_sweep_one", row),
+        patch.object(_SweepEngine, "fill_ytd_column", AsyncMock(return_value=[])),
+    ):
+        reason = await _SweepEngine(hass, entry, {}).run_full_sweep(coord)
+        await async_run_daily_compare(hass, entry, coord)
+    assert reason == "the recorder did not answer for sensor.cons"
+    assert coord.daily_compare is yesterday
+    coord._save_persistent.assert_not_awaited()
+
+
+async def test_a_busy_recorder_leaves_the_year_to_date_column_out(
+    hass: HomeAssistant,
+) -> None:
+    """The year-to-date pass reads a year of meter per row. A read the
+    recorder did not answer, in the own row's walk or a candidate's, priced
+    that row's year on part of it: the candidates fell to their fees, 180 to
+    250 EUR against 500 to 575, beside an own row that kept its figure. The
+    annual figures still stand; the column goes out empty, as when the pass
+    fails outright."""
+    from custom_components.be_electricity_prices import energy_meters
+    from custom_components.be_electricity_prices.compare_engine import _SweepEngine
+
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    priced = RankedRow(label="Mega Online Fixed", annual=1102.75)
+
+    async def busy_pass(_self: Any, sweep: Any, _coord: Any) -> list[RankedRow]:
+        energy_meters._note_failed_read("sensor.cons")
+        return [
+            RankedRow(label=r.label, annual=r.annual, ytd=210.09) for r in sweep["rows"]
+        ]
+
+    with (
+        patch.object(
+            _SweepEngine,
+            "build_sweep",
+            return_value={"candidates": [("mega", "x", False)], "rows": []},
+        ),
+        patch.object(_SweepEngine, "_resolve_household", AsyncMock(return_value=None)),
+        patch.object(_SweepEngine, "_sweep_own_row", AsyncMock(return_value=None)),
+        patch.object(_SweepEngine, "_sweep_one", AsyncMock(return_value=priced)),
+        patch.object(_SweepEngine, "fill_ytd_column", busy_pass),
+    ):
+        result = await _SweepEngine(hass, entry, {}).run_full_sweep(_coord(entry))
+    assert not isinstance(result, str)
+    assert [r.annual for r in result.rows] == [1102.75]
+    assert [r.ytd for r in result.rows] == [None]
+
+
 async def test_a_failed_save_does_not_undo_the_published_ranking(
     hass: HomeAssistant,
 ) -> None:

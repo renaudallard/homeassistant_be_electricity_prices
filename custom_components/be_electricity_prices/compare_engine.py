@@ -68,7 +68,7 @@ from .const import (
     SPOT_PRICED_CONTRACT_KINDS,
 )
 from .coordinator_persist import settings_digest
-from .energy_meters import memoise_meter_reads
+from .energy_meters import memoise_meter_reads, noting_failed_reads
 from .flow_contracts import (
     _contract_kind,
     _ranking_candidates,
@@ -441,43 +441,64 @@ class _SweepEngine(_HouseholdMixin):
             await coord.fetch_quoted_profiles(
                 spp=_effective_regime(data, {}) == SOLAR_REGIME_INJECTION
             )
-        sweep["household"] = await self._resolve_household(
-            coord,
-            candidates=sweep["candidates"],
-        )
-        rows: list[RankedRow] = []
-        own = await self._sweep_own_row(sweep["household"])
-        if own is not None:
-            rows.append(own)
-        for supplier, contract, quarter_hourly in sweep["candidates"]:
-            try:
-                rows.append(
-                    await self._sweep_one(sweep, supplier, contract, quarter_hourly)
-                )
-            except Exception as err:  # one row, not the sweep
-                # Same rule as the dialog: a row that raised is still a row,
-                # because dropping it would read as "not competitive".
-                rows.append(
-                    RankedRow(
-                        label=_candidate_label(supplier, contract, quarter_hourly),
-                        annual=None,
-                        status=f"could not be priced: {err}",
+        # The household's volumes and shapes are recorder reads, and a busy
+        # recorder answers each one with nothing, which prices the year on the
+        # 3.500 kWh default and the export on none. The ranking is kept until
+        # the next night and across restarts, so a run that could not read the
+        # meters publishes nothing and yesterday's stands, as after a fault.
+        with noting_failed_reads() as failed:
+            sweep["household"] = await self._resolve_household(
+                coord,
+                candidates=sweep["candidates"],
+            )
+            rows: list[RankedRow] = []
+            own = await self._sweep_own_row(sweep["household"])
+            if own is not None:
+                rows.append(own)
+            for supplier, contract, quarter_hourly in sweep["candidates"]:
+                try:
+                    rows.append(
+                        await self._sweep_one(sweep, supplier, contract, quarter_hourly)
                     )
-                )
+                except Exception as err:  # one row, not the sweep
+                    # Same rule as the dialog: a row that raised is still a
+                    # row, because dropping it would read as "not competitive".
+                    rows.append(
+                        RankedRow(
+                            label=_candidate_label(supplier, contract, quarter_hourly),
+                            annual=None,
+                            status=f"could not be priced: {err}",
+                        )
+                    )
+        if failed:
+            return f"the recorder did not answer for {', '.join(sorted(failed))}"
         # The year-to-date column, which used to be reachable only by clicking
         # through the options page and was stored nowhere afterwards. A
         # scheduled run is the right place for it: the pass replays a year per
         # candidate, and this is the run with all night and no progress bar.
         # Wrapped because it is an extra, not the ranking: a failure here must
         # leave the annual figures standing rather than cost the whole sweep.
+        # That includes a read the recorder did not answer, in the own row's
+        # walk or a candidate's: the column would set a year against part of
+        # one, so the annual figures go out with no column at all.
         sweep["rows"] = rows
-        try:
-            rows = await self.fill_ytd_column(sweep, coord)
-        except Exception:  # the annual ranking still stands
-            _LOGGER.exception(
-                "Year-to-date column failed for %s; publishing annual only",
-                self.config_entry.title,
+        with noting_failed_reads() as failed:
+            try:
+                ytd = await self.fill_ytd_column(sweep, coord)
+            except Exception:  # the annual ranking still stands
+                _LOGGER.exception(
+                    "Year-to-date column failed for %s; publishing annual only",
+                    self.config_entry.title,
+                )
+                ytd = rows
+        if failed:
+            _LOGGER.debug(
+                "%s: year-to-date column left out, the recorder did not answer for %s",
+                self.config_entry.entry_id,
+                ", ".join(sorted(failed)),
             )
+        else:
+            rows = ytd
         return DailyCompare(
             rows=tuple(rows),
             own=own.annual if own is not None else None,
