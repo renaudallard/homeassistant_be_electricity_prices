@@ -281,12 +281,11 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
         dist_excl_night = to_float(match.group(2))
         # group(3) is the card's "quart-horaire" data-management column
         # (~61 EUR). It is deliberately NOT used for the SMR3 dynamic
-        # product: it contradicts the authoritative Fluvius SMR3
-        # data-management fee (~18,56 EUR, per the Luminus card footnote),
+        # product: Fluvius has billed every low-voltage metering regime one
+        # data-management fee since 2025, 17,85 EUR excluding VAT in 2026,
         # so billing the dynamic at it would over-charge ~42 EUR/yr. The
-        # mensuel/annuel value (group 4, 18,92 EUR) matches the standard
-        # databeheer the rest of the integration uses, so use it for all
-        # meter regimes pending an authoritative Fluvius quart-horaire rate.
+        # mensuel/annuel value (group 4, 18,92 EUR) is that fee, so it is
+        # used for all meter regimes.
         data_mgmt_year = to_float(match.group(4))
         capacity = to_float(match.group(5))
         out[key] = DsoOverlay(

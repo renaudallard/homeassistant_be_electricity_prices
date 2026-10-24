@@ -567,7 +567,7 @@ def parse_snapshot(
     wallonia_renewables = 0.0
     if region == REGION_FLANDERS:
         flanders_renewables = _extract_flanders_renewables(text)
-        dsos = _extract_flanders_dsos(text, contract.kind)
+        dsos = _extract_flanders_dsos(text)
     else:
         wallonia_renewables = _extract_wallonia_renewables(text)
         dsos = _extract_wallonia_dsos(text)

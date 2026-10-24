@@ -439,12 +439,10 @@ because some cards (Dynamic Flanders) prepend header glyphs to one digital row
 and strip the leading `F` from the rest (e.g. `luvius Halle-Vilvoorde`).
 
 Gotcha: group 3 is the card's `quart-horaire` data-management column (~61 EUR),
-deliberately NOT used. It contradicts the authoritative Fluvius SMR3
-data-management fee (~18,56 EUR per the Luminus card footnote); billing the
-dynamic at it would over-charge ~42 EUR/yr. The mensuel/annuel value (group 4,
-~18,92 EUR) matches the standard databeheer the rest of the integration uses, so
-it is used for all meter regimes pending an authoritative Fluvius quart-horaire
-rate. Flanders `transport` is set to 0.0. Pinned
+deliberately NOT used. Fluvius has billed every low-voltage metering regime one
+data-management fee since 2025, 17,85 EUR a year excluding VAT in 2026; billing
+the dynamic at group 3 would over-charge ~42 EUR/yr. The mensuel/annuel value
+(group 4, ~18,92 EUR) is that fee, so it is used for all meter regimes. Flanders `transport` is set to 0.0. Pinned
 illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
 52.37, prosumer 54.63 (`test_flanders_dsos_extract_full_set`).
 

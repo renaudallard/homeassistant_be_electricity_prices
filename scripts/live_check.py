@@ -3423,9 +3423,6 @@ _NETWORK_TOLERANCE = 0.01
 # do not vote and are not reported, like _NO_STANDING_CHARGE: a structure does
 # not drift the way a price does. Each one is documented where it is billed.
 _NETWORK_STRUCTURAL: dict[tuple[str, str, str], str] = {
-    # The card's own footnote: 18,56 for quarter-hourly metering, which a
-    # dynamic contract requires; the table's 18,92 is the standard figure.
-    ("luminus_dynamic", "flanders", "data_management_per_year"): "SMR3 metering fee",
     # Bolt prints the metering term alone; resolve_brussels_power_term adds
     # the Brugel power term the other cards fold into this figure.
     ("bolt", "brussels", "data_management_per_year"): "power term added from Brugel",

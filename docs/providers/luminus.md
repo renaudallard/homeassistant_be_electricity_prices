@@ -389,16 +389,21 @@ Two column layouts are read by asking for each width in turn
   compensation regime (see `DsoOverlay.prosumer_eur_per_kva_year`,
   `base.py`).
 
-The SMR3 data-management gotcha: the dynamic product meters quarter-hourly, so
-its data-management fee is the reduced value from the
-`(**) ... quart d'heure ... gestion des données` footnote, not the table's
-monthly-regime column. `_extract_flanders_dsos` reads that footnote when
-`kind == "dynamic"` and falls back to the table value if it is absent
-(`_luminus_overlays.py`, handed the kind by `parse_snapshot` in `luminus.py`).
+The SMR3 data-management gotcha: the dynamic card prints a
+`(**) Pour des régimes de mesure par quart d'heure, le tarif de gestion des
+données s'élève à 18,56 € par an` footnote beside the table's 18,92. Fluvius has
+billed every low-voltage metering regime one data-management fee since 2025,
+17,85 EUR a year excluding VAT in 2026 (18,92 with VAT), so the footnote kept
+2025's figure through 2026, and `_extract_flanders_dsos` (`_luminus_overlays.py`)
+bills the table on every card. Billing the footnote put a quarter-hourly
+household 0,36 EUR a year under. Before 2025 the quarter-hourly regime had a fee
+of its own and the footnote carried it (15,14 against the table's 13,95 in June
+2024), but no dynamic card of that time parses: its formula reads
+`Jour (compteur de jour) = ... x Belpex H`.
 `test_flanders_dynamic_dso_table_is_smaller_than_static`
-(`test_luminus.py`) pins it: Antwerpen dynamic data-management `18.56`
-(footnote) vs static `18.92` (table), and the dynamic prosumer is `None` while
-static is `54.63` (illustrative).
+(`test_luminus.py`) pins it: Antwerpen data-management `18.92` on both the
+dynamic and the static card, and the dynamic prosumer is `None` while static is
+`54.63` (illustrative).
 
 ### Wallonia (`_extract_wallonia_dsos`, `_luminus_overlays.py`)
 
@@ -589,8 +594,10 @@ print a single value and offer no exclusive-night), so the standard fee applies.
   `Estimation annuelle du tarif`) sides. Always take the current-month
   applicable row (`test_comfyflex_flanders_uses_current_monthly_not_annual_estimate`,
   `test_luminus.py`; injection at `test_luminus.py`).
-- **SMR3 reduced data-management fee** from the `quart d'heure` footnote on
-  dynamic Flanders cards, not the table's monthly column (`_luminus_overlays.py`).
+- **SMR3 data-management footnote is stale**: the dynamic Flanders card's
+  `quart d'heure` footnote still prints 2025's 18,56, while Fluvius bills every
+  regime the table's figure since 2025, so the table is read
+  (`_luminus_overlays.py`).
 - **Two DSO column widths** per region (static wide, dynamic narrow); the row
   is asked for at each width in turn, with prosumer present only on static
   (`_luminus_overlays.py`).
@@ -648,7 +655,7 @@ variable parse paths already covered by the fixtures above.
 | Dynamic factor/base off by ~1.06 or ~10 | dynamic branch (`_luminus_cards.py`) | VAT multiplier + mWh->kWh + c->EUR conversion |
 | Injection wrong or raising | `_extract_injection` (`_luminus_cards.py`) | applicable-vs-estimate `Tarif` capitalisation, VAT-exempt scaling |
 | A DSO row missing | `_FLANDERS_LABELS` / `_WALLONIA_LABELS` + row regexes (`_luminus_overlays.py`) | printed label renamed, or column count changed |
-| Dynamic data-management fee wrong (Flanders) | footnote regex (`_luminus_overlays.py`) | `quart d'heure ... gestion des données` phrasing drift |
+| Dynamic data-management fee wrong (Flanders) | table column (`_extract_flanders_dsos`, `_luminus_overlays.py`) | four-column row width; Fluvius splitting the regimes again |
 | Tax value zeroed / block too short | `_tax_block_values` + `_extract_per_kwh_taxes` (`_luminus_overlays.py`) | colon anchor, value-run boundary, BTNR/BTR ordering |
 | Yearly / exclusive-night fee wrong | `_extract_yearly_fee` / `_extract_excl_night_fee` (`_luminus_cards.py`) | `Redevance fixe` line format, third-column `-` handling |
 | Publication label empty | `_extract_publication_month` (`luminus.py`) | parens padding / month spelling |

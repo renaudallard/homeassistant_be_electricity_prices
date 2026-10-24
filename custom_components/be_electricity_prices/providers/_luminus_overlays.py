@@ -48,7 +48,6 @@ from ._parse import (
     parse_vreg_network_ceiling,
     to_float,
 )
-from ._rates import TariffKind
 from .base import DsoOverlay, ExtractorError
 
 
@@ -216,7 +215,7 @@ def _extract_wallonia_renewables(text: str) -> float:
     return to_float(match.group(1)) / 100.0
 
 
-def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]:
+def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     """Read the Compteur digital columns from the Flanders DSO table.
 
     Static cards print 8 numbers per row (digital + classic + prosumer):
@@ -230,20 +229,18 @@ def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]
 
     Distribution already includes transport (same convention as Engie's
     Flanders rows).
-    """
-    # The dynamic product meters quarter-hourly (SMR3); its data-management
-    # fee is the reduced value in the "(**) ... quart d'heure ... gestion
-    # des donnees" footnote, not the table's monthly-regime column. Fall
-    # back to the table value if the footnote is absent.
-    quarter_data_mgmt: float | None = None
-    if kind == "dynamic":
-        footnote = re.search(
-            r"quart d['’]heure[\s\S]{0,80}?gestion des donn[\s\S]{0,40}?([\d,]+)\s*€",
-            text,
-        )
-        if footnote is not None:
-            quarter_data_mgmt = to_float(footnote.group(1))
 
+    The data-management fee is the table's on every card, the dynamic one's
+    included. Fluvius has billed every low-voltage metering regime one fee
+    since 2025, 17,85 EUR a year excluding VAT in 2026, which the table
+    prints, while the dynamic card's "(**) Pour des regimes de mesure par
+    quart d'heure" footnote kept 2025's 18,56 through 2026: billed, it put a
+    quarter-hourly household 0,36 EUR a year under. Before 2025 the
+    quarter-hourly regime had a fee of its own, which that footnote carried
+    (15,14 against the table's 13,95 in June 2024), but no dynamic card of
+    that time parses: its formula reads "Jour (compteur de jour) = ... x
+    Belpex H".
+    """
     out: dict[str, DsoOverlay] = {}
     # One VREG figure for the whole region, stated once in a footnote rather
     # than per area, so it goes on every Fluvius overlay this card produces.
@@ -260,9 +257,7 @@ def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]
             distribution_single=nums[2] / 100.0,
             distribution_exclusive_night=nums[3] / 100.0,
             transport=0.0,
-            data_management_per_year=(
-                quarter_data_mgmt if quarter_data_mgmt is not None else nums[0]
-            ),
+            data_management_per_year=nums[0],
             capacity_eur_per_kw_year=nums[1],
             prosumer_eur_per_kva_year=prosumer,
             network_ceiling_eur_per_kwh=ceiling,

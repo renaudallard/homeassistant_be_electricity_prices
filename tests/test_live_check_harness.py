@@ -3266,12 +3266,32 @@ def test_every_network_allowance_expires_with_the_tariff_year() -> None:
 def test_a_network_figure_that_differs_by_structure_does_not_vote(
     tmp_path: Path,
 ) -> None:
-    """Luminus's dynamic card bills the quarter-hourly metering fee its own
-    footnote prints, which is right and differs from every other card. It is
-    left out of the vote rather than allowed, since a structure does not
-    expire the way a stale figure does."""
+    """Cociter's trihoraire card prints only the three Impact bands, and the
+    single rate it stores, its Pic figure, is never billed. It is left out of
+    the vote rather than allowed, since a structure does not expire the way a
+    stale figure does.
+
+    Luminus's dynamic card is not such a case any more. It billed its
+    quarter-hour footnote's 18,56 as a structure, but since 2025 Fluvius
+    charges every low-voltage regime one data-management fee and the
+    footnote kept 2025's figure through 2026, so a card billing it now votes
+    and is reported."""
     archive = _network_archive(
         tmp_path,
+        {
+            ("a", "a_fixed", "wallonia"): (0.0, {"distribution_single": 0.1198}),
+            ("b", "b_fixed", "wallonia"): (0.0, {"distribution_single": 0.1198}),
+            ("cociter", "cociter_variable_impact", "wallonia"): (
+                0.0,
+                {"distribution_single": 0.1518},
+            ),
+        },
+    )
+    lc._check_network_consensus(archive, date(2026, 9, 25))
+    assert lc.CHECKS == []
+
+    stale = _network_archive(
+        tmp_path / "stale",
         {
             ("a", "a_fixed", "flanders"): (0.0, {"data_management_per_year": 18.92}),
             ("b", "b_fixed", "flanders"): (0.0, {"data_management_per_year": 18.92}),
@@ -3281,8 +3301,10 @@ def test_a_network_figure_that_differs_by_structure_does_not_vote(
             ),
         },
     )
-    lc._check_network_consensus(archive, date(2026, 9, 25))
-    assert lc.CHECKS == []
+    lc._check_network_consensus(stale, date(2026, 9, 25))
+    assert [check.label for check in lc.CHECKS] == [
+        "luminus/fluvius_antwerpen data_management_per_year 18.56 disagrees for 2026-09"
+    ]
 
 
 def test_the_network_check_stays_quiet_without_a_consensus(tmp_path: Path) -> None:

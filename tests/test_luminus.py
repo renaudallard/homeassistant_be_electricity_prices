@@ -246,10 +246,10 @@ def test_flanders_dynamic_dso_table_is_smaller_than_static() -> None:
     # Only the static card carries a prosumer rate.
     assert antwerpen_dyn.prosumer_eur_per_kva_year is None
     assert antwerpen_static.prosumer_eur_per_kva_year == pytest.approx(54.63)
-    # The SMR3 dynamic regime is billed the reduced data-management fee
-    # from the "(**) ... quart d'heure" footnote (18,56), not the table's
-    # monthly-regime 18,92 that the static card bills.
-    assert antwerpen_dyn.data_management_per_year == pytest.approx(18.56)
+    # Both bill the table's data-management fee, which Fluvius charges every
+    # low-voltage metering regime in 2026, though the dynamic card's "(**)
+    # ... quart d'heure" footnote still prints 2025's 18,56.
+    assert antwerpen_dyn.data_management_per_year == pytest.approx(18.92)
     assert antwerpen_static.data_management_per_year == pytest.approx(18.92)
 
 

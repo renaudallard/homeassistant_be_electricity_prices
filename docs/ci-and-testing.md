@@ -423,8 +423,8 @@ households the card's figure. That is what nothing reported before the check exi
 professional card prints the Pic rate in the Medium column for ORES, RESA, REW and AIESH, which
 bills every Medium hour of an Impact entry at Pic.
 
-Four figures differ from the fleet by the card's structure and are left out of the vote
-(`_NETWORK_STRUCTURAL`): Luminus Dynamic's quarter-hourly metering fee (its own footnote), Bolt's
+Three figures differ from the fleet by the card's structure and are left out of the vote
+(`_NETWORK_STRUCTURAL`): Bolt's
 Brussels metering term (the Brugel power term is added by the resolver), and the single rate and
 the terme fixe on Cociter's trihoraire card (never billed, the contract forces the Impact mode,
 which charges no fixed term and which the card prints as 0,00 from October 2026). The disagreements
