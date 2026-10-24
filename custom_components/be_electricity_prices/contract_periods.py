@@ -82,6 +82,7 @@ from .energy_meters import (
 )
 from .fees import billed_peak_for
 from .flow_contracts import _contract_is_month_indexed
+from .fluvius import ensure_analog_surcharge
 from .meter_daily import _measured_kwh
 from .meter_faults import _without_today
 from .meter_hourly import _metered_sides
@@ -97,7 +98,7 @@ from .providers.base import (
 )
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .snapshot_months import month_card, month_card_failed
-from .snapshot_resolve import _resolve_snapshot, entry_annual_kwh
+from .snapshot_resolve import _resolve_snapshot, analog_meter, entry_annual_kwh
 from .snapshot_stand_ins import card_for_unreadable_month
 from .snapshot_store import fetch_shared
 from .spot_stats import _energy_is_rlp_indexed, _spp_weighting_enabled, spots_available
@@ -616,6 +617,27 @@ def periods_need_rlp(periods: list[ContractPeriod]) -> bool:
         or p.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_COMPENSATION
         for p in periods
     )
+
+
+async def ensure_period_analog_rates(
+    session: aiohttp.ClientSession, periods: list[ContractPeriod]
+) -> None:
+    """Read the area's analog kWh rate for every year an earlier contract held
+    on an analog meter covers.
+
+    The tick reads it for the entry's own meter only, so a contract kept analog
+    at a recorded switch found none once the entry had gone digital and was
+    billed the peak-metered kWh rate: 49,26 EUR short on Fluvius Antwerpen for a
+    3.500 kWh household's first half of 2026, until a backfill happened to read
+    it and the live figure jumped. Asked before the period's card is resolved
+    (``period_card``), which is where a month no archive holds takes it.
+    """
+    for period in periods:
+        if not analog_meter(period.data):
+            continue
+        dso = str(period.data.get(CONF_DSO, ""))
+        for year in range(period.start.year, period.end.year + 1):
+            await ensure_analog_surcharge(session, year, dso)
 
 
 async def _current_card(

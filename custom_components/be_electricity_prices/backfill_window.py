@@ -73,6 +73,7 @@ from .const import (
 from .contract_periods import (
     ContractPeriod,
     current_period_start,
+    ensure_period_analog_rates,
     period_card,
     previous_periods,
 )
@@ -544,6 +545,9 @@ async def _segment_for(
 ) -> _Segment:
     if index is None or index < 0:
         return entry, None, None, hours
+    # Before the card is resolved, which a month no archive holds takes the
+    # analog kWh rate from (_build_context reads it after).
+    await ensure_period_analog_rates(coordinator._session, [periods[index]])
     proxy, _extractor, card, _stand_in, _failed, _ocr, raw = await period_card(
         hass, coordinator._session, coordinator, periods[index]
     )

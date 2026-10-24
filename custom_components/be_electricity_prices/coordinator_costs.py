@@ -69,6 +69,7 @@ from .contract_periods import (
     ContractPeriod,
     PricedPeriods,
     current_period_start,
+    ensure_period_analog_rates,
     keep_settled,
     periods_key,
     periods_need_rlp,
@@ -793,6 +794,9 @@ class _CostsMixin:
             # an old card's index is reduced from the same workbook read, and
             # asking for its blend here would move the live coordinator's.
             await self._ensure_rlp_weights(self._rlp_blend)
+        # And the analog kWh rate of a contract held on an analog meter, which
+        # the tick reads for the entry's own meter only.
+        await ensure_period_analog_rates(self._session, periods)
         # Read before the pricing reads it, so a peak that moves meanwhile is
         # priced again on the next tick rather than taken as priced.
         peak = self._previous_peak_kw(periods)

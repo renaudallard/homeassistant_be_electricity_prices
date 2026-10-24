@@ -1029,8 +1029,8 @@ one, starting from what you have now. From then on:
   means fetching the old supplier's cards, and again as soon as the billed
   capacity peak moves in Flanders, so the old contract's capacity term follows
   your peak as your current contract's does. A contract held on an analog
-  meter is billed the flat 2,5 kW charge instead, and one on an exclusive-night
-  circuit none, as each was. An earlier contract that settled on the day-ahead
+  meter is billed the flat 2,5 kW charge and the analog kWh rate instead, and
+  one on an exclusive-night circuit no capacity charge, as each was. An earlier contract that settled on the day-ahead
   is priced on it with the key it was set up with, while your current contract
   without a key or the keyless setting keeps the figures its card prints, as it
   would had it never had one. After you record a switch,

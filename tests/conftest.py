@@ -188,6 +188,7 @@ def _fluvius_sheets_as_published() -> Iterator[None]:
 
     from custom_components.be_electricity_prices import (
         backfill_window,
+        contract_periods,
         coordinator_tick,
         fluvius,
     )
@@ -212,6 +213,7 @@ def _fluvius_sheets_as_published() -> Iterator[None]:
         patch.object(backfill_window, "ensure_tariff_sheet", AsyncMock()),
         patch.object(coordinator_tick, "ensure_analog_surcharge", AsyncMock()),
         patch.object(backfill_window, "ensure_analog_surcharge", AsyncMock()),
+        patch.object(contract_periods, "ensure_analog_surcharge", AsyncMock()),
     ):
         yield
     _forget()

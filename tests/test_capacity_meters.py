@@ -815,3 +815,123 @@ def test_a_custom_household_on_an_analog_meter_is_quoted_analog_cards(
     )
     own = _resolve_snapshot(entry, _card("custom"), delivery_month=october)
     assert own.dsos["fluvius_antwerpen"].distribution_single == 0.0535
+
+
+def _held_analog(entry_analog: bool) -> MockConfigEntry:
+    """A household digital or analog now, which held a contract on an analog
+    meter until a switch on 1 July 2026."""
+    earlier = {**_flemish("mono").data, "analog_meter": True}
+    return _flemish(
+        "mono",
+        analog_meter=entry_analog,
+        previous_contracts=[{"until": "2026-07-01", "data": earlier}],
+    )
+
+
+async def test_an_earlier_analog_contract_reads_its_areas_rate(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The tick reads the analog kWh rate for the entry's own meter only, so
+    once the entry went digital the contract kept analog at the switch found
+    none and was billed the peak-metered kWh rate: 49,26 EUR short on 1.802 kWh
+    of the first half of 2026, until a backfill read it and the live figure
+    jumped. The daily pricing reads it first."""
+    from datetime import date
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.be_electricity_prices import (
+        contract_periods,
+        coordinator_costs,
+        fluvius,
+    )
+
+    freezer.move_to("2026-10-23 13:00:00+02:00")
+    asked: list[tuple[int, str]] = []
+
+    async def _read(_session: Any, year: int, dso: str) -> float:
+        asked.append((year, dso))
+        fluvius._analog[(year, dso)] = _ANTWERPEN_2026
+        return _ANTWERPEN_2026
+
+    held: list[float | None] = []
+
+    async def _price(*_args: Any, **_kwargs: Any) -> list[Any]:
+        held.append(fluvius.cached_analog_surcharge(2026, "fluvius_antwerpen"))
+        return []
+
+    entry = _held_analog(False)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    periods = contract_periods.previous_periods(
+        entry.data, date(2026, 1, 1), date(2026, 10, 23)
+    )
+    with (
+        patch.object(contract_periods, "ensure_analog_surcharge", new=_read),
+        patch.object(coordinator_costs, "price_previous_periods", new=_price),
+    ):
+        await coord._price_previous(periods, date(2026, 10, 23))
+    assert asked == [(2026, "fluvius_antwerpen")]
+    assert held == [_ANTWERPEN_2026]
+    # A contract kept digital at the switch asks for nothing.
+    asked.clear()
+    kept_digital = {**_flemish("mono").data, "analog_meter": False}
+    digital = _flemish(
+        "mono",
+        analog_meter=True,
+        previous_contracts=[{"until": "2026-07-01", "data": kept_digital}],
+    )
+    with patch.object(contract_periods, "ensure_analog_surcharge", new=_read):
+        await contract_periods.ensure_period_analog_rates(
+            None,  # type: ignore[arg-type]
+            contract_periods.previous_periods(
+                digital.data, date(2026, 1, 1), date(2026, 10, 23)
+            ),
+        )
+    assert asked == []
+
+
+async def test_the_backfill_reads_the_rate_before_the_contracts_card(
+    hass: HomeAssistant,
+) -> None:
+    """period_card resolves the card a month no archive holds is billed on,
+    so on a first backfill run the stand-in months missed the rate the
+    segment's context read after it."""
+    from datetime import date
+    from unittest.mock import patch
+
+    from custom_components.be_electricity_prices import (
+        backfill_window,
+        contract_periods,
+        fluvius,
+    )
+
+    entry = _held_analog(False)
+    entry.add_to_hass(hass)
+    periods = contract_periods.previous_periods(
+        entry.data, date(2026, 1, 1), date(2026, 10, 23)
+    )
+    seen: list[float | None] = []
+
+    async def _read(_session: Any, year: int, dso: str) -> float:
+        fluvius._analog[(year, dso)] = _ANTWERPEN_2026
+        return _ANTWERPEN_2026
+
+    async def _card(*_args: Any, **_kwargs: Any) -> Any:
+        seen.append(fluvius.cached_analog_surcharge(2026, "fluvius_antwerpen"))
+        return entry, None, None, False, False, False, None
+
+    coordinator = SimpleNamespace(_session=None)
+    with (
+        patch.object(contract_periods, "ensure_analog_surcharge", new=_read),
+        patch.object(backfill_window, "period_card", new=_card),
+    ):
+        await backfill_window._segment_for(
+            hass,
+            entry,
+            coordinator,  # type: ignore[arg-type]
+            periods,
+            0,
+            [],
+        )
+    assert seen == [_ANTWERPEN_2026]

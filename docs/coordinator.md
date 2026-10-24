@@ -567,8 +567,11 @@ asks for a refresh when it lands. The result is kept as
 and served only for those. Each period's capacity term is billed on the peak of
 the meter it ran on, asked of its own settings (`billed_peak_for`, `fees.py`):
 none on an exclusive-night circuit, the minimum on an analog meter, else the
-household's, so the one peak `_previous_peak_kw` watches is the household's. A
-stand-in caused by the old supplier's site or an
+household's, so the one peak `_previous_peak_kw` watches is the household's. One
+held on an analog meter has its area's analog kWh rate read first
+(`ensure_period_analog_rates`, `contract_periods.py`), here and before a backfill
+resolves its card (`_segment_for`), since the tick reads it for the entry's own
+meter only. A stand-in caused by the old supplier's site or an
 archive not answering (`period_card` tells it from cards no archive kept: a
 transient fetch error on the current card, or a month `month_card_failed`
 names) is `read_failed`; a stand-in for cards nobody kept is settled for the
