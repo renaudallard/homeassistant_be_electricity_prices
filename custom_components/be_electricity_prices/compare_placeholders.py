@@ -389,7 +389,10 @@ class _PlaceholdersMixin(OptionsFlow):
                     spot_dict,
                     avg_spot,
                     await _credit_month_spot_for(
-                        current_snapshot, own=True, raw=raw_snapshot
+                        current_snapshot,
+                        entry=quote_entry,
+                        own=True,
+                        raw=raw_snapshot,
                     ),
                     inj_hour_weights,
                     raw_snapshot=raw_snapshot,
@@ -408,7 +411,9 @@ class _PlaceholdersMixin(OptionsFlow):
                     quote_entry,
                     spot_dict,
                     avg_spot,
-                    await _credit_month_spot_for(other_snap, own=False, raw=other_card),
+                    await _credit_month_spot_for(
+                        other_snap, entry=quote_entry, own=False, raw=other_card
+                    ),
                     inj_hour_weights,
                     raw_snapshot=other_card,
                     meter=meter,
@@ -467,7 +472,10 @@ class _PlaceholdersMixin(OptionsFlow):
                     spot_dict,
                     avg_spot,
                     await _credit_month_spot_for(
-                        baseline_snapshot, own=True, raw=raw_snapshot
+                        baseline_snapshot,
+                        entry=self.config_entry,
+                        own=True,
+                        raw=raw_snapshot,
                     ),
                     inj_hour_weights,
                     raw_snapshot=raw_snapshot,
@@ -649,7 +657,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     self.config_entry, current_snapshot
                 ),
                 spp_weights=_coordinator_spp_weights(
-                    self.config_entry, current_snapshot, own=True
+                    self.config_entry, current_snapshot, own_entry=quote_entry
                 ),
                 # From the day the entry's contract started when it recorded
                 # a switch; the contracts before it are added below.
@@ -772,7 +780,7 @@ class _PlaceholdersMixin(OptionsFlow):
                         self.config_entry, other_snap
                     ),
                     spp_weights=_coordinator_spp_weights(
-                        self.config_entry, other_snap, own=False
+                        self.config_entry, other_snap, own_entry=None
                     ),
                     # Over the days the own row covers, which after a
                     # recorded switch the entry's settings no longer give.

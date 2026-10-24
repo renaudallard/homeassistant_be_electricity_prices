@@ -198,7 +198,10 @@ def _coordinator_rlp_index_weights(
 
 
 def _coordinator_spp_weights(
-    entry: ConfigEntry, snapshot: SupplierSnapshot | None, *, own: bool
+    entry: ConfigEntry,
+    snapshot: SupplierSnapshot | None,
+    *,
+    own_entry: ConfigEntry | None,
 ) -> SppWeights | None:
     """The Synergrid solar profile the entry's coordinator holds, or ``None``.
 
@@ -210,18 +213,22 @@ def _coordinator_spp_weights(
     credited the card's printed indicative and the household's own row
     contradicted its own current_year_cost.
 
-    ``own`` splits the gate the same way ``_credit_month_spot_for`` does, and for the
-    same reason: the entry-side opt-in belongs to the side it was made on,
-    while a foreign card is judged only by what it prints. Handing a target's
-    formula a weighting its card never names inverts the credit.
+    ``own_entry`` splits the gate the same way ``_credit_month_spot_for``
+    does, and for the same reason: the entry-side opt-in belongs to the side
+    it was made on, while a foreign card is judged only by what it prints.
+    Handing a target's formula a weighting its card never names inverts the
+    credit. It is the entry the household's own side is walked under, the
+    quote proxy on a what-if, since only that one carries the regime the walk
+    credits on; ``None`` for a card that is not the household's. The
+    coordinator is read off ``entry``, the real one: the proxy carries none.
 
     Never downloaded from the dialog; a household whose own contract does not
     want the profile simply has none, and the walk keeps the printed figure as
     it always did.
     """
     if not (
-        _spp_weighting_enabled(entry, snapshot)
-        if own
+        _spp_weighting_enabled(own_entry, snapshot)
+        if own_entry is not None
         else _injection_is_spp_indexed(snapshot)
     ):
         return None

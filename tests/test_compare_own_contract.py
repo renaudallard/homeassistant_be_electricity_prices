@@ -209,3 +209,95 @@ async def test_the_year_to_date_walks_the_card_before_the_cohort_splice(
     assert len(walked) == 2
     assert walked[0] is coord._snapshot
     assert all(snap.injection != signed for snap in walked)
+
+
+async def test_a_what_if_into_injection_credits_the_card_s_own_index(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A what-if into the injection tariff prices the own side on the quote
+    proxy, and which month index its feed-in settles on was asked of the real
+    entry, still on compensation. An SPP-indexed credit read as plain there
+    and was resolved on the arithmetic month mean, so Mega Smart Flex quoted
+    against itself read 172 EUR a year apart on a Walloon household."""
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices import ytd_cost
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+    )
+
+    freezer.move_to("2026-10-23 13:00:00+02:00")
+    card = replace(
+        _stub_snapshot("mega", "mega_smart_flex", 0.18),
+        injection=InjectionRates(
+            current=0.0604, factor=0.8, base=-0.02, spp_indexed=True
+        ),
+    )
+    entry = make_entry(
+        supplier="mega",
+        contract="mega_smart_flex",
+        solar_regime="compensation",
+        solar_kva=5.0,
+        api_key="k",
+        consumption_kwh="sensor.c",
+        injection_kwh="sensor.i",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(hass, entry, card)
+    now = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
+    first = dt_util.start_of_local_day(dt_util.now().replace(day=1))
+    hours = [
+        first + timedelta(hours=h)
+        for h in range(int((now - first).total_seconds() // 3600))
+    ]
+
+    def spot(t: Any) -> float:
+        hour = dt_util.as_local(t).hour
+        return 0.03 if 11 <= hour <= 15 else 0.20 if 17 <= hour <= 21 else 0.08
+
+    # Cheap at midday and dear in the evening, so the solar weighting and the
+    # plain mean of the month are far apart.
+    coord._historical_spots = {t: spot(t) for t in hours}
+    coord._spot_cache = {
+        now + timedelta(hours=h): spot(now + timedelta(hours=h)) for h in range(24)
+    }
+    weights = {
+        (t.month, t.day, t.hour): 1.0 if 9 <= t.hour <= 13 else 0.0 for t in hours
+    }
+    coord._spp_weights = weights
+    entry.runtime_data = coord
+    walked: list[Any] = []
+
+    async def walk(*_a: Any, spp_weights: Any = None, **_k: Any) -> float:
+        walked.append(spp_weights)
+        return 100.0
+
+    async def total(*_a: Any, side: str = "consumption", **_k: Any) -> MeasuredKwh:
+        return MeasuredKwh(3000.0 if side == "injection" else 3500.0, 365)
+
+    async def hourly(*_a: Any, **_k: Any) -> Any:
+        return None
+
+    household = "custom_components.be_electricity_prices.compare_household."
+    with (
+        patch(household + "_measured_hourly", hourly),
+        patch(household + "_measured_kwh", total),
+        patch.object(ytd_cost, "_compute_current_year_cost", walk),
+    ):
+        p = await _compare_placeholders(
+            hass,
+            entry,
+            supplier="mega",
+            contract="mega_smart_flex",
+            target_snapshot=card,
+            meter="mono",
+            solar_regime="injection",
+        )
+    assert p["current_annual"] != "-"
+    assert p["current_annual"] == p["compare_annual"]
+    assert float(p["delta_annual"]) == 0.0
+    # The year to date walks the own side under the proxy too, so it is handed
+    # the solar weighting on the same terms as the target.
+    assert walked == [weights, weights]

@@ -9194,16 +9194,16 @@ def test_the_compare_page_reads_the_solar_profile_for_the_side_that_names_it() -
 
     # A card that names Belpex_SPP gets the profile on either side.
     assert (
-        _coordinator_spp_weights(entry, spp_card, own=True) == weights  # type: ignore[arg-type]
+        _coordinator_spp_weights(entry, spp_card, own_entry=entry) == weights  # type: ignore[arg-type]
     )
     assert (
-        _coordinator_spp_weights(entry, spp_card, own=False) == weights  # type: ignore[arg-type]
+        _coordinator_spp_weights(entry, spp_card, own_entry=None) == weights  # type: ignore[arg-type]
     )
     # One that does not gets nothing, and the walk keeps its printed figure.
-    assert _coordinator_spp_weights(entry, plain_card, own=False) is None  # type: ignore[arg-type]
+    assert _coordinator_spp_weights(entry, plain_card, own_entry=None) is None  # type: ignore[arg-type]
     # No coordinator loaded yet: nothing to read, and nothing downloaded here.
     bare = SimpleNamespace(data=dict(entry.data))
-    assert _coordinator_spp_weights(bare, spp_card, own=True) is None  # type: ignore[arg-type]
+    assert _coordinator_spp_weights(bare, spp_card, own_entry=bare) is None  # type: ignore[arg-type]
 
 
 def test_every_compare_annual_bill_carries_a_welcome_credit() -> None:

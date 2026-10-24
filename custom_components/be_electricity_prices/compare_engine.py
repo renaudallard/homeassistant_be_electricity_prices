@@ -220,7 +220,7 @@ class _SweepEngine(_HouseholdMixin):
                         self.config_entry, hh.current_snapshot
                     ),
                     spp_weights=_coordinator_spp_weights(
-                        self.config_entry, hh.current_snapshot, own=True
+                        self.config_entry, hh.current_snapshot, own_entry=hh.quote_entry
                     ),
                     # From the day the entry's contract started when it recorded
                     # a switch; the contracts before it are added below.
@@ -373,7 +373,7 @@ class _SweepEngine(_HouseholdMixin):
                         self.config_entry, snap
                     ),
                     spp_weights=_coordinator_spp_weights(
-                        self.config_entry, snap, own=False
+                        self.config_entry, snap, own_entry=None
                     ),
                     # The own row's days, which after a recorded switch the
                     # entry's settings no longer give.
@@ -543,7 +543,10 @@ class _SweepEngine(_HouseholdMixin):
                 hh.spot_dict,
                 hh.avg_spot,
                 await hh.credit_month_spot_for(
-                    hh.current_snapshot, own=True, raw=hh.raw_snapshot
+                    hh.current_snapshot,
+                    entry=hh.quote_entry,
+                    own=True,
+                    raw=hh.raw_snapshot,
                 ),
                 hh.inj_hour_weights,
                 raw_snapshot=hh.raw_snapshot,
@@ -687,7 +690,7 @@ class _SweepEngine(_HouseholdMixin):
             target_entry,
             hh.spot_dict,
             hh.avg_spot,
-            await hh.credit_month_spot_for(resolved, own=False),
+            await hh.credit_month_spot_for(resolved, entry=target_entry, own=False),
             hh.inj_hour_weights,
             meter=meter,
             credit_year=hh.credit_year,

@@ -414,6 +414,7 @@ class _HouseholdMixin:
         async def _credit_month_spot_for(
             snapshot: SupplierSnapshot | None,
             *,
+            entry: ConfigEntry,
             own: bool,
             raw: SupplierSnapshot | None = None,
         ) -> float | None:
@@ -437,8 +438,18 @@ class _HouseholdMixin:
             Which index applies is ``_credit_index_for``; this only turns
             that answer into a number, because resolving either mean needs the
             fetched month the closure holds.
+
+            ``entry`` is the one the side's credit is priced under, and it has
+            no default because the answer turns on its regime: the SPP gate
+            and the per-hour cohort test both need the injection regime on
+            the entry they are handed. A what-if into the injection tariff
+            prices the own side on the quote proxy, and asked of the real
+            entry, still on compensation, an SPP-indexed credit read as plain
+            and was resolved on the arithmetic mean: 167 to 245 EUR a year
+            too much credit on the own side alone. Only the as-configured
+            baseline is asked of the real entry.
             """
-            index = _credit_index_for(self.config_entry, snapshot, own=own, raw=raw)
+            index = _credit_index_for(entry, snapshot, own=own, raw=raw)
             if index == "spp":
                 return await _spp_month_spot()
             if index == "plain":
