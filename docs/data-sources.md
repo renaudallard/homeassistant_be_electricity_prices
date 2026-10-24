@@ -1298,10 +1298,11 @@ leaves the floor unread and the ceiling stands.
 An entry on an analog meter (see
 [the pricing model](pricing-model.md#analog-meters)) also reads its own area's
 sheet, through the publication page named after the area
-(`fluvius-<area>-distributienettarief-afname-elektriciteit-01012026-31122026`),
-which exists from 2025, when the eight areas took the names the DSO keys stand
-for; before it the listing names the merged operators, which match no key one
-to one. From it `parse_analog_surcharge` reads what an analog meter pays per
+(`fluvius-<area>-distributienettarief-afname-elektriciteit-01012026-31122026`).
+Antwerpen, Limburg and West have such pages from 2023; the other five areas
+only from 2025, when they took the names the DSO keys stand for. Before it the
+listing names the operators merged into them (Gaselwest, Imewo, Intergem,
+Iveka, Iverlek, PBE, Sibelgas), which match no key one to one. From it `parse_analog_surcharge` reads what an analog meter pays per
 kWh over a peak-metered one: the "kWh-tarief" in the column of the "Vaste term"
 row's first figure (the analog meter's, headed "analoge meter", "klassieke
 meter" up to 2024) less the "kWh-tarief" in the capacity rate's column, 0,0257935
@@ -1323,7 +1324,9 @@ reads are found from one download, and a Fluvius that does not answer costs
 one timeout, after which nothing more is asked, the year before included. A
 sheet read is held for the life of the process; a failure is held for six
 hours, and an analog meter whose area sheet is not
-read is billed as a digital one and logged. Without the
+read is billed the peak-metered kWh rate, its capacity charge still the flat
+one, and logged: as a warning for this year's, which heals once the sheet is
+read, and quietly for a closed year that has none. Without the
 year's figure `resolve_vreg_network_ceiling` leaves the card exactly as
 printed, which is what the integration did before the sheet was read.
 `capacity_floor_kw` answers the floor of the year's sheet, else of the latest

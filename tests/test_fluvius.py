@@ -291,6 +291,23 @@ async def test_a_year_not_published_yet_stands_on_the_year_before() -> None:
     assert session.asked.count(fluvius._LISTING_URL) == 1
 
 
+async def test_a_closed_year_without_a_sheet_is_not_warned_of(
+    caplog: Any, freezer: Any
+) -> None:
+    """Kempen had no sheet of its own before 2025, and none is coming: a
+    backfill reaching 2024 is told quietly. This year's missing sheet, which
+    heals once Fluvius publishes it, is warned of."""
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    session: Any = _Session()
+    for year in (2024, 2026):
+        assert (
+            await fluvius.ensure_analog_surcharge(session, year, "fluvius_iveka")
+            is None
+        )
+    warned = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warned) == 1 and "2026" in warned[0], warned
+
+
 @pytest.mark.parametrize(
     ("label", "body"),
     [

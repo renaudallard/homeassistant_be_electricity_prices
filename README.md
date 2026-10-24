@@ -553,13 +553,15 @@ dropped rather than billed on the new card.
    exclusive-night ones included, its analog kWh rate instead of the digital
    one, 2,73 c/kWh more with VAT on Fluvius Antwerpen in 2026. That rate is
    read off your area's own Fluvius tariff sheet for each year billed: a year
-   Fluvius has not published yet is billed on the year before, and until a
-   sheet has been read, or for a year before 2025, when the sheets were still
-   published per merged operator, the meter is billed as a digital one. An
-   analog meter has no peak source to set, so the capacity step is skipped.
-   Like the day hours, the answer belongs to the meter: a contract kept at a
+   Fluvius has not published yet is billed on the year before. Until a sheet
+   has been read, and for 2023 and 2024 outside Antwerpen, Limburg and West,
+   which Fluvius published per merged operator then, the kWh are billed the
+   digital rate, though the capacity charge stays the flat one. An analog
+   meter has no peak source to set, so the capacity step is skipped. The
+   answer belongs to the meter: a contract kept at a
    [supplier switch](#switching-supplier-during-the-year) recorded before the
-   question was asked takes the entry's.
+   question existed takes the entry's answer, one recorded since keeps its
+   own.
 5. **Professional contract** *(pro contracts only)* — **Prices include VAT
    (21%)** and **Estimated yearly consumption**; see *Professional (B2B)
    tariffs* above.

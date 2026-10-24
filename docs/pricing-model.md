@@ -1723,7 +1723,9 @@ accordingly:
   not published yet) and put on the card's VAT basis with `on_card_basis`: 2,73
   c/kWh with VAT on Fluvius Antwerpen in 2026, which lands on Luminus's 8,09 and
   7,55 c/kWh to the card's rounding. Until the area's sheet is read, and for
-  the years before 2025, whose sheets are the merged operators', it is identity.
+  2023 and 2024 in the five areas Fluvius published per merged operator then
+  (all but Antwerpen, Limburg and West), it is identity: the kWh are billed the
+  peak-metered rate while the capacity charge stays the flat one.
 
 Not offered on a dynamic meter, which a contract only a digital meter carries
 forces, nor on the custom supplier, whose network figures are typed for the

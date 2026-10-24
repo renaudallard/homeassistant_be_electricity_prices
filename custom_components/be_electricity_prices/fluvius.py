@@ -102,10 +102,11 @@ _LISTING_URL: Final = (
 _PUBLICATION_RE: Final = (
     r'href="(/nl/publicatie/[a-z0-9-]+-afname-elektriciteit-0101{year}-3112{year})"'
 )
-# One area's page, named the same way from 2025, when the eight areas took the
-# names the DSO keys stand for. Before it the listing names the merged
-# operators (Iveka, Intergem, Iverlek, ...), which match no key one to one, so
-# those years have no area sheet and an analog meter there is billed as before.
+# One area's page, named the same way. Antwerpen, Limburg and West have one
+# from 2023, the other five from 2025, when they took the names the DSO keys
+# stand for: before it the listing names the merged operators (Iveka,
+# Intergem, Iverlek, ...), which match no key one to one, so an analog meter
+# there is billed the peak-metered kWh rate for those years.
 _AREA_PUBLICATION_RE: Final = (
     r'href="(/nl/publicatie/fluvius-{area}-distributienettarief-afname-'
     r'elektriciteit-0101{year}-3112{year})"'
@@ -336,19 +337,28 @@ async def _fetch_analog_surcharge(
         stand_in = None
         if re.search(_AREA_PUBLICATION_RE.format(area=area, year=year - 1), listing):
             stand_in = await ensure_analog_surcharge(session, year - 1, dso)
-        if stand_in is None:
-            _LOGGER.warning(
-                "Fluvius gives no %d tariff sheet for %s: an analog meter there "
-                "is billed the peak-metered kWh rate until it does",
-                year,
-                area,
-            )
-        else:
+        if stand_in is not None:
             _LOGGER.debug(
                 "Fluvius gives no %d tariff sheet for %s yet: its %d one stands in",
                 year,
                 area,
                 year - 1,
+            )
+        elif year < dt_util.now().year:
+            # A closed year whose sheet is not coming: nothing heals, so a
+            # backfill reaching it is not warned of every time it runs.
+            _LOGGER.debug(
+                "Fluvius has no %d tariff sheet for %s: an analog meter's kWh "
+                "there are billed the peak-metered rate for that year",
+                year,
+                area,
+            )
+        else:
+            _LOGGER.warning(
+                "Fluvius gives no %d tariff sheet for %s: an analog meter there "
+                "is billed the peak-metered kWh rate until it does",
+                year,
+                area,
             )
         return None
     surcharge = await read_analog_surcharge(session, year, area)
