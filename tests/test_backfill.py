@@ -4155,3 +4155,48 @@ async def test_a_2025_backfill_bills_the_walloon_fixed_term_on_an_impact_entry(
         )
     assert out["impact"][0] == pytest.approx(out["bi_horaire"][0])
     assert out["impact"][1] == pytest.approx(out["bi_horaire"][1])
+
+
+@pytest.mark.parametrize("meter", ["mono", "bi"])
+async def test_a_2025_compensation_year_of_an_impact_entry_nets_as_bi_hourly(
+    hass: HomeAssistant, meter: str
+) -> None:
+    """A compensation year is netted per meter register, and the Impact
+    configuration that splits it per CWaPE band took effect on 1 January
+    2026. A year walked over 2025 for an entry now on it netted per band all
+    the same, 206 EUR over the bi-hourly configuration on a mono meter. Over
+    2025 it nets as the bi-hourly configuration does, in the year-to-date
+    walk and the backfilled cost alike."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        FixedRates,
+    )
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.25, peak=0.27, offpeak=0.21),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.11,
+                distribution_offpeak=0.08,
+                distribution_pic=0.15,
+                distribution_medium=0.10,
+                distribution_eco=0.05,
+                transport=0.02,
+                data_management_per_year=78.84,
+            )
+        },
+    )
+    out: dict[str, tuple[float, float]] = {}
+    for mode in ("impact", "bi_horaire"):
+        entry = make_entry(
+            meter=meter,
+            dso_tariff_mode=mode,
+            solar_regime="compensation",
+            consumption_kwh="sensor.cons",
+            injection_kwh="sensor.inj",
+        )
+        out[mode] = await _live_and_backfill(
+            hass, entry, snap, date(2025, 12, 31), _evening_draw_midday_export
+        )
+    assert out["impact"][0] == pytest.approx(out["bi_horaire"][0])
+    assert out["impact"][1] == pytest.approx(out["bi_horaire"][1])

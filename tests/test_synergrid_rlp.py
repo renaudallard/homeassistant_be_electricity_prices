@@ -866,6 +866,29 @@ def test_register_for_follows_the_meter_and_the_dso_mode() -> None:
     )
 
 
+def test_a_2025_hour_of_an_impact_entry_nets_on_the_bi_hourly_registers() -> None:
+    """The Impact configuration took effect on 1 January 2026. An hour of 2025
+    lands in the register the bi-hourly configuration had, whatever the entry
+    is on now: one for a mono meter, day or night on the classic schedule for
+    a meter with two."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.spot_stats import _register_for
+
+    tz = dt_util.DEFAULT_TIME_ZONE
+    wednesday_noon = datetime(2025, 9, 10, 12, tzinfo=tz)
+    saturday_evening = datetime(2025, 9, 13, 19, tzinfo=tz)
+    assert _register_for(wednesday_noon, "mono", "impact", "wallonia") == "single"
+    # Wallonia 2025: the classic schedule, a weekday noon is the day register.
+    assert _register_for(wednesday_noon, "bi", "impact", "wallonia") == "peak"
+    assert _register_for(saturday_evening, "dynamic", "impact", "wallonia") == (
+        "offpeak"
+    )
+    assert _register_for(
+        datetime(2026, 1, 1, 0, tzinfo=tz), "mono", "impact", "wallonia"
+    ) == ("medium")
+
+
 def test_day_register_weights_sum_the_days_hours_per_register() -> None:
     from custom_components.be_electricity_prices.spot_stats import (
         _day_register_weights,

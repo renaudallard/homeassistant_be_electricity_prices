@@ -56,7 +56,13 @@ from .const import (
     SUPPLIER_CUSTOM,
 )
 from .day_night import is_offpeak
-from .pricing import DsoTariffMode, MeterType, dso_impact_band, slot_start
+from .pricing import (
+    DsoTariffMode,
+    MeterType,
+    _tariff_mode_at,
+    dso_impact_band,
+    slot_start,
+)
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -829,10 +835,12 @@ def _register_for(
     metering: the dedicated circuit for an exclusive-night meter, the CWaPE
     band under Impact comptage (an SMR3 meter counts per band), day or night
     for a bi-hourly or digital meter on the bi-hourly schedule, one register
-    for a mono meter."""
+    for a mono meter. Impact comptage only from the day the configuration
+    took effect (``_tariff_mode_at``): an hour of 2025 lands in the register
+    the bi-hourly configuration had."""
     if meter == "exclusive_night":
         return "night"
-    if dso_mode == "impact":
+    if _tariff_mode_at(dso_mode, local) == "impact":
         return dso_impact_band(local)
     if meter in ("bi", "dynamic"):
         return "offpeak" if is_offpeak(local, region, day_start=day_start) else "peak"

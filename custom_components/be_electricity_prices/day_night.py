@@ -156,7 +156,8 @@ def impact_in_force(day: date) -> bool:
 
     It took effect on 1 January 2026, with the Walloon schedule, so an entry
     on it bills a day before that on the bi-hourly configuration: the energy
-    and network legs (``pricing._tariff_mode_at``), the terme fixe
+    and network legs (``pricing._tariff_mode_at``), the register a
+    compensation net lands in (``spot_stats._register_for``), the terme fixe
     (``fees._walloon_fixed_term_applies``) and a feed-in figure per band
     (``injection._tou_injection_rate``) alike. Only a backfill reaching into
     2025 meets such a day.
