@@ -879,11 +879,12 @@ async def fill_missing_days(
 ) -> tuple[dict[datetime, float], list[str], list[str]]:
     """Fill the local days ``prices`` leaves out from the keyless sources.
 
-    Returns the prices, the sources that added any, and each failure. Every
-    source is asked only for the days still empty, from the first of them to
-    the window's end, and kept for those days alone, so a day already held
-    keeps the source that served it. A recent day another entry already
-    fetched is taken from the installation's shared days without a request.
+    Returns the prices, the sources that added any, in the order they are
+    asked whichever day each served, and each failure. Every source is asked
+    only for the days still empty, from the first of them to the window's
+    end, and kept for those days alone, so a day already held keeps the
+    source that served it. A recent day another entry already fetched is
+    taken from the installation's shared days without a request.
 
     ENTSO-E answering for today while tomorrow is not published yet is a
     success, and without this tomorrow stayed empty until ENTSO-E caught up
@@ -905,7 +906,7 @@ async def fill_missing_days(
         del _shared_days[old]
     for old_key in [k for k in _missed_days if k[1] < recent]:
         del _missed_days[old_key]
-    sources: list[str] = []
+    sources: set[str] = set()
     errors: list[str] = []
     for day in sorted(missing & _shared_days.keys()):
         name, slots = _shared_days[day]
@@ -917,8 +918,7 @@ async def fill_missing_days(
         if shared:
             prices = {**prices, **shared}
             missing.discard(day)
-            if name not in sources:
-                sources.append(name)
+            sources.add(name)
     keyless: tuple[tuple[str, type[EnergyChartsClient | SmardClient]], ...] = (
         ("energy-charts", EnergyChartsClient),
         ("smard", SmardClient),
@@ -962,5 +962,10 @@ async def fill_missing_days(
             continue
         prices = {**prices, **extra}
         missing -= {dt_util.as_local(slot).date() for slot in extra}
-        sources.append(name)
-    return dict(sorted(prices.items())), sources, errors
+        sources.add(name)
+    # Named once each and always in this order: a day taken from the shared
+    # days and the next fetched from the same source read
+    # "energy-charts+energy-charts", and the label flipping between ticks
+    # logged a source change that never happened.
+    named = [name for name, _client in keyless if name in sources]
+    return dict(sorted(prices.items())), named, errors

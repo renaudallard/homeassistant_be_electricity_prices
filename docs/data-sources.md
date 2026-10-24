@@ -101,7 +101,8 @@ it did not answer, all of them on an `EntsoeError` or the ones a successful
 answer left empty, go to `fill_missing_days` (`api.py`), which asks
 `EnergyChartsClient` and then `SmardClient` (`api.py`), each for the days still
 empty and kept for those days alone. It returns the prices *and* every source
-that supplied them, joined by `+`, which reaches the `current_price` sensor as
+that supplied them, each named once and in the order they are asked whichever
+day it served, joined by `+`, which reaches the `current_price` sensor as
 `spot_source`: `entsoe`, `energy-charts`, `smard`, `entsoe+energy-charts`,
 `entsoe+smard` or `energy-charts+smard`.
 
@@ -165,9 +166,11 @@ alone until it publishes. A source that fails or comes back empty
 (energy-charts answers `no content available` before the auction is out, SMARD
 serves the slot as `null`) adds nothing, without an error, and the next tick
 asks again. A day held only in part is not filled. Once tomorrow is held, the
-live cache stops refetching for the day, so the fill costs one energy-charts
-request per entry per tick, plus two SMARD requests while energy-charts has
-nothing either, only until a source publishes.
+live cache stops refetching for the day, and until then a source that had
+nothing for it is not asked again for 20 minutes (`_MISS_TTL`), so the fill
+costs one energy-charts request per installation every 20 minutes, plus two
+SMARD requests while energy-charts has nothing either, only until a source
+publishes.
 
 **SMARD** is the Bundesnetzagentur's portal and the source energy-charts
 republishes the BE series from, so the two answer with the same prices while
@@ -184,7 +187,7 @@ every slot of four windows, hourly and quarter-hourly, including the MTU
 change and the 25-hour fall-back day. No rate limit is announced or has been
 seen, so a 429 is an ordinary failure rather than a cooldown.
 
-Three properties are load-bearing:
+Five properties are load-bearing:
 
 - **`EntsoeAuthError` is deliberately not caught.** A rejected or exhausted
   token has to keep raising its Repairs card; answering from a keyless source

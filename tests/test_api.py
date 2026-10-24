@@ -1150,6 +1150,64 @@ async def test_an_entry_with_a_key_still_asks_entsoe_each_time(freezer: Any) -> 
     assert session.entsoe_calls == 2
 
 
+async def test_a_source_is_named_once_whichever_days_it_served(freezer: Any) -> None:
+    """Today taken from the shared days and tomorrow fetched from the same
+    source read "energy-charts+energy-charts", and an entry whose label
+    flipped between ticks logged a day-ahead source change that never
+    happened."""
+    freezer.move_to("2026-04-30 14:00:00+02:00")
+    session = _Counting(
+        entsoe=EntsoeError("503"), fallback_body=_day_body(_TODAY_START, 48)
+    )
+    await fetch_day_ahead_or_fallback(
+        None,
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _TOMORROW_START,
+    )
+    prices, source = await fetch_day_ahead_or_fallback(
+        None,
+        session,  # type: ignore[arg-type]
+        _TODAY_START,
+        _WINDOW_END,
+    )
+    assert len(session.fallback_params) == 2
+    assert len(prices) == 48
+    assert source == "energy-charts"
+
+
+async def test_the_sources_are_named_in_the_order_they_are_asked(
+    freezer: Any,
+) -> None:
+    """A day SMARD served while energy-charts was down, shared, and the next
+    day fetched from energy-charts read "smard+energy-charts", where the same
+    two sources read the other way round on the next tick."""
+    freezer.move_to("2026-04-30 14:00:00+02:00")
+    down = _Counting(
+        entsoe=EntsoeError("503"),
+        fallback_body="nope",
+        smard=_smard({_WEEK_APR27: _quarters(_TODAY_START, 24, 100.0)}),
+    )
+    first = await fetch_day_ahead_or_fallback(
+        None,
+        down,  # type: ignore[arg-type]
+        _TODAY_START,
+        _TOMORROW_START,
+    )
+    assert first[1] == "smard"
+    up = _Counting(
+        entsoe=EntsoeError("503"), fallback_body=_day_body(_TOMORROW_START, 24)
+    )
+    _prices, source = await fetch_day_ahead_or_fallback(
+        None,
+        up,  # type: ignore[arg-type]
+        _TODAY_START,
+        _WINDOW_END,
+    )
+    assert len(up.fallback_params) == 1
+    assert source == "energy-charts+smard"
+
+
 async def test_old_days_and_part_days_are_not_shared(freezer: Any) -> None:
     """A backfill's year is asked once and kept per entry, and a day still
     filling in would be served short to every entry."""
