@@ -639,14 +639,20 @@ the general case, but Bolt still exposes a prosumer column, which is read into
 (`tests/test_bolt.py`) checks Antwerpen: transport 0.0, distribution 0.0535, exclusive-night
 0.0481 (< distribution), capacity 52.37 (all illustrative).
 
-**A Flemish card defect, billed as printed.** The professional cards of October to December 2025
-(`bolt_pro_fix` and `bolt_pro_plenty_fix`) print the exclusive-night column of `Fluvius Limburg` and
-`Fluvius Midden-Vl` the wrong way round: Limburg 4,46 and Midden-Vl 5,31 c€/kWh excluding VAT,
-where Engie, Mega and Ecopower print 5,3147 for Limburg and 4,4581 for Intergem the same months.
-Midden-Vl's night rate then sits above its own normal rate (5,29), which no other row does. A night
-circuit is billed about 0,85 c€/kWh low in Limburg and as much too high in Midden-Vlaanderen for
-those three months. Both rows are billed as printed, like the Walloon figures below. The residential
-cards of those months and the professional cards from January 2026 print the right columns.
+**A Flemish card defect, billed as printed.** Every professional card of 2025 the archive holds
+(`bolt_pro_fix` from January, `bolt_pro_plenty_fix` from May, its first month) prints the
+exclusive-night column of `Fluvius Limburg` and `Fluvius Midden-Vl` the wrong way round: Limburg 4,46
+and Midden-Vl 5,31 c€/kWh excluding VAT, where Engie and Ecopower print 5,3147 for Limburg and
+4,4581 for Intergem the same months, and Mega from October. Midden-Vl's night rate then sits above
+its own normal rate (5,29), which no other row does. A night circuit is billed about 0,85 c€/kWh low
+in Limburg and as much too high in Midden-Vlaanderen through 2025. Both rows are billed as printed,
+like the Walloon figures below. The residential cards of 2025 and the professional cards from
+January 2026 print the right columns.
+
+**And a stale data-management fee.** The residential fixed cards of January to March 2026
+(`bolt_fix`, `bolt_plenty_fix`) print the Fluvius data management at 18,56 €/year, the 2025 figure,
+where the other suppliers' cards print 18,92 from January; the April card prints 18,92. Billed as
+printed.
 
 **Wallonia (`_extract_wallonia_dsos`, `_bolt_overlays.py`).** Five DSOs via `_WALLONIA_LABELS`
 (`_bolt_overlays.py`). Ten numbers per row: mono, jour, nuit, excl_nuit, PIC, MEDIUM, ECO, transport,
@@ -659,12 +665,24 @@ gestion des données/Activités de mesure et de comptage/Terme fixe GRD (€/an)
 (€/kW/an)", and a card where no ten-column row reads is read that way
 (`_extract_wallonia_2025_dsos`, `_bolt_overlays.py`). Each column is checked against the other
 suppliers' cards of the month: ORES on Bolt's October 2025 card, `10,79 11,46 6,63 5,41 3,20 13,84
-86,96`, is Cociter's and Eneco's row of that month figure for figure, their transport `3,1993` and
-`2,98` beside Bolt's rounded `3,20`; the professional card prints the same figures before VAT
+86,96`, is Cociter's and Eneco's row of that month figure for figure but for the transport, where
+Cociter prints `3,1993` and Eneco `2,98`; the professional card prints the same figures before VAT
 (`8,92` for AIEG's `9,46`). The seventh number has to end the row, so a 2026 row whose ten columns
 did not read is never taken for its first seven. Up to 0.39.1 none of these rows read, and the
 Walloon months of October to December 2025 were left out of the bill, network, taxes and energy
 alike (`test_a_2025_walloon_card_reads_its_seven_column_table`, `tests/test_bolt.py`).
+
+Two figures of the 2025 cards disagree with the rest of the fleet and are billed as printed
+wherever a 2025 month is priced on its own card:
+
+- **Transport.** Every Walloon row prints 3,20 c€/kWh all year (3,02 before VAT on the professional
+  card). Eneco and Engie print 2,98 from March 2025 and OCTA+ from April, so a month from March on
+  is billed 0,22 c€/kWh high. Cociter's cards, held from October 2025, print 3,1993 the same way.
+- **REW night.** The residential fixed cards (`bolt_fix` from January, `bolt_plenty_fix` from May,
+  its first month held) print REW's `Nuit` at the exclusive-night figure,
+  `WAVRE 11,48 11,65 6,17 6,17 3,20 28,09 89,91`, where Eneco and Cociter print 7,21 and the
+  professional card 6,80 before VAT: a bi-hourly REW meter's night kWh is billed 1,04 c€/kWh low.
+  The 2026 cards print the right column.
 
 The Wallonia parser carries the module's single largest land mine, the **RESA/REW label swap**
 (`_bolt_overlays.py`). In Bolt's `pdfplumber` text extraction the rows labeled `TECTEO RESA` and `WAVRE`

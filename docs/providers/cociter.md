@@ -551,6 +551,11 @@ comment:
   (`cociter.py`, `_validity.py`).
 - **DSO map / const lockstep assertion.** `_DSO_KEY` must equal
   `WALLONIA_DSO_KEYS` or import fails (`cociter.py`).
+- **Walloon transport of October to December 2025, billed as printed.** Those
+  cards print `Tarifs de transport TVAC (c€/kWh) 3,19930`, where Eneco and
+  Engie print 2,98 from March 2025 and OCTA+ from April (Bolt prints 3,20), so
+  those months are billed 0,22 c€/kWh above most of the fleet. From January
+  2026 the card prints 2,74252 with the rest.
 
 ## Test fixtures
 

@@ -362,8 +362,13 @@ capaciteitstarief -> capacity_eur_per_kw_year     (EUR/kW/year, no /100)  [col 1
 kWh-tarief         -> distribution_single          (c€/kWh /100)          [col 2]
 excl. nacht        -> distribution_exclusive_night (c€/kWh /100)          [col 3]
 databeheer         -> data_management_per_year     (EUR/year, no /100)    [col 4]
-maximumtarief      -> ignored (ceiling)                                   [col 5]
+maximumtarief      -> network_ceiling_eur_per_kwh  (c€/kWh /100)          [col 5]
 ```
+
+The maximumtarief is the VREG ceiling on the capacity and per-kWh network terms together.
+`resolve_vreg_network_ceiling` (`providers/_resolve.py`) replaces the parsed figure with the
+one on Fluvius's tariff sheet for the delivery year, put on the card's VAT basis, once the
+sheet has been read; EnergyVision prints that same figure (34,72738 c€/kWh with VAT).
 
 `transport` is always 0.0 (bundled into distribution, `test_dso_transport_is_zero`). The
 analog-meter block (with its prosumer column) is skipped, so
@@ -619,6 +624,11 @@ Five things a maintainer needs to know about this card:
   It clears itself when EnergyVision prints the row again. Peers that still print it (Engie,
   Mega, Bolt, OCTA+, DATS 24) keep reading it off their own cards, and **the rate is never
   hardcoded** — no regulated billing value is hardcoded anywhere in this integration.
+
+**The January 2026 card's transport is billed as printed.** `EV-0126-GS1JV-WAL-fr` prints the
+transport at 3,19 c€/kWh on every Walloon row, where every other card of January 2026, and
+EnergyVision's own from February, prints 2,74, so January is billed 0,45 c€/kWh high. Network
+figures are billed as each card prints them.
 
 ## Quirks and historical bugs (land mines)
 
