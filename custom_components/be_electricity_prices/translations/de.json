@@ -120,7 +120,7 @@
       },
       "capacity": {
         "title": "Kapazitätstarif (Flandern)",
-        "description": "Bevorzugen Sie den Monatsspitzen-Sensor des Zählers (DSMR 5B liefert \"Maximum demand current month\"), also die Viertelstundenspitze, die Fluvius abrechnet. Ein einfacher Leistungssensor wird stündlich abgetastet und ist nur eine Näherung. Oder festen Wert wählen.",
+        "description": "Bevorzugen Sie den Monatsspitzen-Sensor des Zählers (DSMR 5B liefert \"Maximum demand current month\"), also die Viertelstundenspitze, die Fluvius abrechnet. Ein einfacher Leistungssensor wird stündlich abgetastet und ist nur eine Näherung. Oder festen Wert wählen. Mit einem zusätzlichen Exklusiv-Nachtzähler berechnet Fluvius die höchste Summe der Viertelstundenspitzen beider Zähler: Ein Sensor, der beide addiert, liefert sie, die Spitze des Hauptzählers allein kann darunter bleiben.",
         "data": {
           "capacity_mode": "Quelle der Spitze",
           "capacity_peak_sensor": "Monatsspitzen-Sensor",
@@ -476,7 +476,7 @@
       },
       "capacity": {
         "title": "Kapazitätstarif (Flandern)",
-        "description": "Bevorzugen Sie den Monatsspitzen-Sensor des Zählers (DSMR 5B liefert \"Maximum demand current month\"), also die Viertelstundenspitze, die Fluvius abrechnet. Ein einfacher Leistungssensor wird stündlich abgetastet und ist nur eine Näherung. Oder festen Wert wählen.",
+        "description": "Bevorzugen Sie den Monatsspitzen-Sensor des Zählers (DSMR 5B liefert \"Maximum demand current month\"), also die Viertelstundenspitze, die Fluvius abrechnet. Ein einfacher Leistungssensor wird stündlich abgetastet und ist nur eine Näherung. Oder festen Wert wählen. Mit einem zusätzlichen Exklusiv-Nachtzähler berechnet Fluvius die höchste Summe der Viertelstundenspitzen beider Zähler: Ein Sensor, der beide addiert, liefert sie, die Spitze des Hauptzählers allein kann darunter bleiben.",
         "data": {
           "capacity_mode": "Quelle der Spitze",
           "capacity_peak_sensor": "Monatsspitzen-Sensor",

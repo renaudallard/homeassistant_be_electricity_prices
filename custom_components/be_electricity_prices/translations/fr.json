@@ -120,7 +120,7 @@
       },
       "capacity": {
         "title": "Tarif capacitaire (Flandre)",
-        "description": "Préférez le capteur de pic mensuel du compteur (DSMR 5B publie \"Maximum demand current month\"), soit le pic quart-horaire réellement facturé par Fluvius. Un simple capteur de puissance est échantillonné chaque heure et ne fait que l'approcher. Ou une valeur fixe.",
+        "description": "Préférez le capteur de pic mensuel du compteur (DSMR 5B publie \"Maximum demand current month\"), soit le pic quart-horaire réellement facturé par Fluvius. Un simple capteur de puissance est échantillonné chaque heure et ne fait que l'approcher. Ou une valeur fixe. Avec un compteur exclusif nuit en plus, Fluvius facture la plus haute somme des pics quart-horaires des deux compteurs : un capteur qui les additionne la donne, le pic du seul compteur principal peut rester en dessous.",
         "data": {
           "capacity_mode": "Source du pic",
           "capacity_peak_sensor": "Capteur de pic mensuel",
@@ -476,7 +476,7 @@
       },
       "capacity": {
         "title": "Tarif capacitaire (Flandre)",
-        "description": "Préférez le capteur de pic mensuel du compteur (DSMR 5B publie \"Maximum demand current month\"), soit le pic quart-horaire réellement facturé par Fluvius. Un simple capteur de puissance est échantillonné chaque heure et ne fait que l'approcher. Ou une valeur fixe.",
+        "description": "Préférez le capteur de pic mensuel du compteur (DSMR 5B publie \"Maximum demand current month\"), soit le pic quart-horaire réellement facturé par Fluvius. Un simple capteur de puissance est échantillonné chaque heure et ne fait que l'approcher. Ou une valeur fixe. Avec un compteur exclusif nuit en plus, Fluvius facture la plus haute somme des pics quart-horaires des deux compteurs : un capteur qui les additionne la donne, le pic du seul compteur principal peut rester en dessous.",
         "data": {
           "capacity_mode": "Source du pic",
           "capacity_peak_sensor": "Capteur de pic mensuel",

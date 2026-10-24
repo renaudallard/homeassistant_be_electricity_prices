@@ -120,7 +120,7 @@
       },
       "capacity": {
         "title": "Capacity tariff (Flanders)",
-        "description": "Prefer your meter's own monthly peak sensor (DSMR 5B publishes \"Maximum demand current month\"), which is the quarter-hour peak Fluvius actually bills. A plain power sensor is sampled hourly and only approximates it. Or use a fixed value.",
+        "description": "Prefer your meter's own monthly peak sensor (DSMR 5B publishes \"Maximum demand current month\"), which is the quarter-hour peak Fluvius actually bills. A plain power sensor is sampled hourly and only approximates it. Or use a fixed value. With an exclusive-night meter as well, Fluvius bills the highest sum of both meters' quarter-hour peaks: a sensor adding the two gives it, the main meter's own peak can fall short of it.",
         "data": {
           "capacity_mode": "Peak source",
           "capacity_peak_sensor": "Monthly peak sensor",
