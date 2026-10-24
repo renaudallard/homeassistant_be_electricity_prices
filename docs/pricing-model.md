@@ -704,6 +704,11 @@ A household inside the tranche has no variable leg at all and comes back as
 still demand a monthly mean, and a month with no cached spot would then fail
 the tick over a coefficient that cannot matter.
 
+The folded leg keeps `1 - w` (`tier_formula_share`) and `w * rate`
+(`tier_base`), because a signing pair typed on the entry is the card's
+formula, not the blend: `_manual_energy_leg` folds it the same way, and
+`card_formula` gives Edit settings the card's own pair to show beside the boxes.
+
 ### Welcome credits
 
 A card may grant a one-off credit to a new customer's first year. It is an invoice line

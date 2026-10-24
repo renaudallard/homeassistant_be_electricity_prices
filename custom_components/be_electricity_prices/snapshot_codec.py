@@ -541,6 +541,9 @@ _ENERGY_OPTIONAL_KEYS = (
     "single_under_impact",
     # And Mega's settled months, billed at the figures its next card states.
     "settled_as_stated",
+    # Set by resolve_volume_tier on a resolved leg, never on a card as parsed.
+    "tier_formula_share",
+    "tier_base",
 )
 # The RLP pair is optional on the Impact leg alone: VariableRates and
 # SpotMonthlyRates have carried it since before the archive went live, and

@@ -5715,6 +5715,43 @@ async def test_card_fee_is_shown_with_vat_for_a_deducting_business(
     assert figures["card_single"] == "0.15 EUR/kWh"
 
 
+async def test_card_figures_show_the_pair_a_tiered_card_prints(
+    hass: HomeAssistant,
+) -> None:
+    """EnergyVision's 1.800 kWh card bills that first volume at a flat rate and
+    the rest on 1,12 x Belpex-RLP-M + 20 EUR/MWh. The entry holds the two folded
+    into one pair against its yearly volume, 0,5766 and 0,0648 at 3.500 kWh,
+    which the card prints nowhere; the boxes take the card's own pair."""
+    from dataclasses import replace
+
+    from custom_components.be_electricity_prices.config_flow import _card_figures
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+    from custom_components.be_electricity_prices.providers._resolve import (
+        resolve_volume_tier,
+    )
+
+    entry = _make_entry()
+    tiered = replace(
+        _stub_snapshot("eneco", "power_fix", 0.15),
+        energy=SpotMonthlyRates(
+            factor=1.1872, base=0.0212, tier_kwh=1800.0, tier_rate=0.106
+        ),
+    )
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = resolve_volume_tier(tiered, 3500.0)
+    entry.runtime_data = coord
+    figures = _card_figures(entry, entry.data)
+    assert (figures["card_factor"], figures["card_base"]) == (
+        "1.1872",
+        "0.0212 EUR/kWh",
+    )
+
+
 async def test_card_figures_are_only_shown_for_the_contract_they_belong_to(
     hass: HomeAssistant,
 ) -> None:

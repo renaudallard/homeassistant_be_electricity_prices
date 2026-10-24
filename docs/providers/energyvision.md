@@ -406,6 +406,15 @@ depends on its yearly volume, which is entry data and not card data.
 [the pricing model](../pricing-model.md#volume-tiered-energy) for the algebra and for why
 the blend is the annual bill exactly rather than an approximation of it.
 
+The fold keeps what it did on the leg (`tier_formula_share`, the share of the year left on
+the formula, and `tier_base`, what the tranche adds to the base), because the signing-rate
+step's factor and base are the formula the card prints, not the blend. A pair typed there
+is folded the same way (`_manual_energy_leg`), so typing the card's own pair changes
+nothing and a negotiated one keeps the tranche; replacing the blend with it billed the whole
+year on the formula, -24 to +104 EUR a year at 3.500 kWh. Edit settings shows the card's
+pair beside the boxes (`card_formula`), where it used to show the blend, which the card
+prints nowhere (0,5766 and 0,0648 at 3.500 kWh).
+
 The index is the Flanders RLP curve: the card names "het rekenkundig gemiddelde van de
 RLP-verbruiksprofielen stroom van de verschillende distributienetbeheerders van
 Vlaanderen", and every Flemish sub-area shares one Synergrid curve, so the mean over them

@@ -933,6 +933,40 @@ def test_tranche_falls_back_to_the_typed_volume_then_the_default() -> None:
     )
 
 
+def test_a_typed_signing_pair_keeps_the_tranche() -> None:
+    """The signing-rate step's factor and base are the formula the card
+    prints, which on this card prices only what is left after the first 1.800
+    kWh. The leg they are typed over has the tranche folded in already, so
+    they are folded the same way: the card's own pair typed back in changes
+    nothing, where it used to replace the blend and bill the whole year on
+    the formula, and Edit settings shows that pair rather than the blend."""
+    from custom_components.be_electricity_prices.cohort_legs import _manual_energy_leg
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers._resolve import (
+        card_formula,
+        resolve_volume_tier,
+    )
+
+    folded = resolve_volume_tier(_tiered_1800(), 3500.0).energy
+    assert isinstance(folded, SpotMonthlyRates)
+    own = (1.12 * 1.06, 0.020 * 1.06)
+    assert card_formula(folded) == pytest.approx(own)
+
+    def typed(**boxes: float) -> float:
+        leg = _manual_energy_leg(_entry(**boxes), folded)  # type: ignore[arg-type]
+        assert leg is not None
+        return energy_eur_per_kwh(leg, datetime(2026, 3, 4, 9, tzinfo=UTC), 0.09)
+
+    card = energy_eur_per_kwh(folded, datetime(2026, 3, 4, 9, tzinfo=UTC), 0.09)
+    assert typed(manual_energy_factor=own[0], manual_energy_base=own[1]) == (
+        pytest.approx(card)
+    )
+    # A negotiated factor still bills the first 1.800 kWh at the flat rate.
+    assert typed(manual_energy_factor=1.0) * 3500 == pytest.approx(
+        1800 * 0.1060 + 1700 * (1.0 * 0.09 + own[1])
+    )
+
+
 def test_night_circuit_entry_is_billed_the_formula_alone() -> None:
     """Footnote a: *"Niet van toepassing op het exclusief nacht tarief."*"""
     mean = 129.317 / 1000.0

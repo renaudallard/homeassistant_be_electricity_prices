@@ -458,6 +458,13 @@ class SpotMonthlyRates:
     # whole volume one way, which is all of them but that range.
     tier_kwh: float | None = None
     tier_rate: float | None = None
+    # What the fold made of that pair: the share of the year left on the
+    # formula, and what the tranche adds to every base. A signing pair typed
+    # over the folded leg is the card's own formula, so it is folded the same
+    # way (``_manual_energy_leg``) rather than replacing the blend. None on a
+    # leg nothing was folded into, which is every card as parsed.
+    tier_formula_share: float | None = None
+    tier_base: float | None = None
     weekend_rule: WeekendRule = "weekend_offpeak"
     yearly_fixed_fee: float = 0.0
     # Dedicated yearly fixed fee for an exclusive-night meter circuit, carried

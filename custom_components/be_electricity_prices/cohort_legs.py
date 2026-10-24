@@ -138,9 +138,17 @@ def _manual_energy_leg(
         # Mega Flex bi-hourly cohort, typing only a yearly fee billed peak
         # hours at the mono coefficient (1,1095 against 1,3275, 16% low),
         # off-peak 18% high, and silently discarded the Mega Cap ceiling.
+        # A typed pair is the formula the card prints. On a card whose first
+        # 1.800 kWh are billed at a flat rate that formula prices only the rest
+        # of the year, and the leg here has the tranche folded in already
+        # (``resolve_volume_tier``), so the typed pair is folded the same way.
+        # Replacing the blend with it dropped the tranche: the GS1800V card's
+        # own pair typed back in moved a 3.500 kWh year by -24 to +104 EUR.
+        share = energy.tier_formula_share or 1.0
+        lift = energy.tier_base or 0.0
         overrides: dict[str, Any] = {
-            "factor": float(factor) if factor is not None else energy.factor,
-            "base": float(base) if base is not None else energy.base,
+            "factor": share * float(factor) if factor is not None else energy.factor,
+            "base": share * float(base) + lift if base is not None else energy.base,
             "yearly_fixed_fee": fee,
         }
         if (

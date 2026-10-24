@@ -866,6 +866,8 @@ def resolve_volume_tier(
         "base": base,
         "tier_kwh": None,
         "tier_rate": None,
+        "tier_formula_share": rest,
+        "tier_base": fixed_part,
     }
     # Every band pair the leg happens to carry moves with the mono one. No
     # tiered card publishes a per-band formula today, and the blend is exact
@@ -882,6 +884,15 @@ def resolve_volume_tier(
         changes[f"factor_{suffix}"] = blended_factor
         changes[f"base_{suffix}"] = blended_base
     return replace(snapshot, energy=replace(energy, **changes))
+
+
+def card_formula(energy: SpotMonthlyRates) -> tuple[float, float]:
+    """The factor and base the card prints, before a tranche was folded into
+    them by :func:`resolve_volume_tier`. The leg's own pair where nothing was."""
+    share = energy.tier_formula_share
+    if not share:
+        return energy.factor, energy.base
+    return energy.factor / share, (energy.base - (energy.tier_base or 0.0)) / share
 
 
 def card_residential_vat(snapshot: SupplierSnapshot, month: date) -> float:

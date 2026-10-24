@@ -113,6 +113,8 @@ from .flow_wizard import _WizardStepsMixin
 from .providers import (
     get as get_extractor,
 )
+from .providers._rates import SpotMonthlyRates
+from .providers._resolve import card_formula
 from .providers.base import ExtractorError
 
 # ---- shared schema builders ---------------------------------------------------
@@ -163,8 +165,13 @@ def _card_figures(entry: ConfigEntry, data: Mapping[str, Any]) -> dict[str, str]
     if snapshot is None or _another_contract(entry.data, data):
         return figures
     energy = snapshot.energy
+    shown = {field: getattr(energy, field, None) for field, _ in _CARD_FIGURES.values()}
+    if isinstance(energy, SpotMonthlyRates):
+        # The pair the card prints, which is how a typed one is read, rather
+        # than the blend a first-1.800-kWh tranche was folded into.
+        shown["factor"], shown["base"] = card_formula(energy)
     for key, (field, unit) in _CARD_FIGURES.items():
-        value = getattr(energy, field, None)
+        value = shown[field]
         if value is not None:
             figures[key] = f"{round(value, 6):g}{unit}"
     fee = energy.yearly_fixed_fee
