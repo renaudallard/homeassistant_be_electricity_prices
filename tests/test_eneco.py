@@ -116,6 +116,23 @@ def test_fix_extracts_dso_overlay() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.04)
 
 
+def test_resa_printed_as_bare_tecteo_is_read() -> None:
+    """The cards up to May 2025 label RESA's row "TECTEO", the later ones
+    "TECTEO RESA", with the same figures either side of the change. The bare
+    label is too far from the long one for the similarity match, and every
+    Walloon card of 2023-10..2025-05 came out without RESA."""
+    text = fixture_text("eneco_flex_jun25.pdf")
+    bare = text.replace("TECTEO RESA", "TECTEO")
+    assert bare != text, "the fixture stopped printing TECTEO RESA"
+    resa = parse_snapshot(bare, "power_flex", "test://flex", REGION_WALLONIA).dsos
+    assert "resa" in resa
+    assert resa["resa"].distribution_single == pytest.approx(0.1062)
+    assert resa["resa"].transport == pytest.approx(0.0298)
+    assert resa["resa"].prosumer_eur_per_kva_year == pytest.approx(85.94)
+    same = parse_snapshot(text, "power_flex", "test://flex", REGION_WALLONIA)
+    assert same.dsos["resa"] == resa["resa"]
+
+
 def test_a_live_card_missing_an_area_is_refused(freezer: Any) -> None:
     """Every card prints both regions' tables, and a live one missing an area
     is refused rather than adopted without it, which left an entry on that

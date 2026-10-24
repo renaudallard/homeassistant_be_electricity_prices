@@ -355,7 +355,11 @@ Wallonia (`_WALLONIA_LABELS`, `eneco.py`), via `_find_wallonia_row`
 | ORES (Brabant Wallon) | `ores` |
 | REGIE DE WAVRE | `rew` |
 | TECTEO RESA | `resa` |
+| TECTEO | `resa` |
 
+The cards up to May 2025 print RESA's row as a bare `TECTEO`, too far from
+`TECTEO RESA` for the similarity match (`numeric_row`, `_parse.py`), so both
+spellings are listed; the figures did not move when the label did.
 ORES sub-zones share a uniform rate, so only the first ORES row encountered is
 kept as the canonical `ores` (`eneco.py`, dedup guard at `eneco.py`).
 A Wallonia row carries 7 numbers on Power Dynamic or 10 on Power Fix. The optional

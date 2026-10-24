@@ -123,13 +123,16 @@ _CONTRACT_SLUGS: dict[str, str] = {
 
 # Wallonia DSO labels (column layout: 4 distribution + optional [MEDIUM PIC ECO]
 # + transport + databeheer + prosument). ORES sub-zones share a uniform rate so
-# we just keep the first one encountered as the canonical "ores" row.
+# we just keep the first one encountered as the canonical "ores" row. The cards
+# up to May 2025 print RESA's row as a bare "TECTEO", too far from "TECTEO RESA"
+# for the similarity match, so that spelling is listed too.
 _WALLONIA_LABELS: dict[str, str] = {
     "AIEG": DSO_AIEG,
     "AIESH": DSO_AIESH,
     "ORES (Brabant Wallon)": DSO_ORES,
     "REGIE DE WAVRE": DSO_REW,
     "TECTEO RESA": DSO_RESA,
+    "TECTEO": DSO_RESA,
 }
 
 # Flanders Fluvius digital-meter sub-areas (column layout: Normaal,
