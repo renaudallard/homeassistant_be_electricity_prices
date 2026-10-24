@@ -1030,7 +1030,10 @@ one, starting from what you have now. From then on:
   capacity peak moves in Flanders, so the old contract's capacity term follows
   your peak as your current contract's does. A contract held on an analog
   meter is billed the flat 2,5 kW charge instead, and one on an exclusive-night
-  circuit none, as each was. After you record a switch,
+  circuit none, as each was. An earlier contract that settled on the day-ahead
+  is priced on it with the key it was set up with, while your current contract
+  without a key or the keyless setting keeps the figures its card prints, as it
+  would had it never had one. After you record a switch,
   `current_year_cost` reads unknown until that pricing lands, usually within
   minutes, rather than a year missing a whole contract. It stays unknown while
   an earlier contract cannot be priced at all, and is tried again every hour:

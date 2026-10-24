@@ -51,6 +51,7 @@ from .compare_inputs import (
     _detached_spot_view,
     _effective_regime,
     _HouseholdQuote,
+    _keyless_stale_spots,
     _label_for_contract,
     _label_for_supplier,
     _months_billed,
@@ -113,6 +114,7 @@ from .spot_stats import (
     _energy_is_rlp_indexed,
     _injection_is_spp_indexed,
     _rlp_blend_for,
+    spots_available,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -374,8 +376,17 @@ class _HouseholdMixin:
             value = avg_spot
             # Merged rather than isolated: a month mean is the same number
             # whoever asks, so whatever the entry has already cached is valid
-            # input, and it is what still answers when the fetch fails.
-            view = _detached_spot_view(coord, isolate=False)
+            # input, and it is what still answers when the fetch fails. Not a
+            # stale cache, one an entry with no source holds from a contract it
+            # switched away from: read as the month, the two days before a
+            # switch on the 3rd priced every side's feed-in.
+            month_first = today_local.replace(day=1)
+            view = _detached_spot_view(
+                coord,
+                isolate=_keyless_stale_spots(
+                    current, coord._historical_spots, month_first, today_local
+                ),
+            )
             month_view.append(view)
             # A failed fetch degrades to the day-ahead mean.
             with contextlib.suppress(Exception):
@@ -455,6 +466,12 @@ class _HouseholdMixin:
             too much credit on the own side alone. Only the as-configured
             baseline is asked of the real entry.
             """
+            if own and not spots_available(entry.data):
+                # The household's own credit on its own day-ahead, as the
+                # sensor credits it: with no source, the page's month is an
+                # earlier contract's days at best, and the card's figure
+                # stands.
+                return None
             index = _credit_index_for(entry, snapshot, own=own, raw=raw)
             if index == "spp":
                 return await _spp_month_spot()
@@ -478,9 +495,14 @@ class _HouseholdMixin:
             ):
                 # Bolt bills the quarter's index, so the quarter is fetched,
                 # into a copy, and resolved the way the live price is.
-                view = _detached_spot_view(coord, isolate=False)
                 first = today_local.replace(
                     month=(today_local.month - 1) // 3 * 3 + 1, day=1
+                )
+                view = _detached_spot_view(
+                    coord,
+                    isolate=_keyless_stale_spots(
+                        current, coord._historical_spots, first, today_local
+                    ),
                 )
                 # A failed fetch degrades to the month mean below.
                 with contextlib.suppress(Exception):

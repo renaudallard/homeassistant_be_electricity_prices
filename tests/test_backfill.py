@@ -903,6 +903,7 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
         injection=InjectionRates(factor=0.5, base=0.0, floor_at_zero=False),
     )
     entry = make_entry(
+        api_key="k",
         supplier=const.SUPPLIER_CUSTOM,
         contract=const.CUSTOM_CONTRACT_MONTHLY,
         region=const.REGION_WALLONIA,
@@ -1063,6 +1064,7 @@ async def test_cost_backfill_reports_the_feed_in_it_could_not_credit(
         ),
     )
     entry = make_entry(
+        api_key="k",
         region=const.REGION_WALLONIA,
         dso=const.DSO_ORES,
         meter=const.METER_MONO,
@@ -1230,6 +1232,7 @@ async def test_cost_backfill_meets_the_live_walk_across_the_spring_change(
         energy=DynamicRates(factor=1.0, base=0.02, yearly_fixed_fee=48.0)
     )
     entry = make_entry(
+        api_key="k",
         region="wallonia",
         dso="ores",
         meter="dynamic",
@@ -1393,6 +1396,7 @@ async def test_cost_backfill_meets_the_live_walk_on_a_double_flow_meter(
 
     async def run(double_flow: bool) -> tuple[float, float]:
         entry = make_entry(
+            api_key="k",
             region="wallonia",
             dso="ores",
             meter="dynamic",
@@ -1690,6 +1694,7 @@ async def test_a_month_indexed_credit_ignores_the_hours_quarters(
             injection=month_credit,
         )
     entry = make_entry(
+        api_key="k",
         meter="mono",
         dso_tariff_mode="bi_horaire" if walk == "dynamic" else "impact",
         solar_regime="injection",
@@ -1754,6 +1759,7 @@ async def test_a_card_settled_by_the_hour_floors_its_credit_by_the_hour(
         return await _live_and_backfill(
             hass,
             make_entry(
+                api_key="k",
                 meter="dynamic",
                 solar_regime="injection",
                 consumption_kwh="sensor.cons",
@@ -2877,6 +2883,7 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         return march if percentage and month.month == 3 else snap
 
     entry = make_entry(
+        api_key="k",
         region="wallonia",
         dso="ores",
         meter="dynamic",
@@ -3208,6 +3215,7 @@ async def test_the_backfill_groups_the_day_ahead_once_per_pass(
 
     freezer.move_to("2026-06-20 12:00:00+02:00")
     entry = make_entry(
+        api_key="k",
         title="Eneco Fix",
         solar_regime="injection",
         consumption_kwh="sensor.cons",
@@ -3302,7 +3310,7 @@ async def test_a_january_backfill_prices_no_december_hour(
             make_snapshot(energy=DynamicRates(factor=1.0, base=0.02)),
             make_snapshot(energy=SpotMonthlyRates(factor=1.1, base=0.01)),
         ):
-            entry = make_entry(title="Eneco Fix", solar_regime="none")
+            entry = make_entry(api_key="k", title="Eneco Fix", solar_regime="none")
             entry.add_to_hass(hass)
             ids = _register_sensors(hass, entry, ["current_price"])
             coord = SimpleNamespace(
@@ -3370,7 +3378,7 @@ async def test_a_tick_during_the_backfill_does_not_prune_the_hours_it_reads(
 
     freezer.move_to("2027-01-05 12:00:00+01:00")
     snap = make_snapshot(energy=DynamicRates(factor=1.0, base=0.02))
-    entry = make_entry(title="Eneco Fix", solar_regime="none")
+    entry = make_entry(api_key="k", title="Eneco Fix", solar_regime="none")
     entry.add_to_hass(hass)
     ids = _register_sensors(hass, entry, ["current_price"])
     start = datetime(2025, 12, 1, tzinfo=BRUSSELS)
@@ -4019,3 +4027,92 @@ async def test_the_backfill_decides_the_profiles_on_the_signed_leg(
     assert coordinator._ensure_spp_weights.await_count == int(signed_indexed)
     assert (context.rlp_weights is not None) is signed_indexed
     assert (context.spp_weights is not None) is signed_indexed
+
+
+@pytest.mark.parametrize("source", [{}, {"api_key": "k"}])
+async def test_the_backfill_bills_a_contract_with_no_source_on_its_card(
+    hass: HomeAssistant, source: dict[str, Any]
+) -> None:
+    """An entry with no day-ahead source that switched away from a keyed
+    contract holds that contract's days, fetched to price it. Its own
+    contract's backfilled rows took the switch month's days before the
+    switch for the month, and credited the feed-in on two days of October
+    where the sensor bills the card's figure. They are the same whatever the
+    cache holds; an entry that can fetch is priced on it, both passes alike."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        VariableRates,
+    )
+
+    snap = make_snapshot(
+        energy=VariableRates(current=0.20),
+        injection=InjectionRates(
+            current=0.0904, factor=0.77, base=-0.03, month_indexed=True
+        ),
+    )
+    oct1 = datetime(2026, 9, 30, 22, 0, tzinfo=UTC)
+    refill = {oct1 + timedelta(hours=h): 0.20 for h in range(48)}
+    last = date(2026, 10, 24)
+    sums: list[float] = []
+    prices: list[list[float]] = []
+    for spots in (refill, {}):
+        entry = make_entry(
+            solar_regime="injection",
+            consumption_kwh="sensor.cons",
+            injection_kwh="sensor.inj",
+            **source,
+        )
+        back, _live = await _live_and_backfill(
+            hass, entry, snap, last, _evening_draw_midday_export, spots=spots
+        )
+        sums.append(back)
+        ids = _register_sensors(hass, entry, ["injection_price"])
+        coord = SimpleNamespace(
+            hass=None,
+            entry=entry,
+            _snapshot=snap,
+            _session=None,
+            _spp_weights={},
+            _ensure_spp_weights=AsyncMock(),
+            _rlp_weights={},
+            _ensure_rlp_weights=AsyncMock(),
+            _billed_peak_kw=lambda: 0.0,
+        )
+        rows: list[float] = []
+
+        async def _snap_for(_month_first: object) -> Any:
+            return snap
+
+        with (
+            patch.object(
+                backfill_window,
+                "_month_snapshot_cache",
+                lambda *_a, **_k: _snap_for,
+            ),
+            patch(
+                "homeassistant.components.recorder.statistics.async_import_statistics",
+                new=lambda _h, _meta, got, _rows=rows: _rows.extend(
+                    r["mean"] for r in got
+                ),
+            ),
+            patch(
+                "homeassistant.util.dt.now",
+                lambda: dt_util.start_of_local_day(last) + timedelta(hours=12),
+            ),
+        ):
+            await bf._backfill_price_sensors(
+                hass,
+                entry,
+                coord,  # type: ignore[arg-type]
+                list(refill),
+                dict(spots),
+                {},
+            )
+        assert ids and rows
+        prices.append(rows)
+    if source:
+        assert sums[0] != pytest.approx(sums[1])
+        assert prices[0][0] == pytest.approx(0.77 * 0.20 - 0.03)
+    else:
+        assert sums[0] == pytest.approx(sums[1])
+        assert prices[0] == prices[1] == [pytest.approx(0.0904)] * len(refill)

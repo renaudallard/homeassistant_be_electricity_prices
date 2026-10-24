@@ -1548,8 +1548,8 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
     now counts as none for the target, so a typed key is borrowed for the
     window, and with none typed the target's credit is left out whole, as the
     ranking does and as the token step and the annual note say. The own row
-    keeps the cache whatever is typed, since its current_year_cost sensor
-    bills on it."""
+    reads none of it whatever is typed, as its current_year_cost sensor does
+    for an entry with no day-ahead source."""
     from dataclasses import replace
     from datetime import UTC, datetime
 
@@ -1654,8 +1654,8 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
     ]
     assert own and target
     expected = {**stale, **fresh} if borrowed else stale
-    # The own row is the sensor's, on the entry's cache whatever is typed.
-    assert all(spots == stale for spots in own)
+    # The own row is the sensor's, on the entry's own day-ahead: none.
+    assert all(spots == {} for spots in own)
     assert all(spots == (expected if typed else {}) for spots in target)
 
 

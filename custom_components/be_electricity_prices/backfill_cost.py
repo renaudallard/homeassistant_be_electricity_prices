@@ -103,6 +103,7 @@ from .spot_stats import (
     _rlp_hour_weight,
     _SpotMonthBucket,
     _spp_injection_spot,
+    own_day_ahead,
 )
 from .synergrid import SppWeights
 from .ytd_cost import first_year_charges
@@ -536,6 +537,12 @@ async def _accrue_cost(
     """
     if not hours:
         return carried
+    if snapshot is None:
+        # The entry's own contract on its own day-ahead, none at all for an
+        # entry with no source: the cache may hold the days a contract held
+        # earlier was priced on with its key (own_day_ahead).
+        spots = own_day_ahead(entry.data, spots)
+        quarters = own_day_ahead(entry.data, quarters)
     bill = 0.0
     ctx = await _build_context(
         hass, entry, coordinator, hours, snapshot=snapshot, snapshot_raw=snapshot_raw

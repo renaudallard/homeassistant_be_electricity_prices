@@ -76,7 +76,7 @@ from .flow_contracts import (
 from .providers import get as get_extractor
 from .providers import offers_direct_debit, settlement_answer
 from .providers._pdf import memoise_text_fetches
-from .spot_stats import spots_available
+from .spot_stats import own_day_ahead, spots_available
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -182,14 +182,19 @@ class _SweepEngine(_HouseholdMixin):
         # ENTSO-E fetch does not belong in a timer job. A household that
         # needs none leaves this empty, and the gate below is what keeps
         # that from printing an uncredited figure.
-        own_spots = dict(getattr(coord, "_historical_spots", {}) or {})
-        own_quarters = dict(getattr(coord, "_historical_spot_quarters", {}) or {})
-        # The household's own row reads the cache as it is, which is what its
-        # current_year_cost sensor bills on. The candidates do not: a keyless
-        # entry's stale cache would credit their spot-indexed feed-in only up
-        # to the day its key went, so for them it counts as none.
-        hist_spots, hist_quarters = own_spots, own_quarters
-        if _keyless_stale_spots(current, own_spots, hh.ytd_from, today):
+        cache = dict(getattr(coord, "_historical_spots", {}) or {})
+        cache_quarters = dict(getattr(coord, "_historical_spot_quarters", {}) or {})
+        # The household's own row reads its own day-ahead, which is what its
+        # current_year_cost sensor bills on: none at all for an entry with no
+        # source, whose cache can only be an earlier contract's
+        # (own_day_ahead). The candidates read the cache, the same Belgian
+        # day-ahead whoever fetched it, unless it is stale: an entry with no
+        # source cannot bring it up to date, and it would credit their
+        # spot-indexed feed-in only up to the day it stops.
+        own_spots = own_day_ahead(current, cache)
+        own_quarters = own_day_ahead(current, cache_quarters)
+        hist_spots, hist_quarters = cache, cache_quarters
+        if _keyless_stale_spots(current, cache, hh.ytd_from, today):
             hist_spots, hist_quarters = {}, {}
         own_ytd: float | None = None
         own_start = current_period_start(current, hh.ytd_from)

@@ -301,3 +301,156 @@ async def test_a_what_if_into_injection_credits_the_card_s_own_index(
     # The year to date walks the own side under the proxy too, so it is handed
     # the solar weighting on the same terms as the target.
     assert walked == [weights, weights]
+
+
+async def test_a_household_with_no_source_quotes_none_of_an_earlier_contract_s_days(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A household with no day-ahead source that switched away from a keyed
+    contract holds that contract's days, fetched to price it. The page took
+    the switch month's days before the switch for the month, and credited
+    the feed-in of its own contract and of every alternative on them, where
+    its sensor and a household that never had a source bill the printed
+    figure. Its quote is the same whatever the cache holds."""
+    from datetime import UTC, datetime, timedelta
+
+    from custom_components.be_electricity_prices import ytd_cost
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+    )
+
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    card = replace(
+        _stub_snapshot("eneco", "power_flex", 0.20),
+        injection=InjectionRates(
+            current=0.0904, factor=0.77, base=-0.03, month_indexed=True
+        ),
+    )
+    quotes = []
+    oct1 = datetime(2026, 9, 30, 22, 0, tzinfo=UTC)
+    for cache in ({oct1 + timedelta(hours=h): 0.20 for h in range(48)}, {}):
+        entry = make_entry(
+            supplier="eneco",
+            contract="power_flex",
+            solar_regime="injection",
+            consumption_kwh="sensor.c",
+            injection_kwh="sensor.i",
+        )
+        entry.add_to_hass(hass)
+        coord = _real_coordinator(hass, entry, card)
+        coord._historical_spots = dict(cache)
+        entry.runtime_data = coord
+
+        async def total(*_a: Any, side: str = "consumption", **_k: Any) -> MeasuredKwh:
+            return MeasuredKwh(3000.0 if side == "injection" else 3500.0, 365)
+
+        async def hourly(*_a: Any, **_k: Any) -> Any:
+            return None
+
+        household = "custom_components.be_electricity_prices.compare_household."
+        with (
+            patch(household + "_measured_hourly", hourly),
+            patch(household + "_measured_kwh", total),
+            patch.object(
+                ytd_cost, "_compute_current_year_cost", AsyncMock(return_value=100.0)
+            ),
+        ):
+            quotes.append(
+                await _compare_placeholders(
+                    hass,
+                    entry,
+                    supplier="eneco",
+                    contract="power_flex",
+                    target_snapshot=card,
+                    meter="mono",
+                    # Left blank: the page lends no key.
+                    api_key=" ",
+                )
+            )
+    held, never = quotes
+    assert held["current_annual"] != "-"
+    assert held["current_annual"] == never["current_annual"]
+    assert held["compare_annual"] == never["compare_annual"]
+
+
+async def test_the_own_side_follows_its_sensor_when_a_key_is_typed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A key typed on the page prices the alternative on the month it fetches.
+    The household's own side follows its sensor, which bills the printed
+    figure for an entry with no source of its own, so the same contract
+    quoted against itself may differ by what the typed key fetched."""
+    from datetime import UTC, datetime, timedelta
+
+    from custom_components.be_electricity_prices import compare_flow, ytd_cost
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+    )
+
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    card = replace(
+        _stub_snapshot("eneco", "power_flex", 0.20),
+        injection=InjectionRates(
+            current=0.0904, factor=0.77, base=-0.03, month_indexed=True
+        ),
+    )
+    oct1 = datetime(2026, 9, 30, 22, 0, tzinfo=UTC)
+    month = {oct1 + timedelta(hours=h): 0.10 for h in range(23 * 24)}
+
+    async def _fetch(
+        self: Any, start: Any, end: Any, api_key: Any = None, *, keyless: bool = False
+    ) -> None:
+        if api_key:
+            self._historical_spots.update(month)
+
+    async def total(*_a: Any, side: str = "consumption", **_k: Any) -> MeasuredKwh:
+        return MeasuredKwh(3000.0 if side == "injection" else 3500.0, 365)
+
+    async def hourly(*_a: Any, **_k: Any) -> Any:
+        return None
+
+    quotes = []
+    for typed in (" ", "TESTKEY"):
+        entry = make_entry(
+            supplier="eneco",
+            contract="power_flex",
+            solar_regime="injection",
+            consumption_kwh="sensor.c",
+            injection_kwh="sensor.i",
+        )
+        entry.add_to_hass(hass)
+        coord = _real_coordinator(hass, entry, card)
+        entry.runtime_data = coord
+        household = "custom_components.be_electricity_prices.compare_household."
+        with (
+            patch(household + "_measured_hourly", hourly),
+            patch(household + "_measured_kwh", total),
+            patch.object(type(coord), "_ensure_historical_spots", _fetch),
+            patch.object(
+                compare_flow, "_validate_entsoe_key", AsyncMock(return_value=None)
+            ),
+            patch(
+                "custom_components.be_electricity_prices.api"
+                ".fetch_day_ahead_or_fallback",
+                AsyncMock(return_value=({}, "entsoe")),
+            ),
+            patch.object(
+                ytd_cost, "_compute_current_year_cost", AsyncMock(return_value=100.0)
+            ),
+        ):
+            quotes.append(
+                await _compare_placeholders(
+                    hass,
+                    entry,
+                    supplier="eneco",
+                    contract="power_flex",
+                    target_snapshot=card,
+                    meter="mono",
+                    api_key=typed,
+                )
+            )
+    blank, keyed = quotes
+    # The own side is the sensor's either way; the alternative is credited on
+    # the fetched month, 0,77 x 0,10 - 0,03 against the printed 0,0904.
+    assert keyed["current_annual"] == blank["current_annual"]
+    assert keyed["compare_annual"] != blank["compare_annual"]

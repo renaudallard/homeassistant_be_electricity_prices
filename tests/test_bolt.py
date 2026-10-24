@@ -2596,6 +2596,7 @@ def test_the_live_tick_bills_the_running_quarter_to_date() -> None:
         rlp_blend="wallonia",
     )
     coord = SimpleNamespace(
+        entry=SimpleNamespace(data={"api_key": "k"}),
         _billable_spots=lambda extra: spots,
         rlp_weights_for_blend=lambda blend: weights if blend == "wallonia" else None,
     )

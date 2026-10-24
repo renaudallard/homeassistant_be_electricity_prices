@@ -63,6 +63,7 @@ from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     InjectionRates,
     SpotMonthlyRates,
+    VariableRates,
 )
 from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
@@ -1156,6 +1157,98 @@ async def test_fetch_spot_prices_uses_quarter_hourly_for_quarter_contract(
     with _patch_spot_fetch(_fake_fetch):
         await coord._fetch_spot_prices()
     assert captured["quarter_hourly"] is False
+
+
+@pytest.mark.parametrize("index", ["month_indexed", "spp_indexed"])
+@pytest.mark.parametrize("source", [{}, {"api_key": "k"}])
+async def test_a_contract_with_no_source_reads_no_earlier_contracts_day_ahead(
+    hass: HomeAssistant, freezer: Any, index: str, source: dict[str, Any]
+) -> None:
+    """An entry with no day-ahead source restores none, but pricing a
+    contract it switched away from fetches that contract's days with its key
+    into the same cache. The two days of October before a switch on the 3rd
+    then read as this contract's month: an Eneco Power Flex feed-in credited
+    0,12392 EUR/kWh where its card prints 0,0904, and the year-to-date, month
+    and year-end walks and the projection all on the same days. The entry's
+    own contract reads none of them; one that can fetch reads its cache."""
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    held = {
+        "supplier": "engie",
+        "contract": "engie_dynamic",
+        "region": "wallonia",
+        "dso": "ores",
+        "meter": "mono",
+        "solar_regime": "injection",
+        "api_key": "old-key",
+    }
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "eneco",
+            "contract": "power_flex",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "previous_contracts": [{"until": "2026-10-03", "data": held}],
+            **source,
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="eneco",
+        contract="power_flex",
+        energy=VariableRates(current=0.20),
+        injection=InjectionRates(
+            current=0.0904,
+            factor=0.77,
+            base=-0.03,
+            month_indexed=index == "month_indexed",
+            spp_indexed=index == "spp_indexed",
+        ),
+    )
+    # What pricing the earlier contract leaves: its days, up to the switch.
+    oct1 = datetime(2026, 9, 30, 22, 0, tzinfo=UTC)
+    refill = {oct1 + timedelta(hours=h): 0.20 for h in range(48)}
+    coord._historical_spots = dict(refill)
+    coord._spp_weights = {(h.month, h.day, h.hour): 1.0 for h in refill}
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_spp_weights = AsyncMock()  # type: ignore[method-assign]
+    coord._price_previous = AsyncMock()  # type: ignore[method-assign]
+    walk = AsyncMock(return_value=0.0)
+    projection = AsyncMock(return_value=None)
+
+    async def _down(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        return dict(refill)
+
+    with (
+        _patch_spot_fetch(_down),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
+            walk,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_costs._compute_projected_year_cost",
+            projection,
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._update_body()
+
+    if source:
+        # The cache is the entry's own: the month's two days are its mean.
+        assert data.injection_price_eur_per_kwh == pytest.approx(0.77 * 0.20 - 0.03)
+        assert all(c.kwargs["historical_spots"] == refill for c in walk.call_args_list)
+    else:
+        assert data.injection_price_eur_per_kwh == pytest.approx(0.0904)
+        assert walk.call_args_list
+        assert all(c.kwargs["historical_spots"] == {} for c in walk.call_args_list)
+        assert projection.call_args.kwargs["spots"] == {}
 
 
 async def test_a_feed_in_credited_per_quarter_hour_is_shown_per_quarter_hour(

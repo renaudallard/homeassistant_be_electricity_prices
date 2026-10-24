@@ -1798,6 +1798,7 @@ async def test_the_backfilled_year_ends_on_what_the_two_contracts_cost_live(
     switch = date(2026, 2, 15)
     entry = make_entry(
         meter="dynamic",
+        api_key="k",
         consumption_kwh="sensor.cons_total",
         previous_contracts=[
             {

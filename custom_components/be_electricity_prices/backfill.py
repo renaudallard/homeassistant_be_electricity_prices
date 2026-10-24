@@ -104,6 +104,7 @@ from .spot_stats import (
     _bucket_by_local_month,
     _energy_needs_spot,
     _hour_spot,
+    own_day_ahead,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -268,6 +269,13 @@ async def _backfill_price_sensors(
     for seg_entry, seg_snap, seg_raw, seg_hours in await _contract_segments(
         hass, entry, coordinator, hours
     ):
+        # The entry's own contract on its own day-ahead (own_day_ahead), one
+        # held earlier on the cache its own key filled.
+        seg_spots = spots if seg_snap is not None else own_day_ahead(entry.data, spots)
+        seg_quarters = (
+            quarters if seg_snap is not None else own_day_ahead(entry.data, quarters)
+        )
+        seg_bucket = month_bucket if seg_spots is spots else {}
         ctx = await _build_context(
             hass,
             seg_entry,
@@ -293,8 +301,8 @@ async def _backfill_price_sensors(
                 snap_h.energy,
                 local,
                 utc_hour,
-                spots,
-                month_bucket,
+                seg_spots,
+                seg_bucket,
                 month_mean_cache,
                 today,
                 ctx.rlp_index_weights,
@@ -334,9 +342,9 @@ async def _backfill_price_sensors(
                     inj_rate = _injection_rate_for_hour(
                         snap_h,
                         spot=spot,
-                        spots=spots,
-                        bucket=month_bucket,
-                        quarters=quarters,
+                        spots=seg_spots,
+                        bucket=seg_bucket,
+                        quarters=seg_quarters,
                         utc_hour=utc_hour,
                         local=local,
                         spp_weights=spp_weights,

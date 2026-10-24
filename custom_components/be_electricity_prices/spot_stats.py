@@ -81,6 +81,22 @@ def spots_available(data: Mapping[str, Any]) -> bool:
     return bool(data.get(CONF_API_KEY) or data.get(CONF_KEYLESS_SPOTS))
 
 
+def own_day_ahead[Slot](
+    data: Mapping[str, Any], cache: dict[datetime, Slot]
+) -> dict[datetime, Slot]:
+    """``cache`` as the entry's own contract is priced on it: all of it, or
+    nothing for an entry with no day-ahead source (:func:`spots_available`).
+
+    Such an entry restores none, but pricing a contract it switched away
+    from fetches that contract's year with that contract's key into the same
+    cache, and the days of the switch month before the switch then read as
+    this contract's month mean: an Eneco Power Flex feed-in credited 0,12392
+    EUR/kWh on two cached days of October where its card prints 0,0904. The
+    contracts held earlier read the cache itself, on their own key.
+    """
+    return cache if spots_available(data) else {}
+
+
 def _energy_is_quarter_hourly(energy: EnergyRates) -> bool:
     """True when the energy model bills on the native 15-minute grid.
 

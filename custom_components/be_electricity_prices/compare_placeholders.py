@@ -88,6 +88,7 @@ from .flow_contracts import _contract_kind
 from .providers import get as get_extractor
 from .providers import settlement_answer
 from .snapshot_resolve import entry_annual_injection_kwh
+from .spot_stats import own_day_ahead
 
 
 class _PlaceholdersMixin(OptionsFlow):
@@ -660,8 +661,9 @@ class _PlaceholdersMixin(OptionsFlow):
                 # 29 month-indexed contracts.
                 raw_snapshot,
                 quote_entry,
-                historical_spots=coord._historical_spots,
-                spot_quarters=coord._historical_spot_quarters,
+                # On the household's own day-ahead, as the sensor is.
+                historical_spots=own_day_ahead(current, coord._historical_spots),
+                spot_quarters=own_day_ahead(current, coord._historical_spot_quarters),
                 billed_peak_kw=peak_kw,
                 rlp_weights=_coordinator_rlp_weights(self.config_entry),
                 rlp_index_weights=_coordinator_rlp_index_weights(

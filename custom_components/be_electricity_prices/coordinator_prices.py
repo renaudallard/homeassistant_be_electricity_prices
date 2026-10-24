@@ -89,6 +89,8 @@ from .spot_stats import (
     _rlp_blend_for,
     _spp_weighting_enabled,
     index_window_start,
+    own_day_ahead,
+    spots_available,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -291,8 +293,10 @@ class _PricesMixin:
         # Only worth the download when there are prices to weight. energie.be
         # Vast offers its ENTSO-E key as optional, so an entry that skipped it
         # reaches here with no spots at all and would otherwise pull 52 MB to
-        # weight nothing, every restart.
-        wants_spp = bool(spp_weighted and (spot_prices or self._historical_spots))
+        # weight nothing, every restart. Its own prices: the cache of an entry
+        # with no source may hold an earlier contract's.
+        own_hours = own_day_ahead(self.entry.data, self._historical_spots)
+        wants_spp = bool(spp_weighted and (spot_prices or own_hours))
         # And the RLP profile when the ENERGY leg resolves against the
         # RLP-weighted month mean (Eneco Flex and Flex One, whose Belpex-RLP-M
         # weights each hour's Belpex by the residential load profile). Same
@@ -303,7 +307,7 @@ class _PricesMixin:
         # yearly net is settled by spreading the volume over the year on it.
         allocating = self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_COMPENSATION
         wants_rlp = bool(
-            (rlp_weighted and (spot_prices or self._historical_spots))
+            (rlp_weighted and (spot_prices or own_hours))
             or allocating
             or periods_need_rlp(gate_periods)
         )
@@ -415,7 +419,13 @@ class _PricesMixin:
         spot_prices: dict[datetime, float],
         rlp_weighted: bool,
     ) -> tuple[float | None, float | None]:
-        """The running month's plain mean, and the one the energy leg bills on."""
+        """The running month's plain mean, and the one the energy leg bills on.
+
+        None for an entry with no day-ahead source, which bills the figures
+        its card prints: what its cache holds is an earlier contract's.
+        """
+        if not spots_available(self.entry.data):
+            return None, None
         # Two means, because the two legs can name two indices. Eneco's
         # energy is on Belpex-RLP-M, the RLP-weighted month mean, while its
         # injection is on Belpex-injectie, the plain one, so the energy leg
@@ -495,7 +505,7 @@ class _PricesMixin:
             # can be skipped.
             inj = self._snapshot.injection
             has_indicative = inj is not None and inj.current is not None
-            if spp_weighted:
+            if spp_weighted and spots_available(self.entry.data):
                 # SPP-weight the injection month-mean; keep the flat mean for
                 # energy.
                 now = dt_util.now()

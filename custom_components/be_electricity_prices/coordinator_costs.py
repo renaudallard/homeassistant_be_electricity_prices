@@ -94,6 +94,7 @@ from .providers import (
 )
 from .snapshot_months import archived_months_present
 from .snapshot_store import _monthly_snapshots
+from .spot_stats import own_day_ahead
 from .synergrid import RlpWeights, SppWeights
 from .year_end_cost import _compute_year_end_cost
 from .ytd_cost import _compute_current_year_cost, window_welcome_credit
@@ -316,6 +317,11 @@ class _CostsMixin:
         # below. Without one this is the window's first day, as it always was.
         periods = previous_periods(self.entry.data, ytd_start, window_now.date())
         own_start = current_period_start(self.entry.data, ytd_start)
+        # The day-ahead this contract is priced on, which is none at all for an
+        # entry with no source of its own: the cache may hold the days an
+        # earlier contract was priced on with its key.
+        own_hours = own_day_ahead(self.entry.data, self._historical_spots)
+        own_quarters = own_day_ahead(self.entry.data, self._historical_spot_quarters)
         # The one bill, over each window this tick prices it on.
         bill = partial(
             _compute_current_year_cost,
@@ -324,8 +330,8 @@ class _CostsMixin:
             get_extractor(self.entry.data[CONF_SUPPLIER]),
             self._snapshot,
             self.entry,
-            historical_spots=self._historical_spots,
-            spot_quarters=self._historical_spot_quarters,
+            historical_spots=own_hours,
+            spot_quarters=own_quarters,
             spp_weights=self._spp_weights if spp_weighted else None,
             rlp_weights=(
                 (self._rlp_weights or None) if (rlp_weighted or allocating) else None
@@ -429,7 +435,7 @@ class _CostsMixin:
             # spot price per slot, on the year the compare page credits it
             # on. Not the live table's day or two, which moved this recorded
             # figure by tens of euro a day.
-            spots=self._historical_spots,
+            spots=own_hours,
             signing=signing,
             # The running month's index, held for the year on a month-indexed
             # leg, as current_price bills this month.
@@ -532,8 +538,8 @@ class _CostsMixin:
                 energy_index=energy_mean,
                 previous_eur=prev_year,
                 breakdown=year_end_breakdown,
-                historical_spots=self._historical_spots,
-                spot_quarters=self._historical_spot_quarters,
+                historical_spots=own_hours,
+                spot_quarters=own_quarters,
                 spp_weights=self._spp_weights if spp_weighted else None,
                 rlp_weights=(
                     (self._rlp_weights or None)

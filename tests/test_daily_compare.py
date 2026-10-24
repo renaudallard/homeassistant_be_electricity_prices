@@ -839,8 +839,9 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
     one-to-one page has always passed them; this pass did not, which put the
     household's OWN row at odds with its current_year_cost sensor.
 
-    The own row always reads the cache as held, as its sensor does; only the
-    candidates drop a keyless entry's stale one.
+    The own row reads the household's own day-ahead, as its sensor does:
+    the cache with a key, none without a source, whose cache can only be an
+    earlier contract's. Only the candidates drop a keyless entry's stale one.
     """
     from custom_components.be_electricity_prices import compare_engine
     from custom_components.be_electricity_prices.providers._rates import ImpactRates
@@ -927,7 +928,7 @@ async def test_the_pass_hands_the_engine_the_spots_it_credits_feed_in_from(
     ):
         await engine.fill_ytd_column(sweep, _coord_with_spots(spots))
 
-    assert handed_to["own"] == (spots, {})
+    assert handed_to["own"] == ((spots, {}) if key else ({}, {}))
     assert handed_to["candidate"] == ((spots, {}) if handed else ({}, {}))
 
 
