@@ -567,7 +567,9 @@ def parse_snapshot(
     wallonia_renewables = 0.0
     if region == REGION_FLANDERS:
         flanders_renewables = _extract_flanders_renewables(text)
-        dsos = _extract_flanders_dsos(text)
+        dsos = _extract_flanders_dsos(
+            text, contract.kind, _label_year(publication_label)
+        )
     else:
         wallonia_renewables = _extract_wallonia_renewables(text)
         dsos = _extract_wallonia_dsos(text)
@@ -614,6 +616,12 @@ def _extract_publication_month(text: str) -> str:
         text,
     )
     return match.group(1) if match else ""
+
+
+def _label_year(label: str) -> int | None:
+    """The year a card's label names ("juin 2024"), or None."""
+    match = re.search(r"\b(20\d{2})\b", label)
+    return int(match.group(1)) if match else None
 
 
 # ---- DSO row parsers ----------------------------------------------------------

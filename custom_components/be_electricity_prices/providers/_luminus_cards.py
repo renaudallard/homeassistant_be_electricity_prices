@@ -294,11 +294,10 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         )
 
     if kind == "dynamic":
-        match = _DYNAMIC_FORMULA_RE.search(text)
-        if not match:
+        pair = _belpex_h_pair(text, _DYNAMIC_ENERGY_BLOCK_RE)
+        if pair is None:
             raise ExtractorError("could not parse Luminus dynamic formula")
-        factor_pdf = to_float(match.group(1))
-        base_pre_vat_cents = parse_sign(match.group(2)) * to_float(match.group(3))
+        factor_pdf, base_pre_vat_cents, _row = pair
         vat = _vat_multiplier(text)
         # PDF formula: c€/kWh hors TVA = factor_pdf * Belpex_eur_mwh + base_cents.
         # Spot in EUR/kWh = Belpex_eur_mwh / 1000. Convert to:
@@ -478,6 +477,34 @@ def _formula_pairs(
     return out
 
 
+def _belpex_h_pair(
+    text: str, block: re.Pattern[str]
+) -> tuple[float, float, str] | None:
+    """The hourly pair a dynamic card's ``block`` prints, as ``(factor, base,
+    row)`` in the card's own units, c/kWh HTVA against Belpex H in EUR/MWh,
+    or ``None`` when the block or its rows do not read.
+
+    Every row is read, one per meter register on the cards before September
+    2025, and a card whose registers differ is refused: a ``DynamicRates``
+    leg bills one formula on every meter, and every card on file prints the
+    same one on each.
+    """
+    found = block.search(text)
+    if found is None:
+        return None
+    rows = list(_BELPEX_H_ROW_RE.finditer(found.group(0)))
+    pairs = {
+        (to_float(row.group(1)), parse_sign(row.group(2)) * to_float(row.group(3)))
+        for row in rows
+    }
+    if not pairs:
+        return None
+    if len(pairs) > 1:
+        raise ExtractorError("Luminus: the dynamic formula differs by meter register")
+    factor, base = pairs.pop()
+    return factor, base, rows[0].group(0)
+
+
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     # Anchor on the applicable "Tarif de l'énergie injectée" row, not the
     # "Estimation annuelle du tarif de l'énergie injectée" forecast
@@ -505,14 +532,12 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     formula: str | None = None
     month_indexed = False
     if kind == "dynamic":
-        match = _INJECTION_FORMULA_RE.search(text)
-        if match:
-            factor_pdf = to_float(match.group(1))
-            base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
+        pair = _belpex_h_pair(text, _DYNAMIC_INJECTION_BLOCK_RE)
+        if pair is not None:
+            factor_pdf, base_pdf_cents, formula = pair
             # Residential injection is VAT-exempt in Belgium.
             factor = factor_pdf * 10.0
             base = base_pdf_cents / 100.0
-            formula = match.group(0)
     else:
         # A non-dynamic card indexes the credit on the delivery month and says
         # the printed figure is not it: "Votre tarif sera indexe tous les mois.
@@ -633,8 +658,31 @@ _PROMO_NIGHT_RE = re.compile(
 _PROMO_CASHBACK_RE = re.compile(
     r"accord[ée]e?\s+(\d+)\s+mois\s+apr[eè]s[^.]{0,60}?cashback", re.IGNORECASE
 )
-_DYNAMIC_FORMULA_RE = re.compile(
-    rf"Prélèvement\s*\([^)]+\)\s*=\s*({_NUM})\s*x\s*Belpex\s*H\s*([{SIGN_CHARS}])\s*({_NUM})",
+# A dynamic card's two formula blocks, energy and feed-in, each from its
+# heading to the "Les montants mentionnes sont arrondis" sentence closing it.
+# The rows inside are one per meter register, in three spellings: since
+# September 2025 one "Prelevement (Compteur mono-horaire et bi-horaire)" and
+# one "Injection (...)" row; in August 2025 "Compteur mono-horaire", "Heures
+# pleines (Compteur bi-horaire)" and "Heures creuses"; from January 2024 to
+# July 2025 "Jour (compteur de jour)", "Jour (compteur de jour et de nuit)"
+# and "nuit". The feed-in heading moved from "pour la compensation de" to
+# "pour" to "de" over the same cards.
+_DYNAMIC_ENERGY_BLOCK_RE = re.compile(
+    r"Formules?\s+tarifaires?\s+pour\s+le\s+co[uû]t\s+de\s+l['\u2019\u00a9]\s*[ée]nergie"
+    r"(?:(?!Formule\s+tarifaire|Les\s+montants).)*",
+    re.S,
+)
+_DYNAMIC_INJECTION_BLOCK_RE = re.compile(
+    r"Formule\s+tarifaire\s+(?:pour\s+la\s+compensation\s+de|pour|de)\s+"
+    r"l['\u2019\u00a9]\s*[ée]nergie\s+inject[ée]e"
+    r"(?:(?!Formule\s+tarifaire|Les\s+montants).)*",
+    re.S,
+)
+# One register's row with its label, which runs back to the block's colon or
+# to the row before it: "Injection (Compteur mono-horaire et bi-horaire) =
+# 0,1019 x Belpex H - 1,2737".
+_BELPEX_H_ROW_RE = re.compile(
+    rf"[^\s=;:.][^=;:]*?=\s*({_NUM})\s*x\s*Belpex\s*H\s*([{SIGN_CHARS}])\s*({_NUM})",
     re.S,
 )
 # A non-dynamic card's feed-in formula, accepted ONLY when that same block
@@ -745,12 +793,6 @@ _QUARTER_ATTRIBUTION_RE = re.compile(
 # trimestres. Les trimestres commencent le 1er janvier, 1er avril, ..."
 _QUARTERLY_CADENCE_RE = re.compile(
     r"Votre\s+tarif\s+sera\s+indexé\s+tous\s+les\s+trimestres\b"
-)
-
-
-_INJECTION_FORMULA_RE = re.compile(
-    rf"Injection\s*\([^)]+\)\s*=\s*({_NUM})\s*x\s*Belpex\s*H\s*([{SIGN_CHARS}])\s*({_NUM})",
-    re.S,
 )
 
 

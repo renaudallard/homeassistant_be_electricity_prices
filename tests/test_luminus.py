@@ -181,6 +181,145 @@ def test_dynamic_extracts_injection_formula_with_negative_base() -> None:
     assert inj.base == pytest.approx(-0.012737)
 
 
+@pytest.mark.parametrize(
+    ("fixture", "label", "energy", "feed_in", "expected", "printed"),
+    [
+        # January 2024 to July 2025: "Jour (compteur de jour) = 0,1054 x
+        # Belpex H + 2,0940", then "Jour (compteur de jour et de nuit)" and
+        # "et nuit" for the bi-hourly meter, and the feed-in the same way.
+        (
+            "luminus_dynamic_v_2024-06.pdf",
+            "juin 2024",
+            (0.1054, 1.1200),
+            (0.0825, -0.9550),
+            (91.41, 79.77),
+            (11.40, 5.63),
+        ),
+        (
+            "luminus_dynamic_v_2025-06.pdf",
+            "juin 2025",
+            (0.1054, 2.0940),
+            (0.0825, -0.7790),
+            (90.79, 80.49),
+            (12.36, 5.86),
+        ),
+        # August 2025: "Compteur mono-horaire", "Heures pleines (Compteur
+        # bi-horaire)" and "Heures creuses".
+        (
+            "luminus_dynamic_v_2025-08.pdf",
+            "août 2025",
+            (0.1018, 2.1316),
+            (0.1018, -1.2685),
+            (87.43, 78.63),
+            (11.69, 6.73),
+        ),
+    ],
+)
+def test_dynamic_cards_before_september_2025_read_their_formulas(
+    fixture: str,
+    label: str,
+    energy: tuple[float, float],
+    feed_in: tuple[float, float],
+    expected: tuple[float, float],
+    printed: tuple[float, float],
+) -> None:
+    """Before September 2025 the dynamic card spelled its formulas one row per
+    meter register, where the reader knew only the single "Prelevement
+    (...)" row of the later cards. Every card from January 2024 to August
+    2025 failed to parse, so a contract signed on one billed each month's own
+    card, and a month of that time stood in on the current card. The
+    estimates the card prints are its formulas at the Belpex H it expects
+    for the year ahead."""
+    snap = parse_snapshot("luminus_dynamic", fixture_text(fixture), "flanders")
+    assert snap.publication_label == label
+    rates, inj = snap.energy, snap.injection
+    assert isinstance(rates, DynamicRates) and inj is not None
+    assert rates.factor == pytest.approx(energy[0] * 10.0 * 1.06)
+    assert rates.base == pytest.approx(energy[1] / 100.0 * 1.06)
+    assert inj.factor == pytest.approx(feed_in[0] * 10.0)
+    assert inj.base == pytest.approx(feed_in[1] / 100.0)
+    assert inj.factor is not None and inj.base is not None
+    assert rates.factor * expected[0] / 1000.0 + rates.base == pytest.approx(
+        printed[0] / 100.0, abs=1e-4
+    )
+    assert inj.factor * expected[1] / 1000.0 + inj.base == pytest.approx(
+        printed[1] / 100.0, abs=1e-4
+    )
+    assert "fluvius_antwerpen" in snap.dsos
+
+
+def test_the_quarter_hour_data_fee_is_billed_while_fluvius_kept_it_apart() -> None:
+    """Up to 2024 Fluvius billed the quarter-hourly metering regime, which the
+    dynamic contract needs, a data-management fee of its own, and the card's
+    "(**) ... quart d'heure" footnote carried it: 15,14 against the table's
+    monthly-regime 13,95 in June 2024. From 2025 every regime pays the
+    table's fee, and the footnote kept 2025's 18,56 through 2026 where the
+    table moved to 18,92."""
+    from custom_components.be_electricity_prices.providers._luminus_overlays import (
+        _extract_flanders_dsos,
+    )
+
+    for fixture, fee in (
+        ("luminus_dynamic_v_2024-06.pdf", 15.14),
+        ("luminus_dynamic_v_2025-06.pdf", 18.56),
+        ("luminus_dynamic_v.pdf", 18.92),
+    ):
+        snap = parse_snapshot("luminus_dynamic", fixture_text(fixture), "flanders")
+        antwerpen = snap.dsos["fluvius_antwerpen"]
+        assert antwerpen.data_management_per_year == pytest.approx(fee), fixture
+    # A static contract runs on any regime, so it bills the table's.
+    june_2024 = fixture_text("luminus_dynamic_v_2024-06.pdf")
+    static = _extract_flanders_dsos(june_2024, "fixed", 2024)
+    assert static["fluvius_antwerpen"].data_management_per_year == pytest.approx(13.95)
+
+
+def test_a_dynamic_card_pricing_its_registers_apart_is_refused() -> None:
+    """A dynamic leg bills one formula on every meter, and every card on file
+    prints the same one on each register. One that did not would bill the
+    night register of a bi-hourly meter on the day formula, so it is refused
+    rather than read off its first row."""
+    text = fixture_text("luminus_dynamic_v_2025-06.pdf")
+    apart = text.replace(
+        "et nuit =  0,1054  x  Belpex H  +  2,0940",
+        "et nuit =  0,0954  x  Belpex H  +  2,0940",
+    )
+    assert apart != text
+    with pytest.raises(ExtractorError, match="meter register"):
+        parse_snapshot("luminus_dynamic", apart, "flanders")
+
+
+async def test_the_archive_serves_a_dynamic_month_before_september_2025(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A contract signed on the June 2025 card is billed off it: the archive
+    answered None for every dynamic month before September 2025, its card
+    not parsing, and the signing cohort fell back to each month's own card,
+    0,57 c/kWh under on energy and 0,72 over on the feed-in in 2026."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    async def _products(session: object, url: str, **kwargs: object) -> str:
+        assert "signing=2025-06" in url
+        return _archive_products(("Luminus Dynamic Online Electricité", "id-dynamic"))
+
+    async def _card(session: object, url: str, **kwargs: object) -> str:
+        assert "productId=id-dynamic&" in url and "date=2025-06" in url
+        return fixture_text("luminus_dynamic_v_2025-06.pdf")
+
+    monkeypatch.setattr(luminus, "fetch_text", _products)
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _card)
+    snap = await luminus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "luminus_dynamic",
+        "flanders",
+        date(2025, 6, 1),
+    )
+    assert snap is not None
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(0.1054 * 10.0 * 1.06)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(0.825)
+
+
 def test_missing_injection_row_fails_loud() -> None:
     # Every Luminus card publishes an injection rate; a non-dynamic card
     # whose injection row went missing is a layout drift, not a fee-free

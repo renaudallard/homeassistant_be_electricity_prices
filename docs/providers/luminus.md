@@ -326,12 +326,24 @@ Both the `TimeOfUseRates` docstring in `_rates.py` and this extractor use the
 
 ### dynamic
 
-Parses the ex-VAT formula
-`Prélèvement (...) = <factor> x Belpex H <sign> <base>` via `_DYNAMIC_FORMULA_RE`
-(`_luminus_cards.py`). The sign character is
-matched from the shared `SIGN_CHARS` class and resolved with `parse_sign`
-(`_parse.py`), so a card that flips to a Unicode minus does not silently
-break polarity.
+Parses the ex-VAT formula `<label> = <factor> x Belpex H <sign> <base>` out of
+the block the card heads "Formule(s) tarifaire(s) pour le coût de l'énergie"
+(`_DYNAMIC_ENERGY_BLOCK_RE`, rows `_BELPEX_H_ROW_RE`, read by `_belpex_h_pair`,
+`_luminus_cards.py`). The rows are one per meter register in three spellings:
+a single `Prélèvement (Compteur mono-horaire et bi-horaire)` row since
+September 2025; `Compteur mono-horaire`, `Heures pleines (Compteur
+bi-horaire)` and `Heures creuses` in August 2025; `Jour (compteur de jour)`,
+`Jour (compteur de jour et de nuit)` and `et nuit` from January 2024 to July
+2025. Every row is read and a card whose rows disagree is refused, since a
+`DynamicRates` leg bills one formula on every meter; every card on file prints
+the same one on each register. Reading the later spelling alone left every card
+before September 2025 unparsed, so a contract signed on one billed each month's
+own card and those months stood in on the current one; their printed annual
+estimates reproduce at the Belpex H each expects for the year ahead
+(`test_dynamic_cards_before_september_2025_read_their_formulas`). The sign
+character is matched from the shared `SIGN_CHARS` class and resolved with
+`parse_sign` (`_parse.py`), so a card that flips to a Unicode minus does not
+silently break polarity.
 
 The PDF formula is `c€/kWh hors TVA = factor_pdf * Belpex_eur_mwh + base_cents`.
 The extractor converts to EUR/kWh against a EUR/kWh spot and applies the parsed
@@ -395,15 +407,16 @@ données s'élève à 18,56 € par an` footnote beside the table's 18,92. Fluvi
 billed every low-voltage metering regime one data-management fee since 2025,
 17,85 EUR a year excluding VAT in 2026 (18,92 with VAT), so the footnote kept
 2025's figure through 2026, and `_extract_flanders_dsos` (`_luminus_overlays.py`)
-bills the table on every card. Billing the footnote put a quarter-hourly
-household 0,36 EUR a year under. Before 2025 the quarter-hourly regime had a fee
-of its own and the footnote carried it (15,14 against the table's 13,95 in June
-2024), but no dynamic card of that time parses: its formula reads
-`Jour (compteur de jour) = ... x Belpex H`.
+bills the table on every card from 2025. Billing the footnote put a
+quarter-hourly household 0,36 EUR a year under. Before 2025 the quarter-hourly
+regime the dynamic contract needs had a fee of its own and the footnote carried
+it (15,14 against the table's monthly-regime 13,95 in June 2024), so a dynamic
+card whose label names an earlier year bills the footnote
+(`test_the_quarter_hour_data_fee_is_billed_while_fluvius_kept_it_apart`).
 `test_flanders_dynamic_dso_table_is_smaller_than_static`
-(`test_luminus.py`) pins it: Antwerpen data-management `18.92` on both the
-dynamic and the static card, and the dynamic prosumer is `None` while static is
-`54.63` (illustrative).
+(`test_luminus.py`) pins the 2026 case: Antwerpen data-management `18.92` on
+both the dynamic and the static card, and the dynamic prosumer is `None` while
+static is `54.63` (illustrative).
 
 ### Wallonia (`_extract_wallonia_dsos`, `_luminus_overlays.py`)
 
@@ -517,12 +530,15 @@ contract kind and by the card's indexation sentence:
   states it bills a period on whose quarter is not known at settlement, and one
   without on the printed figure. Read as printed before, every closed quarter was
   credited on the one before it, for good.
-- **dynamic -> hourly `factor*spot + base`.** `_INJECTION_FORMULA_RE`
-  (`_luminus_cards.py`) parses `Injection (...) = <factor> x Belpex H <sign>
-  <base>`. Residential injection is VAT-exempt, so **no VAT multiplier is
+- **dynamic -> hourly `factor*spot + base`.** `_DYNAMIC_INJECTION_BLOCK_RE`
+  (`_luminus_cards.py`) scopes the feed-in block, headed "pour la compensation
+  de", "pour" or "de l'énergie injectée" as the cards went, and
+  `_belpex_h_pair` reads its `<label> = <factor> x Belpex H <sign> <base>` rows
+  as for the energy (`Injection (...)` since September 2025, one per register
+  before). Residential injection is VAT-exempt, so **no VAT multiplier is
   applied** (`_luminus_cards.py`): `factor = factor_pdf * 10.0`, `base =
   base_pdf_cents / 100.0`. Contrast the consumption dynamic formula, which does
-  scale by VAT. The formula text is stored in `InjectionRates.formula`.
+  scale by VAT. The first row's text is stored in `InjectionRates.formula`.
 
 Illustrative: dynamic Wallonia injection `0,1019 x Belpex H - 1,2737` yields
 `factor == 1.019`, `base == -0.012737` (negative base preserved,
@@ -635,6 +651,9 @@ Under `tests/fixtures/`, exercised by `tests/test_luminus.py`:
 | `luminus_dynamic_w.pdf` | Dynamic, Wallonia | consumption + injection formula, taxes |
 | `luminus_dynamic_v.pdf` | Dynamic, Flanders | region-specific base, narrow SMR3 DSO table |
 | `luminus_dynamic_w_oct.pdf` | Dynamic, Wallonia, October 2026 | Impact columns printed PIC first |
+| `luminus_dynamic_v_2024-06.pdf` | Dynamic, Flanders, June 2024 | "Jour (compteur de jour)" rows, quarter-hour data fee footnote |
+| `luminus_dynamic_v_2025-06.pdf` | Dynamic, Flanders, June 2025 | formulas one row per register, "Jour (compteur de jour)" |
+| `luminus_dynamic_v_2025-08.pdf` | Dynamic, Flanders, August 2025 | formulas one row per register, "Compteur mono-horaire" |
 | `luminus_smartflex_w_oct.pdf` | SmartFlex (tou), Wallonia, October 2026 | four-figure row with Happy Sunday |
 | `luminus_smartflex_v_oct.pdf` | SmartFlex (tou), Flanders, October 2026 | four-figure row with Happy Sunday |
 | `luminus_comfyflex_w_oct.pdf` | ComfyFlex (variable), Wallonia, October 2026 | campaign gated by the product name |

@@ -48,6 +48,7 @@ from ._parse import (
     parse_vreg_network_ceiling,
     to_float,
 )
+from ._rates import TariffKind
 from .base import DsoOverlay, ExtractorError
 
 
@@ -215,7 +216,22 @@ def _extract_wallonia_renewables(text: str) -> float:
     return to_float(match.group(1)) / 100.0
 
 
-def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
+# The first year Fluvius billed every low-voltage metering regime one
+# data-management fee: 17,51 EUR a year excluding VAT, then 17,85 in 2026,
+# where 2024 charged the quarter-hourly regime 14,28 and the monthly or yearly
+# one 13,16.
+_ONE_DATA_FEE_FROM = 2025
+# The dynamic card's footnote on the quarter-hourly regime's fee: "(**) Pour
+# des regimes de mesure par quart d'heure, le tarif de gestion des donnees
+# s'eleve a 15,14 EUR par an".
+_QUARTER_HOUR_DATA_FEE_RE = re.compile(
+    r"quart d['’]heure[\s\S]{0,80}?gestion des donn[\s\S]{0,40}?([\d,]+)\s*€"
+)
+
+
+def _extract_flanders_dsos(
+    text: str, kind: TariffKind, year: int | None
+) -> dict[str, DsoOverlay]:
     """Read the Compteur digital columns from the Flanders DSO table.
 
     Static cards print 8 numbers per row (digital + classic + prosumer):
@@ -230,17 +246,21 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     Distribution already includes transport (same convention as Engie's
     Flanders rows).
 
-    The data-management fee is the table's on every card, the dynamic one's
-    included. Fluvius has billed every low-voltage metering regime one fee
-    since 2025, 17,85 EUR a year excluding VAT in 2026, which the table
-    prints, while the dynamic card's "(**) Pour des regimes de mesure par
-    quart d'heure" footnote kept 2025's 18,56 through 2026: billed, it put a
+    The data-management fee is the table's, which every low-voltage metering
+    regime has paid alike since 2025: 17,85 EUR a year excluding VAT in 2026.
+    The dynamic card's "(**) Pour des regimes de mesure par quart d'heure"
+    footnote kept 2025's 18,56 through 2026, and billed, it put a
     quarter-hourly household 0,36 EUR a year under. Before 2025 the
-    quarter-hourly regime had a fee of its own, which that footnote carried
-    (15,14 against the table's 13,95 in June 2024), but no dynamic card of
-    that time parses: its formula reads "Jour (compteur de jour) = ... x
-    Belpex H".
+    quarter-hourly regime the dynamic contract needs had a fee of its own,
+    which the footnote carried: 15,14 against the table's monthly-regime
+    13,95 on the June 2024 card. So a dynamic card of a ``year`` before 2025
+    bills the footnote.
     """
+    quarter_hour_fee: float | None = None
+    if kind == "dynamic" and year is not None and year < _ONE_DATA_FEE_FROM:
+        footnote = _QUARTER_HOUR_DATA_FEE_RE.search(text)
+        if footnote is not None:
+            quarter_hour_fee = to_float(footnote.group(1))
     out: dict[str, DsoOverlay] = {}
     # One VREG figure for the whole region, stated once in a footnote rather
     # than per area, so it goes on every Fluvius overlay this card produces.
@@ -257,7 +277,9 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
             distribution_single=nums[2] / 100.0,
             distribution_exclusive_night=nums[3] / 100.0,
             transport=0.0,
-            data_management_per_year=nums[0],
+            data_management_per_year=(
+                nums[0] if quarter_hour_fee is None else quarter_hour_fee
+            ),
             capacity_eur_per_kw_year=nums[1],
             prosumer_eur_per_kva_year=prosumer,
             network_ceiling_eur_per_kwh=ceiling,
