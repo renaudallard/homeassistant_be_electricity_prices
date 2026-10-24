@@ -123,7 +123,7 @@ the "Shown when" column gives the gate.
                                           │
                        _after_energy_key  ── custom? → async_step_custom_energy
                                           │
-                      bills_capacity? ────┼── yes → async_step_capacity
+          bills_capacity and not analog? ─┼── yes → async_step_capacity
                                           │              │
                           _before_solar  ◄──────────────┘
                                           │
@@ -438,8 +438,10 @@ Fields:
 Pre-fill: before rendering, `async_step_capacity` copies `self._data` and calls
 `_apply_energy_manager_capacity_default` (`flow_prefill.py`), which tries two
 sources in order. Only where the step is new to the entry: at install, or on an
-edit that moves a stored entry the step did not apply to (outside Flanders, or on
-an exclusive-night circuit) onto one it does (`_stored_data`, `flow_wizard.py`). A Flemish entry that cleared its sensor had it picked again
+edit that moves a stored entry the step did not apply to (outside Flanders, on an
+exclusive-night circuit, or on an analog meter, whose peak Fluvius cannot measure)
+onto one it does (`_stored_data`, `flow_wizard.py`): a household whose analog
+meter was replaced is offered the new meter's peak sensor as at install. A Flemish entry that cleared its sensor had it picked again
 on every later edit submitted as shown.
 
 First `_dsmr_monthly_peak_sensor` looks for the meter's own monthly peak: a

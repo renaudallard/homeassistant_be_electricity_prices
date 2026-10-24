@@ -734,3 +734,25 @@ async def test_the_backfill_bills_a_contract_on_its_own_meters_peak(
     assert live[2.5] is not None and live[5.0] is not None
     assert live[5.0] - live[2.5] > 10.0
     assert captured[-1]["sum"] == pytest.approx(live[2.5], abs=1e-3)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_leaving_an_analog_meter_offers_the_new_meters_peak(
+    hass: HomeAssistant,
+) -> None:
+    """An analog entry never met the capacity step, so once Fluvius replaces
+    the meter and the box is unticked the step is new to it and offers the
+    DSMR peak sensor, as at install: left blank, the entry is billed the 2,5 kW
+    minimum where the household's peak is higher."""
+    peak = _add_dsmr_monthly_peak(hass)
+    for meter in ("mono", "exclusive_night"):
+        entry = _flemish(meter, solar_regime="none", analog_meter=True)
+        entry.add_to_hass(hass)
+        steps = await _steps(
+            hass, entry, {"meter": {"meter": "mono", "analog_meter": False}}
+        )
+        assert f"offered {peak}" in steps, meter
+    # A digital entry that cleared its sensor keeps it cleared.
+    digital = _flemish("mono", solar_regime="none")
+    digital.add_to_hass(hass)
+    assert f"offered {peak}" not in await _steps(hass, digital, {})

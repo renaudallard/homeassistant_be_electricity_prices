@@ -580,10 +580,11 @@ class _WizardStepsMixin:
             return await self.async_step_solar()
         defaults = dict(self._data)
         # Only where the step is new to the entry: at install, or on a move
-        # into Flanders or off a night circuit. A household that cleared the
-        # sensor had it picked again on every later edit submitted as shown.
+        # into Flanders, off a night circuit or off an analog meter, which
+        # never met it. A household that cleared the sensor had it picked
+        # again on every later edit submitted as shown.
         stored = self._stored_data()
-        if stored is None or not bills_capacity(stored):
+        if stored is None or not bills_capacity(stored) or analog_meter(stored):
             await _apply_energy_manager_capacity_default(self.hass, defaults)
         return self.async_show_form(
             step_id="capacity", data_schema=_capacity_schema(defaults)
