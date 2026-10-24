@@ -34,8 +34,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_REGION, REGION_FLANDERS
 from .coordinator import BePricesCoordinator, supplier_device_info
+from .fees import bills_capacity
 
 _RESET_PEAK = ButtonEntityDescription(
     key="reset_monthly_peak",
@@ -51,18 +51,17 @@ async def async_setup_entry(
 ) -> None:
     """Create buttons for one config entry.
 
-    The reset-peak button only applies to Flemish entries: outside
-    Flanders the capacity tariff is not billed and ``_peak_kw`` is
-    forced to 0 every tick by ``_track_monthly_peak`` anyway, so a
-    user-facing reset would do nothing.
+    The reset-peak button only applies to an entry billed a capacity charge
+    of its own (``bills_capacity``): outside Flanders, and on an
+    exclusive-night circuit whose quarter-hours are billed with the main
+    meter's, ``_peak_kw`` is forced to 0 every tick by
+    ``_track_monthly_peak`` anyway, so a user-facing reset would do nothing.
     """
     coordinator: BePricesCoordinator = entry.runtime_data
     entities = (
-        [ResetMonthlyPeakButton(coordinator)]
-        if entry.data.get(CONF_REGION) == REGION_FLANDERS
-        else []
+        [ResetMonthlyPeakButton(coordinator)] if bills_capacity(entry.data) else []
     )
-    # Recorded even when empty: an entry outside Flanders intends no button,
+    # Recorded even when empty: an entry billed no capacity intends no button,
     # which is what lets a Flemish entry that moved lose its old one.
     coordinator.intended_unique_ids["button"] = {
         e.unique_id for e in entities if e.unique_id

@@ -435,8 +435,8 @@ All sensors share one device per config entry.
 
 | Sensor | Created when | Description |
 | --- | --- | --- |
-| `capacity_cost` | Region = Flanders | Current monthly capacity cost in EUR (`billed_peak_kw × DSO_capacity_rate / 12`). It is capped at the VREG network ceiling of the year, read off Fluvius's tariff sheet: capacity plus the per-kWh network term never costs more than that ceiling times your yearly volume, though the capacity charge never drops below its 2.5 kW minimum. `billed_peak_kw` is the mean of your last twelve monthly peaks, each floored at 2.5 kW first, which is what Fluvius charges on, so this stays steady through the year rather than tracking whichever month you are in. This charge also accrues into `current_year_cost`, so the two are consistent rather than the capacity term being invisible in the running bill. Carries `billed_peak_kw` and `months_counted` attributes; `months_counted` reaches 12 after a full year of history, and until then the mean covers only the months measured so far. With a fixed peak, `billed_peak_kw` is the value you entered (at least 2.5 kW) and `months_counted` reads 0, since no mean is taken. |
-| `monthly_peak_kw` | Region = Flanders | Running monthly peak power in kW (resets the 1st), reported as measured, so it reads 0 with a fixed peak, which measures nothing and adds no month to the history. The months measured before stay, and count again when you return to the sensor. Version 0.28.5 and earlier banked the fixed value into each month as if measured; the first start after upgrading drops the months holding exactly your fixed value. If you changed the fixed value since, the months at the older one stay: press **Reset monthly peak** once to clear them. The 2.5 kW regulated minimum is a billing rule and is applied to `capacity_cost` instead, so a quiet household now reads its true peak here rather than 2.5. State class is `MEASUREMENT` (mandated by HA for the POWER device class), so the long-term-statistics graph defaults to the **mean** aggregation. To see the true monthly peaks, switch the statistic-graph card to **Max** under Developer Tools → Statistics. The month's last day gets one more reading a minute before midnight, so a peak set in its final hour is still banked. A diagnostic **Reset monthly peak** button on the device page drops the rolling max so the next tick rebuilds it, and clears the monthly peaks banked so far, so the twelve-month mean behind `capacity_cost` starts over (use after a misconfigured sensor inflated the peak). |
+| `capacity_cost` | Region = Flanders, not on an exclusive-night circuit | Current monthly capacity cost in EUR (`billed_peak_kw × DSO_capacity_rate / 12`). It is capped at the VREG network ceiling of the year, read off Fluvius's tariff sheet: capacity plus the per-kWh network term never costs more than that ceiling times your yearly volume, though the capacity charge never drops below its 2.5 kW minimum. `billed_peak_kw` is the mean of your last twelve monthly peaks, each floored at 2.5 kW first, which is what Fluvius charges on, so this stays steady through the year rather than tracking whichever month you are in. This charge also accrues into `current_year_cost`, so the two are consistent rather than the capacity term being invisible in the running bill. Carries `billed_peak_kw` and `months_counted` attributes; `months_counted` reaches 12 after a full year of history, and until then the mean covers only the months measured so far. With a fixed peak, `billed_peak_kw` is the value you entered (at least 2.5 kW) and `months_counted` reads 0, since no mean is taken. |
+| `monthly_peak_kw` | Region = Flanders, not on an exclusive-night circuit | Running monthly peak power in kW (resets the 1st), reported as measured, so it reads 0 with a fixed peak, which measures nothing and adds no month to the history. The months measured before stay, and count again when you return to the sensor. Version 0.28.5 and earlier banked the fixed value into each month as if measured; the first start after upgrading drops the months holding exactly your fixed value. If you changed the fixed value since, the months at the older one stay: press **Reset monthly peak** once to clear them. The 2.5 kW regulated minimum is a billing rule and is applied to `capacity_cost` instead, so a quiet household now reads its true peak here rather than 2.5. State class is `MEASUREMENT` (mandated by HA for the POWER device class), so the long-term-statistics graph defaults to the **mean** aggregation. To see the true monthly peaks, switch the statistic-graph card to **Max** under Developer Tools → Statistics. The month's last day gets one more reading a minute before midnight, so a peak set in its final hour is still banked. A diagnostic **Reset monthly peak** button on the device page drops the rolling max so the next tick rebuilds it, and clears the monthly peaks banked so far, so the twelve-month mean behind `capacity_cost` starts over (use after a misconfigured sensor inflated the peak). |
 | `prosumer_cost` | Wallonia, compensation regime + `solar_kva > 0` | Monthly compensation fee in EUR (`solar_kva × (DSO_prosumer_rate + supplier_forfait) / 12`). Most suppliers bill only the regulated DSO rate; Cociter Tarif Variable and Variable Trihoraire, Mega and OCTA+ add a supplier-side PV forfait (already TVAC) on top. Only valid for Walloon installations certified before 2024-01-01; ends 2030-12-31. |
 | `price_peak` / `price_offpeak` | Bi-hourly meter, or digital (smart) meter on a fixed, variable or monthly-indexed card | The contract's **constant** day and night all-in rates, both readable at once. `current_price` follows the clock and holds whichever band applies now, which the Home Assistant energy dashboard cannot use: configuring a grid source with two tariffs asks for one price entity per tariff, permanently. These are those two. A card priced on the month's index has one rate per band for the whole month, so these show it at the month's mean. Unavailable on a contract with no constant band rate, which is every dynamic and time-of-use one. Not created on the Walloon *Tarif Impact* DSO tariff, whose distribution follows the CWaPE bands and has no day or night rate, except on an *Expert: custom formula* entry. |
 | `injection_price_peak` / `injection_price_offpeak` | Bi-hourly or dynamic (smart) meter, injection regime | The feed-in credit of each register. A card that prints a day and a night injection rate (Trevion Groene Energie Vast, the Engie and Luminus social tariff cards) gives each its own, on the delivery month's index where the card gives a formula per register; every other card credits both registers on one formula or rate, so both show the current credit, the same figure as `injection_price`, which is what lets the Energy dashboard price each return register off its own sensor. Both or neither: a card carrying only one of the pair is read as having none. |
@@ -612,7 +612,9 @@ dropped rather than billed on the new card.
    previous month's (or on Bolt and ComfyFlex the previous quarter's), until the next card
    settles the closed month or quarter where the supplier prints the index
    it closed at.
-9. **Capacity tariff peak source** *(Flanders only)* — a sensor, or a fixed
+9. **Capacity tariff peak source** *(Flanders only, not asked on an
+   exclusive-night circuit, whose peak is billed on the main entry: see
+   [Exclusive-night meter circuit](#exclusive-night-meter-circuit))* — a sensor, or a fixed
    kW value (default the VREG regulated minimum, 2.5 kW, read off Fluvius's
    tariff sheet like the network ceiling). Leaving it at that
    default when your real peak is higher understates the bill by the
@@ -838,7 +840,8 @@ opens a menu of four options, five once a supplier switch has been recorded this
   picking the new tariff card on the next refresh. A sensor your new
   settings no longer create (the EV rate after unticking its box, the band
   sensors after leaving a bi-hourly meter, the capacity sensors after leaving
-  Flanders) is removed rather than left unavailable; its history stays.
+  Flanders or moving to an exclusive-night circuit) is removed rather than left
+  unavailable; its history stays.
   Turning the setting back on creates it afresh, under its default entity
   ID, name and area, so a rename or area you gave it has to be set again.
 - **Record a supplier switch** — for a household that changed supplier
@@ -1102,7 +1105,7 @@ back a contract you left before the year began.
   three hours later rather than on the next tick, and the missing hours
   forfeit only their energy term until it fills. See
   [docs/data-sources.md](./docs/data-sources.md).
-- **Monthly capacity peak** *(Flanders)* — tracked continuously, resets on the 1st of each local month.
+- **Monthly capacity peak** *(Flanders, not on an exclusive-night circuit)* — tracked continuously, resets on the 1st of each local month.
 - **`current_year_cost`** — recomputed every coordinator tick from HA's
   recorder; no in-process counters that could drift across restarts. Past
   days come from the recorder's long-term statistics: daily statistics on
@@ -1777,8 +1780,17 @@ saying the night circuit is being billed at the day distribution rate,
 since no figure can be substituted for a column the supplier does not
 print. The supplier's own exclusive-night *energy* rate still applies; it
 is only the network leg that cannot be resolved. The primary entry keeps
-your day-circuit consumption on mono / bi / dynamic; YTD and capacity
-tracking work normally on both entries.
+your day-circuit consumption on mono / bi / dynamic, and YTD works normally
+on both entries.
+
+The capacity tariff is billed on the primary entry only. Fluvius bills a
+household with an exclusive-night meter one monthly peak: not the sum of the
+two meters' own peaks, but the highest sum of their quarter-hour peaks in the
+same quarter-hour. So the night entry asks for no peak sensor and bills no
+`capacity_cost`, and the primary entry's peak source stands for the whole
+household: a sensor adding both meters' quarter-hour demand gives the figure
+Fluvius bills, while the main meter's own *Maximum demand current month*
+leaves out whatever the night circuit drew in that quarter-hour.
 
 ## Development
 

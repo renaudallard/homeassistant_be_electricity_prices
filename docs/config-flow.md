@@ -74,7 +74,7 @@ the "Shown when" column gives the gate.
 | `dso_tariff_mode` | `async_step_dso_tariff_mode` (`flow_wizard.py`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia AND the contract is not `tou_impact` (`flow_wizard.py`) |
 | `api_key` | `async_step_api_key` (`flow_wizard.py`) | ENTSO-E token, or the keyless box (one of the two required) | `CONF_API_KEY`, `CONF_KEYLESS_SPOTS` | Contract kind == `dynamic` or `spot_monthly` (both are spot-indexed) |
 | `custom_energy` | `async_step_custom_energy` | Commodity formula (mode-dependent fields) | `CONF_CUSTOM_ENERGY_*`, `CONF_CUSTOM_YEARLY_FIXED_FEE` | Custom supplier only, after the energy/api-key step. The peak / off-peak energy boxes carry **no default** (`_add_custom_num(..., fallback=True)`): the pricing engine falls back to the single rate when they are absent, and a `vol.Optional` default is submitted verbatim when the user leaves the box alone, which wrote 0,00 into the entry and billed zero. They are shown for **both** `bi` and `dynamic` meters, matching `bi_capable` in `pricing.py`; gating on `bi` alone billed a fixed contract on a smart meter at the single rate for all 24 hours. A blanked box is popped (`_drop_blanked`), and each of the two steps pops only its own keys (`_CUSTOM_ENERGY_FALLBACK_KEYS` here, `_CUSTOM_DSO_FALLBACK_KEYS` on `custom_dso`), shown or not: popping every absent key from both made `custom_dso` throw away the energy split this step had just stored, so a bi-hourly card billed its single rate every hour |
-| `capacity` | `async_step_capacity` (`flow_wizard.py`) | Peak source (sensor/fixed) + value | `CONF_CAPACITY_MODE`, `CONF_CAPACITY_PEAK_SENSOR`, `CONF_CAPACITY_FIXED_KW` | Region == Flanders (`flow_wizard.py`) |
+| `capacity` | `async_step_capacity` (`flow_wizard.py`) | Peak source (sensor/fixed) + value | `CONF_CAPACITY_MODE`, `CONF_CAPACITY_PEAK_SENSOR`, `CONF_CAPACITY_FIXED_KW` | Region == Flanders and the meter is not an exclusive-night circuit (`bills_capacity`, `fees.py`): Fluvius bills that circuit's quarter-hours with the main meter's, on the main entry, so the night entry has no peak to give and is not offered the household's DSMR peak sensor. Its stored answers are left as they are and read by nothing |
 | `connection_power` | `async_step_connection_power` (`flow_wizard.py`) | Brussels connection-power tier | `CONF_CONNECTION_KVA_TIER` | Region == Brussels (`flow_wizard.py`) |
 | `solar` | `async_step_solar` (`flow_wizard.py`) | Inverter kVA + regime | `CONF_SOLAR_KVA`, `CONF_SOLAR_REGIME` | Always |
 | `injection_api_key` | `async_step_injection_api_key` (`flow_wizard.py`) | ENTSO-E token or the keyless box (both optional) | `CONF_API_KEY`, `CONF_KEYLESS_SPOTS` | `_needs_optional_api_key` true (`flow_wizard.py`) |
@@ -123,7 +123,7 @@ the "Shown when" column gives the gate.
                                           │
                        _after_energy_key  ── custom? → async_step_custom_energy
                                           │
-                     region == flanders? ─┼── yes → async_step_capacity
+                      bills_capacity? ────┼── yes → async_step_capacity
                                           │              │
                           _before_solar  ◄──────────────┘
                                           │
@@ -405,7 +405,11 @@ two error strings map to `config.error.invalid_api_key` /
 ### `capacity`: Flanders capacity-tariff peak source
 
 Schema `_capacity_schema` (`flow_schemas_meters.py`). Reached from `_after_api_key` or
-`_after_dso_tariff_mode` when region is Flanders (`flow_wizard.py`).
+`_after_dso_tariff_mode` when `bills_capacity` (`fees.py`) holds: a Flemish entry
+whose meter is not an exclusive-night circuit (`flow_wizard.py`). Fluvius bills a
+household with an exclusive-night meter one monthly peak, the highest
+simultaneous sum of both meters' quarter-hour peaks, so the main entry carries it
+and the night entry is billed none.
 Fields:
 
 - `CONF_CAPACITY_MODE`: `sensor` (default) or `fixed`, `translation_key="capacity_mode"`.
@@ -424,8 +428,8 @@ Fields:
 Pre-fill: before rendering, `async_step_capacity` copies `self._data` and calls
 `_apply_energy_manager_capacity_default` (`flow_prefill.py`), which tries two
 sources in order. Only where the step is new to the entry: at install, or on an
-edit that moves a stored non-Flemish entry into Flanders (`_stored_data`,
-`flow_wizard.py`). A Flemish entry that cleared its sensor had it picked again
+edit that moves a stored entry the step did not apply to (outside Flanders, or on
+an exclusive-night circuit) onto one it does (`_stored_data`, `flow_wizard.py`). A Flemish entry that cleared its sensor had it picked again
 on every later edit submitted as shown.
 
 First `_dsmr_monthly_peak_sensor` looks for the meter's own monthly peak: a
@@ -610,7 +614,7 @@ Anything pre-filled stays editable (`strings.json`).
 | Supplier has no contract in region -> form error `supplier_region_unavailable` on the supplier field | `flow_contracts.py` (`_region_mismatch_error`) | Judged on the step where both are picked, so the options flow keeps every other edit |
 | Dynamic/TOU/Impact contract forces `METER_DYNAMIC` | `flow_schemas.py` | Smart meter required; mixing bi-horaire network with TOU energy mis-bills |
 | `dso_tariff_mode` (incl. Impact) only in Wallonia | `flow_wizard.py` | Impact is CWaPE-only; other regions bill differently |
-| `capacity` step only in Flanders | `flow_wizard.py` | Only Flanders has the capaciteitstarief |
+| `capacity` step only in Flanders, never on an exclusive-night circuit | `flow_wizard.py` | Only Flanders has the capaciteitstarief, and Fluvius bills a night circuit's quarter-hours with the main meter's |
 | `connection_power` step only in Brussels | `flow_wizard.py` | Only Brussels charges the Brugel OSP fee |
 | Compensation regime only in Wallonia | `flow_schemas.py` | Avoids double-counting the Flemish capacity tariff |
 | Peak sensor restricted to power/apparent_power | `flow_schemas.py` | Issue #19: a kWh sensor would inflate the capacity bill |

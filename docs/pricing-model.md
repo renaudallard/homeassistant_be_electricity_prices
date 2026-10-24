@@ -1608,7 +1608,18 @@ Returns `0.0` when the entry lost its `CONF_DSO` key, the overlay is missing, or
 meters publish it, other regions leave it `None`.
 
 `peak_kw` is the *billed* quantity, resolved by `_billed_peak_kw`, and applies
-only in Flanders; outside Flanders the peak is reset to `0.0`.
+only to a connection `bills_capacity` (`fees.py`) says is charged on its own:
+outside Flanders, and on an exclusive-night circuit, the peak is reset to `0.0`
+and `_billed_peak_kw` answers `0.0`. Fluvius bills a household with an
+exclusive-night meter one monthly peak, the highest simultaneous sum of both
+meters' quarter-hour peaks ("Jouw maandpiek is niet de som van deze twee
+getallen ... De hoogste som van die twee kwartierpieken, dat is de maandpiek die
+wij je zullen aanrekenen"). The night circuit is a second entry beside the main
+one, so the main entry carries the charge and the night entry none: every path
+multiplies the billed peak, so a zero there keeps the live sensor, the
+year-to-date walk, the backfill and the comparison page alike from charging the
+household twice. The decision is the connection's, read off the entry and never
+off a comparison proxy, so a what-if meter does not move it.
 
 Fluvius bills the "gemiddelde maandpiek": the mean of the last twelve monthly
 peaks, where one monthly peak is the highest quarter-hour offtake of that month

@@ -91,7 +91,7 @@ from .creg_ev import (
     rate_for as ev_rate_for,
 )
 from .excise_law import ensure_excise_law
-from .fees import _compute_capacity, _compute_prosumer
+from .fees import _compute_capacity, _compute_prosumer, bills_capacity
 from .fluvius import ensure_tariff_sheet
 from .injection import (
     _compute_injection_price,
@@ -367,7 +367,7 @@ class _TickMixin:
 
         capacity_cost = 0.0
         billed_peak = 0.0
-        if self.entry.data.get(CONF_REGION) == REGION_FLANDERS:
+        if bills_capacity(self.entry.data):
             billed_peak = self._billed_peak_kw()
             capacity_cost = _compute_capacity(self._snapshot, self.entry, billed_peak)
 

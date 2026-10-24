@@ -47,7 +47,7 @@
       },
       "meter": {
         "title": "Zählertyp",
-        "description": "Eintarifzähler (mono), Doppeltarifzähler (Tag/Nacht), oder intelligenter Zähler für dynamische Verträge. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet.",
+        "description": "Eintarifzähler (mono), Doppeltarifzähler (Tag/Nacht), oder intelligenter Zähler für dynamische Verträge. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet, in Flandern ohne Kapazitätstarif: Fluvius berechnet dem Haushalt eine einzige Monatsspitze, auf dem Haupteintrag.",
         "data": {
           "meter": "Zähler",
           "day_hours": "Stunden des Tagtarifs"
@@ -401,7 +401,7 @@
       },
       "meter": {
         "title": "Zählertyp",
-        "description": "Eintarifzähler (mono), Doppeltarifzähler (Tag/Nacht), oder intelligenter Zähler für dynamische Verträge. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet.",
+        "description": "Eintarifzähler (mono), Doppeltarifzähler (Tag/Nacht), oder intelligenter Zähler für dynamische Verträge. Der Exklusiv-Nachtkreis ist nur für einen zweiten Eintrag für einen separaten, nur nachts zählenden Zähler gedacht: hier gewählt, wird der ganze Eintrag zum Nachttarif abgerechnet, in Flandern ohne Kapazitätstarif: Fluvius berechnet dem Haushalt eine einzige Monatsspitze, auf dem Haupteintrag.",
         "data": {
           "meter": "Zähler",
           "day_hours": "Stunden des Tagtarifs"

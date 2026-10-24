@@ -48,7 +48,8 @@ where they apply:
                         the month mean); an unreachable ENTSO-E offers
                         api_key_recheck or api_key_unverified
   [custom_energy]    -> the expert custom supplier's energy formula
-  [capacity]         -> Flemish capacity peak source
+  [capacity]         -> Flemish capacity peak source, not on an exclusive-night
+                        circuit (its peak is billed on the main entry)
   [connection_power] -> Brussels connection power
   solar              -> solar regime and inverter power
   [injection_api_key] -> optional ENTSO-E key for an index-linked leg the

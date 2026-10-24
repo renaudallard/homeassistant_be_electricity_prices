@@ -75,6 +75,7 @@ machinery.
 | `tests/test_excise_law.py` | The federal excise read from article 419 on Justel (`excise_law.py`), the household schedule read from its archived copy, started after the transition its law fixed and billed on a card standing in for one of its months, their store round trip, and `resolve_federal_excise` billing the law |
 | `tests/test_brugel.py` | Brugel's published Sibelga power term (`brugel.py`) and the card it completes |
 | `tests/test_fluvius.py` | The VREG network ceiling and capacity floor read off Fluvius's yearly tariff sheet (`fluvius.py`), on two real workbooks, and the restart that has to put the ceiling back on a stored card |
+| `tests/test_capacity_meters.py` | The Flemish capacity charge per meter (`bills_capacity`, `fees.py`): none of its own on an exclusive-night circuit, whose quarter-hours Fluvius bills with the main meter's, so no peak tracked, no capacity sensors or reset button, and no capacity step in the flow |
 | `tests/test_creg_ev.py` | The CREG home charging reimbursement rate and the sensor that carries it |
 | `tests/test_synergrid_rlp.py` | Synergrid RLP profile fetch and parse (the `.xlsb` workbook) and the RLP-weighted month mean |
 | `tests/test_synergrid_spp.py` | Synergrid SPP profile fetch and parse and the SPP-weighted custom injection |

@@ -47,7 +47,7 @@
       },
       "meter": {
         "title": "Type de compteur",
-        "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique. Le circuit exclusif nuit ne sert qu'à une seconde entrée couvrant un compteur séparé qui ne compte que la nuit : choisi ici, il facture toute l'entrée au tarif de nuit.",
+        "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique. Le circuit exclusif nuit ne sert qu'à une seconde entrée couvrant un compteur séparé qui ne compte que la nuit : choisi ici, il facture toute l'entrée au tarif de nuit, et en Flandre sans tarif capacitaire : Fluvius facture au ménage un seul pic mensuel, sur l'entrée principale.",
         "data": {
           "meter": "Compteur",
           "day_hours": "Heures du tarif jour"
@@ -401,7 +401,7 @@
       },
       "meter": {
         "title": "Type de compteur",
-        "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique. Le circuit exclusif nuit ne sert qu'à une seconde entrée couvrant un compteur séparé qui ne compte que la nuit : choisi ici, il facture toute l'entrée au tarif de nuit.",
+        "description": "Compteur simple (mono), compteur bi-horaire (jour/nuit), ou compteur intelligent pour contrat dynamique. Le circuit exclusif nuit ne sert qu'à une seconde entrée couvrant un compteur séparé qui ne compte que la nuit : choisi ici, il facture toute l'entrée au tarif de nuit, et en Flandre sans tarif capacitaire : Fluvius facture au ménage un seul pic mensuel, sur l'entrée principale.",
         "data": {
           "meter": "Compteur",
           "day_hours": "Heures du tarif jour"

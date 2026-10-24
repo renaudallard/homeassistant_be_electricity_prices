@@ -66,7 +66,6 @@ from .const import (
     ENERGY_CHARTS_ATTRIBUTION,
     METER_BI,
     METER_DYNAMIC,
-    REGION_FLANDERS,
     REGION_WALLONIA,
     SMARD_ATTRIBUTION,
     SMART_METER_CONTRACT_KINDS,
@@ -79,6 +78,7 @@ from .coordinator import (
     supplier_device_info,
 )
 from .coordinator_data import CoordinatorData
+from .fees import bills_capacity
 from .flow_contracts import _contract_kind, _ranking_candidates
 from .sensor_values import (
     _current_field,
@@ -433,7 +433,9 @@ async def async_setup_entry(
     )
     if two_bands and not impact:
         descriptions.extend(BI_HOURLY_SENSORS)
-    if entry.data.get(CONF_REGION) == REGION_FLANDERS:
+    # The capacity sensors follow the charge: a Flemish connection billed one
+    # of its own, which an exclusive-night circuit is not (bills_capacity).
+    if bills_capacity(entry.data):
         descriptions.extend(CAPACITY_SENSORS)
     try:
         solar_kva = float(entry.data.get(CONF_SOLAR_KVA, 0.0))

@@ -53,7 +53,9 @@ from .const import (
     DEFAULT_CONNECTION_KVA_TIER,
     DSO_MODE_IMPACT,
     MAX_QUOTED_WELCOME_WAIT_MONTHS,
+    METER_EXCLUSIVE_NIGHT,
     METER_MONO,
+    REGION_FLANDERS,
     REGION_WALLONIA,
     SOLAR_REGIME_COMPENSATION,
     WELCOME_CREDIT_ANNIVERSARY,
@@ -71,6 +73,31 @@ from .providers.base import (
 from .snapshot_resolve import entry_annual_kwh
 
 
+def bills_capacity(data: Mapping[str, Any]) -> bool:
+    """Whether the connection this entry describes is billed a capacity charge
+    of its own.
+
+    Every Flemish meter is, except a digital exclusive-night one. Fluvius bills
+    a household with an exclusive-night meter ONE monthly peak: "Jouw maandpiek
+    is niet de som van deze twee getallen. Voor het berekenen van jouw
+    maandpiek tellen we je gelijktijdige kwartierpiek (van je exclusief
+    nachtmeter en je standaard meter) samen. De hoogste som van die twee
+    kwartierpieken, dat is de maandpiek die wij je zullen aanrekenen." The
+    night circuit is set up as a second entry beside the main one, so the main
+    entry carries the household's charge and this one none: billing both
+    charged the household twice, a full charge on the night entry with the
+    peak sensor the capacity step offered it, and the 2,5 kW minimum without.
+
+    Asked of the entry's own data, never of a comparison proxy's: the charge
+    belongs to the connection, so a what-if meter does not move it. The quote
+    paths take it through the billed peak instead, which ``_billed_peak_kw``
+    sets to 0.0 wherever this is False.
+    """
+    if data.get(CONF_REGION) != REGION_FLANDERS:
+        return False
+    return data.get(CONF_METER) != METER_EXCLUSIVE_NIGHT
+
+
 def _capacity_monthly_eur(overlay: DsoOverlay | None, peak_kw: float) -> float:
     """One month of the Flemish capacity charge, or 0.0 when it isn't billed.
 
@@ -83,7 +110,8 @@ def _capacity_monthly_eur(overlay: DsoOverlay | None, peak_kw: float) -> float:
     backfill's per-hour accrual. ``_annual_static_fees`` is shared across the
     same three for the same reason; capacity is the fee that was left out of
     it, so it drifted here instead. Deliberately region-agnostic: each caller
-    keeps its own Flanders gate.
+    keeps its own Flanders gate, and the peak it passes is 0.0 on a connection
+    :func:`bills_capacity` bills nothing.
     """
     if overlay is None or overlay.capacity_eur_per_kw_year is None:
         return 0.0

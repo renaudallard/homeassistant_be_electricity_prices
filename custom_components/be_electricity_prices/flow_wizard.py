@@ -69,7 +69,7 @@ from .const import (
     SPOT_PRICED_CONTRACT_KINDS,
     SUPPLIER_CUSTOM,
 )
-from .fees import compensation_lacks_kva
+from .fees import bills_capacity, compensation_lacks_kva
 from .flow_contracts import (
     _contract_has_spot_injection,
     _contract_is_month_indexed,
@@ -575,10 +575,10 @@ class _WizardStepsMixin:
             return await self.async_step_solar()
         defaults = dict(self._data)
         # Only where the step is new to the entry: at install, or on a move
-        # into Flanders. A household that cleared the sensor had it picked
-        # again on every later edit submitted as shown.
+        # into Flanders or off a night circuit. A household that cleared the
+        # sensor had it picked again on every later edit submitted as shown.
         stored = self._stored_data()
-        if stored is None or stored.get(CONF_REGION) != REGION_FLANDERS:
+        if stored is None or not bills_capacity(stored):
             await _apply_energy_manager_capacity_default(self.hass, defaults)
         return self.async_show_form(
             step_id="capacity", data_schema=_capacity_schema(defaults)
@@ -807,7 +807,10 @@ class _WizardStepsMixin:
         return await self._after_energy_collected()
 
     async def _after_energy_collected(self) -> ConfigFlowResult:
-        if self._data[CONF_REGION] == REGION_FLANDERS:
+        # Not on an exclusive-night circuit: its quarter-hours are billed with
+        # the main meter's, on the main entry, so there is no peak to ask for
+        # here and the household's DSMR peak sensor must not be offered again.
+        if bills_capacity(self._data):
             return await self.async_step_capacity()
         return await self._before_solar()
 

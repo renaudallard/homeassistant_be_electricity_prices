@@ -49,9 +49,8 @@ from .const import (
     CONF_CAPACITY_FIXED_KW,
     CONF_CAPACITY_MODE,
     CONF_CAPACITY_PEAK_SENSOR,
-    CONF_REGION,
-    REGION_FLANDERS,
 )
+from .fees import bills_capacity
 from .fluvius import capacity_floor_kw
 from .providers.base import SupplierSnapshot
 
@@ -105,13 +104,15 @@ class _PeakMixin:
         await self.async_request_refresh()
 
     async def _track_monthly_peak(self) -> None:
-        if self.entry.data.get(CONF_REGION) != REGION_FLANDERS:
-            # Outside Flanders the capacity tariff doesn't apply. Reset
-            # any peak left over from a previous Flanders config so it
-            # doesn't linger in diagnostics or the persistent store. The
-            # banked window goes too, or moving back to Flanders later would
-            # resume billing on year-old peaks from the previous address;
-            # Fluvius likewise restarts the window when the grid user changes.
+        if not bills_capacity(self.entry.data):
+            # Outside Flanders the capacity tariff doesn't apply, and an
+            # exclusive-night circuit's quarter-hours are billed with the main
+            # meter's, on that entry. Reset any peak left over from a previous
+            # config so it doesn't linger in diagnostics or the persistent
+            # store. The banked window goes too, or moving back to Flanders
+            # later would resume billing on year-old peaks from the previous
+            # address; Fluvius likewise restarts the window when the grid user
+            # changes.
             self._peak_kw = 0.0
             self._peak_month = None
             self._peak_history.clear()
@@ -247,7 +248,14 @@ class _PeakMixin:
         bypasses the window entirely: the user is stating a peak, not
         measuring one, so it is read off the entry, which also makes a change
         to it count from the next tick.
+
+        0.0 on a connection billed no charge of its own (``bills_capacity``),
+        whatever is stored: every path pricing the charge multiplies this, so
+        a night circuit's entry, whose quarter-hours Fluvius bills with the
+        main meter's, is charged nothing on any of them.
         """
+        if not bills_capacity(self.entry.data):
+            return 0.0
         floor = capacity_floor_kw()
         if self.entry.data.get(CONF_CAPACITY_MODE) == CAPACITY_MODE_FIXED:
             fixed = self.entry.data.get(CONF_CAPACITY_FIXED_KW, floor)

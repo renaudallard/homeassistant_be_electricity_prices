@@ -47,7 +47,7 @@
       },
       "meter": {
         "title": "Meter type",
-        "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts. The exclusive-night circuit is only for a second entry covering a separate night-only meter: chosen here, it bills the whole entry at the night rate.",
+        "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts. The exclusive-night circuit is only for a second entry covering a separate night-only meter: chosen here, it bills the whole entry at the night rate, and in Flanders no capacity tariff: Fluvius bills the household one monthly peak, on the main entry.",
         "data": {
           "meter": "Meter",
           "day_hours": "Day tariff hours"
@@ -401,7 +401,7 @@
       },
       "meter": {
         "title": "Meter type",
-        "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts. The exclusive-night circuit is only for a second entry covering a separate night-only meter: chosen here, it bills the whole entry at the night rate.",
+        "description": "Single-rate meter (mono), dual-time meter (peak/off-peak), or smart meter for dynamic contracts. The exclusive-night circuit is only for a second entry covering a separate night-only meter: chosen here, it bills the whole entry at the night rate, and in Flanders no capacity tariff: Fluvius bills the household one monthly peak, on the main entry.",
         "data": {
           "meter": "Meter",
           "day_hours": "Day tariff hours"
