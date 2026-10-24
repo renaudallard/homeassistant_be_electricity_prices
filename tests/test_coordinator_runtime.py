@@ -5613,10 +5613,13 @@ async def _tick_with_credits(
     start: str,
     credits: dict[tuple[Any, Any], float],
     regime: str = "none",
+    eligible: dict[tuple[Any, Any], float] | None = None,
 ) -> tuple[Any, list[tuple[Any, Any]]]:
     """A tick whose bill over each window costs 100 EUR less that window's
     welcome credit in ``credits``, keyed on its (window start override, window
-    end), and the windows it was asked for, on an entry on solar ``regime``."""
+    end), and the windows it was asked for, on an entry on solar ``regime``.
+    ``eligible`` is what each window charged for the components the credit
+    may come off."""
     from custom_components.be_electricity_prices.cohort import _CohortLegs
     from custom_components.be_electricity_prices.providers._rates import FixedRates
 
@@ -5641,6 +5644,8 @@ async def _tick_with_credits(
         asked.append(window)
         if breakdown is not None:
             breakdown["welcome_credit_eur"] = credits[window]
+            if eligible is not None:
+                breakdown["welcome_credit_eligible_eur"] = eligible[window]
         return 100.0 - credits[window]
 
     with (
@@ -5674,17 +5679,20 @@ async def test_a_months_welcome_credit_is_the_years_less_the_year_before_it(
     signed on 10 July took 0,77 EUR less over July to September than its year,
     and the months stopped adding up to it."""
     freezer.move_to("2026-09-20 12:00:00+02:00")
-    year, month, before = (
-        (None, None),
-        (date(2026, 9, 1), None),
-        (None, date(2026, 8, 31)),
-    )
+    year, month = (None, None), (date(2026, 9, 1), None)
     data, asked = await _tick_with_credits(
-        hass, "2026-07-10", {year: 50.0, month: 2.0, before: 36.3}
+        hass,
+        "2026-07-10",
+        {year: 50.0, month: 2.0},
+        eligible={year: 245.0, month: 2.0},
     )
-    assert before in asked
-    # The month's bill before its own credit, less its share of the year's.
-    assert data.current_month_cost_eur == pytest.approx(100.0 - (50.0 - 36.3))
+    # Priced off the two walks, with no third over the days before the month.
+    assert asked == [year, month]
+    # 10 July to 31 August is 53 credited days of the 250 EUR, under the 243
+    # EUR those 243 days charged: 36,30 EUR reached before September.
+    assert data.current_month_cost_eur == pytest.approx(
+        100.0 - (50.0 - 250.0 * 53 / 365)
+    )
 
 
 async def test_a_compensation_month_keeps_its_own_welcome_credit(

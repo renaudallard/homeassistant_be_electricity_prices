@@ -503,14 +503,16 @@ not priced on the month's own window. Capped on what the month charged, a month
 whose charges fell under its share took less than the year does over the same
 days, and a percentage credit was valued on the month's own energy rate, so the
 months and the year parted by up to about a euro. The tick takes the year's
-credit to date less the year's to the day before the month instead, which needs
-a third pass over those earlier days (`window_end`), walked only where the
-credit can have reached them (`credit_accrued_before`, `coordinator_costs.py`):
-a pro-rata credit whose first year began before the month, or a lump paid in
-those days. Under compensation the month keeps the credit of its own netted
-window: a per-kWh credit is valued on the window's net share, which a summer of
-export pulls down, so the year's share of it came out negative in July and
-August.
+credit to date less the year's to the day before the month instead
+(`credit_before_month`, `coordinator_costs.py`). Those earlier days are not
+walked again: the year's walk and the month's both leave sums over their own
+days, so the year's figures less the month's are the earlier days', and the
+credit is priced on them (`window_welcome_credit`, `ytd_cost.py`). A lump paid
+in those days is the year's own. A third walk over them cost about a year's
+walk on every tick. Under compensation the month keeps the credit of its own
+netted window: a per-kWh credit is valued on the window's net share, which a
+summer of export pulls down, so the year's share of it came out negative in
+July and August.
 
 ### `monthly_peak_kw`: why MEASUREMENT
 

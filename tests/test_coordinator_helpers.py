@@ -14205,22 +14205,24 @@ def test_every_windowed_caller_credits_on_a_year_not_its_window() -> None:
     ``first_year_net_kwh`` can be perfect and a caller still hand
     ``_welcome_credit_eur`` its own window's volume, which is the defect it
     exists to fix and which no test of the helper alone can see. Three
-    windowed callers spend it: the year-to-date sensor, the backfill accrual
-    and the compare page's year-to-date column. Each has to convert, and the
-    one forwarder that does not (``_year_ahead_welcome_credit``) is quoting
-    an annual bill, so its volume already is a year.
+    windowed callers spend it: the year-to-date sensor and the month's share
+    of it (through ``window_welcome_credit``), the backfill accrual and the
+    compare page's year-to-date column. Each has to convert, and the one
+    forwarder that does not (``_year_ahead_welcome_credit``) is quoting an
+    annual bill, so its volume already is a year.
     """
     import inspect
 
     from custom_components.be_electricity_prices import (
         backfill_cost,
         compare_quote,
+        coordinator_costs,
         fees,
         ytd_cost,
     )
 
     windowed: dict[str, Any] = {
-        "ytd_cost": ytd_cost._compute_current_year_cost,
+        "ytd_cost": ytd_cost.window_welcome_credit,
         # Per contract since a supplier switch can split the year.
         "backfill": backfill_cost._accrue_cost,
         "compare_quote": compare_quote._ytd_welcome_credit,
@@ -14232,6 +14234,11 @@ def test_every_windowed_caller_credits_on_a_year_not_its_window() -> None:
             f"{name} calls _welcome_credit_eur without converting its window "
             "volume to the first contract year"
         )
+    for func in (
+        ytd_cost._compute_current_year_cost,
+        coordinator_costs.credit_before_month,
+    ):
+        assert "window_welcome_credit(" in inspect.getsource(func)
 
     # The year-ahead forwarder is the deliberate exception.
     ahead = inspect.getsource(fees._year_ahead_welcome_credit)
@@ -15077,6 +15084,92 @@ async def test_a_percentage_credit_is_valued_on_the_contracts_own_months(
     # Sixteen days of the campaign, both times at September's 0,25.
     assert month > 0.0
     assert year == pytest.approx(month)
+
+
+@pytest.mark.parametrize("credit", ["capped", "percentage"])
+async def test_the_credit_before_the_month_is_the_two_walks_difference(
+    hass: HomeAssistant, freezer: Any, credit: str
+) -> None:
+    """The month's share of the year's welcome credit needs the credit the
+    year had reached by the day before the month. Both walks the tick makes
+    leave sums over their own days, so the year's figures less the month's
+    price those days exactly as a walk over them does, a cap that binds and a
+    percentage valued on the first-year days' own rate included."""
+    from custom_components.be_electricity_prices import cohort
+    from custom_components.be_electricity_prices.coordinator_costs import (
+        credit_before_month,
+    )
+
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    entry = _entry(
+        region="flanders",
+        solar_regime="none",
+        meter="mono",
+        contract="test",
+        contract_start_date="2026-07-10",
+        consumption_kwh="sensor.cons_total",
+    )
+    card = _snapshot(
+        prosumer=None,
+        capacity=None,
+        energy=FixedRates(single=0.10, yearly_fixed_fee=20.0),
+    )
+    # A credit no small connection's charges reach, or a share of the energy
+    # on a card whose price moves every month.
+    signing = (
+        replace(card, welcome_credit_eur=400.0)
+        if credit == "capped"
+        else replace(card, welcome_credit_pct_of_energy=0.33)
+    )
+
+    async def _month(*args: Any, **_k: Any) -> Any:
+        month = next(a for a in args if isinstance(a, date))
+        energy = FixedRates(single=0.10 + 0.02 * month.month, yearly_fixed_fee=20.0)
+        return replace(signing, energy=energy) if credit == "percentage" else signing
+
+    async def _signing(*_a: Any, **_k: Any) -> Any:
+        return signing
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        if entity_id != "sensor.cons_total":
+            return {}
+        days = (end - start).days + 1
+        return {
+            start + timedelta(days=n): 0.5 + (start + timedelta(days=n)).month / 10
+            for n in range(days)
+        }
+
+    async def _walk(**window: Any) -> dict[str, float]:
+        stats: dict[str, float] = {}
+        with (
+            patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily),
+            patch.object(cohort, "_effective_snapshot_for_month", new=_month),
+            patch.object(ytd_cost, "_effective_snapshot_for_month", new=_month),
+            patch.object(ytd_cost, "signing_month_snapshot", new=_signing),
+        ):
+            await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                signing,
+                entry,
+                breakdown=stats,
+                **window,
+            )
+        return stats
+
+    year = await _walk()
+    month = await _walk(window_start_override=date(2026, 9, 1))
+    walked = await _walk(window_end=date(2026, 8, 31))
+    assert walked["welcome_credit_eur"] > 0.0
+    if credit == "capped":
+        # The cap binds, or this would not show the cap is priced right.
+        assert walked["welcome_credit_eur"] < 400.0 * 53 / 365
+    assert credit_before_month(
+        signing, entry, date(2026, 1, 1), date(2026, 9, 1), year, month
+    ) == pytest.approx(walked["welcome_credit_eur"])
 
 
 async def test_month_window_is_a_no_op_on_the_year_when_omitted() -> None:

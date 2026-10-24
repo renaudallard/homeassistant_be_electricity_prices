@@ -36,6 +36,7 @@ shows up as a seam, not an exception."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime, time
 from functools import partial
 from typing import Any
@@ -131,6 +132,60 @@ from .ytd_legs import (
 # weekday holiday bills at the day rate, so 10:00 is the day register there.
 _DAY_REGISTER_HOUR = 10
 _NIGHT_REGISTER_HOUR = 3
+
+
+def window_welcome_credit(
+    signing: SupplierSnapshot,
+    entry: ConfigEntry,
+    window_start: date,
+    end: date,
+    eligible: float,
+    stats: Mapping[str, float],
+) -> float:
+    """The welcome credit ``signing`` grants over ``[window_start, end]``, for
+    a window that charged ``eligible`` for the components it may come off and
+    whose walk left ``stats``.
+
+    The one place the leaf's arguments are read off a walk, for the bill and
+    for the month's share of the year's credit (``coordinator_costs``).
+    """
+    return _welcome_credit_eur(
+        signing,
+        _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),
+        window_start,
+        end,
+        eligible,
+        # The FIRST CONTRACT YEAR's net volume, not this window's. The card's
+        # per-kWh term is a yearly one ("pour votre premiere annee de
+        # consommation nette d'electricite"), and the accrual inside places it
+        # in the window; passing the year-to-date volume instead billed it on
+        # whatever share of a year had gone by.
+        first_year_net_kwh(
+            entry_annual_kwh(entry),
+            stats.get("consumption_ytd_kwh", 0.0),
+            stats.get("injection_ytd_kwh", 0.0),
+            compensation=(
+                entry.data.get(CONF_SOLAR_REGIME, "none") == SOLAR_REGIME_COMPENSATION
+            ),
+        ),
+        # What a percentage credit is a percentage of, and what a volume of
+        # free energy is worth: the rate this contract really billed in the
+        # window's first-year days, blended across whatever registers and
+        # hours it drew. The whole window's rate took in the months before the
+        # start, so a September signing's months summed to less than its year.
+        window_energy_rate(
+            stats.get("credit_energy_component_eur", 0.0),
+            stats.get("credit_consumption_kwh", 0.0),
+        )
+        if stats.get("credit_consumption_kwh", 0.0) > 0.0
+        else window_energy_rate(
+            stats.get("energy_component_ytd_eur", 0.0),
+            stats.get("consumption_ytd_kwh", 0.0),
+        ),
+        # A year of SOLD export for a first-year feed-in bonus, zero off the
+        # injection regime or without a measured year of it.
+        first_year_injection_kwh=entry_annual_injection_kwh(entry),
+    )
 
 
 async def first_year_charges(
@@ -474,18 +529,6 @@ async def _compute_current_year_cost(
     stats["standing_charges_ytd_eur"] = static_fees.total
     stats["billed_peak_kw"] = billed_peak_kw
 
-    def _credit_energy_rate(stats: dict[str, float]) -> float:
-        """The first-year days' energy rate, else the window's."""
-        if stats.get("credit_consumption_kwh", 0.0) > 0.0:
-            return window_energy_rate(
-                stats.get("credit_energy_component_eur", 0.0),
-                stats["credit_consumption_kwh"],
-            )
-        return window_energy_rate(
-            stats.get("energy_component_ytd_eur", 0.0),
-            stats.get("consumption_ytd_kwh", 0.0),
-        )
-
     def _bill(energy: float) -> float:
         """The window's bill: energy plus fees, less any welcome credit.
 
@@ -542,36 +585,11 @@ async def _compute_current_year_cost(
                 )
             )
             # And kept, for the cap a lump paid at the anniversary is held to
-            # (first_year_charges).
+            # (first_year_charges) and the month's share of the year's credit
+            # (coordinator_costs.credit_before_month).
             stats["welcome_credit_eligible_eur"] = eligible
-            credit = _welcome_credit_eur(
-                signing_snapshot,
-                _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),
-                window_start,
-                end,
-                eligible,
-                # The FIRST CONTRACT YEAR's net volume, not this window's.
-                # The card's per-kWh term is a yearly one ("pour votre
-                # premiere annee de consommation nette d'electricite"), and
-                # the accrual inside places it in the window; passing the
-                # year-to-date volume instead billed it on whatever share of
-                # a year had gone by.
-                first_year_net_kwh(
-                    entry_annual_kwh(entry),
-                    stats.get("consumption_ytd_kwh", 0.0),
-                    stats.get("injection_ytd_kwh", 0.0),
-                    compensation=regime == SOLAR_REGIME_COMPENSATION,
-                ),
-                # What a percentage credit is a percentage of, and what a
-                # volume of free energy is worth: the rate this contract really
-                # billed in the window's first-year days, blended across
-                # whatever registers and hours it drew. The whole window's rate
-                # took in the months before the start, so a September signing's
-                # months summed to less than its year.
-                _credit_energy_rate(stats),
-                # A year of SOLD export for a first-year feed-in bonus, zero
-                # off the injection regime or without a measured year of it.
-                first_year_injection_kwh=entry_annual_injection_kwh(entry),
+            credit = window_welcome_credit(
+                signing_snapshot, entry, window_start, end, eligible, stats
             )
         stats["welcome_credit_eur"] = credit
         # On a double-flow meter the network bills the gross draws when that
