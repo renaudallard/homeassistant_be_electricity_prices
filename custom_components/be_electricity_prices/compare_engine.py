@@ -277,7 +277,8 @@ class _SweepEngine(_HouseholdMixin):
         proxied = bool(own_closed) and not baseline
         # A candidate replays the window on the entry's sensors, which hold
         # nothing for an earlier contract's days when they were rewired at the
-        # switch: it would bill those days at its fees alone.
+        # switch, and on the entry's meter, analog or digital: it would bill
+        # those days at its fees alone, or on a meter they did not run on.
         rewired = _meters_rewired(self.config_entry, today)
         if not proxied:
             baseline |= {

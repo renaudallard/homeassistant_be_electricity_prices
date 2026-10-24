@@ -555,7 +555,8 @@ class _PlaceholdersMixin(OptionsFlow):
         if rewired:
             caveats.append(
                 "the year to date is left out, as an earlier contract this "
-                "year read other meter sensors"
+                "year read other meter sensors or ran on another kind of meter "
+                "(analog or digital)"
             )
         vintage = _vintage_note(
             current_snapshot,
@@ -606,8 +607,9 @@ class _PlaceholdersMixin(OptionsFlow):
         # consumption register may already be netted. Typed volumes are a
         # yearly hypothesis with no history behind them, so the legs stay
         # blank rather than mixing a what-if with a measured past. So do
-        # meters rewired at a switch: the quoted side reads the entry's
-        # sensors, which hold nothing for the earlier contract's days.
+        # meters rewired or replaced at a switch: the quoted side reads the
+        # entry's sensors, which hold nothing for the earlier contract's days,
+        # and bills them on the entry's meter, analog or digital.
         if volumes_typed or rewired:
             _populate_charts(
                 placeholders,

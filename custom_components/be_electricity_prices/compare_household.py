@@ -110,6 +110,7 @@ from .pricing import MeterType
 from .providers import get as get_extractor
 from .providers import settlement_answer
 from .providers.base import SupplierSnapshot
+from .snapshot_resolve import analog_meter
 from .spot_stats import (
     _energy_is_rlp_indexed,
     _injection_is_spp_indexed,
@@ -122,20 +123,27 @@ _LOGGER = logging.getLogger(__name__)
 
 def _meters_rewired(entry: ConfigEntry, today: date) -> bool:
     """Whether an earlier contract in this year's window read other meter
-    sensors than the entry does now.
+    sensors than the entry does now, or ran on a meter of the other kind.
 
     The own row prices each earlier contract on the sensors kept with it, and
     a quoted contract can only be replayed on the entry's own. When those were
     rewired at the switch they hold nothing for the earlier contract's days,
     so the alternative billed them at its fees alone and the page printed a
-    saving of most of those days' bill. The year-to-date of a quoted side is
-    left out instead.
+    saving of most of those days' bill. The same when the meter was analog on
+    one side of the switch and digital on the other: the own row bills the
+    earlier days on the meter they ran on (the flat capacity charge, the
+    analog kWh rate) and a quoted contract replays them on today's, 21 to 71
+    EUR apart over half a year on the same card. The year-to-date of a quoted
+    side is left out instead.
     """
     data = entry.data
     return any(
-        (period.data.get(key) or None) != (data.get(key) or None)
+        analog_meter(period.data) != analog_meter(data)
+        or any(
+            (period.data.get(key) or None) != (data.get(key) or None)
+            for key in METER_SENSOR_KEYS
+        )
         for period in previous_periods(data, ytd_window_start(entry, today), today)
-        for key in METER_SENSOR_KEYS
     )
 
 

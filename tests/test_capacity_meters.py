@@ -935,3 +935,36 @@ async def test_the_backfill_reads_the_rate_before_the_contracts_card(
             [],
         )
     assert seen == [_ANTWERPEN_2026]
+
+
+@pytest.mark.parametrize(
+    ("entry_analog", "held", "left_out"),
+    [
+        (False, {"analog_meter": True}, True),
+        (True, {"analog_meter": False}, True),
+        (True, {"analog_meter": True}, False),
+        (False, {"analog_meter": False}, False),
+        # A copy kept before the question existed takes the entry's answer.
+        (True, {}, False),
+    ],
+)
+def test_a_quoted_ytd_is_left_out_across_a_replaced_meter(
+    entry_analog: bool, held: dict[str, Any], left_out: bool
+) -> None:
+    """The own row bills an earlier contract on the meter it ran on and a
+    quoted one can only be replayed on today's: 21 to 71 EUR apart over half
+    a year on the same card. Its year-to-date is left out, as for sensors
+    rewired at the switch."""
+    from datetime import date
+
+    from custom_components.be_electricity_prices.compare_household import (
+        _meters_rewired,
+    )
+
+    earlier = {**_flemish("mono").data, **held}
+    entry = _flemish(
+        "mono",
+        analog_meter=entry_analog,
+        previous_contracts=[{"until": "2026-07-01", "data": earlier}],
+    )
+    assert _meters_rewired(entry, date(2026, 10, 23)) is left_out

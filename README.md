@@ -1088,7 +1088,9 @@ months before it as well; one the earlier contract already held is kept.
 When the meter sensors changed at the switch, the comparison pages leave out
 the year to date of the contracts they quote, and the compare page says so:
 those are replayed on the entry's sensors, which hold nothing for the earlier
-contract's days.
+contract's days. They do the same when the meter went from analog to digital
+at the switch, or back: a quoted contract would bill the earlier days on
+today's meter, where your own figure bills them on the one they ran on.
 
 The meter checks run on each earlier contract's own sensors over its own days,
 and on the entry's sensors from the switch on, so a register rewired at the
