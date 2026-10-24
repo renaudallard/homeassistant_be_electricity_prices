@@ -570,7 +570,15 @@ indices are means over the Flemish and Brussels registers' hours. Wallonia's nig
 runs 11:00-17:00 since 2026 and holds most of a household's export, so the card's night figure is
 not its register's mean there (1,82 c/kWh against about 4,4 over those hours in the third quarter):
 a Walloon card carries the single figure alone and a two-register meter is credited it, within 3%
-of the mean over its own registers' hours. A closed quarter's months settle the figures with the
+of the mean over its own registers' hours. Its Tarif Impact block prints the figure per CWaPE band
+as well, "Eco injection 4,41 58,97 Belpex * 0,94 - 11,33", Medium 9,17 and Pic 10,93 c/kWh in
+October 2026 against the single 6,21, each the formula at its band's SPP-weighted quarter index:
+a Walloon leg carries them (`impact_eco`, `impact_medium`, `impact_pic`), `resolve_settlement_grid`
+keeps them for an entry on the Impact tariff alone, and that entry is credited the band the hour
+falls in, a night circuit the single figure (`_impact_band_rates`, `injection.py`). Credited the
+single figure in every band, an Impact household was paid 1,80 c/kWh too much in the ECO band that
+holds most of its export and 2,96 and 4,72 too little at MEDIUM and PIC: on the third quarter's
+figures, about 23 EUR a year too much on 3.000 kWh exported at an 80/15/5 split. A closed quarter's months settle the figures with the
 energy on the next quarter's table (`settle_month`, `settled_spp_registers`, `_settle.py`), which
 marks them `spp_settled`, and a replay puts back only figures so marked (`settled_as`). The mark
 is the leg's own, since `index_realised` on it would stand in for every slot's spot on the
@@ -879,7 +887,8 @@ combinations confirms the two are identical — but it is now reachable by ticki
 box rather than by picking a different product, so a Walloon household on the
 incitative network tariff should know that its energy stops being banded when it
 switches settlement. The network leg and the Walloon terme fixe still follow
-`dso_tariff_mode`, which is the connection and does not move with the contract.
+`dso_tariff_mode`, which is the connection and does not move with the contract. The feed-in bands
+go with them: the quarter-hourly settlement credits each quarter at its own Belpex.
 
 **A re-priced card keeps the bands.** The bands come from one formula on three per-band indices,
 and the Jour / Nuit rates from per-register ones, so the monthly leg a variable card is re-priced
@@ -986,7 +995,11 @@ parser change puts each register's index back on the re-parsed card (`settled_as
 The feed-in leg settles on the same table, on its SPP-weighted rows, for an entry on the variable
 settlement; on the dynamic one it is credited per quarter-hour, or at its printed indicative
 without a key. A month is settled once both have: a next card whose feed-in rows do not read
-settles the energy and keeps the month `provisional`.
+settles the energy and keeps the month `provisional`. The Impact block's figures per band settle
+with them, on a Walloon row stored before the bands were read too; where that block does not read
+they are dropped, so an Impact entry is credited the quarter's single figure in every band rather
+than the month held on the quarter before (`settled_spp_registers`, `_settle.py`), and a replay
+drops the bands a settled row does not hold the same way.
 
 ### Stand-in months
 
@@ -1013,3 +1026,14 @@ quarter-hour on the formula, as the dynamic settlement is, nothing without a spo
 backfill waits for the card as for a month's own (`reference_failed`). The fixed cards' labels are
 not read: the April 2026 card as Bolt serves it now names the second quarter over the first
 quarter's indices.
+
+The fixed cards print no Impact feed-in rows before September 2026, so an entry on the Impact
+tariff is credited the single figure in every band for the stand-in months of the first quarter
+of 2026; the second quarter's bands come off the September 2026 fixed card (Eco 1,35, Medium
+6,22, Pic 8,77 c/kWh).
+The June 2026 variable card (`bolt_res_el_fr_12.pdf`) printed the first quarter's bands, Eco 4,61,
+Medium 6,78 and Pic 8,97 c/kWh against the single 5,31, but the archive holds no variable card
+before September 2026, and a past quarter's is not fetched off the variable folder, whose
+addresses name a version Bolt bumps in place rather than a month. At an 80/15/5 split the single
+figure credits 0,16 c/kWh too much, under a euro on the 563 kWh the modelled household exports in
+the first quarter.

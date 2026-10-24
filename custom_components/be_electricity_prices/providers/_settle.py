@@ -186,12 +186,15 @@ def _register_indices(energy: VariableRates) -> dict[str, float]:
     }
 
 
-# The feed-in figures a Bolt variable card prints per meter register.
-_SPP_REGISTER_RATES = ("current", "peak", "offpeak")
+# The feed-in figures a Bolt variable card prints per meter register, and per
+# CWaPE band on a Walloon card.
+_SPP_REGISTERS = ("current", "peak", "offpeak")
+_SPP_BANDS = ("impact_eco", "impact_medium", "impact_pic")
+_SPP_REGISTER_RATES = _SPP_REGISTERS + _SPP_BANDS
 
 
 def settled_spp_registers(
-    inj: InjectionRates, indices: Mapping[str, float]
+    inj: InjectionRates, indices: Mapping[str, float], *, bands: bool = False
 ) -> InjectionRates:
     """A feed-in leg crediting its variable settlement per meter register
     (``InjectionRates.spp_redistributed``) rebuilt on ``indices``, each
@@ -200,17 +203,28 @@ def settled_spp_registers(
 
     The formula stays on the leg for the dynamic settlement, and no
     ``index_realised`` is recorded: on that leg it would stand in for every
-    slot's spot (``spot_stats._spp_injection_spot``). Only the figures the
-    leg carries are rebuilt, so a Walloon leg keeps its single register; a
-    leg with no formula, or ``indices`` lacking one of them, comes back as
-    it was.
+    slot's spot (``spot_stats._spp_injection_spot``). Only the registers the
+    leg carries are rebuilt, so a Walloon leg keeps its single one; a leg
+    with no formula, or ``indices`` lacking one of them, comes back as it
+    was.
+
+    The figures per CWaPE band settle with them, on a leg that carries them
+    or, with ``bands``, on a Walloon one older than they are, where
+    ``indices`` holds all three, and are dropped where it does not: an Impact
+    block that does not read leaves the entry on the tariff the quarter's
+    single figure rather than the month on the quarter before's.
     """
-    carried = [f for f in _SPP_REGISTER_RATES if getattr(inj, f) is not None]
+    carried = [f for f in _SPP_REGISTERS if getattr(inj, f) is not None]
     if inj.factor is None or inj.base is None or any(f not in indices for f in carried):
         return inj
     rates: dict[str, Any] = {
         field: inj.factor * indices[field] + inj.base for field in carried
     }
+    if bands or any(getattr(inj, f) is not None for f in _SPP_BANDS):
+        read = all(f in indices for f in _SPP_BANDS)
+        rates |= {
+            f: inj.factor * indices[f] + inj.base if read else None for f in _SPP_BANDS
+        }
     return replace(inj, spp_settled=True, **rates)
 
 
@@ -224,12 +238,13 @@ def settled_stand_in(
     ``reference`` is a card of the quarter after, whose figures per register
     are the formula at those indices (``_spp_register_indices``). A figure it
     prints no index for is dropped rather than left at the current card's
-    quarter, so a two-register meter is credited the quarter's single figure.
+    quarter, so a two-register meter, or an entry on the Impact tariff, is
+    credited the quarter's single figure.
     """
     indices = _spp_register_indices(reference)
     if "current" not in indices:
         return None
-    unread: dict[str, Any] = {f: None for f in _SPP_REGISTER_RATES if f not in indices}
+    unread: dict[str, Any] = {f: None for f in _SPP_REGISTERS if f not in indices}
     return settled_spp_registers(replace(inj, **unread), indices)
 
 
@@ -307,7 +322,8 @@ def settled_as(snap: SupplierSnapshot, settled: SupplierSnapshot) -> SupplierSna
     feed-in figures per register, but only where the stored ones were
     settled (``spp_settled``): figures a row printed for the quarter before,
     or a row older than the figures themselves, are left as parsed, so the
-    month is asked again (``is_settled``).
+    month is asked again (``is_settled``). Figures per CWaPE band a settled
+    row does not hold are dropped with them (``settled_spp_registers``).
     """
     held = settled.energy
     index = getattr(held, "index_realised", None)

@@ -131,6 +131,9 @@ def _vat_injection(injection: InjectionRates, factor: float) -> InjectionRates:
         base_transition=scaled(injection.base_transition),
         factor_offpeak=scaled(injection.factor_offpeak),
         base_offpeak=scaled(injection.base_offpeak),
+        impact_pic=scaled(injection.impact_pic),
+        impact_medium=scaled(injection.impact_medium),
+        impact_eco=scaled(injection.impact_eco),
         # The guaranteed floor is a rate like the rest; left as printed it
         # would sit ex-VAT beside grossed coefficients.
         minimum=scaled(injection.minimum),

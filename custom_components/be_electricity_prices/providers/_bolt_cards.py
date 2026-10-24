@@ -442,7 +442,10 @@ def quarter_injection_indices(text: str) -> tuple[str, dict[str, float]] | None:
     32,29 by the hour, the hour-against-quarter gap of
     ``spot_stats._spp_month_mean``, where the consumption rows are RLP-weighted.
     Keyed ``current``, ``peak`` and ``offpeak`` as the leg carries them;
-    ``None`` unless all three read.
+    ``None`` unless all three read. The Tarif Impact block beneath prints the
+    same per CWaPE band, "Eco injection 4,41 58,97 Belpex * 0,94 - 11,33" in
+    October 2026, keyed ``impact_eco``, ``impact_medium`` and ``impact_pic``
+    and present only when all three read.
 
     The fixed cards print the same table, and the ones before April 2026
     print it as a single row, "Belpex Q4 2025 (€/MWh) 74,54 83,26 52,27", in
@@ -472,6 +475,12 @@ def quarter_injection_indices(text: str) -> tuple[str, dict[str, float]] | None:
         if row_match is None:
             return None
         indices[field] = to_float(row_match.group(1)) / 1000.0
+    bands = {
+        f"impact_{band.lower()}": to_float(index) / 1000.0
+        for band, _printed, index in _IMPACT_INJECTION_ROW_RE.findall(table)
+    }
+    if len(bands) == 3:
+        indices |= bands
     return " ".join(head.group(1).split()), indices
 
 
@@ -506,7 +515,7 @@ def with_table_figures(injection: InjectionRates, text: str) -> InjectionRates:
 
 
 def with_spp_registers(
-    injection: InjectionRates, text: str, *, registers: bool
+    injection: InjectionRates, text: str, *, registers: bool, bands: bool = False
 ) -> InjectionRates:
     """A variable card's feed-in leg carrying the figures the card bills on
     its variable settlement, beside the per-slot formula of its dynamic one
@@ -526,14 +535,22 @@ def with_spp_registers(
     mean there: 1,82 c/kWh against about 4,4 over those hours. Without
     ``registers`` a two-register meter is credited the single figure, which
     is within 3% of that mean over the quarter.
+
+    With ``bands``, which is a Walloon card, the leg carries the figures per
+    CWaPE band its Tarif Impact block prints too, 4,41 / 9,17 / 10,93 c/kWh
+    for Eco / Medium / Pic on the October 2026 cards against the single
+    6,21: an entry on that tariff is credited the band the hour falls in.
     """
     injection = replace(injection, spp_redistributed=True)
     figures = _table_figures(injection, text)
     if not figures:
         return injection
-    if not registers:
-        return replace(injection, current=figures["current"])
-    return replace(injection, **figures)
+    kept = {"current"}
+    if registers:
+        kept |= {"peak", "offpeak"}
+    if bands:
+        kept |= set(_IMPACT_INJECTION_FIELDS)
+    return replace(injection, **{f: v for f, v in figures.items() if f in kept})
 
 
 def _impact_energy_bands(text: str, vat: float) -> dict[str, float]:
@@ -701,6 +718,14 @@ _IMPACT_ROW_RE = re.compile(
     rf"Belpex\s*\*\s*([\d,]+)\s*([{SIGN_CHARS}])\s*([\d,]+)",
     re.IGNORECASE,
 )
+# The same block's feed-in rows, "Eco injection 4,41 58,97 Belpex * 0,94 -
+# 11,33": printed figure and that band's SPP-weighted index, the formula
+# beside them the leg's own.
+_IMPACT_INJECTION_ROW_RE = re.compile(
+    r"(Eco|Medium|Pic)\s+injection\s+(-?[\d,]+)\s+(-?[\d,]+)\s+Belpex\s*\*",
+    re.IGNORECASE,
+)
+_IMPACT_INJECTION_FIELDS = ("impact_eco", "impact_medium", "impact_pic")
 # The residential VAT the settlement formula and the Impact bands are grossed
 # by. Named rather than left to the helper's default: the residential cards
 # print no "N% TVA" phrase for the multiplier to read, so this is the value

@@ -501,8 +501,9 @@ _DEGRADED_MIN_SCHEMA_VERSION = 16
 # added it: measured on the 1.686 stored rows, 1.683 carry an injection leg
 # and every one of them would have been rewritten with the field at null.
 # ``settled_as_stated`` joined both lists for Mega's stated settlements,
-# ``spp_redistributed`` and ``spp_settled`` for Bolt's variable cards, and
-# ``forward_indexed`` both for Engie's Easy Variable.
+# ``spp_redistributed``, ``spp_settled`` and the Impact band figures for
+# Bolt's variable cards, and ``forward_indexed`` both for Engie's Easy
+# Variable.
 _INJECTION_OPTIONAL_KEYS = (
     "bi_hourly",
     "index_realised",
@@ -510,6 +511,9 @@ _INJECTION_OPTIONAL_KEYS = (
     "spp_redistributed",
     "spp_settled",
     "forward_indexed",
+    "impact_pic",
+    "impact_medium",
+    "impact_eco",
 )
 _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
 # The same rule for the tax overlay, from v73.

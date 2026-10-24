@@ -32,13 +32,14 @@ settlements, the feed-in included.
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 from ._rates import DynamicRates, VariableRates
 from .base import SupplierSnapshot
 
 
 def resolve_settlement_grid(
-    snapshot: SupplierSnapshot, *, quarter_hourly: bool
+    snapshot: SupplierSnapshot, *, quarter_hourly: bool, impact: bool = False
 ) -> SupplierSnapshot:
     """Move a dynamic card onto the 15-minute grid the entry settles on.
 
@@ -85,10 +86,12 @@ def resolve_settlement_grid(
     (``InjectionRates.spp_redistributed``). The leg is parsed as the
     per-slot one, so a household left unticked has it turned into those
     register rates here, with the formula dropped so that no spot reaches
-    it.
+    it. A Walloon card prints them per CWaPE band of its Tarif Impact too,
+    which are kept for a household on that tariff (``impact``) alone: a
+    Walloon day/night meter is credited the single figure.
     """
     if not quarter_hourly:
-        return _spp_redistributed(snapshot)
+        return _spp_redistributed(snapshot, impact=impact)
     energy = snapshot.energy
     if isinstance(energy, DynamicRates):
         if energy.quarter_hourly:
@@ -107,14 +110,18 @@ def resolve_settlement_grid(
     return snapshot
 
 
-def _spp_redistributed(snapshot: SupplierSnapshot) -> SupplierSnapshot:
+def _spp_redistributed(snapshot: SupplierSnapshot, *, impact: bool) -> SupplierSnapshot:
     """``snapshot`` with a feed-in leg the card credits per register on its
     variable settlement turned into those register rates: ``current`` for a
     single register, ``peak`` and ``offpeak`` read by register for a meter
-    that has two (``bi_hourly``)."""
+    that has two (``bi_hourly``), and the figures per CWaPE band for an
+    entry on the Impact tariff, dropped for any other."""
     inj = snapshot.injection
     if inj is None or not inj.spp_redistributed or not inj.slot_indexed:
         return snapshot
+    bands: dict[str, Any] = (
+        {} if impact else dict.fromkeys(("impact_pic", "impact_medium", "impact_eco"))
+    )
     return replace(
         snapshot,
         injection=replace(
@@ -123,5 +130,6 @@ def _spp_redistributed(snapshot: SupplierSnapshot) -> SupplierSnapshot:
             base=None,
             slot_indexed=False,
             bi_hourly=inj.peak is not None and inj.offpeak is not None,
+            **bands,
         ),
     )

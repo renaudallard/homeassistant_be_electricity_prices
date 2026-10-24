@@ -600,7 +600,7 @@ async def fetch_for_month(
 async def settle_month(
     session: aiohttp.ClientSession,
     contract_id: str,
-    region: str,  # Bolt's PDFs cover every region.
+    region: str,
     year_month: date,
     held: SupplierSnapshot,
 ) -> SupplierSnapshot:
@@ -618,6 +618,9 @@ async def settle_month(
     SPP-weighted rows of that table (``quarter_injection_indices``), and a
     month whose feed-in rows do not read there stays ``provisional`` with its
     energy settled, rather than keep the quarter before's figures as settled.
+    A Walloon month takes the figures per CWaPE band the Impact block prints,
+    whether or not the row it settles carried them, and the single figure in
+    every band where that block does not read (``settled_spp_registers``).
 
     In place, as at TotalEnergies: the variable folder addresses no card by
     month, so the next quarter's card is only ever the live one. Before the
@@ -657,7 +660,9 @@ async def settle_month(
     if injection is not None and settles_registers(injection):
         feed_in = quarter_injection_indices(text)
         if feed_in is not None and feed_in[0] == named:
-            injection = settled_spp_registers(injection, feed_in[1])
+            injection = settled_spp_registers(
+                injection, feed_in[1], bands=region == REGION_WALLONIA
+            )
         if not injection.spp_settled:
             return replace(held, energy=settled, provisional=True)
     return replace(held, energy=settled, injection=injection)
@@ -757,7 +762,10 @@ def parse_snapshot(
     injection = _extract_injection(text)
     if contract.settlement and injection is not None:
         injection = with_spp_registers(
-            injection, text, registers=region != REGION_WALLONIA
+            injection,
+            text,
+            registers=region != REGION_WALLONIA,
+            bands=region == REGION_WALLONIA,
         )
     elif injection is not None:
         injection = with_table_figures(injection, text)

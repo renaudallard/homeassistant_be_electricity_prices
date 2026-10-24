@@ -456,7 +456,9 @@ def _compare_injection_credit(
     region's schedule, on the meter the quote is for: ``meter`` when the page
     overrides it, the entry's otherwise. It used to reach the live helper too,
     which answers the register the clock is in, so the credit for a whole
-    year's export moved by a third between a weekday afternoon and a Sunday. A
+    year's export moved by a third between a weekday afternoon and a Sunday.
+    A figure per CWaPE band, which a Walloon Bolt variable card credits an
+    entry on the Impact tariff, is averaged over the three bands the same way. A
     spot-indexed injection is priced per slot over the window and averaged by
     the household's export shape, the same basis as the TOU branch and the
     same one ``current_year_cost`` bills on. It deliberately does NOT follow
@@ -502,6 +504,7 @@ def _compare_injection_credit(
         _bake_monthly_injection,
         _compute_injection_price,
         _floor_injection,
+        _impact_band_rates,
         _injection_bakes_to_month_mean,
         _tou_weekend_rule,
     )
@@ -524,6 +527,27 @@ def _compare_injection_credit(
     inj: InjectionRates | None = getattr(snapshot, "injection", None)
     energy = getattr(snapshot, "energy", None)
     weekend_rule = _tou_weekend_rule(energy)
+    bands = None if inj is None else _impact_band_rates(inj)
+    if meter is None:
+        meter = entry.data.get(CONF_METER, METER_MONO)
+    if inj is not None and bands is not None and meter != METER_EXCLUSIVE_NIGHT:
+        # A figure per CWaPE band, averaged by the household's export shape
+        # over the bands as the meter registers them, as the register pair
+        # below is.
+        region = entry.data.get(CONF_REGION, REGION_FLANDERS)
+        day_start = day_start_for(entry.data)
+        weights = _register_weights(
+            region,
+            inj_hour_weights,
+            meter=meter,
+            dso_mode=DSO_MODE_IMPACT,
+            day_start=day_start,
+        )
+        names = _register_names(meter, DSO_MODE_IMPACT, region, day_start=day_start)
+        rates = [_floor_injection(bands[name], inj) for name in names]
+        return float(
+            sum(r * w for r, w in zip(rates, weights, strict=True)) / sum(weights)
+        )
     if (
         inj is not None
         and weekend_rule is not None
@@ -545,8 +569,6 @@ def _compare_injection_credit(
         and inj.peak is not None
         and inj.offpeak is not None
     ):
-        if meter is None:
-            meter = entry.data.get(CONF_METER, METER_MONO)
         if meter not in (METER_BI, METER_DYNAMIC):
             # One register: the card's own rate for it, as the live path.
             return _floor_injection(inj.current, inj)

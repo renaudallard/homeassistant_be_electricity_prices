@@ -4069,7 +4069,16 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         # card carries one, and it billed without a bound.
         _expect_rate(prefix, "injection factor", factor, _INJECTION_FACTOR_BOUNDS)
         _expect_rate(prefix, "injection base", base, _INJECTION_BASE_BOUNDS)
-    for slot in ("peak", "transition", "offpeak"):
+    # And the figures per CWaPE band a Walloon Bolt variable card prints,
+    # which a band index left in EUR/MWh puts a thousand times out.
+    for slot in (
+        "peak",
+        "transition",
+        "offpeak",
+        "impact_pic",
+        "impact_medium",
+        "impact_eco",
+    ):
         _expect_rate(
             prefix,
             f"injection {slot} EUR/kWh",

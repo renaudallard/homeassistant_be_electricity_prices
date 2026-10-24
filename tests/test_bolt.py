@@ -2680,11 +2680,17 @@ def test_a_variable_month_no_archive_holds_names_the_card_it_settles_on(
 
 
 async def _stand_in(
-    hass: Any, month: date, rows: dict[str, str], meter: str = "bi"
+    hass: Any,
+    month: date,
+    rows: dict[str, str],
+    meter: str = "bi",
+    region: str = "flanders",
+    dso: str = "fluvius_antwerpen",
+    mode: str = "bi_horaire",
 ) -> SupplierSnapshot:
-    """``month`` as a Flemish Bolt Online entry on the variable settlement is
-    billed on 23 October 2026, the October card standing in for it, with the
-    card archive serving the fixed cards ``rows`` names by month."""
+    """``month`` as a Bolt Online entry on the variable settlement is billed
+    on 23 October 2026, the October card standing in for it, with the card
+    archive serving the fixed cards ``rows`` names by month."""
     from unittest.mock import MagicMock
 
     from homeassistant.util import dt as dt_util
@@ -2711,15 +2717,16 @@ async def _stand_in(
     raw = parse_snapshot(
         "bolt_online",
         fixture_text("bolt_online_oct_reissue.pdf", layout=True),
-        "flanders",
+        region,
     )
     entry = make_entry(
         supplier="bolt",
         contract="bolt_online",
-        region="flanders",
-        dso="fluvius_antwerpen",
+        region=region,
+        dso=dso,
         meter=meter,
         solar_regime="injection",
+        dso_tariff_mode=mode,
     )
     now = datetime(2026, 10, 23, 10, tzinfo=dt_util.DEFAULT_TIME_ZONE)
     with (
@@ -2737,7 +2744,7 @@ async def _stand_in(
             MagicMock(),
             EXTRACTORS["bolt"],
             "bolt_online",
-            "flanders",
+            region,
             month,
             _resolve_snapshot(entry, raw),
             entry,
@@ -2827,3 +2834,325 @@ async def test_a_month_whose_quarter_cannot_be_read_is_credited_per_slot(
         assert not snapshot_months.month_card_failed(
             hass, "bolt", "bolt_online", "flanders", date(2026, 8, 1)
         )
+
+
+_OCTOBER_BANDS = {"impact_eco": 0.0441, "impact_medium": 0.0917, "impact_pic": 0.1093}
+
+
+def test_a_walloon_card_carries_its_impact_feed_in_bands() -> None:
+    """The variable card's Tarif Impact block prints the feed-in per CWaPE
+    band, "Eco injection 4,41 58,97 Belpex * 0,94 - 11,33", Medium 9,17,
+    Pic 10,93 c/kWh in October 2026, each the formula at its band's
+    SPP-weighted index. A Walloon leg carries them; a Flemish one, whose
+    meters know no such band, does not."""
+    text = fixture_text("bolt_online_oct_reissue.pdf", layout=True)
+    inj = parse_snapshot("bolt_online", text, "wallonia").injection
+    assert inj is not None
+    for field, figure in _OCTOBER_BANDS.items():
+        assert getattr(inj, field) == pytest.approx(figure, abs=5e-5), field
+    flemish = parse_snapshot("bolt_online", text, "flanders").injection
+    assert flemish is not None
+    assert (flemish.impact_eco, flemish.impact_medium, flemish.impact_pic) == (
+        None,
+        None,
+        None,
+    )
+
+
+def test_an_impact_entry_is_credited_the_feed_in_band_the_hour_falls_in() -> None:
+    """Credited the single 6,21 c/kWh in every band, a Walloon entry on the
+    Impact tariff was paid 1,80 c/kWh too much in the ECO band that holds most
+    of its export and too little in the others. It is credited the band's
+    figure, a night circuit and an entry off the tariff the single one."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.injection import (
+        _historical_injection_rate,
+        _injection_price_for_slot,
+    )
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+    from tests import make_entry
+
+    snap = parse_snapshot(
+        "bolt_online",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "wallonia",
+    )
+    assert snap.injection is not None
+    single = snap.injection.current
+    hours = ((13, "impact_eco"), (9, "impact_medium"), (19, "impact_pic"))
+
+    def credited(mode: str, meter: str, hour: int, quarter: bool = False) -> Any:
+        entry = make_entry(
+            supplier="bolt",
+            contract="bolt_online",
+            meter=meter,
+            dso_tariff_mode=mode,
+            quarter_hourly=quarter,
+        )
+        leg = _resolve_snapshot(entry, snap)
+        assert leg.injection is not None
+        when = datetime(2026, 10, 14, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        historical = _historical_injection_rate(
+            leg.injection,
+            0.05,
+            energy=leg.energy,
+            when=when,
+            meter=meter,  # type: ignore[arg-type]
+            region="wallonia",
+        )
+        live = _injection_price_for_slot(
+            leg.injection,
+            leg.energy,
+            0.05,
+            when,
+            meter=meter,  # type: ignore[arg-type]
+            region="wallonia",
+        )
+        assert historical == pytest.approx(live)
+        return historical
+
+    for meter in ("mono", "bi", "dynamic"):
+        for hour, field in hours:
+            assert credited("impact", meter, hour) == pytest.approx(
+                _OCTOBER_BANDS[field], abs=5e-5
+            ), (meter, hour)
+            assert credited("bi_horaire", meter, hour) == pytest.approx(single)
+    for hour, _field in hours:
+        assert credited("impact", "exclusive_night", hour) == pytest.approx(single)
+        # The quarter-hourly settlement credits the slot's spot in any band.
+        assert credited("impact", "dynamic", hour, quarter=True) == pytest.approx(
+            0.94 * 0.05 - 0.01133
+        )
+
+
+async def test_an_impact_month_settles_its_feed_in_bands_on_the_quarter_after() -> None:
+    """August 2026's card prints the second quarter's bands, 1,35 / 6,22 /
+    8,77 c/kWh; the month settles on the third quarter's October prints."""
+    held, settled, _fetched = await _settle_august(
+        date(2026, 10, 15), "bolt_online_oct_reissue.pdf"
+    )
+    assert held.injection is not None and settled.injection is not None
+    for field, figure in (
+        ("impact_eco", 0.0135),
+        ("impact_medium", 0.0622),
+        ("impact_pic", 0.0877),
+    ):
+        assert getattr(held.injection, field) == pytest.approx(figure, abs=5e-5)
+    for field, figure in _OCTOBER_BANDS.items():
+        assert getattr(settled.injection, field) == pytest.approx(figure, abs=5e-5)
+    assert settled.injection.spp_settled and not settled.provisional
+
+
+def test_a_professional_card_s_feed_in_bands_carry_its_vat() -> None:
+    """A professional card's feed-in is taxed and grossed by apply_vat, the
+    figures per band with the rest."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+    )
+    from custom_components.be_electricity_prices.providers._resolve import apply_vat
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+    from tests import make_snapshot
+
+    snap = make_snapshot(
+        taxes=TaxOverlay(
+            federal_excise=0.01421, energy_contribution=0.0019261, vat_rate=0.21
+        ),
+        injection=InjectionRates(
+            current=0.0621,
+            impact_eco=0.0441,
+            impact_medium=0.0917,
+            impact_pic=0.1093,
+            vat_applies=True,
+        ),
+    )
+    inj = apply_vat(snap, include_vat=True).injection
+    assert inj is not None
+    for field, figure in _OCTOBER_BANDS.items():
+        assert getattr(inj, field) == pytest.approx(figure * 1.21)
+
+
+def test_the_comparison_credits_an_impact_entry_per_band() -> None:
+    """The annual estimate averages the band figures by the household's own
+    export shape over the CWaPE bands, as it averages a register pair."""
+    from custom_components.be_electricity_prices.compare_weighting import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+    from tests import make_entry
+
+    snap = parse_snapshot(
+        "bolt_online",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "wallonia",
+    )
+    entry = make_entry(
+        supplier="bolt",
+        contract="bolt_online",
+        meter="dynamic",
+        dso_tariff_mode="impact",
+        solar_regime="injection",
+    )
+    leg = _resolve_snapshot(entry, snap)
+    assert leg.injection is not None
+    # All of the export at midday: the ECO band's figure alone.
+    noon = {13: 1.0}
+    assert _compare_injection_credit(leg, entry, {}, None, None, noon) == pytest.approx(
+        leg.injection.impact_eco
+    )
+    # Half at midday, half in the evening peak.
+    split = {13: 1.0, 19: 1.0}
+    assert _compare_injection_credit(leg, entry, {}, None, None, split) == (
+        pytest.approx(
+            (leg.injection.impact_eco + leg.injection.impact_pic) / 2  # type: ignore[operator]
+        )
+    )
+
+
+async def test_an_impact_month_no_archive_holds_takes_its_own_quarter_s_bands(
+    hass: Any,
+) -> None:
+    """A Walloon Impact entry's month standing in on the current card takes
+    its quarter's figures off the fixed card of the quarter after. The fixed
+    cards of the first half of 2026 print no band, so such a month is
+    credited its quarter's single figure in every band rather than the third
+    quarter's bands; one of the third quarter keeps the current card's."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.injection import (
+        _historical_injection_rate,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
+    )
+
+    rows = {"bolt_fix 2026-06": "bolt_fix.pdf"}
+    for month, hour, figure in (
+        (date(2026, 2, 1), 13, 0.94 * 0.06858 - 0.01133),
+        (date(2026, 2, 1), 19, 0.94 * 0.06858 - 0.01133),
+        (date(2026, 8, 1), 13, _OCTOBER_BANDS["impact_eco"]),
+        (date(2026, 8, 1), 19, _OCTOBER_BANDS["impact_pic"]),
+    ):
+        _monthly_snapshots(hass).clear()
+        snap = await _stand_in(
+            hass,
+            month,
+            rows,
+            meter="dynamic",
+            region="wallonia",
+            dso="ores",
+            mode="impact",
+        )
+        assert snap.injection is not None
+        when = datetime(
+            month.year, month.month, 11, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE
+        )
+        assert _historical_injection_rate(
+            snap.injection,
+            0.05,
+            energy=snap.energy,
+            when=when,
+            meter="dynamic",
+            region="wallonia",
+        ) == pytest.approx(figure, abs=5e-5), (month, hour)
+
+
+async def _settle_walloon(held: SupplierSnapshot, live: str) -> SupplierSnapshot:
+    """``held`` settled as August 2026 in Wallonia on 15 October with the
+    card text ``live`` served."""
+    from homeassistant.util import dt as dt_util
+
+    now = datetime(2026, 10, 15, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    with (
+        patch.object(
+            bolt_mod, "_fetch_pdf_text", AsyncMock(return_value=("url", live))
+        ),
+        patch.object(bolt_mod.dt_util, "now", return_value=now),
+    ):
+        return await bolt_mod.settle_month(
+            None,  # type: ignore[arg-type]
+            "bolt_variable",
+            "wallonia",
+            date(2026, 8, 1),
+            held,
+        )
+
+
+def _walloon_august() -> tuple[SupplierSnapshot, str]:
+    """August 2026's Walloon card, at the second quarter's bands, and
+    October's text, which prints the third quarter's."""
+    held = parse_snapshot(
+        "bolt_variable",
+        fixture_text("bolt_variable_impact_w.pdf", layout=True),
+        "wallonia",
+    )
+    return held, fixture_text("bolt_online_oct_reissue.pdf", layout=True)
+
+
+async def test_a_walloon_month_whose_band_rows_do_not_read_settles_its_single_figure() -> (
+    None
+):
+    """A next card whose Impact feed-in rows do not read kept the whole
+    feed-in leg on the quarter before, the single figure included, and the
+    month provisional until the card moved on, then for good. The single
+    figure settles on the rows that read, and the bands give way to it."""
+    from custom_components.be_electricity_prices.providers._settle import is_settled
+
+    held, october = _walloon_august()
+    settled = await _settle_walloon(
+        held, october.replace("Eco injection", "Eco réinjection")
+    )
+    inj = settled.injection
+    assert inj is not None and inj.spp_settled
+    assert inj.current == pytest.approx(0.0621, abs=5e-5)
+    assert (inj.impact_eco, inj.impact_medium, inj.impact_pic) == (None, None, None)
+    assert is_settled(settled) and not settled.provisional
+
+
+async def test_a_walloon_month_older_than_its_bands_settles_them() -> None:
+    """The card archive's Walloon rows before schema 84 carry no band
+    figures. Settled on a next card that prints them, the month takes the
+    quarter's bands, which a replay of its own card then keeps."""
+    from custom_components.be_electricity_prices.providers._settle import settled_as
+
+    held, october = _walloon_august()
+    assert held.injection is not None
+    older = replace(
+        held,
+        injection=replace(
+            held.injection, impact_eco=None, impact_medium=None, impact_pic=None
+        ),
+    )
+    settled = await _settle_walloon(older, october)
+    assert settled.injection is not None
+    for field, figure in _OCTOBER_BANDS.items():
+        assert getattr(settled.injection, field) == pytest.approx(figure, abs=5e-5)
+    replayed = settled_as(held, settled)
+    assert replayed.injection is not None
+    for field, figure in _OCTOBER_BANDS.items():
+        assert getattr(replayed.injection, field) == pytest.approx(figure, abs=5e-5)
+
+
+async def test_a_replay_drops_bands_its_settled_row_does_not_hold() -> None:
+    """A replay re-reads a card that prints the quarter before's bands over a
+    row settled without them: the bands go with the registers' settlement
+    rather than holding the month on the quarter before."""
+    from custom_components.be_electricity_prices.providers._settle import (
+        is_settled,
+        settled_as,
+    )
+
+    held, october = _walloon_august()
+    settled = await _settle_walloon(
+        held, october.replace("Eco injection", "Eco réinjection")
+    )
+    replayed = settled_as(held, settled)
+    inj = replayed.injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.0621, abs=5e-5)
+    assert (inj.impact_eco, inj.impact_medium, inj.impact_pic) == (None, None, None)
+    assert is_settled(replayed)

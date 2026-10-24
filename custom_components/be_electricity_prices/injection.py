@@ -52,7 +52,7 @@ from .const import (
     SOLAR_REGIME_INJECTION,
 )
 from .day_night import day_start_for, is_offpeak
-from .pricing import MeterType, tou_slot
+from .pricing import MeterType, dso_impact_band, tou_slot
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -114,6 +114,25 @@ def _register_coefficients(
     ):
         return None
     return (inj.factor_peak, inj.base_peak), (inj.factor_offpeak, inj.base_offpeak)
+
+
+def _impact_band_rates(inj: InjectionRates) -> dict[str, float] | None:
+    """The feed-in figure of each CWaPE band, by band, for a leg credited per
+    band of the Impact tariff, or ``None``.
+
+    Kept on the leg for an entry on that tariff alone
+    (``resolve_settlement_grid``), and read only on the variable settlement
+    they are printed for: a leg still per slot (``slot_indexed``) credits
+    its slot's spot whatever the band. All three or none.
+    """
+    if (
+        inj.slot_indexed
+        or inj.impact_pic is None
+        or inj.impact_medium is None
+        or inj.impact_eco is None
+    ):
+        return None
+    return {"pic": inj.impact_pic, "medium": inj.impact_medium, "eco": inj.impact_eco}
 
 
 def _tou_weekend_rule(energy: EnergyRates | None) -> str | None:
@@ -344,8 +363,11 @@ def _tou_injection_rate(
     day_start: int = DAY_START,
 ) -> float | None:
     """Per-slot injection rate for a time-of-use contract whose feed-in
-    tariff varies by slot (Engie Empower Flextime), or per register for a
-    card that prints a day and night feed-in pair (Trevion Vast).
+    tariff varies by slot (Engie Empower Flextime), per register for a
+    card that prints a day and night feed-in pair (Trevion Vast), or per
+    CWaPE band for one that prints a figure per band of the Impact tariff
+    and an entry on it (Bolt's Walloon variable cards,
+    ``_impact_band_rates``), on every meter but a night circuit.
 
     Returns ``None`` when the contract isn't TOU or its injection is a
     single rate (``peak`` unset), so the caller falls back to the normal
@@ -376,6 +398,9 @@ def _tou_injection_rate(
     per slot and per register as much as on a single rate, and both callers
     used to pass this answer on unclamped.
     """
+    bands = _impact_band_rates(inj)
+    if bands is not None and meter != "exclusive_night":
+        return _floor_injection(bands[dso_impact_band(when)], inj)
     rule = _tou_weekend_rule(energy)
     if inj.peak is None:
         return None
@@ -573,8 +598,9 @@ def _injection_price_for_slot(
 
     The per-slot core shared by the live current-hour scalar and the
     today/tomorrow injection array. Priority (identical to the historical
-    walk): a per-slot TOU or per-register rate first (Engie Empower
-    Flextime, Trevion Vast on a two-register meter), then the
+    walk): a per-slot TOU, per-register or per-band rate first (Engie
+    Empower Flextime, Trevion Vast on a two-register meter, Bolt's Walloon
+    variable cards on the Impact tariff), then the
     spot-indexed formula ``factor*spot + base`` when the contract is
     spot-indexed, otherwise the printed monthly ``current`` indicative.
     ``spot`` is the already-resolved spot for ``when``'s billing slot (None
@@ -650,7 +676,8 @@ def _historical_injection_rate(
 
     Mirrors the live ``_compute_injection_price`` priority: a per-slot TOU
     or per-register rate first (Engie Empower Flextime, Trevion Vast on a
-    two-register meter, when ``energy`` + ``when`` are given; ``meter``,
+    two-register meter, Bolt's Walloon variable cards per Impact band, when
+    ``energy`` + ``when`` are given; ``meter``,
     ``region`` and ``day_start`` say which registers and whose day/night
     schedule, and default
     to a single-register meter, which is credited at ``current``), then the

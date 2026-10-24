@@ -852,6 +852,17 @@ class InjectionRates:
     # ``index_realised``, which on the per-slot reading of the same leg would
     # stand in for every slot's spot.
     spp_settled: bool = False
+    # The same figures per CWaPE band, for a Walloon card that prints its
+    # variable settlement's feed-in per band of its Tarif Impact (Bolt's
+    # variable cards: "Eco injection 4,41", "Medium injection 9,17", "Pic
+    # injection 10,93" c/kWh in October 2026, each the formula at that band's
+    # SPP-weighted quarter index). Kept on the leg only for an entry on the
+    # Impact tariff (``resolve_settlement_grid``), which is credited the
+    # band the hour falls in (``injection._impact_band_rates``); all three or
+    # none.
+    impact_pic: float | None = None
+    impact_medium: float | None = None
+    impact_eco: float | None = None
     # An explicit guaranteed minimum in EUR/kWh, for a card that promises more
     # than "never negative". EnergyVision guarantees 1 c/kWh: *"Als de
     # berekening van onze formule lager zou uitkomen dan 1 EURcent/kWh, dan

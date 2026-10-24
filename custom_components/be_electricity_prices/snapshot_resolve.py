@@ -57,6 +57,7 @@ from .const import (
     CONF_CUSTOM_VAT_RATE,
     CONF_DIRECT_DEBIT,
     CONF_DSO,
+    CONF_DSO_TARIFF_MODE,
     CONF_INCLUDE_VAT,
     CONF_METER,
     CONF_QUARTER_HOURLY,
@@ -66,6 +67,7 @@ from .const import (
     DEFAULT_ANNUAL_CONSUMPTION_KWH,
     DEFAULT_DIRECT_DEBIT,
     DEFAULT_INCLUDE_VAT,
+    DSO_MODE_IMPACT,
     METER_BI,
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
@@ -459,5 +461,7 @@ def _resolve_snapshot(
         meter=entry.data.get(CONF_METER, METER_MONO),
     )
     return resolve_settlement_grid(
-        resolved, quarter_hourly=_quarter_hourly(entry, snap)
+        resolved,
+        quarter_hourly=_quarter_hourly(entry, snap),
+        impact=entry.data.get(CONF_DSO_TARIFF_MODE) == DSO_MODE_IMPACT,
     )
