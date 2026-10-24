@@ -416,8 +416,10 @@ Fields:
   tail at the picker is the only guarantee the bug class cannot recur
   (`flow_schemas.py` comment).
 - `CONF_CAPACITY_FIXED_KW`: a `NumberSelector` box, 0-50 kW step 0.1, default
-  `VREG_CAPACITY_FLOOR_KW` (2.5 kW, the regulated minimum monthly peak Fluvius bills
-  against; `const.py`).
+  `capacity_floor_kw()` (`fluvius.py`), the minimum monthly peak Fluvius bills
+  against as this year's tariff sheet states it (2.5 kW on every sheet from 2023 to
+  2026), else the latest earlier sheet held, else `VREG_CAPACITY_FLOOR_KW`
+  (`const.py`) before any sheet has been read.
 
 Pre-fill: before rendering, `async_step_capacity` copies `self._data` and calls
 `_apply_energy_manager_capacity_default` (`flow_prefill.py`), which tries two
