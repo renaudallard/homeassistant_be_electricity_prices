@@ -397,7 +397,8 @@ All four use `SIGN_CHARS` for the leading sign, and non-ASCII minus glyphs are n
 before `to_float` (`_ecopower_cards.py`). Returns `None` when nothing matches (injection is
 nullable).
 
-**dbs** injection is an **hourly `factor*spot+base`** shape. `_extract_dbs_injection`
+**dbs** injection is a **per-quarter-hour `factor*spot+base`** shape (the card credits "elk
+kwartier"). `_extract_dbs_injection`
 (`_ecopower_cards.py`) parses `Terugleververgoeding elk kwartier 0,00098 × EPEX DA - 0,015
 euro/kWh` via `_DBS_INJECTION_RE` (`_ecopower_cards.py`). Same MWh->kWh factor scaling (`× 1000`)
 and signed base as the consumption formula. The base can be negative (the credit drops below zero
@@ -410,13 +411,13 @@ VAT-exempt). Sets `current=None`, `factor`, `base`, and a diagnostic `formula` s
 | Aspect | Groene burgerstroom (variable) | Dynamische burgerstroom (dynamic) |
 | --- | --- | --- |
 | Energy | `0,5 × EPEX RLP + 0,085`, `month_indexed` on the `columns` blend, the printed (last month's) rate as `VariableRates.current`; settled on the card's own index in `fetch_for_month` | `factor × spot + base` (EUR/kWh), `quarter_hourly=True`, plus `yearly_fixed_fee` |
-| Fixed fee | none | Abonnementskost, VAT-incl 12-month total |
+| Fixed fee | none | Abonnementskost, 12 times the monthly figure, ex VAT as printed (`apply_vat` adds the 6% once) |
 | DSO coverage | all 8 Fluvius sub-areas, digital-meter block | all 8 Fluvius sub-areas, digital-only block |
-| Capacity / databeheer | flat euro fees, 6% VAT baked in | same |
+| Capacity / databeheer | flat euro fees, ex VAT as printed (`apply_vat` adds the 6% once) | same |
 | Distribution | per-kWh, unscaled (pricing applies VAT) | same |
 | Transport | 0.0 (rolled into distribution) | 0.0 |
 | Tax overlay | federal excise + energy contribution + GSC+WKK renewables + energy fund, `vat_rate=0.06` | identical block, reused |
-| Injection shape | monthly indicative (`current`), blended with the SPP-indexed pair on the 2026-07+ cards | hourly `factor × spot + base` |
+| Injection shape | monthly indicative (`current`), blended with the SPP-indexed pair on the 2026-07+ cards | per quarter-hour `factor × spot + base` |
 | Prosumer / PV forfait | none (Flanders digital SMR3 has no prosumer tariff) | none |
 
 There is no supplier-side PV/prosumer forfait: `supplier_prosumer_eur_per_kva_year` stays `None`.

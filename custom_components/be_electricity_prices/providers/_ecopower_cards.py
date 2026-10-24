@@ -222,8 +222,8 @@ def _extract_dbs_energy(text: str) -> DynamicRates:
     so they are NOT pre-scaled here.
 
     The monthly subscription (``Abonnementskost``) maps to
-    ``yearly_fixed_fee``, which is consumed as the actual annual euros
-    without further VAT scaling, so the 6% residential VAT is baked in.
+    ``yearly_fixed_fee``, twelve times the HTVA figure, which
+    ``_resolve.apply_vat`` grosses once per entry.
     """
     match = _DBS_ENERGY_RE.search(text)
     if not match:
@@ -241,7 +241,7 @@ def _extract_dbs_energy(text: str) -> DynamicRates:
 
 
 def _extract_dbs_abonnement(text: str) -> float:
-    """Yearly subscription fee in EUR, VAT-inclusive.
+    """Yearly subscription fee in EUR, HTVA as the card prints it.
 
     Printed HTVA as ``Abonnementskost 5,00 euro/maand``, so multiply out the
     12 months and leave it HTVA: this card declares ``vat_rate=0.06`` and
