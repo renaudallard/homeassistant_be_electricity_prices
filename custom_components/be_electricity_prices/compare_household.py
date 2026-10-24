@@ -65,7 +65,7 @@ from .compare_quote import (
     _full_year_kwh,
     _read_total_kwh,
 )
-from .compare_table import _solar_note
+from .compare_table import IndexGaps, _solar_note
 from .compare_weighting import (
     _consumption_weighted_spot,
     _register_weights,
@@ -109,7 +109,11 @@ from .pricing import MeterType
 from .providers import get as get_extractor
 from .providers import settlement_answer
 from .providers.base import SupplierSnapshot
-from .spot_stats import _energy_is_rlp_indexed, _rlp_blend_for
+from .spot_stats import (
+    _energy_is_rlp_indexed,
+    _injection_is_spp_indexed,
+    _rlp_blend_for,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -396,11 +400,12 @@ class _HouseholdMixin:
 
             One index further than _month_spot: a card that indexes its
             feed-in on Belpex_SPP may not be resolved against any other mean,
-            so when the Synergrid profile is not loaded this answers None and
+            so when no Synergrid solar profile is held this answers None and
             the caller keeps the card's printed indicative rather than
-            quoting the consumption index. Reuses the profile the coordinator
-            already holds; the dialog never triggers the 52 MB download
-            itself.
+            quoting the consumption index. Reads the entry's profile, else
+            the installation's (``quoted_spp_weights``); only the nightly
+            ranking downloads one, never the dialog, and a row priced without
+            it says so (``index_gaps``).
             """
             if spp_spot_resolved:
                 return spp_spot_resolved[0]
@@ -491,8 +496,9 @@ class _HouseholdMixin:
                 month = await _month_spot()
                 if _energy_is_rlp_indexed(snapshot.energy):
                     # Eneco's index is the RLP-weighted mean; the plain one
-                    # is the fallback while the profile is not loaded. Reuses
-                    # the coordinator's profiles, never downloads here.
+                    # is the fallback while no profile is held. The entry's
+                    # profiles, else the installation's, laid on the view
+                    # (``_detached_spot_view``); never downloaded here.
                     #
                     # THIS side's blend, not the entry's. The three reductions
                     # are three different indices, not one at three
@@ -512,6 +518,49 @@ class _HouseholdMixin:
                         return weighted
                 return month
             return _consumption_weighted_spot(spot_dict, hour_weights) or avg_spot
+
+        def _index_gaps(snapshot: SupplierSnapshot | None) -> IndexGaps:
+            """The index this side's card names that the page could not
+            resolve, by cause (``IndexGaps``), so the page and the ranking say
+            so rather than ranking the row as though its own index had been
+            read.
+
+            Without a day-ahead source no month index is resolved, whatever
+            curve is held: a feed-in on one is credited at the figure its card
+            prints, and an energy leg on one is not priced at all, so the cause
+            is the source and never the profile. With one, a weighted index
+            whose curve is not held is priced without it: the plain mean for
+            the energy, the printed figure for the feed-in. A feed-in only
+            counts where it is credited at a price on export the household
+            measured, and where the card prints a figure to fall back on;
+            without one the credit is left out, which ``feed_in_uncredited``
+            says.
+            """
+            if snapshot is None:
+                return IndexGaps()
+            energy = snapshot.energy
+            inj = snapshot.injection
+            credited = (
+                regime == SOLAR_REGIME_INJECTION
+                and rolling_inj_kwh > 0
+                and getattr(inj, "current", None) is not None
+            )
+            if not (spot_key or spot_keyless):
+                return IndexGaps(
+                    day_ahead=credited
+                    and (
+                        bool(getattr(inj, "month_indexed", False))
+                        or _injection_is_spp_indexed(snapshot)
+                    )
+                )
+            return IndexGaps(
+                load=_needs_month_mean(snapshot)
+                and _energy_is_rlp_indexed(energy)
+                and not coord.quoted_rlp_weights(_rlp_blend_for(energy)),
+                solar=credited
+                and _injection_is_spp_indexed(snapshot)
+                and not coord.quoted_spp_weights(),
+            )
 
         # Measured consumption / injection from the user's kWh sensors.
         # Injection is only relevant when a solar regime is configured; for
@@ -855,6 +904,7 @@ class _HouseholdMixin:
             signing_snapshot=signing_snapshot,
             own_welcome_credit=own_welcome_credit,
             spot_for=_spot_for,
+            index_gaps=_index_gaps,
             credit_month_spot_for=_credit_month_spot_for,
             export_rate_for=_export_rate_for,
             credit_year=_credit_year(

@@ -444,7 +444,7 @@ All sensors share one device per config entry.
 | `projected_year_injection` | Compensation or injection regime | The same for feed-in, read off your injection meter. Its fallback is Synergrid's solar production profile, used only where the entry already loads it (a feed-in indexed on Belpex SPP, or a custom entry weighting its feed-in on SPP). |
 | `rolling_year_injection` | Compensation or injection regime | The same as `rolling_year_consumption` for feed-in, read off your injection meter. |
 | `contract_end_date` | A contract end date is set | Timestamp of your contract's end date (`device_class: timestamp`), so an automation can remind you to renew before it rolls over. Changes no billed rate. It does bound the projections: `projected_year_cost` reads it to report how much of the 365 days it prices today's contract still covers, and `projected_year_end_cost` how much of the rest of this year. Stays available even when a supplier fetch fails. |
-| `potential_saving` | *Compare every supplier daily* is ticked, and your contract has an alternative of its kind in your region to rank against | EUR a year the cheapest alternative would save you against your own contract, from the nightly ranking. Negative means nothing on the market beats what you have. Attributes carry the whole ranking, each row with its annual cost and, where the same months could be replayed for it, a year-to-date figure. A row whose feed-in credit is left out for want of a full year of day-ahead and of your export (a feed-in that follows the spot price per slot) carries `feed_in_uncredited: true`, and the ranking page tags it `NO FEED-IN`: its figure is high by a year of that credit. A row whose card rewards paying by direct debit, when your own card never asked how you pay, is priced as not paying by direct debit, carries `direct_debit_assumed: true` and is tagged `NO DIRECT DEBIT`; the one-off comparison asks instead. Survives a restart, unless you changed a setting of the entry since the ranking ran (the supplier, the meter, the solar regime or any other): it is then discarded until the next nightly ranking. See [docs/entities.md](./docs/entities.md). |
+| `potential_saving` | *Compare every supplier daily* is ticked, and your contract has an alternative of its kind in your region to rank against | EUR a year the cheapest alternative would save you against your own contract, from the nightly ranking. Negative means nothing on the market beats what you have. Attributes carry the whole ranking, each row with its annual cost and, where the same months could be replayed for it, a year-to-date figure. A row whose feed-in credit is left out for want of a full year of day-ahead and of your export (a feed-in that follows the spot price per slot) carries `feed_in_uncredited: true`, and the ranking page tags it `NO FEED-IN`: its figure is high by a year of that credit. A row whose card rewards paying by direct debit, when your own card never asked how you pay, is priced as not paying by direct debit, carries `direct_debit_assumed: true` and is tagged `NO DIRECT DEBIT`; the one-off comparison asks instead. A row whose card weights an index by a Synergrid profile the installation does not hold is priced on the plain monthly mean for an energy index, or on the figure the card prints for a feed-in one, carries `profile_missing: true` and is tagged `NO PROFILE`; without an ENTSO-E key and the keyless setting, every feed-in that settles on a month of the day-ahead price is credited at the figure its card prints, your own contract's included, which the ranking page says once under the table. Survives a restart, unless you changed a setting of the entry since the ranking ran (the supplier, the meter, the solar regime or any other): it is then discarded until the next nightly ranking. See [docs/entities.md](./docs/entities.md). |
 | `ev_home_charging_rate` | *Publish the CREG home charging rate for a company car* is ticked | For a company car charged at home: the most an employer may reimburse per metered kWh, free of tax and social contributions, when it pays a flat rate (circular 2024/C/77), in EUR/kWh for your region and the running quarter. Computed from the CREG's monthly prices the way the SPF Finances does in the circular's quarterly addenda, and read once a quarter. It is a ceiling, not what every employer pays: an employer may pay less, must pay the lowest of the three regions if it ignores where its staff live, or may reimburse your actual cost instead. Attributes carry the quarter and every quarter the CREG's file covers, so last quarter's kWh can be settled at last quarter's rate. Not part of `current_price`. |
 
 ## Installation
@@ -915,7 +915,18 @@ opens a menu of four options, five once a supplier switch has been recorded this
   curve alone, and Bolt's variable cards read the Walloon curve in every
   region. Those are four different indices, about 2 €/MWh apart, and all four
   can sit in one table, so the ranking resolves each card against
-  its own rather than against yours.
+  its own rather than against yours. The profiles come from Synergrid and are
+  kept for the whole installation: the comparison pages use whatever any of
+  your entries downloaded and never download one themselves, while the daily
+  ranking below downloads them, at most once a month, for an entry with an
+  ENTSO-E key or the keyless setting. A card priced without its profile says
+  so: an energy index is then priced on the plain monthly mean and a feed-in
+  one on the figure its card prints, the one-off quote's note names it, and
+  the ranking tags the row `NO PROFILE`. Without either source no profile
+  would help, since there is no day-ahead to weigh: every feed-in that settles
+  on a month of the day-ahead price is credited at the figure its card prints,
+  your own contract's included, as your sensors credit it, and the note and
+  the ranking say so once.
   The sweep is **bounded by a clock, not a timeout** — a tariff card cannot be
   parsed halfway and abandoned — so it fetches the cheapest cards first, and
   **the table is on screen while it fills**, rows appearing and reordering as
@@ -953,7 +964,9 @@ opens a menu of four options, five once a supplier switch has been recorded this
   publish a freshness check, including the two slowest cards, so a day on which
   nothing was republished costs a handful of conditional requests rather than
   the minutes of fetching a cold sweep costs, and tariff cards move about
-  monthly. A
+  monthly. With a day-ahead source it also downloads the Synergrid load profile
+  the cards' indices are weighted by, and on the injection tariff the solar one,
+  at most once a month for the whole installation. A
   negative reading on the sensor is a real answer: nothing on the market beats
   what you already have. Unlike the dialog the scheduled run has **no time
   budget and skips nothing**, because the budget only exists to keep a progress

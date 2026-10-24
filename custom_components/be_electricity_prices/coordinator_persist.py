@@ -745,6 +745,8 @@ def _daily_compare_to_dict(result: Any) -> dict[str, Any]:
                 "read_by_ocr": row.read_by_ocr,
                 "feed_in_uncredited": row.feed_in_uncredited,
                 "direct_debit_assumed": row.direct_debit_assumed,
+                "profile_missing": row.profile_missing,
+                "day_ahead_missing": row.day_ahead_missing,
             }
             for row in result.rows
         ],
@@ -816,6 +818,8 @@ def _daily_compare_from_dict(blob: dict[str, Any]) -> Any | None:
                 read_by_ocr=raw.get("read_by_ocr") is True,
                 feed_in_uncredited=raw.get("feed_in_uncredited") is True,
                 direct_debit_assumed=raw.get("direct_debit_assumed") is True,
+                profile_missing=raw.get("profile_missing") is True,
+                day_ahead_missing=raw.get("day_ahead_missing") is True,
             )
         )
     return DailyCompare(

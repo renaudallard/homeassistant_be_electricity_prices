@@ -107,6 +107,7 @@ machinery.
 | `tests/test_day_hours.py` | The Flemish day hours option (issue #131): the 06:00 to 21:00 schedule, the bill on both legs and the meter step that asks it |
 | `tests/test_compare_direct_debit.py` | Direct debit on the comparison pages |
 | `tests/test_compare_own_contract.py` | Quoting the household's own contract on the comparison page |
+| `tests/test_compare_profiles.py` | The Synergrid curves a compared card's own index is weighted by: the entry's own, else the installation's, the nightly ranking's fetch, the `NO PROFILE` tag on a row priced without one, the one line said instead of a tag when there is no day-ahead source, each caveat once on the one-off quote |
 | `tests/test_daily_compare.py` | The opt-in daily supplier ranking and the sensor it feeds |
 | `tests/test_sensor_helpers.py` | Sensor value/attribute helpers |
 | `tests/test_binary_sensor.py` | The `tomorrow_prices_available` binary sensor |

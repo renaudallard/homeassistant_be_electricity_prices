@@ -63,6 +63,7 @@ from .compare_quote import (
     _ytd_welcome_credit,
 )
 from .compare_table import (
+    _NO_DAY_AHEAD,
     _card_caveats,
     _populate_charts,
     _solar_note,
@@ -529,16 +530,26 @@ class _PlaceholdersMixin(OptionsFlow):
             missing_kva=_kva(current) <= 0.0,
         )
         caveats: list[str] = []
+        own_gaps = hh.index_gaps(current_snapshot)
+        other_gaps = hh.index_gaps(other_snap)
         if current_snapshot is not None:
             caveats += _card_caveats(
-                current_snapshot, _label_for_supplier(current[CONF_SUPPLIER])
+                current_snapshot,
+                _label_for_supplier(current[CONF_SUPPLIER]),
+                gaps=own_gaps,
             )
         if other_snap is not None:
             caveats += _card_caveats(
                 other_snap,
                 _label_for_supplier(self._compare[CONF_SUPPLIER]),
                 read_by_ocr=other_read_by_ocr,
+                gaps=other_gaps,
             )
+        # Once each: the own contract quoted against itself is one card on
+        # both sides, and its every caveat read twice in a row.
+        caveats = list(dict.fromkeys(caveats))
+        if own_gaps.day_ahead or other_gaps.day_ahead:
+            caveats.append(_NO_DAY_AHEAD)
         rewired = _meters_rewired(self.config_entry, today_local)
         if rewired:
             caveats.append(
@@ -777,7 +788,7 @@ class _PlaceholdersMixin(OptionsFlow):
                     # by side and the delta between them is what the page says.
                     rlp_weights=_coordinator_rlp_weights(self.config_entry),
                     rlp_index_weights=_coordinator_rlp_index_weights(
-                        self.config_entry, other_snap
+                        self.config_entry, other_snap, quoted=True
                     ),
                     spp_weights=_coordinator_spp_weights(
                         self.config_entry, other_snap, own_entry=None

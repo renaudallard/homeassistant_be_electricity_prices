@@ -35,6 +35,7 @@ the average weighted by when a Belgian home actually draws power.
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -46,7 +47,15 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 from .snapshot_codec import _MigratingStore
 from .spot_stats import _rlp_weighted_month_mean, _spp_weighted_month_mean
-from .synergrid import RLP_BLENDS, RlpWeights, fetch_rlp_blends, fetch_spp_weights
+from .synergrid import (
+    RLP_BLENDS,
+    RlpWeights,
+    SppWeights,
+    fetch_rlp_blends,
+    fetch_spp_weights,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class _ProfilesMixin:
@@ -272,6 +281,49 @@ class _ProfilesMixin:
             held = self._rlp_weights
         return held or None
 
+    def quoted_rlp_weights(self, blend: str) -> RlpWeights | None:
+        """The RLP curve a comparison weights a card's index by, or ``None``.
+
+        :meth:`rlp_weights_for_blend` first, so a card on the entry's own blend
+        is priced on what its sensors read. A blend the entry does not hold is
+        taken from the installation: every curve any entry fetched, and the
+        ones the nightly ranking fetches (:meth:`fetch_quoted_profiles`), are
+        kept in one cache and store for all of them. An entry whose own card
+        names no RLP index holds none, and every RLP-indexed card on its
+        comparison pages fell back to the plain mean: 14 to 28 EUR a year low
+        at October 2026's prices.
+        """
+        return self.rlp_weights_for_blend(blend) or _held_curve(self.hass, "rlp", blend)
+
+    def quoted_spp_weights(self) -> SppWeights | None:
+        """The solar curve a comparison credits an SPP-indexed feed-in on, or
+        ``None``: the entry's own, else the installation's, as
+        :meth:`quoted_rlp_weights` does for the load profile."""
+        held: SppWeights | None = self._spp_weights or _held_curve(self.hass, "spp", "")
+        return held
+
+    async def fetch_quoted_profiles(self, *, spp: bool) -> None:
+        """Fetch the curves the nightly ranking weights other cards' indices on.
+
+        Every RLP blend, which is one download and one workbook read, and the
+        solar curve when ``spp``, which only a household on the injection
+        tariff is credited on. Kept for the whole installation and refreshed
+        by the same monthly rule as an entry's own (:meth:`_shared_profile`),
+        so a night whose curves are fresh fetches nothing. The comparison
+        dialog never calls this and reads what is held: a download of up to
+        52 MB has no place behind a page someone is waiting on. Never raises;
+        a failure leaves the rows on what is held.
+        """
+        year = dt_util.now().year
+        try:
+            await self._shared_rlp_blends(year)
+            if spp:
+                await self._shared_profile(
+                    "spp", year, "", _SPP_REFRESH_DAYS, fetch_spp_weights, year
+                )
+        except Exception as err:  # the ranking still prices without them
+            _LOGGER.debug("Synergrid profiles for the ranking unavailable: %s", err)
+
     def _rlp_weighted_month_mean(
         self,
         year: int,
@@ -322,6 +374,21 @@ def _profile_cache(
 ) -> dict[tuple[str, int, str], tuple[Any, datetime]]:
     bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
     return bucket.setdefault(_PROFILE_CACHE_KEY, {})  # type: ignore[no-any-return]
+
+
+def _held_curve(
+    hass: HomeAssistant, kind: str, blend: str
+) -> dict[tuple[int, int, int], float] | None:
+    """The newest curve of ``kind`` and ``blend`` the installation holds, up to
+    the running year, or ``None``: the year an entry falls back on when its own
+    fetch fails (``_stored_year``)."""
+    year = _stored_year(hass, kind, dt_util.now().year, blend)
+    if year is None:
+        return None
+    weights: dict[tuple[int, int, int], float] = _profile_cache(hass)[
+        (kind, year, blend)
+    ][0]
+    return weights
 
 
 def _stored_year(hass: HomeAssistant, kind: str, year: int, blend: str) -> int | None:

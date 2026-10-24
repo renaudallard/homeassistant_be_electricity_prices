@@ -79,7 +79,7 @@ relative to that package directory.
 | `coordinator_snapshot.py` | `_SnapshotMixin`: the snapshot fetch / freshness state machine. Probe, TTL, the shared cross-entry cache and its adoption, and the negative-fetch cache. |
 | `coordinator_issues.py` | `_IssuesMixin`: the Repairs handlers and the shared `_sync_issue` helper they all raise and clear through. A pure reader of coordinator state. |
 | `coordinator_spots.py` | `_SpotsMixin`: ENTSO-E fetching. The live day-ahead curve, the historical spot cache and its week-sized backfill. |
-| `coordinator_profiles.py` | `_ProfilesMixin`: the Synergrid load and production profiles, shared across entries and persisted, and the weighted monthly means they buy. |
+| `coordinator_profiles.py` | `_ProfilesMixin`: the Synergrid load and production profiles, shared across entries and persisted, and the weighted monthly means they buy, for the entry's own pricing and for the cards a comparison quotes. |
 | `coordinator_peak.py` | `_PeakMixin`: the Flemish capacity peak (`_track_monthly_peak`) and its 12-month history. |
 | `snapshot_store.py` | The shared cross-entry snapshot cache with its lock, negative-fetch cache and eviction, and the tuple generation counter both caches are gated on. |
 | `snapshot_codec.py` | Snapshot serialization to and from `.storage`, `_SNAPSHOT_SCHEMA_VERSION` and the schema-version gate, and the Store that drops a blob written under an older storage version. |

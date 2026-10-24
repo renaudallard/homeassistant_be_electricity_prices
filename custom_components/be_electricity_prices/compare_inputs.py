@@ -76,7 +76,7 @@ from .spot_stats import (
     _spp_weighting_enabled,
     spots_available,
 )
-from .synergrid import RlpWeights, SppWeights
+from .synergrid import RLP_BLENDS, RlpWeights, SppWeights
 
 
 def _label_for_supplier(supplier_id: str) -> str:
@@ -162,7 +162,7 @@ def _coordinator_rlp_weights(entry: ConfigEntry) -> RlpWeights | None:
 
 
 def _coordinator_rlp_index_weights(
-    entry: ConfigEntry, snapshot: SupplierSnapshot | None
+    entry: ConfigEntry, snapshot: SupplierSnapshot | None, *, quoted: bool = False
 ) -> RlpWeights | None:
     """The RLP curve the quoted card's own index names, or ``None``.
 
@@ -175,11 +175,13 @@ def _coordinator_rlp_index_weights(
     reading the entry's own for every row prices most of them on an index their
     card never mentions.
 
-    ``None`` for a card that names no RLP index, and for one whose blend this
-    process has not loaded; the walk then keeps the plain arithmetic mean, the
-    same fallback an entry with no profile at all gets. Never downloaded from
-    the dialog: the coordinator reduces every blend from the one workbook read
-    it already performs.
+    ``None`` for a card that names no RLP index, and for one whose blend is not
+    held; the walk then keeps the plain arithmetic mean, the same fallback an
+    entry with no profile at all gets. ``quoted`` is the comparison pages'
+    question: the entry's blend, else what the installation holds
+    (``quoted_rlp_weights``). Without it, as the backfill and an earlier
+    contract of a switch ask, only what the entry's coordinator loaded. Never
+    downloaded from here.
 
     Reads the leg with ``getattr`` rather than an attribute, like its sibling
     reads the coordinator: the caller wraps the whole year-to-date in
@@ -190,7 +192,9 @@ def _coordinator_rlp_index_weights(
     if not _energy_is_rlp_indexed(energy):
         return None
     coord = getattr(entry, "runtime_data", None)
-    getter = getattr(coord, "rlp_weights_for_blend", None)
+    getter = getattr(
+        coord, "quoted_rlp_weights" if quoted else "rlp_weights_for_blend", None
+    )
     if getter is None:
         return None
     weights: RlpWeights | None = getter(_rlp_blend_for(energy))
@@ -222,9 +226,9 @@ def _coordinator_spp_weights(
     credits on; ``None`` for a card that is not the household's. The
     coordinator is read off ``entry``, the real one: the proxy carries none.
 
-    Never downloaded from the dialog; a household whose own contract does not
-    want the profile simply has none, and the walk keeps the printed figure as
-    it always did.
+    The curve is the entry's own, else what the installation holds
+    (``quoted_spp_weights``). Never downloaded from here; with neither, the walk
+    keeps the printed figure as it always did.
     """
     if not (
         _spp_weighting_enabled(own_entry, snapshot)
@@ -233,7 +237,10 @@ def _coordinator_spp_weights(
     ):
         return None
     coord = getattr(entry, "runtime_data", None)
-    weights = getattr(coord, "_spp_weights", None)
+    getter = getattr(coord, "quoted_spp_weights", None)
+    if getter is None:
+        return None
+    weights: SppWeights | None = getter()
     return weights or None
 
 
@@ -640,6 +647,10 @@ class _HouseholdQuote:
     signing_snapshot: Any
     own_welcome_credit: float
     spot_for: Any
+    # The index a side's card names that the page could not resolve, by cause
+    # (an ``IndexGaps``, ``_resolve_household``), which the page and the
+    # ranking then say.
+    index_gaps: Any
     credit_month_spot_for: Any
     export_rate_for: Any
     # The past year of day-ahead and of the household's export, on which a
@@ -747,4 +758,14 @@ def _detached_spot_view(coord: Any, *, isolate: bool) -> Any:
     view._complete_spot_days = set() if isolate else set(coord._complete_spot_days)
     view._quarter_grid_days = set() if isolate else set(coord._quarter_grid_days)
     view._spot_day_retry_at = {} if isolate else dict(coord._spot_day_retry_at)
+    # The curves a card's own index is weighted by, as a quote reads them: the
+    # entry's own, else what the installation holds. Laid on the copy, so the
+    # means taken through it weigh every card on its own curve while the
+    # coordinator's own pricing still reads only what it loaded.
+    quoted = getattr(coord, "quoted_rlp_weights", None)
+    if quoted is not None:
+        view._rlp_blend_weights = {
+            blend: weights for blend in RLP_BLENDS if (weights := quoted(blend))
+        }
+        view._spp_weights = coord.quoted_spp_weights() or {}
     return view

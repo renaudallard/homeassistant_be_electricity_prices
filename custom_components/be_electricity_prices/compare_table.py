@@ -115,6 +115,29 @@ def _row_label(supplier_label: str, contract_label: str) -> str:
 
 
 @dataclass(frozen=True)
+class IndexGaps:
+    """The index a side's card names that its quote could not resolve, by cause.
+
+    ``load``: an energy index weighted by the Synergrid load profile, priced on
+    the plain monthly mean because no load profile is held. ``solar``: a
+    feed-in index weighted by the solar profile, credited at the figure the
+    card prints because no solar profile is held. ``day_ahead``: a feed-in that
+    settles on a month of the day-ahead price, credited at the printed figure
+    because the household has no day-ahead source, which no profile would
+    change. The first two are only asked with a source.
+    """
+
+    load: bool = False
+    solar: bool = False
+    day_ahead: bool = False
+
+    @property
+    def profile(self) -> bool:
+        """Whether a profile, of either kind, is what the side lacked."""
+        return self.load or self.solar
+
+
+@dataclass(frozen=True)
 class RankedRow:
     """One line of the ranking, already priced or explicitly not.
 
@@ -146,6 +169,18 @@ class RankedRow:
     # whose ristourne goes to a direct-debit payer alone, that is about 429 EUR
     # a year too dear, and the row says so rather than ranking on a guess.
     direct_debit_assumed: bool = False
+    # The card names an index weighted by a Synergrid profile that was not
+    # held, so its energy was priced on the plain monthly mean, or its
+    # SPP-indexed feed-in at the figure it prints (``IndexGaps.load`` or
+    # ``.solar``). Only the nightly ranking downloads one, and only for a
+    # household with a day-ahead source; a dialog reads what is held.
+    profile_missing: bool = False
+    # The card's feed-in settles on a month of the day-ahead price and the
+    # household has no day-ahead source, so it was credited at the figure the
+    # card prints (``IndexGaps.day_ahead``). No profile would change that. Not
+    # a tag: the cause is the household's, so the table says it once under the
+    # rows, and keeps the fact with a stored ranking to say it there too.
+    day_ahead_missing: bool = False
 
 
 @dataclass(frozen=True)
@@ -215,6 +250,16 @@ def _eur(value: float) -> str:
 _NO_FEED_IN = "`NO FEED-IN`"
 # The same for a row priced as not paying by direct debit for want of an answer.
 _NO_DIRECT_DEBIT = "`NO DIRECT DEBIT`"
+# And for a row priced without the Synergrid profile its card's index names.
+_NO_PROFILE = "`NO PROFILE`"
+# Said once, under the ranking and in a quote's note, rather than per row: a
+# household with no day-ahead source has every month-indexed feed-in on the
+# printed figure, which is a fact about it and not about any one card.
+_NO_DAY_AHEAD = (
+    "without a day-ahead source (an ENTSO-E key or the keyless setting) every "
+    "feed-in indexed on a month is credited at the figure its card prints, your "
+    "own contract's included"
+)
 
 
 def _ranking_table(
@@ -281,6 +326,8 @@ def _ranking_table(
             line += f" {_NO_FEED_IN}"
         if row.direct_debit_assumed:
             line += f" {_NO_DIRECT_DEBIT}"
+        if row.profile_missing:
+            line += f" {_NO_PROFILE}"
         out.append(line)
     if any(row.feed_in_uncredited for row in priced):
         out.append("")
@@ -297,6 +344,18 @@ def _ranking_table(
             "pay. Quote it on its own to answer, since a whole ristourne can "
             "depend on it."
         )
+    if any(row.profile_missing for row in priced):
+        out.append("")
+        out.append(
+            f"{_NO_PROFILE} its card weights an index by a Synergrid profile "
+            "this installation has not downloaded: an energy index is then "
+            "priced on the plain monthly mean, a feed-in one at the figure the "
+            "card prints. The daily ranking downloads the profiles for an entry "
+            "with an ENTSO-E key or the keyless setting."
+        )
+    if any(row.day_ahead_missing for row in priced):
+        out.append("")
+        out.append(f"{_NO_DAY_AHEAD[0].upper()}{_NO_DAY_AHEAD[1:]}.")
 
     if unpriced:
         out.append("")
@@ -437,13 +496,22 @@ def _vintage_note(
     )
 
 
-def _card_caveats(snapshot: Any, label: str, *, read_by_ocr: bool = False) -> list[str]:
+def _card_caveats(
+    snapshot: Any,
+    label: str,
+    *,
+    read_by_ocr: bool = False,
+    gaps: IndexGaps | None = None,
+) -> list[str]:
     """What one side's card does not say, in the household's own terms.
 
     Separate from ``_uncredited_note``, which explains a missing injection
     credit. These are caveats about the card itself: a regulated charge it
     does not print, so the estimate beside it is short by a real amount the
-    household still pays.
+    household still pays, or an index it names that a profile not held kept
+    from being resolved (``gaps``, which the caller asks of the household). A
+    household with no day-ahead source is told that once for the page
+    (``_NO_DAY_AHEAD``), not once per card.
 
     Returned per side and joined by the caller, so the page names which
     supplier each caveat belongs to rather than hedging the whole quote.
@@ -453,6 +521,19 @@ def _card_caveats(snapshot: Any, label: str, *, read_by_ocr: bool = False) -> li
         out.append(
             f"{label} publishes its card as page images, so this quote is "
             "priced off the archive's OCR reading of it"
+        )
+    gaps = gaps or IndexGaps()
+    if gaps.load:
+        out.append(
+            f"{label}'s energy index is weighted by the Synergrid load profile, "
+            "which this installation has not downloaded, so it is quoted on the "
+            "plain monthly mean"
+        )
+    if gaps.solar:
+        out.append(
+            f"{label}'s feed-in index is weighted by the Synergrid solar profile, "
+            "which this installation has not downloaded, so its feed-in is "
+            "credited at the figure the card prints"
         )
     # A card whose rate IS the delivery month's index prints one computed from
     # the PREVIOUS month's and says so, worth 8,1% under in May and 15,4% over

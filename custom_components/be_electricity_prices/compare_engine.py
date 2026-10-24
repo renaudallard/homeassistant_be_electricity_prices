@@ -50,6 +50,7 @@ from .compare_inputs import (
     _coordinator_rlp_index_weights,
     _coordinator_rlp_weights,
     _coordinator_spp_weights,
+    _effective_regime,
     _HouseholdQuote,
     _keyless_stale_spots,
     _needs_missing_spots,
@@ -75,6 +76,7 @@ from .flow_contracts import (
 from .providers import get as get_extractor
 from .providers import offers_direct_debit, settlement_answer
 from .providers._pdf import memoise_text_fetches
+from .spot_stats import spots_available
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -370,7 +372,7 @@ class _SweepEngine(_HouseholdMixin):
                     billed_peak_kw=hh.peak_kw,
                     rlp_weights=_coordinator_rlp_weights(self.config_entry),
                     rlp_index_weights=_coordinator_rlp_index_weights(
-                        self.config_entry, snap
+                        self.config_entry, snap, quoted=True
                     ),
                     spp_weights=_coordinator_spp_weights(
                         self.config_entry, snap, own_entry=None
@@ -420,6 +422,19 @@ class _SweepEngine(_HouseholdMixin):
         # Every night is a new sweep, so it starts from the shared cache and
         # its probe rather than from the cards an earlier night held.
         evict_sweep_rows(self.hass, self.config_entry.entry_id)
+        # The Synergrid curves the cards' own indices are weighted by, which a
+        # household whose own card names none never loads, so its alternatives
+        # were ranked on the plain mean. Fetched here and not in the dialog:
+        # this run has all night, and a curve it fetches serves every entry of
+        # the installation until it is due again. Before the household, whose
+        # month means are taken on the curves held when it is resolved. Only
+        # with a day-ahead to weight, and the solar curve only where a feed-in
+        # is credited at a price.
+        data = self.config_entry.data
+        if spots_available(data):
+            await coord.fetch_quoted_profiles(
+                spp=_effective_regime(data, {}) == SOLAR_REGIME_INJECTION
+            )
         sweep["household"] = await self._resolve_household(
             coord,
             candidates=sweep["candidates"],
@@ -570,11 +585,14 @@ class _SweepEngine(_HouseholdMixin):
             )
         except Exception:  # the alternatives are still useful
             return None
+        gaps = hh.index_gaps(hh.current_snapshot)
         return RankedRow(
             label=label,
             annual=annual,
             is_own=True,
             feed_in_uncredited=_feed_in_left_out(hh.current_snapshot, credit, hh),
+            profile_missing=gaps.profile,
+            day_ahead_missing=gaps.day_ahead,
         )
 
     async def _sweep_one(
@@ -714,6 +732,7 @@ class _SweepEngine(_HouseholdMixin):
             meter=meter,
             welcome_credit_eur=welcome_credit,
         )
+        gaps = hh.index_gaps(resolved)
         return RankedRow(
             label=label,
             annual=annual,
@@ -723,6 +742,8 @@ class _SweepEngine(_HouseholdMixin):
             # holds only where its own card asks the question.
             direct_debit_assumed=offers_direct_debit(supplier, contract)
             and CONF_DIRECT_DEBIT not in self.config_entry.data,
+            profile_missing=gaps.profile,
+            day_ahead_missing=gaps.day_ahead,
         )
 
 

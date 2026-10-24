@@ -980,9 +980,25 @@ day split by, and only the entry's own bill wants the same curve for both. An
 earlier contract after a recorded supplier switch is priced the same way, live
 (`price_previous_periods`, `contract_periods.py`) and in the backfill, whose
 context carries the two as `rlp_index_weights` and `rlp_weights`
-(`_BackfillContext`, `backfill_window.py`). A
-blend this process has not loaded falls back to the plain arithmetic mean, the
-same answer an entry with no profile at all gets; the dialog never downloads.
+(`_BackfillContext`, `backfill_window.py`). Those two read only the blends
+the entry loaded. The comparison pages read further (`quoted_rlp_weights`,
+`coordinator_profiles.py`): a blend the entry does not hold is taken from what
+the installation holds, every curve any entry fetched and those the nightly
+ranking fetches (`fetch_quoted_profiles`), since an entry whose own card names
+no RLP index loads none and its RLP-indexed alternatives were ranked on the plain
+mean, 14 to 28 EUR a year low at October 2026's prices. The views the pages take
+their month means on carry those curves (`_detached_spot_view`,
+`compare_inputs.py`), so the coordinator's own pricing is untouched. Where
+nothing holds the blend the quote falls back to the plain arithmetic mean, the
+same answer an entry with no profile at all gets, and says so: the one-off
+quote's note names the card and the ranking tags its row `NO PROFILE`
+(`profile_missing`). The dialog never downloads; the nightly ranking fetches
+every blend, one download for all of them, before it prices, and never twice
+inside the refresh window. It does so only for an entry with a day-ahead source:
+without one no month index is resolved whatever curve is held, so a row is never
+tagged for a missing profile there; the page says once that every
+month-indexed feed-in is credited at its printed figure (`IndexGaps`,
+`compare_table.py`).
 
 All four `_compute_current_year_cost` call sites in `compare_flow.py` pass it,
 the household's own rows included, where it says the same thing as the default
@@ -1051,7 +1067,11 @@ later still gets a fresh file. The rows are written to the shared
 `{DOMAIN}_profiles` store, which is what survives a restart.
 `_spp_weighted_month_mean` then computes `sum(price * weight) / sum(weight)` over
 the delivery month for the injection index, while energy keeps the plain mean.
-Both the live injection sensor and the year-to-date credit use it.
+Both the live injection sensor and the year-to-date credit use it. The
+comparison pages credit an SPP-indexed feed-in on the entry's curve, else the
+installation's (`quoted_spp_weights`), as they do the load profile; the nightly
+ranking of a household on the injection tariff fetches it before pricing, and a
+row priced without it is credited the figure its card prints and tagged.
 
 ### The ex-ante caveat
 

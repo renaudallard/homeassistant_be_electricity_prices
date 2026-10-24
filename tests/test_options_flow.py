@@ -9235,7 +9235,7 @@ def test_the_compare_page_reads_the_solar_profile_for_the_side_that_names_it() -
             "supplier": "eneco",
             "contract": "power_fix",
         },
-        runtime_data=SimpleNamespace(_spp_weights=weights),
+        runtime_data=SimpleNamespace(quoted_spp_weights=lambda: weights),
     )
     spp_card = make_snapshot(
         injection=InjectionRates(current=0.05, factor=0.9, base=-0.01, spp_indexed=True)
