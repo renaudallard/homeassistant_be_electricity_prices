@@ -37,6 +37,7 @@ shows up as a seam, not an exception."""
 from __future__ import annotations
 
 from datetime import date, datetime, time
+from functools import partial
 from typing import Any
 
 import aiohttp
@@ -73,6 +74,7 @@ from .fees import (
     first_year_net_kwh,
     grants_a_welcome_credit,
     in_first_contract_year,
+    lump_held_to_first_year,
     window_energy_rate,
 )
 from .injection import (
@@ -129,6 +131,51 @@ from .ytd_legs import (
 # weekday holiday bills at the day rate, so 10:00 is the day register there.
 _DAY_REGISTER_HOUR = 10
 _NIGHT_REGISTER_HOUR = 3
+
+
+async def first_year_charges(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    extractor: SupplierExtractor,
+    snapshot: SupplierSnapshot,
+    entry: ConfigEntry,
+    first: date,
+    last: date,
+    **walk: Any,
+) -> float | None:
+    """What ``[first, last]`` charged for the three components a welcome
+    credit may come off, by the year-to-date bill over those days.
+
+    The metered part is stretched over the days or hours the walk could not
+    price (no meter reading, no spot), so a history starting part-way through
+    the first year does not pass for a year of small bills; a walk that priced
+    none answers None, as one that could not run at all does.
+    """
+    year: dict[str, float] = {}
+    if (
+        await _compute_current_year_cost(
+            hass,
+            session,
+            extractor,
+            snapshot,
+            entry,
+            breakdown=year,
+            window_start_override=first,
+            window_end=last,
+            **walk,
+        )
+        is None
+    ):
+        return None
+    eligible = year.get("welcome_credit_eligible_eur")
+    priced = year.get("days_priced", year.get("hours_priced", 0.0))
+    elapsed = year.get("days_elapsed", year.get("hours_elapsed", 0.0))
+    if eligible is None or priced <= 0.0:
+        return None
+    metered = year.get("energy_component_ytd_eur", 0.0) + year.get(
+        "green_component_ytd_eur", 0.0
+    )
+    return eligible + metered * (elapsed / priced - 1.0)
 
 
 async def _compute_current_year_cost(
@@ -343,6 +390,31 @@ async def _compute_current_year_cost(
         snapshot,
         cached_only=cached_only,
     )
+    # A lump the card holds to what the first contract year charged is held to
+    # that year's charges, walked by this same bill wherever the lump lands.
+    signing_snapshot = await lump_held_to_first_year(
+        signing_snapshot,
+        _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),
+        window_start,
+        end,
+        partial(
+            first_year_charges,
+            hass,
+            session,
+            extractor,
+            snapshot,
+            entry,
+            contract_override=contract_override,
+            meter_override=meter_override,
+            historical_spots=historical_spots,
+            spot_quarters=spot_quarters,
+            spp_weights=spp_weights,
+            rlp_weights=rlp_weights,
+            rlp_index_weights=rlp_index_weights,
+            cached_only=cached_only,
+            snapshot_raw=snapshot_raw,
+        ),
+    )
 
     static_fees = await _ytd_static_fees(
         hass,
@@ -439,24 +511,20 @@ async def _compute_current_year_cost(
         # tested the two EUR halves and dropped 0.27.2's percentage campaign
         # and its kWh cashback whole.
         if grants_a_welcome_credit(signing_snapshot):
-            credit = _welcome_credit_eur(
-                signing_snapshot,
-                _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),
-                window_start,
-                end,
-                # The three components a welcome credit may come off and no
-                # others: the supplier's ENERGY component of what the window's
-                # consumption was charged, the SUPPLIER's standing charge (not
-                # the energy fund, the data-management charge or the Brussels
-                # OSP fee sitting beside it in static_fees) and the region's
-                # green electricity / CHP contribution. Not ``energy``: that
-                # is the all-in figure the walks bill, network and taxes
-                # included and net of the feed-in credit, and measured against
-                # it the cap let a 365 kWh/year connection through at 42,61
-                # EUR over a quarter where the card grants 26,28, while a site
-                # exporting more than it used was capped below its own
-                # energiekost. The walks keep the component beside the bill
-                # for exactly this sum.
+            # The three components a welcome credit may come off and no
+            # others: the supplier's ENERGY component of what the window's
+            # consumption was charged, the SUPPLIER's standing charge (not
+            # the energy fund, the data-management charge or the Brussels
+            # OSP fee sitting beside it in static_fees) and the region's
+            # green electricity / CHP contribution. Not ``energy``: that
+            # is the all-in figure the walks bill, network and taxes
+            # included and net of the feed-in credit, and measured against
+            # it the cap let a 365 kWh/year connection through at 42,61
+            # EUR over a quarter where the card grants 26,28, while a site
+            # exporting more than it used was capped below its own
+            # energiekost. The walks keep the component beside the bill
+            # for exactly this sum.
+            eligible = (
                 stats.get("energy_component_ytd_eur", 0.0)
                 + static_fees.supplier_fee
                 # Accumulated per month by the walks, on each month's own
@@ -471,7 +539,17 @@ async def _compute_current_year_cost(
                     "green_component_ytd_eur",
                     stats.get("consumption_ytd_kwh", 0.0)
                     * renewables_eur_per_kwh(snapshot.taxes, region),
-                ),
+                )
+            )
+            # And kept, for the cap a lump paid at the anniversary is held to
+            # (first_year_charges).
+            stats["welcome_credit_eligible_eur"] = eligible
+            credit = _welcome_credit_eur(
+                signing_snapshot,
+                _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),
+                window_start,
+                end,
+                eligible,
                 # The FIRST CONTRACT YEAR's net volume, not this window's.
                 # The card's per-kWh term is a yearly one ("pour votre
                 # premiere annee de consommation nette d'electricite"), and

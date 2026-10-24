@@ -34,7 +34,8 @@ why they must not be duplicated per caller."""
 from __future__ import annotations
 
 from calendar import monthrange
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -591,6 +592,52 @@ def last_credited_day(snapshot: SupplierSnapshot, start: date) -> date:
     return start + timedelta(days=_WELCOME_YEAR_DAYS - 1)
 
 
+async def lump_held_to_first_year(
+    snapshot: SupplierSnapshot,
+    start: date | None,
+    window_start: date,
+    today: date,
+    charged: Callable[[date, date], Awaitable[float | None]],
+) -> SupplierSnapshot:
+    """``snapshot`` with its lump held to what the first contract year
+    charged, for a window ``[window_start, today]`` the lump lands in.
+
+    EnergyVision's April to June 2026 cards pay the credit at the anniversary
+    and cap it at what that year charged for the three components it may come
+    off (``welcome_credit_lump_capped``). That year lies mostly before any
+    window the anniversary falls in, so the window's own charges cannot stand
+    in for it: stretched to a year they moved the lump with every later day,
+    and in the anniversary's month put it above the cap. ``charged`` walks
+    ``[first, last]`` and answers what those days charged for the three
+    components, or None where it could not price them, and the figure becomes
+    the card's ceiling (``welcome_credit_cap_eur``), the same in every window
+    the lump lands in. The first year runs from the start date to the day
+    before the anniversary.
+
+    Identity for every other card and window, and where the walk failed,
+    which leaves ``_welcome_credit_eur`` its stretched estimate.
+    """
+    if (
+        start is None
+        or snapshot.welcome_credit_kind != WELCOME_CREDIT_ANNIVERSARY
+        or not getattr(snapshot, "welcome_credit_lump_capped", False)
+    ):
+        return snapshot
+    lump_day = last_credited_day(snapshot, start)
+    if not window_start <= lump_day <= today:
+        return snapshot
+    eligible = await charged(start, lump_day - timedelta(days=1))
+    if eligible is None:
+        return snapshot
+    year = max(eligible, 0.0)
+    ceiling = snapshot.welcome_credit_cap_eur
+    return replace(
+        snapshot,
+        welcome_credit_cap_eur=year if ceiling is None else min(ceiling, year),
+        welcome_credit_lump_capped=False,
+    )
+
+
 def grants_a_welcome_credit(snapshot: SupplierSnapshot) -> bool:
     """Whether the card grants a welcome credit at all, in ANY of its shapes.
 
@@ -667,10 +714,10 @@ def _welcome_credit_eur(
     carries and which binds above. EnergyVision's cards up to June 2026 pay
     a lump too (*"De korting wordt pas toegekend na één ononderbroken jaar
     verbruik"*), and the ones from April hold it to the ELIGIBLE charges of
-    the year (``welcome_credit_lump_capped``). Those are not a running figure
-    here: the first year lies mostly before the window its anniversary falls
-    in, so the window's eligible charges, stretched to a year, stand in for
-    them.
+    the year (``welcome_credit_lump_capped``). The walks resolve that cap on
+    the first contract year itself (:func:`lump_held_to_first_year`) before
+    calling this; a window that could not walk it, a quote of the year ahead
+    among them, stretches its own eligible charges to a year instead.
 
     A card may state the credit as a reduction on the ENERGY PRICE instead of
     a lump, or as both: Mega's ristourne is *"une reduction de 4.929 c EUR/kWh
@@ -776,9 +823,10 @@ def _welcome_credit_eur(
         if not window_start <= last_credited_day(snapshot, start) <= today:
             return 0.0
         if getattr(snapshot, "welcome_credit_lump_capped", False):
-            # Held to what the first year charged for the three components.
-            # That year lies mostly before a window the anniversary falls in,
-            # so the window's own charges stand in for it, at a year's length.
+            # Held to what the first year charged for the three components,
+            # which a caller that walked that year has already resolved into
+            # the ceiling above. One that could not (a quote of the coming
+            # year, whose window is that year) stretches its own charges.
             window_days = (today - window_start).days + 1
             amount = min(
                 amount, max(eligible_eur, 0.0) * _WELCOME_YEAR_DAYS / window_days

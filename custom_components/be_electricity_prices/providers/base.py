@@ -349,7 +349,9 @@ class SupplierSnapshot:
     # anniversary rule: "Indien de som van deze componenten lager is dan de
     # vermelde welkomstkorting, wordt de korting beperkt tot maximaal het
     # bedrag van deze som". Its cards before April pay the same lump without
-    # that sentence, and Frank's state none. Read on the anniversary kind only.
+    # that sentence, and Frank's state none. Read on the anniversary kind only,
+    # and resolved into ``welcome_credit_cap_eur`` on that year's own charges
+    # by a walk that can price it (``fees.lump_held_to_first_year``).
     welcome_credit_lump_capped: bool = False
     # What the supplier takes off the YEARLY STANDING CHARGE when the customer
     # pays by direct debit, in EUR/year, or None where the card offers no such

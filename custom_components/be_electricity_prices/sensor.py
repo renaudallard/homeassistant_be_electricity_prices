@@ -538,6 +538,7 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "network_cap_rebate_eur",
             "standing_charges_ytd_eur",
             "welcome_credit_eur",
+            "welcome_credit_eligible_eur",
             "previous_contracts_eur",
             "previous_contracts",
             "energy_basis",

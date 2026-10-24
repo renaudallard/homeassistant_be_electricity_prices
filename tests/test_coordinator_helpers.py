@@ -14729,8 +14729,8 @@ def test_a_capped_anniversary_lump_is_held_to_a_year_of_eligible_charges() -> No
     """EnergyVision's April to June 2026 cards pay the credit as a lump after a
     year and add *"Indien de som van deze componenten lager is dan de vermelde
     welkomstkorting, wordt de korting beperkt tot maximaal het bedrag van deze
-    som"*. That year lies mostly before the window its anniversary falls in,
-    so the window's eligible charges, stretched to a year, stand in for it."""
+    som"*. A window that could not walk that year, a quote of the coming one,
+    stretches its own eligible charges to a year instead."""
     from custom_components.be_electricity_prices.const import (
         WELCOME_CREDIT_ANNIVERSARY,
     )
@@ -14758,6 +14758,141 @@ def test_a_capped_anniversary_lump_is_held_to_a_year_of_eligible_charges() -> No
         _welcome_credit_eur(snap, start, date(2026, 6, 10), date(2026, 12, 31), 60.0)
         == 0.0
     )
+
+
+async def test_a_capped_lump_takes_its_first_years_charges_as_its_ceiling() -> None:
+    """The cap is what the first contract year charged, from the start date to
+    the day before the anniversary, asked of the walk once for a window the
+    lump lands in and held as the card's ceiling there."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import lump_held_to_first_year
+
+    capped = replace(
+        make_snapshot(
+            welcome_credit_eur=200.0, welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY
+        ),
+        welcome_credit_lump_capped=True,
+    )
+    start = date(2026, 5, 10)
+    asked: list[tuple[date, date]] = []
+
+    async def charged(first: date, last: date) -> float | None:
+        asked.append((first, last))
+        return 171.73
+
+    held = await lump_held_to_first_year(
+        capped, start, date(2027, 1, 1), date(2027, 7, 15), charged
+    )
+    assert asked == [(start, date(2027, 5, 9))]
+    assert held.welcome_credit_cap_eur == pytest.approx(171.73)
+    assert held.welcome_credit_lump_capped is False
+    # A ceiling the card prints itself still binds when it is lower.
+    printed = replace(capped, welcome_credit_cap_eur=150.0)
+    lower = await lump_held_to_first_year(
+        printed, start, date(2027, 1, 1), date(2027, 7, 15), charged
+    )
+    assert lower.welcome_credit_cap_eur == pytest.approx(150.0)
+    # No walk where the lump is not in the window, or the card states no cap,
+    # and none that could not price the year changes anything.
+    asked.clear()
+    for snap, window_end in (
+        (capped, date(2027, 4, 30)),
+        (replace(capped, welcome_credit_lump_capped=False), date(2027, 7, 15)),
+    ):
+        same = await lump_held_to_first_year(
+            snap, start, date(2027, 1, 1), window_end, charged
+        )
+        assert same is snap
+    assert asked == []
+
+    async def failed(_first: date, _last: date) -> float | None:
+        return None
+
+    kept = await lump_held_to_first_year(
+        capped, start, date(2027, 1, 1), date(2027, 7, 15), failed
+    )
+    assert kept is capped
+
+
+async def test_a_capped_lump_holds_one_value_after_the_anniversary(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Measured on the window it lands in, stretched to a year, the lump of a
+    May 2026 signing moved with every later day of 2027 and in May passed the
+    first year's charges it is capped at. Walked on the first year itself, it
+    is that year's charges in June and in December alike, and the months of
+    the year (each the year to date less the year to the day before it) add up
+    to it."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    entry = _entry(
+        region="wallonia",
+        solar_regime="none",
+        meter="mono",
+        contract="test",
+        contract_start_date="2026-05-10",
+        consumption_kwh="sensor.cons_total",
+    )
+    snap = replace(
+        _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=FixedRates(single=0.10, yearly_fixed_fee=36.5),
+        ),
+        welcome_credit_eur=200.0,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        welcome_credit_lump_capped=True,
+    )
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        if entity_id != "sensor.cons_total":
+            return {}
+        # A household drawing four times as much in winter, so no stretch of
+        # part of a year is the year.
+        days = (end - start).days + 1
+        return {
+            start + timedelta(days=n): 2.0
+            if (start + timedelta(days=n)).month in (11, 12, 1, 2)
+            else 0.5
+            for n in range(days)
+        }
+
+    async def _walk(today: str, **window: Any) -> dict[str, float]:
+        freezer.move_to(today)
+        stats: dict[str, float] = {}
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+            await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                snap,
+                entry,
+                breakdown=stats,
+                **window,
+            )
+        return stats
+
+    first_year = (
+        await _walk(
+            "2027-07-15 12:00:00+02:00",
+            window_start_override=date(2026, 5, 10),
+            window_end=date(2027, 5, 9),
+        )
+    )["welcome_credit_eligible_eur"]
+    assert first_year < 200.0
+    june = await _walk("2027-06-15 12:00:00+02:00")
+    december = await _walk("2027-12-31 12:00:00+01:00")
+    assert june["welcome_credit_eur"] == pytest.approx(first_year)
+    assert december["welcome_credit_eur"] == pytest.approx(first_year)
+    # December's share: the year to date less the year to 30 November.
+    november = await _walk("2027-12-31 12:00:00+01:00", window_end=date(2027, 11, 30))
+    assert november["welcome_credit_eur"] == pytest.approx(first_year)
 
 
 async def test_welcome_credit_is_read_from_the_signing_month_card(

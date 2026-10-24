@@ -2805,7 +2805,9 @@ async def test_backfill_if_missing_skips_when_there_is_no_snapshot(
     ],
     ids=["fixed", "dynamic"],
 )
-@pytest.mark.parametrize("credit", ["pro_rata", "feed_in_bonus", "percentage"])
+@pytest.mark.parametrize(
+    "credit", ["pro_rata", "feed_in_bonus", "percentage", "capped_lump"]
+)
 async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     hass: HomeAssistant, energy: Any, credit: str
 ) -> None:
@@ -2820,7 +2822,10 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     has to read the same year the live walk reads.
 
     And a percentage of the energy cost, valued at the rate of the contract's
-    own first-year hours, on cards that change price at the start date."""
+    own first-year hours, on cards that change price at the start date.
+
+    And a lump capped at what the first contract year charged, held to that
+    year's own charges on both sides rather than to a stretch of the window."""
     from dataclasses import replace
 
     from custom_components.be_electricity_prices import (
@@ -2836,6 +2841,7 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
 
     bonus = credit == "feed_in_bonus"
     percentage = credit == "percentage"
+    lump = credit == "capped_lump"
     snap = (
         make_snapshot(
             energy=energy,
@@ -2845,6 +2851,16 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         if bonus
         else make_snapshot(energy=energy, welcome_credit_pct_of_energy=0.33)
         if percentage
+        # A lump no first year's charges come near, so the cap is what bills.
+        else replace(
+            make_snapshot(
+                energy=energy,
+                welcome_credit_eur=5000.0,
+                welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+            ),
+            welcome_credit_lump_capped=True,
+        )
+        if lump
         else make_snapshot(energy=energy, welcome_credit_eur=200.0)
     )
     # A dearer card from March, the month the percentage contract starts in.
@@ -2867,9 +2883,14 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         title="Credited",
         solar_regime="injection" if bonus else "none",
         consumption_kwh="sensor.cons_total",
-        # A bonus is paid at the anniversary, which has to fall in the window.
+        # A bonus or a lump is paid at the anniversary, which has to fall in
+        # the window.
         contract_start_date=(
-            "2025-02-01" if bonus else "2026-03-10" if percentage else "2026-01-01"
+            "2025-02-01"
+            if bonus or lump
+            else "2026-03-10"
+            if percentage
+            else "2026-01-01"
         ),
     )
     entry.add_to_hass(hass)
@@ -2941,6 +2962,7 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         patch.object(
             backfill_window, "signing_month_snapshot", AsyncMock(return_value=snap)
         ),
+        patch.object(ytd_cost, "signing_month_snapshot", AsyncMock(return_value=snap)),
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
@@ -2980,6 +3002,8 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     # days of it or the whole bonus, or agreeing with it would prove nothing.
     if percentage:
         assert stats["welcome_credit_eur"] > 0.0
+    elif lump:
+        assert 0.0 < stats["welcome_credit_eur"] < 5000.0
     else:
         expected = 0.0106 * 3000.0 if bonus else 200.0 * 90 / 365
         assert stats["welcome_credit_eur"] == pytest.approx(expected)

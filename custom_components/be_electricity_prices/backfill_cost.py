@@ -38,6 +38,7 @@ import calendar
 import logging
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -55,6 +56,7 @@ from .backfill_window import (
 from .cohort import _parse_iso_date
 from .const import (
     CONF_CONTRACT_START_DATE,
+    CONF_SUPPLIER,
     DAY_START,
     METER_MONO,
     REGION_FLANDERS,
@@ -73,6 +75,7 @@ from .fees import (
     first_year_net_kwh,
     gross_network_rebate,
     in_first_contract_year,
+    lump_held_to_first_year,
     window_energy_rate,
 )
 from .injection import _historical_injection_rate, _injection_is_spot_formula
@@ -84,6 +87,7 @@ from .pricing import (
     renewables_eur_per_kwh,
     yearly_fixed_fee_for_meter,
 )
+from .providers import get as get_extractor
 from .providers._rates import InjectionRates
 from .providers.base import SupplierSnapshot
 from .spot_stats import (
@@ -100,6 +104,7 @@ from .spot_stats import (
     _spp_injection_spot,
 )
 from .synergrid import SppWeights
+from .ytd_cost import first_year_charges
 from .ytd_legs import _dso_prosumer_day
 
 if TYPE_CHECKING:
@@ -625,6 +630,34 @@ async def _accrue_cost(
     # one began for that one, which is the window the live walk credits over.
     credit_window_start = dt_util.as_local(hours[0]).date()
     credit_start = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
+    # A lump held to what its first contract year charged, on that year's own
+    # charges, as the live walk holds it.
+    card = snapshot if snapshot is not None else coordinator._snapshot
+    assert card is not None
+    signing = await lump_held_to_first_year(
+        ctx.signing,
+        credit_start,
+        credit_window_start,
+        dt_util.as_local(hours[-1]).date(),
+        partial(
+            first_year_charges,
+            hass,
+            coordinator._session,
+            get_extractor(entry.data[CONF_SUPPLIER]),
+            card,
+            entry,
+            historical_spots=spots,
+            spot_quarters=quarters,
+            spp_weights=ctx.spp_weights,
+            rlp_weights=ctx.rlp_weights,
+            rlp_index_weights=ctx.rlp_index_weights,
+            snapshot_raw=(
+                snapshot_raw
+                if snapshot is not None
+                else getattr(coordinator, "_snapshot_raw", None)
+            ),
+        ),
+    )
     netting = _NetAllocation()
     allocated = ctx.rlp_weights is not None
     async for utc_hour in _in_turns(hours):
@@ -813,7 +846,7 @@ async def _accrue_cost(
         # the backfill runs at most a day's share ahead inside one, the same
         # kind of intra-day lead the fee proration above carries.
         credit = _welcome_credit_eur(
-            ctx.signing,
+            signing,
             credit_start,
             credit_window_start,
             local.date(),
