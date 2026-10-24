@@ -24,7 +24,7 @@ Related reading:
 | Publication shape | Monthly PDF card per contract, at a predictable CDN URL; a public HTML listing page links every current PDF | `bolt.py` |
 | Fetch transport | `fetch_pdf_text_layout` (pdfplumber, layout-aware) | `bolt.py` |
 | Probe | the card's address and its `Last-Modified`, the Online card's too for Plenty Online | `bolt.py` |
-| Archive | The `fix` folder (`bolt_fix`, `bolt_plenty_fix` and their professional twins) is monthly-archived back to 2024-01; the variable folder has no month-addressable card and falls back to the current snapshot, while a variable month the card archive holds settles in place on the next quarter's card (`settle_month`) | `bolt.py` |
+| Archive | The `fix` folder (`bolt_fix`, `bolt_plenty_fix` and their professional twins) is monthly-archived back to 2024-01; the variable folder has no month-addressable card and falls back to the current snapshot, credited its own quarter's feed-in figures off the fixed card of the quarter after (`stand_in_reference`), while a variable month the card archive holds settles in place on the next quarter's card (`settle_month`) | `bolt.py` |
 | VAT convention | Prices are VAT-incl; `vat_rate=0.0` | `bolt.py`, `base.py` |
 
 Bolt's PDFs are the reason this extractor exists in its current form. They are around 5 MB each,
@@ -369,7 +369,9 @@ and every card in it addresses its current card the same way, so all four clear 
 (`bolt_res_el_fr_13.pdf`) rather than by month, so past months cannot be addressed there at all;
 those return `None` and the YTD path falls back to the current snapshot as a proxy (`bolt.py`).
 A variable month the card archive holds is settled in place instead (see
-[Settlement](#settlement)).
+[Settlement](#settlement)). A month it does not hold, every one before September 2026, is
+credited its own quarter's feed-in figures off a fixed card, which prints the variable cards'
+SPP-weighted table (see [Stand-in months](#stand-in-months)).
 
 The gate used to require the slug to be `fix` as well, which locked the two `plenty_fix` contracts
 out of an archive that does exist (verified against the CDN: `plenty_fix_res_el_fr_202601.pdf` and
@@ -451,7 +453,7 @@ newline is expected, replacing them with `\n` so one set of regexes covers every
 | Snapshot field | Extractor | Notes |
 | --- | --- | --- |
 | `energy` | `_extract_energy` (`_bolt_cards.py`) | `FixedRates` or `VariableRates` |
-| `injection` | `_extract_injection`, `with_spp_registers` (`_bolt_cards.py`) | printed figure PLUS the quarter-hourly `factor`/`base`, flagged `slot_indexed`, on every card; a variable card adds the SPP-weighted figures per register its variable settlement credits, flagged `spp_redistributed` |
+| `injection` | `_extract_injection`, `with_spp_registers`, `with_table_figures` (`_bolt_cards.py`) | printed figure PLUS the quarter-hourly `factor`/`base`, flagged `slot_indexed`, on every card; a variable card adds the SPP-weighted figures per register its variable settlement credits, flagged `spp_redistributed`, and a fixed card the same figures off its own table, which nothing credits to it |
 | `publication_label` | `_extract_publication_month` (`bolt.py`) | `<Month> <Year>` header. The accent classes span the whole Latin-1 range rather than the accents French month names actually use: Bolt's August 2026 fixed card prints "Aôut 2026" (circumflex on the wrong vowel) and an exact class blanked the label on that typo. Besides the display label, it checks that a card and the index card it is priced on are the same month's and names the quarter its index table should be (`check_quarter_table`), so a blank label can refuse a card a misspelt one reads; a misspelling is kept verbatim and its accents folded where the month is needed. |
 | `taxes.federal_excise`, `energy_contribution`, `region_connection_fee` | `_extract_taxes` (`_bolt_overlays.py`) | 3-column FL/WAL/BX rows, sliced by region |
 | `taxes.energy_fund_eur_per_month` | `_extract_energy_fund` (`_bolt_overlays.py`) | Flanders only. The card prints both categories: a domiciled residential connection pays the `résidentiel` row, which is `-` (0); a **professional** contract pays the `non-résidentiel` row (10,07 EUR/month on the August 2026 card). The two rows need separate patterns, since the residential value sits after a U+2028 and the non-residential values are inline on the label line |
@@ -985,3 +987,29 @@ The feed-in leg settles on the same table, on its SPP-weighted rows, for an entr
 settlement; on the dynamic one it is credited per quarter-hour, or at its printed indicative
 without a key. A month is settled once both have: a next card whose feed-in rows do not read
 settles the energy and keeps the month `provisional`.
+
+### Stand-in months
+
+The card archive holds the variable cards from September 2026, and the variable folder addresses
+no card by month, so every month before stands in on the current card (`_snapshot_for_month`,
+`snapshot_months.py`). Its energy re-prices on the delivery quarter with a key, as a held month's
+does, but its feed-in figures per register are the current card's, the last closed quarter's:
+up to 0.42.1 every month of the first half of 2026 was credited the third quarter's 6,21 / 7,95 /
+1,82 c/kWh, where the first quarter's table gives 5,31 / 5,84 / 4,03 and the second's 3,40 / 4,95
+/ -0,43: about 45 EUR too much for a modelled household exporting 3.246 kWh from January to
+September.
+
+The fixed cards print the same SPP-weighted table for the quarter before theirs, the single row
+of three indices before April 2026 (`quarter_injection_indices`), are archived by month, and carry
+the figures their table stands for (`with_table_figures`, `_bolt_cards.py`), which the fixed card
+itself is not credited. `stand_in_reference` (`bolt.py`) names the fixed card of the quarter after
+a stand-in month, its latest closed month, since a quarter's first edition has printed the quarter
+before's (the first October 2026 cards), and `stand_in_for_month` (`snapshot_feed_in.py`) rebuilds
+the month's figures on its indices through the current card's formula (`settled_stand_in`,
+`_settle.py`); a figure the table prints no index for is dropped, so a two-register meter is
+credited the quarter's single figure. While the quarter after has no closed month the current
+card's table is the quarter's own. Where the fixed card cannot be had the month is credited per
+quarter-hour on the formula, as the dynamic settlement is, nothing without a spot, and the
+backfill waits for the card as for a month's own (`reference_failed`). The fixed cards' labels are
+not read: the April 2026 card as Bolt serves it now names the second quarter over the first
+quarter's indices.

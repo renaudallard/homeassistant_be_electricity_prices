@@ -36,6 +36,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, fields, replace
 from datetime import date
+from typing import Any
 
 from ..const import REGION_FLANDERS, VAT_RATE_REDUCED, VAT_RATE_STANDARD
 from ._parse import SIGN_CHARS, parse_sign, to_float
@@ -431,8 +432,8 @@ def quarter_indices(text: str) -> tuple[str, dict[str, float]] | None:
 
 
 def quarter_injection_indices(text: str) -> tuple[str, dict[str, float]] | None:
-    """The quarter a variable card's index table names, and the feed-in
-    indices it prints, in EUR/kWh, or ``None``.
+    """The quarter a card's index table names, and the feed-in indices it
+    prints, in EUR/kWh, or ``None``.
 
     The table's injection rows, "Injectie simple 78,09 €/MWh", "Injection
     jour 96,66 €/MWh" and "Injection nuit 31,37 €/MWh", are the quarter's
@@ -442,18 +443,66 @@ def quarter_injection_indices(text: str) -> tuple[str, dict[str, float]] | None:
     ``spot_stats._spp_month_mean``, where the consumption rows are RLP-weighted.
     Keyed ``current``, ``peak`` and ``offpeak`` as the leg carries them;
     ``None`` unless all three read.
+
+    The fixed cards print the same table, and the ones before April 2026
+    print it as a single row, "Belpex Q4 2025 (€/MWh) 74,54 83,26 52,27", in
+    the order of the feed-in figures beneath it, "Injection (c€/kWh) 5,87 6,69
+    3,78": the single register, then the day and night ones. Their label is
+    not to be trusted: the April 2026 fixed card as Bolt serves it now names
+    the second quarter over the first quarter's indices.
     """
-    head = _QUARTER_MONO_INDEX_RE.search(text)
+    legacy = _LEGACY_INJECTION_TABLE_RE.search(text)
+    if legacy is not None:
+        label, *row = legacy.groups()
+        return " ".join(label.split()), {
+            field: to_float(index) / 1000.0
+            for (field, _label), index in zip(
+                _INJECTION_REGISTER_ROWS, row, strict=True
+            )
+        }
+    head = _QUARTER_INDEX_RE.search(text)
     if head is None:
         return None
     table = text[head.start() :]
     indices: dict[str, float] = {}
     for field, label in _INJECTION_REGISTER_ROWS:
-        row = re.search(rf"Inject(?:ie|ion)\s+{label}\s+([\d.,]+)\s*€/MWh", table)
-        if row is None:
+        row_match = re.search(
+            rf"Inject(?:ie|ion)\s+{label}\s+(-?[\d.,]+)\s*€/MWh", table
+        )
+        if row_match is None:
             return None
-        indices[field] = to_float(row.group(1)) / 1000.0
+        indices[field] = to_float(row_match.group(1)) / 1000.0
     return " ".join(head.group(1).split()), indices
+
+
+def _table_figures(injection: InjectionRates, text: str) -> dict[str, Any]:
+    """The feed-in figures the card's index table stands for, by the field
+    each prices: the leg's formula at each register's index. Empty where the
+    table or the formula does not read."""
+    table = quarter_injection_indices(text)
+    if table is None or injection.factor is None or injection.base is None:
+        return {}
+    return {
+        field: injection.factor * index + injection.base
+        for field, index in table[1].items()
+    }
+
+
+def with_table_figures(injection: InjectionRates, text: str) -> InjectionRates:
+    """A fixed card's feed-in leg carrying the figures its index table stands
+    for per register, beside the per-slot formula it bills.
+
+    Nothing here is credited to the fixed card itself, which bills its
+    feed-in per quarter-hour and reads ``peak`` and ``offpeak`` only on a
+    ``bi_hourly`` leg. The figures are the variable cards': the same table,
+    printed for the quarter before the card's, and a variable month no
+    archive holds is credited its quarter's off the fixed card of the quarter
+    after (``bolt.stand_in_reference``). ``current`` is the single
+    register's, the figure the card prints beside it on every consistent
+    card; the May 2025 one printed 9,56 c/kWh where its table and the June
+    card give 6,49.
+    """
+    return replace(injection, **_table_figures(injection, text))
 
 
 def with_spp_registers(
@@ -479,20 +528,12 @@ def with_spp_registers(
     is within 3% of that mean over the quarter.
     """
     injection = replace(injection, spp_redistributed=True)
-    table = quarter_injection_indices(text)
-    if table is None or injection.factor is None or injection.base is None:
+    figures = _table_figures(injection, text)
+    if not figures:
         return injection
-    factor, base = injection.factor, injection.base
-    indices = table[1]
-    current = factor * indices["current"] + base
     if not registers:
-        return replace(injection, current=current)
-    return replace(
-        injection,
-        current=current,
-        peak=factor * indices["peak"] + base,
-        offpeak=factor * indices["offpeak"] + base,
-    )
+        return replace(injection, current=figures["current"])
+    return replace(injection, **figures)
 
 
 def _impact_energy_bands(text: str, vat: float) -> dict[str, float]:
@@ -622,7 +663,12 @@ _BELPEX_FORMULA_RE = re.compile(
 # tarifaire". Its rows are the RLP-weighted quarter means of the Walloon
 # DSOs' curve, one per meter register and CWaPE band, which the card says is
 # "la moyenne ponderee par le RLP des prix par quart d'heure belges".
-_QUARTER_INDEX_RE = re.compile(r"Belpex\s+Q[1-4]\s+\d{4}")
+_QUARTER_INDEX_RE = re.compile(r"Belpex\s+(Q[1-4]\s+\d{4})")
+# The fixed cards' table before April 2026, the feed-in indices alone on one
+# row: "Belpex Q4 2025 (€/MWh) 74,54 83,26 52,27".
+_LEGACY_INJECTION_TABLE_RE = re.compile(
+    r"Belpex\s+(Q[1-4]\s+\d{4})\s*\(€/MWh\)\s*(-?[\d,]+)\s+(-?[\d,]+)\s+(-?[\d,]+)"
+)
 # The same table's single-meter row: the quarter it names and its index,
 # "Belpex Q3 2026 ... Simple 139,36 €/MWh".
 _QUARTER_MONO_INDEX_RE = re.compile(

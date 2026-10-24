@@ -499,6 +499,11 @@ MonthSettler = Callable[
     Awaitable["SupplierSnapshot"],
 ]
 
+# Stand-in reference: given a contract, a closed month no archive holds a card
+# of and today, the contract and month whose card prints the indices that
+# month settled at, or None while no such card can be out yet.
+StandInReference = Callable[[str, date, date], tuple[str, date] | None]
+
 
 def with_vat_basis(
     snapshot: SupplierSnapshot,
@@ -556,6 +561,11 @@ class SupplierExtractor:
     # never replace a captured card. TotalEnergies keeps no archive at all,
     # nor does Bolt's variable folder, whose months settle a quarter at a time.
     settle_month: MonthSettler | None = None
+    # Set where a month no archive holds, billed on the current card standing
+    # in for it, can still be credited its own period's feed-in figures off
+    # another card of the supplier (Bolt: the fixed card of the quarter after
+    # prints the variable cards' SPP table). See ``snapshot_feed_in``.
+    stand_in_reference: StandInReference | None = None
     # Set when the supplier has announced it is leaving the residential
     # market: the date its contracts stop being supplied, and the registry
     # id of the supplier taking them over. Two effects, both deliberate:

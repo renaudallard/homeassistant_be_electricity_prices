@@ -83,6 +83,7 @@ from ._bolt_cards import (
     quarter_indices,
     quarter_injection_indices,
     with_spp_registers,
+    with_table_figures,
 )
 from ._bolt_overlays import (
     _FLANDERS_LABELS,
@@ -662,6 +663,35 @@ async def settle_month(
     return replace(held, energy=settled, injection=injection)
 
 
+def stand_in_reference(
+    contract_id: str, year_month: date, today: date
+) -> tuple[str, date] | None:
+    """The fixed card whose index table a variable month no archive holds
+    settles its feed-in figures on, as (contract, month), or ``None``.
+
+    Such a month is billed on the current card, whose figures are the last
+    closed quarter's: the first half of 2026 was credited the third
+    quarter's 6,21 c/kWh where the first quarter's table gives 5,31 and the
+    second's 3,40. The fixed cards print the same SPP-weighted table
+    for the quarter before theirs and are archived by month, so the
+    quarter's own figures are on the fixed card of the quarter after: its
+    latest closed month, since a quarter's first edition has printed the
+    quarter before's (the first October 2026 cards). ``None`` while that
+    quarter has no closed month, when the current card's table is the one
+    to read.
+    """
+    contract = _CONTRACTS_BY_ID.get(contract_id)
+    if contract is None or not contract.settlement:
+        return None
+    quarter = (year_month.month - 1) // 3
+    following = date(year_month.year + (quarter == 3), (quarter + 1) % 4 * 3 + 1, 1)
+    closed = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+    latest = min(following.replace(month=following.month + 2), closed)
+    if latest < following:
+        return None
+    return ("bolt_pro_fix" if contract.professional else "bolt_fix"), latest
+
+
 def parse_snapshot(
     contract_id: str,
     text: str,
@@ -729,6 +759,8 @@ def parse_snapshot(
         injection = with_spp_registers(
             injection, text, registers=region != REGION_WALLONIA
         )
+    elif injection is not None:
+        injection = with_table_figures(injection, text)
     if professional and injection is not None:
         injection = replace(injection, vat_applies=True)
     publication_label = _extract_publication_month(text)
@@ -860,4 +892,5 @@ EXTRACTOR = SupplierExtractor(
     probe=probe,
     settles_on_next_card=True,
     settle_month=settle_month,
+    stand_in_reference=stand_in_reference,
 )

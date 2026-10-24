@@ -1029,14 +1029,17 @@ def test_pre_redesign_archive_card_carries_its_overlays_too() -> None:
     # applicable. Simple Jour Nuit" and the Belpex row above shares them),
     # not regions. The VL/WAL/BX headers on that page govern the tax rows.
     # Reading them as regions credited Wallonia the Jour rate (6,69) and
-    # Brussels the Nuit one (3,78); every region bills the Simple column,
-    # the same way the current card's "Prix mensuel" branch does.
+    # Brussels the Nuit one (3,78); every region carries the Simple column,
+    # the same way the current card's "Prix mensuel" branch does, and the
+    # Jour and Nuit ones as the register figures of the table above them,
+    # which no fixed entry is credited (the leg is not ``bi_hourly``).
     for region in ("flanders", "wallonia", "brussels"):
         snap = parse_snapshot("bolt_fix", text, region, "test://bolt-202601")
         assert snap.injection is not None, region
-        assert snap.injection.current == pytest.approx(0.0587), region
-        assert snap.injection.peak is None, region
-        assert snap.injection.offpeak is None, region
+        assert snap.injection.current == pytest.approx(0.0587, abs=5e-5), region
+        assert snap.injection.peak == pytest.approx(0.0669, abs=5e-5), region
+        assert snap.injection.offpeak == pytest.approx(0.0378, abs=5e-5), region
+        assert not snap.injection.bi_hourly, region
 
     # "Redevance de raccordement (c€/kWh) (*)(***) - 0,075 -": Wallonia only.
     assert parse_snapshot(
@@ -2605,3 +2608,222 @@ def test_the_live_tick_bills_the_running_quarter_to_date() -> None:
     priced = SimpleNamespace(energy=leg, injection=None)
     plain, energy_mean = _PricesMixin._tick_month_means(coord, priced, {}, True)  # type: ignore[arg-type]
     assert (plain, energy_mean) == (0.10, pytest.approx(quarter))
+
+
+def test_a_fixed_card_carries_its_table_s_feed_in_figures() -> None:
+    """A fixed card prints the variable cards' SPP-weighted table for the
+    quarter before its own, the single row of three indices on the cards
+    before April 2026. Its leg carries the figures that table stands for per
+    register, which nothing credits to the fixed card itself: the April 2026
+    card's first quarter, 5,31 / 5,84 / 4,03 c/kWh at 68,58 / 74,14 / 54,96,
+    and January's fourth quarter of 2025, 5,87 / 6,69 / 3,78 at 74,54 /
+    83,26 / 52,27."""
+    for fixture, printed in (
+        ("bolt_fix.pdf", (68.58, 74.14, 54.96)),
+        ("bolt_fix_jan_legacy.pdf", (74.54, 83.26, 52.27)),
+    ):
+        snap = parse_snapshot(
+            "bolt_fix", fixture_text(fixture, layout=True), "flanders"
+        )
+        inj = snap.injection
+        assert inj is not None and inj.slot_indexed and not inj.bi_hourly, fixture
+        assert not inj.spp_redistributed, fixture
+        for field, index in zip(("current", "peak", "offpeak"), printed, strict=True):
+            assert getattr(inj, field) == pytest.approx(
+                0.94 * index / 1000.0 - 0.01133
+            ), (fixture, field)
+        assert resolve_settlement_grid(snap, quarter_hourly=False) is snap
+
+
+@pytest.mark.parametrize(
+    ("contract", "month", "today", "reference"),
+    [
+        (
+            "bolt_online",
+            date(2026, 2, 1),
+            date(2026, 10, 23),
+            ("bolt_fix", date(2026, 6, 1)),
+        ),
+        (
+            "bolt_variable",
+            date(2026, 5, 1),
+            date(2026, 10, 23),
+            ("bolt_fix", date(2026, 9, 1)),
+        ),
+        (
+            "bolt_pro_plenty",
+            date(2026, 5, 1),
+            date(2026, 10, 23),
+            ("bolt_pro_fix", date(2026, 9, 1)),
+        ),
+        # The quarter after has no closed month: the current card's table is it.
+        ("bolt_variable", date(2026, 8, 1), date(2026, 10, 23), None),
+        (
+            "bolt_variable",
+            date(2026, 8, 1),
+            date(2026, 11, 2),
+            ("bolt_fix", date(2026, 10, 1)),
+        ),
+        (
+            "bolt_variable",
+            date(2025, 11, 1),
+            date(2026, 10, 23),
+            ("bolt_fix", date(2026, 3, 1)),
+        ),
+        ("bolt_fix", date(2026, 5, 1), date(2026, 10, 23), None),
+    ],
+)
+def test_a_variable_month_no_archive_holds_names_the_card_it_settles_on(
+    contract: str, month: date, today: date, reference: tuple[str, date] | None
+) -> None:
+    assert bolt_mod.stand_in_reference(contract, month, today) == reference
+
+
+async def _stand_in(
+    hass: Any, month: date, rows: dict[str, str], meter: str = "bi"
+) -> SupplierSnapshot:
+    """``month`` as a Flemish Bolt Online entry on the variable settlement is
+    billed on 23 October 2026, the October card standing in for it, with the
+    card archive serving the fixed cards ``rows`` names by month."""
+    from unittest.mock import MagicMock
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices import snapshot_months
+    from custom_components.be_electricity_prices.snapshot_months import (
+        ArchivedCard,
+        _snapshot_for_month,
+    )
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+    from tests import make_entry
+
+    async def github(
+        _session: Any, _supplier: str, contract: str, region: str, year_month: date
+    ) -> ArchivedCard | None:
+        fixture = rows.get(f"{contract} {year_month:%Y-%m}")
+        if fixture is None:
+            return None
+        card = parse_snapshot("bolt_fix", fixture_text(fixture, layout=True), region)
+        return ArchivedCard(snapshot=card, read_by_ocr=False)
+
+    raw = parse_snapshot(
+        "bolt_online",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "flanders",
+    )
+    entry = make_entry(
+        supplier="bolt",
+        contract="bolt_online",
+        region="flanders",
+        dso="fluvius_antwerpen",
+        meter=meter,
+        solar_regime="injection",
+    )
+    now = datetime(2026, 10, 23, 10, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    with (
+        patch.object(snapshot_months, "_archived_card_from_github", github),
+        patch.object(snapshot_months.dt_util, "now", return_value=now),
+        patch.object(bolt_mod.dt_util, "now", return_value=now),
+        patch.object(
+            bolt_mod,
+            "fetch_pdf_text_layout",
+            AsyncMock(side_effect=ExtractorError("network error fetching x: timeout")),
+        ),
+    ):
+        return await _snapshot_for_month(
+            hass,
+            MagicMock(),
+            EXTRACTORS["bolt"],
+            "bolt_online",
+            "flanders",
+            month,
+            _resolve_snapshot(entry, raw),
+            entry,
+            current_raw=raw,
+        )
+
+
+async def test_a_month_no_archive_holds_is_credited_its_own_quarter_s_feed_in(
+    hass: Any,
+) -> None:
+    """Bolt's variable cards are archived from September 2026, so the months
+    before stand in on the current card, whose feed-in figures are the third
+    quarter's: 6,21 / 7,95 / 1,82 c/kWh credited from January, where the
+    first quarter's table gives 5,31 / 5,84 / 4,03 and the second's 3,40 /
+    4,95 / -0,43. Each month is credited its own quarter's, off the fixed
+    card of the quarter after."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.injection import (
+        _historical_injection_rate,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
+    )
+
+    rows = {
+        "bolt_fix 2026-06": "bolt_fix.pdf",
+        "bolt_fix 2026-09": "bolt_plenty_fix_sep.pdf",
+    }
+    for month, indices in (
+        (date(2026, 2, 1), (68.58, 74.14, 54.96)),
+        (date(2026, 5, 1), (48.20, 64.73, 7.52)),
+        (date(2026, 8, 1), (78.09, 96.66, 31.37)),
+    ):
+        _monthly_snapshots(hass).clear()
+        snap = await _stand_in(hass, month, rows)
+        inj = snap.injection
+        assert inj is not None and not inj.slot_indexed and inj.bi_hourly, month
+        for field, index in zip(("current", "peak", "offpeak"), indices, strict=True):
+            assert getattr(inj, field) == pytest.approx(
+                0.94 * index / 1000.0 - 0.01133
+            ), (month, field)
+        noon = datetime(
+            month.year, month.month, 11, 13, tzinfo=dt_util.DEFAULT_TIME_ZONE
+        )
+        assert _historical_injection_rate(
+            inj, 0.05, energy=snap.energy, when=noon, meter="bi", region="flanders"
+        ) == pytest.approx(inj.peak)
+
+
+async def test_a_month_whose_quarter_cannot_be_read_is_credited_per_slot(
+    hass: Any,
+) -> None:
+    """Where the fixed card of the quarter after cannot be had, the month is
+    not credited the current card's figures, another quarter's: it is credited
+    per quarter-hour on the card's formula, nothing without a spot, and the
+    backfill waits for the card as for the month's own."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices import snapshot_months
+    from custom_components.be_electricity_prices.injection import (
+        _historical_injection_rate,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
+    )
+
+    _monthly_snapshots(hass).clear()
+    snap = await _stand_in(hass, date(2026, 2, 1), {})
+    inj = snap.injection
+    assert inj is not None and inj.slot_indexed and not inj.spp_redistributed
+    noon = datetime(2026, 2, 11, 13, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    assert _historical_injection_rate(
+        inj, 0.05, energy=snap.energy, when=noon, meter="bi", region="flanders"
+    ) == pytest.approx(0.94 * 0.05 - 0.01133)
+    assert (
+        _historical_injection_rate(
+            inj, None, energy=snap.energy, when=noon, meter="bi", region="flanders"
+        )
+        is None
+    )
+    now = datetime(2026, 10, 23, 10, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    with patch.object(snapshot_months.dt_util, "now", return_value=now):
+        assert snapshot_months.month_card_failed(
+            hass, "bolt", "bolt_online", "flanders", date(2026, 2, 1)
+        )
+        assert not snapshot_months.month_card_failed(
+            hass, "bolt", "bolt_online", "flanders", date(2026, 8, 1)
+        )

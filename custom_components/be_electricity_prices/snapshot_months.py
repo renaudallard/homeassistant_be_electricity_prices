@@ -77,6 +77,7 @@ from .snapshot_codec import (
     _snapshot_from_dict,
     _snapshot_to_dict,
 )
+from .snapshot_feed_in import reference_failed, stand_in_for_month
 from .snapshot_resolve import _resolve_snapshot
 from .snapshot_store import (
     _MONTHLY_FAILURE_TTL,
@@ -577,11 +578,14 @@ def month_card_failed(
     walk heals on its own next tick; a caller that keeps what it priced (the
     backfill) must tell the two apart, and only the caches can. A cached row,
     a card or ``None``, is an answer; a fresh failure marker with no row is a
-    failed read.
+    failed read. A month no archive holds also waits for the card its
+    stand-in's feed-in settles on (``snapshot_feed_in.reference_failed``).
     """
     key = _month_key(supplier, contract, region, year_month)
     if key in _monthly_snapshots(hass):
-        return False
+        return _monthly_snapshots(hass)[key] is None and reference_failed(
+            hass, supplier, contract, region, year_month
+        )
     failed_at = _monthly_failed_fetches(hass).get(key)
     return failed_at is not None and dt_util.utcnow() - failed_at < _MONTHLY_FAILURE_TTL
 
@@ -647,8 +651,10 @@ async def _snapshot_for_month(
     card it was resolved from as ``current_raw``: the two federal levies are
     then resolved for the delivery month (``_proxy_for_month``), since the
     law and not the card decides them, and a January bill on October's card
-    still owes January's. Whether the answer is a stand-in is ``month_card``
-    returning None, never the identity of what comes back.
+    still owes January's; feed-in figures per register are the month's own
+    quarter's where the supplier prints them on another card
+    (``snapshot_feed_in``). Whether the answer is a stand-in is
+    ``month_card`` returning None, never the identity of what comes back.
     """
     card = await month_card(
         hass,
@@ -663,9 +669,18 @@ async def _snapshot_for_month(
     )
     if card is not None:
         return card
-    if entry is None or current_raw is None:
-        return current_snapshot
-    return _proxy_for_month(entry, current_snapshot, current_raw, year_month)
+    return await stand_in_for_month(
+        hass,
+        session,
+        extractor,
+        contract,
+        region,
+        year_month,
+        current_snapshot,
+        entry,
+        cached_only=cached_only,
+        current_raw=current_raw,
+    )
 
 
 def _proxy_for_month(

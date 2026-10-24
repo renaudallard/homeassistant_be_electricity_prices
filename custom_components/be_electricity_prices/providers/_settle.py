@@ -214,6 +214,25 @@ def settled_spp_registers(
     return replace(inj, spp_settled=True, **rates)
 
 
+def settled_stand_in(
+    inj: InjectionRates, reference: InjectionRates
+) -> InjectionRates | None:
+    """``inj``, a feed-in leg crediting figures per register, standing in for
+    a closed month, rebuilt on the indices ``reference`` prints for that
+    month's quarter, or ``None`` where it prints no single-register one.
+
+    ``reference`` is a card of the quarter after, whose figures per register
+    are the formula at those indices (``_spp_register_indices``). A figure it
+    prints no index for is dropped rather than left at the current card's
+    quarter, so a two-register meter is credited the quarter's single figure.
+    """
+    indices = _spp_register_indices(reference)
+    if "current" not in indices:
+        return None
+    unread: dict[str, Any] = {f: None for f in _SPP_REGISTER_RATES if f not in indices}
+    return settled_spp_registers(replace(inj, **unread), indices)
+
+
 def settles_registers(inj: InjectionRates) -> bool:
     """Whether a feed-in leg credits figures per register that its quarter
     settles (``InjectionRates.spp_redistributed``): one carrying the formula
