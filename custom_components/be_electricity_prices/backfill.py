@@ -43,9 +43,11 @@ Two entry points:
 * :func:`backfill_if_missing`: automatic run called from
   ``async_setup_entry``. Probes the recorder for statistics at the Jan
   1 anchor and only runs when none exist, so we don't redo the work on
-  every HA restart. When a card read failed it runs again an hour later,
-  then less often, until those days are written, carrying on at the next
-  setup when Home Assistant stopped before then.
+  every HA restart. When a card read failed, or the recorder did not answer
+  for the running cost, it runs again an hour later, then less often, until
+  it is all written, carrying on at the next setup when Home Assistant
+  stopped before then. A probe the recorder did not answer is asked again
+  on the same waits.
 """
 
 from __future__ import annotations
@@ -128,7 +130,7 @@ _INJECTION_PRICE_SENSOR_KEY = "injection_price"
 # failed: past the half hour a failed month read waits before it is asked
 # again (``_MONTHLY_FAILURE_TTL``). Each wait doubles up to a day, so a house
 # that cannot reach the card archive at all does not rewrite months of rows
-# every hour.
+# every hour. A recorder that did not answer is waited for the same way.
 _RETRY_AFTER = timedelta(hours=1)
 _RETRY_AT_MOST = timedelta(days=1)
 
@@ -405,6 +407,11 @@ async def backfill_range(
     is the automatic backfill, which runs again by itself: the first of those
     days is kept on the coordinator (``_backfill_retry_from``) for that run to
     start from. A service call says to call it again instead.
+
+    The cost series is not written at all when the recorder did not answer a
+    read it is priced or chained from, which ``skipped`` says. The automatic
+    backfill then keeps the last day, or the first one left out when it is
+    earlier: the run that writes the series writes it whole.
     """
     coordinator = getattr(entry, "runtime_data", None)
     if not isinstance(coordinator, BePricesCoordinator):
@@ -587,6 +594,9 @@ async def _backfill_range(
         hass, entry, coordinator, hours, spots, quarters
     )
     gaps: dict[str, int] = {}
+    # What the recorder did not answer for, the cost series then left as it
+    # was. The price series read none of it.
+    unanswered: set[str] = set()
     if not skip_cost:
         counts.update(
             await _backfill_cost_sensor(
@@ -598,9 +608,14 @@ async def _backfill_range(
                 quarters,
                 emit_from=cost_emit_from,
                 gaps=gaps,
+                unanswered=unanswered,
             )
         )
     if retry_later:
+        if unanswered and retry_from is None:
+            # Every retry writes the running cost whole, and the price series
+            # wants none of its days again.
+            retry_from = dt_util.as_local(end_utc - timedelta(hours=1)).date()
         coordinator._backfill_retry_from = retry_from
     total = sum(counts.values())
     _LOGGER.info(
@@ -625,6 +640,22 @@ async def _backfill_range(
             "that boundary, because the recorder ignores last_reset on "
             "imported statistics"
         )
+    elif unanswered:
+        why = f"the recorder did not answer for {', '.join(sorted(unanswered))}"
+        if retry_later:
+            result["skipped"] = f"cost: {why}, written when the backfill runs again"
+            _LOGGER.info(
+                "backfill for %s left the cost series out until it runs again: %s",
+                entry.entry_id,
+                why,
+            )
+        else:
+            result["skipped"] = f"cost: {why}, call the service again once it does"
+            _LOGGER.warning(
+                "backfill for %s left the cost series as it was: %s",
+                entry.entry_id,
+                why,
+            )
     if retry and retry_later:
         result["retry"] = [f"{first}..{last}: {why}" for first, last, why, _ in retry]
         _LOGGER.info(
@@ -672,7 +703,10 @@ async def backfill_if_missing(
     the task waiting for it, which a restart or a reload cancels. It runs
     until those days are written: the live sensor prices them on their own
     cards again once those can be read, and a stand-in written here would stay
-    in the recorder.
+    in the recorder. A running cost the recorder did not answer for is
+    retried the same way. A probe it did not answer is asked again after the
+    same waits rather than taken for no statistics: on a busy database at
+    setup that rewrote the year's running cost at its fees alone.
 
     Tolerates entry removal mid-flight: this runs as a fire-and-forget
     background task, and the user can delete the entry between scheduling
@@ -713,11 +747,21 @@ async def backfill_if_missing(
             entry.entry_id,
         )
         return None
-    now_local = dt_util.now()
-    anchor_local = ytd_window_reset(entry, now_local)
-    anchor_utc = anchor_local.astimezone(UTC)
+    wait = _RETRY_AFTER
+    while True:
+        anchor_local = ytd_window_reset(entry, dt_util.now())
+        anchor_utc = anchor_local.astimezone(UTC)
+        found = await _existing_stat_window(hass, sid, anchor_utc)
+        if found is not None:
+            break
+        # Asked again, never taken for nothing recorded (_existing_stat_window).
+        _LOGGER.debug("backfill waits: the recorder did not answer for %s", sid)
+        runtime = await _still_loaded_after(entry, wait)
+        if runtime is None:
+            return None
+        wait = min(wait * 2, _RETRY_AT_MOST)
     start: date | datetime = anchor_local
-    if await _existing_stat_window(hass, sid, anchor_utc):
+    if found:
         if runtime._backfill_retry_from is None:
             _LOGGER.debug(
                 "backfill skipped: statistics already present at %s for %s",
@@ -726,7 +770,6 @@ async def backfill_if_missing(
             )
             return None
         start = runtime._backfill_retry_from
-    wait = _RETRY_AFTER
     while True:
         pending = runtime._backfill_retry_from
         result = await backfill_range(
@@ -739,10 +782,21 @@ async def backfill_if_missing(
         if runtime._backfill_retry_from is None:
             return result
         start = runtime._backfill_retry_from
-        # A blip on the card archive or on the old supplier's site is usually
-        # over within the hour.
-        await asyncio.sleep(wait.total_seconds())
-        wait = min(wait * 2, _RETRY_AT_MOST)
-        runtime = getattr(entry, "runtime_data", None)
-        if not isinstance(runtime, BePricesCoordinator) or runtime._snapshot is None:
+        # A blip on the card archive or on the old supplier's site, or a busy
+        # recorder, is usually over within the hour.
+        runtime = await _still_loaded_after(entry, wait)
+        if runtime is None:
             return result
+        wait = min(wait * 2, _RETRY_AT_MOST)
+
+
+async def _still_loaded_after(
+    entry: ConfigEntry, wait: timedelta
+) -> BePricesCoordinator | None:
+    """The entry's coordinator once ``wait`` is over, or None when the entry
+    was unloaded or lost its card meanwhile."""
+    await asyncio.sleep(wait.total_seconds())
+    runtime = getattr(entry, "runtime_data", None)
+    if not isinstance(runtime, BePricesCoordinator) or runtime._snapshot is None:
+        return None
+    return runtime

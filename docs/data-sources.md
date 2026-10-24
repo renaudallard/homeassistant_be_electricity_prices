@@ -526,7 +526,7 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
 | `backfill_range` (`backfill.py`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists; when a card read failed, again an hour later and then less often until those days are written, carrying on at the next setup when Home Assistant stopped during a wait (`_backfill_retry_from`, kept in the coordinator's store). |
+| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists; when a card read failed, again an hour later and then less often until those days are written, carrying on at the next setup when Home Assistant stopped during a wait (`_backfill_retry_from`, kept in the coordinator's store). A probe the recorder did not answer is asked again on the same waits, never taken for no statistics, and a running cost whose meter or chain reads failed (`noting_failed_reads`) is not imported and retried the same way. |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py`). Backfill is reached either automatically

@@ -65,6 +65,7 @@ from .const import (
 )
 from .coordinator import BePricesCoordinator
 from .coordinator_data import ytd_window_reset
+from .energy_meters import noting_failed_reads
 from .fees import (
     _annual_static_fees,
     _capped_capacity_monthly_eur,
@@ -214,6 +215,7 @@ async def _backfill_cost_sensor(
     quarters: dict[datetime, list[float]],
     emit_from: datetime | None = None,
     gaps: dict[str, int] | None = None,
+    unanswered: set[str] | None = None,
 ) -> dict[str, int]:
     """Write cumulative state/sum rows for ``current_year_cost`` over ``hours``.
 
@@ -255,6 +257,13 @@ async def _backfill_cost_sensor(
     rate. A key is set only when its count is not zero. Unlike the live
     sensor, which recomputes the year on every tick, an imported row keeps
     what it was written with, so a gap left here stays until the next backfill.
+
+    That is also why nothing is imported when the recorder did not answer one
+    of the walk's meter reads, or a read of the chain the rows join
+    (``_import_cost_rows``): a busy database answers each meter read with
+    nothing, which priced the year at its fees alone over the rows it had.
+    ``unanswered``, when given, receives the sensors it did not answer for,
+    for the caller to run it again.
     """
     sid = _stat_id(hass, entry, _COST_SENSOR_KEY)
     if sid is None:
@@ -271,24 +280,51 @@ async def _backfill_cost_sensor(
     # One contract at a time, each carrying on from the bill the ones before it
     # ran up: an entry that recorded no switch is one piece, as it always was.
     carried = 0.0
-    for seg_entry, seg_snap, seg_raw, seg_hours in await _contract_segments(
-        hass, entry, coordinator, hours, billed_only=True
-    ):
-        carried = await _accrue_cost(
-            hass,
-            seg_entry,
-            coordinator,
-            seg_hours,
-            spots,
-            quarters,
-            snapshot=seg_snap,
-            snapshot_raw=seg_raw,
-            carried=carried,
-            emit_from=emit_from,
-            rows=rows,
-            make_row=StatisticData,
-            gaps=missing,
+    with noting_failed_reads() as failed:
+        for seg_entry, seg_snap, seg_raw, seg_hours in await _contract_segments(
+            hass, entry, coordinator, hours, billed_only=True
+        ):
+            carried = await _accrue_cost(
+                hass,
+                seg_entry,
+                coordinator,
+                seg_hours,
+                spots,
+                quarters,
+                snapshot=seg_snap,
+                snapshot_raw=seg_raw,
+                carried=carried,
+                emit_from=emit_from,
+                rows=rows,
+                make_row=StatisticData,
+                gaps=missing,
+            )
+    if failed:
+        if unanswered is not None:
+            unanswered.update(failed)
+        return {sid: 0}
+
+    if rows:
+        metadata = StatisticMetaData(
+            mean_type=StatisticMeanType.NONE,
+            has_sum=True,
+            name=None,
+            source="recorder",
+            statistic_id=sid,
+            unit_class=None,
+            unit_of_measurement="EUR",
         )
+        # The cycle the rows were priced in, never the clock's: pricing a year
+        # takes minutes on a small host, and a run that ends past New Year's
+        # midnight would otherwise chain last year's rows onto this year's
+        # cycle.
+        reset = ytd_window_reset(entry, dt_util.as_local(rows[-1]["start"]))
+        if not await _import_cost_rows(
+            hass, metadata, rows, reset, async_import_statistics
+        ):
+            if unanswered is not None:
+                unanswered.add(sid)
+            return {sid: 0}
     if missing:
         _LOGGER.warning(
             "backfill of %s left %d hours of energy unpriced and %d hours of "
@@ -300,24 +336,6 @@ async def _backfill_cost_sensor(
         )
         if gaps is not None:
             gaps.update(missing)
-
-    if not rows:
-        return {sid: 0}
-
-    metadata = StatisticMetaData(
-        mean_type=StatisticMeanType.NONE,
-        has_sum=True,
-        name=None,
-        source="recorder",
-        statistic_id=sid,
-        unit_class=None,
-        unit_of_measurement="EUR",
-    )
-    # The cycle the rows were priced in, never the clock's: pricing a year
-    # takes minutes on a small host, and a run that ends past New Year's
-    # midnight would otherwise chain last year's rows onto this year's cycle.
-    reset = ytd_window_reset(entry, dt_util.as_local(rows[-1]["start"]))
-    await _import_cost_rows(hass, metadata, rows, reset, async_import_statistics)
     return {sid: len(rows)}
 
 
@@ -327,7 +345,7 @@ async def _import_cost_rows(
     rows: list[Any],
     reset: datetime,
     import_statistics: Any,
-) -> None:
+) -> bool:
     """Import the year-to-date rows as a continuation of the recorded chain.
 
     Each row is built with ``sum = state``, the year-to-date bill. The live
@@ -346,9 +364,16 @@ async def _import_cost_rows(
     with them (``_rechained``): the window ends where the run began, and a
     run that takes past the next hour finds that hour compiled on the old
     chain, which read as minus the shift that hour and plus it the next.
+
+    False, with nothing imported, when the recorder did not answer one of
+    those reads. Taken for nothing recorded, a chain it could not read put
+    every row a year's bill below it, which the first hour of the year read
+    as minus that bill, and the imported rows stay.
     """
     sid = metadata["statistic_id"]
     base = await _chain_before(hass, sid, rows[0]["start"], reset)
+    if base is None:
+        return False
     if base:
         rows = [{**row, "sum": round(base + row["state"], 4)} for row in rows]
     last = rows[-1]
@@ -356,15 +381,19 @@ async def _import_cost_rows(
         hass, sid, last["start"] + timedelta(minutes=5), "5minute"
     )
     hours = await _rows_after(hass, sid, last["start"] + timedelta(hours=1), "hour")
+    if later is None or hours is None:
+        return False
     import_statistics(hass, metadata, [*rows, *_rechained(last, reset, hours)])
     _seed_short_term_sum(hass, metadata, last, reset)
     _import_short_term(hass, metadata, _rechained(last, reset, later))
+    return True
 
 
 async def _rows_after(
     hass: HomeAssistant, statistic_id: str, start: datetime, period: str
-) -> list[Any]:
-    """The rows of ``period`` the live compile has written from ``start`` on.
+) -> list[Any] | None:
+    """The rows of ``period`` the live compile has written from ``start`` on,
+    or None when the recorder did not answer.
 
     The compiler resumes from the newest short-term row, so a seed at the last
     backfilled hour only holds while nothing newer exists. A setup's first
@@ -390,7 +419,7 @@ async def _rows_after(
             {"sum", "state", "last_reset"},
         )
     except Exception:  # recorder may surface anything
-        return []
+        return None
     return list(got.get(statistic_id, []))
 
 
@@ -456,9 +485,10 @@ def _import_short_term(
 
 async def _chain_before(
     hass: HomeAssistant, statistic_id: str, first: datetime, reset: datetime
-) -> float:
+) -> float | None:
     """How far the recorded ``sum`` chain runs ahead of the year-to-date bill
-    just before ``first``, or 0.0 when nothing is recorded before it.
+    just before ``first``, 0.0 when nothing is recorded before it, or None
+    when the recorder did not answer.
 
     The last long-term row before ``first`` is found by month and then by
     hour, so a long gap costs two bounded reads. A row from before ``reset``
@@ -474,7 +504,7 @@ async def _chain_before(
             statistics_during_period,
         )
     except ImportError:  # pragma: no cover - recorder always ships with HA
-        return 0.0
+        return None
 
     async def _rows(start: datetime, period: str) -> list[Any]:
         got = await get_instance(hass).async_add_executor_job(
@@ -497,7 +527,7 @@ async def _chain_before(
         hours = await _rows(month_start, "hour")
     except Exception:  # recorder may surface anything
         _LOGGER.debug("could not read the %s chain before the backfill", statistic_id)
-        return 0.0
+        return None
     if not hours or hours[-1].get("sum") is None:
         return 0.0
     last = hours[-1]

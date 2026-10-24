@@ -400,8 +400,10 @@ class BePricesCoordinator(
         # hours the prune drops, so the prune waits while this is non-zero.
         self._spot_prune_holds = 0
         # The first day the automatic backfill left out of the price series
-        # for want of a card read that failed, while its retry is pending.
-        # Persisted, so a restart during the wait still runs it.
+        # for want of a card read that failed, or the last day it ran over
+        # when the recorder did not answer for the running cost, while its
+        # retry is pending. Persisted, so a restart during the wait still
+        # runs it.
         self._backfill_retry_from: date | None = None
         # The unique_ids each platform's setup is about to add, by platform,
         # recorded before it adds them. What the settings create, as opposed

@@ -406,9 +406,10 @@ async def test_existing_stat_window_swallows_recorder_exceptions(
         present = await bf._existing_stat_window(
             hass, "sensor.x", datetime(2026, 1, 1, tzinfo=UTC)
         )
-    # Errors collapse to "no rows" so the auto path retries; swallowing
-    # them avoids a recorder hiccup blocking entry setup.
-    assert present is False
+    # Swallowed, so a recorder hiccup does not block entry setup, but neither
+    # answer: taken for no rows, a busy database at setup started a whole
+    # year's backfill over the rows it had.
+    assert present is None
 
 
 # ---- end-to-end backfill_range ------------------------------------------------
@@ -450,6 +451,16 @@ def _register_sensors(
         )
         out[key] = e.entity_id
     return out
+
+
+def _recorder_holding_nothing() -> Any:
+    """A recorder that answers every statistics read with no rows, for a cost
+    import to find no chain to join rather than fail to read one."""
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(return_value={})
+    return patch(
+        "homeassistant.components.recorder.get_instance", return_value=instance
+    )
 
 
 async def _make_coordinator(entry: MockConfigEntry) -> Any:
@@ -952,6 +963,7 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
     with (
         patch.object(backfill_window, "_month_snapshot_cache", _fake_cache),
         patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+        _recorder_holding_nothing(),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
             new=_fake_import,
@@ -1020,6 +1032,7 @@ async def test_cost_backfill_bills_grid_and_taxes_for_an_unpriced_hour(
     with (
         patch.object(backfill_window, "_month_snapshot_cache", _fake_cache),
         patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+        _recorder_holding_nothing(),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
             new=_fake_import,
@@ -1101,6 +1114,7 @@ async def test_cost_backfill_reports_the_feed_in_it_could_not_credit(
     with (
         patch.object(backfill_window, "_month_snapshot_cache", _fake_cache),
         patch.object(energy_meters, "_recorder_hourly_kwh", new=_fake_hourly),
+        _recorder_holding_nothing(),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
             new=_fake_import,
@@ -3192,6 +3206,7 @@ def _month_indexed_backfill(
             backfill_window, "_month_snapshot_cache", lambda *_a, **_k: _snap_for
         ),
         patch.object(energy_meters, "_recorder_hourly_kwh", new=_hourly),
+        _recorder_holding_nothing(),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
             new=lambda *_a: None,
@@ -3729,6 +3744,296 @@ async def test_a_pending_backfill_retry_survives_a_restart(
     with patch.object(fresh._store, "async_load", AsyncMock(return_value=saved)):
         await fresh.async_load_persistent()
     assert fresh._backfill_retry_from == date(2026, 8, 1)
+
+
+# ---- a recorder that does not answer --------------------------------------------
+
+
+def _metered_hours(start: datetime, end: datetime) -> list[dict[str, float]]:
+    """A meter's hourly rows from ``start`` to ``end`` or now, as the recorder
+    answers them: 1 kWh in every hour."""
+    rows: list[dict[str, float]] = []
+    hour = start
+    while hour < min(end, dt_util.utcnow()):
+        rows.append({"start": hour.timestamp(), "change": 1.0, "sum": len(rows) + 1.0})
+        hour += timedelta(hours=1)
+    return rows
+
+
+@pytest.mark.parametrize("recorded", [True, False])
+async def test_the_automatic_backfill_asks_again_a_probe_the_recorder_failed(
+    hass: HomeAssistant, freezer: Any, recorded: bool
+) -> None:
+    """A busy or locked database failed the probe, which read as nothing
+    recorded: a whole year's backfill started over the rows it had, priced on
+    meter reads that failed too, and a 3.500 kWh household's running cost was
+    imported at its fees alone, 911 EUR short by October. The probe is asked
+    again after the retry's wait, and only its answer decides."""
+    freezer.move_to("2026-06-02 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    sid = _register_sensors(hass, entry, ["current_price"])["current_price"]
+    entry.runtime_data = await _make_coordinator(entry)
+    busy = True
+
+    async def probe(*_a: Any) -> dict[str, list[dict[str, float]]]:
+        if busy:
+            raise RuntimeError("database is locked")
+        return {sid: [{"start": 0.0, "mean": 0.3}]} if recorded else {}
+
+    runs = AsyncMock(return_value={"rows_written": 3})
+    waits: list[tuple[float, int]] = []
+
+    async def wait(delay: float) -> None:
+        nonlocal busy
+        waits.append((delay, runs.await_count))
+        busy = False
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(side_effect=probe)
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch.object(bf, "backfill_range", runs),
+        patch.object(bf.asyncio, "sleep", wait),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        result = await bf.backfill_if_missing(hass, entry)
+    # Nothing ran before the wait, and the probe was asked again after it.
+    assert waits == [(3600, 0)]
+    assert instance.async_add_executor_job.await_count == 2
+    if recorded:
+        assert result is None
+        runs.assert_not_awaited()
+        return
+    assert result == {"rows_written": 3}
+    assert runs.await_args is not None
+    assert runs.await_args.args[2] == datetime(2026, 1, 1, tzinfo=BRUSSELS)
+
+
+async def test_a_running_cost_the_recorder_did_not_answer_for_is_not_imported(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A busy or locked database answers every meter read with nothing, and
+    the walk priced each hour at its fees alone. Imported, those rows replaced
+    the recorded ones and stayed: a 3.500 kWh household's running cost read
+    911 EUR short by October, and the next compiled hour added the difference
+    in one step. Nothing is imported for the cost then and the response says
+    so. The price series read no meter and are written as usual, and the
+    automatic backfill keeps the last day for the run that writes the cost."""
+    freezer.move_to("2026-01-03 12:00:00+01:00")
+    entry = make_entry(
+        title="Eneco Fix", solar_regime="none", consumption_kwh="sensor.cons"
+    )
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_price", "current_year_cost"])
+    entry.runtime_data = await _make_coordinator(entry)
+    captured: dict[str, list[Any]] = {}
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        captured.setdefault(metadata["statistic_id"], []).extend(statistics)
+
+    async def executor(
+        _fn: Any,
+        _h: Any,
+        _start: Any,
+        _end: Any,
+        _ids: Any,
+        _p: Any,
+        units: Any,
+        *_r: Any,
+    ) -> dict[str, Any]:
+        if units is None:
+            # The cost series' own chain, of which nothing is recorded yet.
+            return {}
+        raise RuntimeError("database is locked")
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(side_effect=executor)
+    start = datetime(2026, 1, 2, tzinfo=BRUSSELS)
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        result = await bf.backfill_range(
+            hass, entry, start, datetime(2026, 1, 3, tzinfo=BRUSSELS)
+        )
+        assert len(captured.pop(ids["current_price"])) == 24
+        assert not captured
+        assert result["rows_written"] == 24
+        assert result["sensors"][ids["current_year_cost"]] == 0
+        assert "sensor.cons" in result["skipped"]
+        assert "call the service again" in result["skipped"]
+        assert entry.runtime_data._backfill_retry_from is None
+
+        result = await bf.backfill_range(hass, entry, start, None, retry_later=True)
+        assert ids["current_year_cost"] not in captured
+        assert "runs again" in result["skipped"]
+        assert entry.runtime_data._backfill_retry_from == date(2026, 1, 3)
+    instance.async_import_statistics.assert_not_called()
+
+
+async def test_the_automatic_backfill_writes_the_running_cost_once_the_recorder_answers(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Its probe finds the price rows the first run wrote, so a running cost
+    left out for a recorder that did not answer would stay out until someone
+    called the service. It runs again after the wait, from the last day, and
+    writes the cost whole from 1 January on what the meter read."""
+    freezer.move_to("2026-01-03 12:00:00+01:00")
+    entry = make_entry(
+        title="Eneco Fix", solar_regime="none", consumption_kwh="sensor.cons"
+    )
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_price", "current_year_cost"])
+    entry.runtime_data = await _make_coordinator(entry)
+    busy = True
+    imported: list[tuple[bool, str, list[Any]]] = []
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        imported.append((busy, metadata["statistic_id"], list(statistics)))
+
+    async def executor(
+        _fn: Any,
+        _h: Any,
+        start: Any,
+        end: Any,
+        sids: Any,
+        _p: Any,
+        units: Any,
+        *_r: Any,
+    ) -> dict[str, Any]:
+        if units is None:
+            # Nothing recorded yet: neither the price series the probe looks
+            # for nor the cost series' chain.
+            return {}
+        if busy:
+            raise RuntimeError("database is locked")
+        return {next(iter(sids)): _metered_hours(start, end)}
+
+    real_sleep = asyncio.sleep
+    waits: list[float] = []
+
+    async def wait(delay: float, *args: Any) -> None:
+        # The retry's wait; the day-by-day turns the passes hand the loop
+        # still pass.
+        nonlocal busy
+        if delay < 60:
+            await real_sleep(delay, *args)
+            return
+        waits.append(delay)
+        busy = False
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(side_effect=executor)
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch.object(bf.asyncio, "sleep", wait),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        result = await bf.backfill_if_missing(hass, entry)
+    assert waits == [3600]
+    assert result is not None
+    assert "skipped" not in result
+    assert entry.runtime_data._backfill_retry_from is None
+    assert entry.runtime_data._save_persistent.await_count == 2
+    cost = [
+        (was, rows) for was, sid, rows in imported if sid == ids["current_year_cost"]
+    ]
+    # Once, after the wait, from 1 January to the hour before now.
+    assert [was for was, _rows in cost] == [False]
+    rows = cost[0][1]
+    assert len(rows) == 60
+    # The 60 kWh the meter read are in it, not only the fees.
+    price = next(rows for _was, sid, rows in imported if sid == ids["current_price"])
+    assert rows[-1]["state"] > 60 * min(row["mean"] for row in price)
+
+
+@pytest.mark.parametrize(
+    ("period", "fields"),
+    [
+        ("month", {"sum", "state"}),
+        ("hour", {"sum", "state"}),
+        ("5minute", {"sum", "state", "last_reset"}),
+        ("hour", {"sum", "state", "last_reset"}),
+    ],
+)
+async def test_a_cost_chain_the_recorder_did_not_answer_imports_nothing(
+    hass: HomeAssistant, freezer: Any, period: str, fields: set[str]
+) -> None:
+    """The rows are put on the recorded chain, which on an entry that ran
+    through last year holds that year's whole bill before 1 January. A read of
+    it that failed answered as nothing recorded, every row went in that bill
+    below the chain, and the first hour of the year read -1234,37 on the
+    Energy dashboard instead of +0,19. A failed read of the live rows after
+    the window left them on the old chain. Nothing is imported then."""
+    freezer.move_to("2026-01-03 12:00:00+01:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    sid = _register_sensors(hass, entry, ["current_year_cost"])["current_year_cost"]
+    entry.runtime_data = await _make_coordinator(entry)
+    last_year = 1234.56
+    failing = True
+
+    async def executor(
+        _fn: Any,
+        _h: Any,
+        _start: Any,
+        _end: Any,
+        _ids: Any,
+        p: Any,
+        _u: Any,
+        types: Any,
+    ) -> dict[str, Any]:
+        if failing and (p, types) == (period, fields):
+            raise RuntimeError("database is locked")
+        if types != {"sum", "state"}:
+            return {}
+        # The chain before 1 January, by month and then by hour.
+        when = (
+            datetime(2025, 12, 1, tzinfo=BRUSSELS)
+            if p == "month"
+            else datetime(2025, 12, 31, 23, tzinfo=BRUSSELS)
+        )
+        return {
+            sid: [{"start": when.timestamp(), "sum": last_year, "state": last_year}]
+        }
+
+    captured: dict[str, list[Any]] = {}
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        captured.setdefault(metadata["statistic_id"], []).extend(statistics)
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(side_effect=executor)
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        result = await bf.backfill_range(hass, entry)
+        assert not captured
+        instance.async_import_statistics.assert_not_called()
+        assert sid in result["skipped"]
+
+        failing = False
+        result = await bf.backfill_range(hass, entry)
+    assert "skipped" not in result
+    first = captured[sid][0]
+    assert first["start"] == datetime(2026, 1, 1, tzinfo=BRUSSELS)
+    # On the chain: last year's bill, then this year's first hour.
+    assert first["sum"] == pytest.approx(last_year + first["state"])
+    instance.async_import_statistics.assert_called()
 
 
 async def test_a_signing_month_read_that_failed_leaves_the_whole_contract_out(

@@ -206,9 +206,10 @@ def _normalize_window(
 
 async def _existing_stat_window(
     hass: HomeAssistant, statistic_id: str, anchor: datetime
-) -> bool:
+) -> bool | None:
     """Return True when at least one statistic row exists in a short
-    window from ``anchor``.
+    window from ``anchor``, False when none does, and None when the
+    recorder did not answer.
 
     Used by :func:`backfill_if_missing` to derive the "is the recorder
     already populated" signal directly from the recorder, so we never
@@ -221,6 +222,10 @@ async def _existing_stat_window(
     the whole-year backfill on every restart. A short window still reads
     empty after a real DB reset (self-healing preserved) but tolerates a
     legitimately-absent leading hour.
+
+    A read the recorder failed says nothing about what it holds. Taken for
+    nothing recorded, a busy database at setup started a whole year's
+    backfill over the rows it had, and its meter reads came back empty too.
     """
     try:
         from homeassistant.components.recorder import (  # type: ignore[attr-defined]
@@ -230,7 +235,7 @@ async def _existing_stat_window(
             statistics_during_period,
         )
     except ImportError:
-        return False
+        return None
     try:
         rows = await get_instance(hass).async_add_executor_job(
             statistics_during_period,
@@ -243,7 +248,7 @@ async def _existing_stat_window(
             {"mean"},
         )
     except Exception:  # recorder may surface anything
-        return False
+        return None
     return bool(rows.get(statistic_id))
 
 
