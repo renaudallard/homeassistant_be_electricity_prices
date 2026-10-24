@@ -1337,7 +1337,12 @@ here raises, for the reason `brugel.py` gives. The live check reads this
 year's and last year's sheet through the same module, files
 `_federal: Fluvius <year> tariff sheet unreadable` when this year's ceiling
 or minimum contribution cannot be read, and compares the cards' printed
-ceilings against it.
+ceilings against it. It also reads this year's analog kWh rate off each of
+the eight area sheets through `read_analog_surcharge`, which raises on a
+network error where the integration logs, and files
+`_federal: Fluvius <year> analog kWh rate unreadable` when an area's does not
+read or lands outside 0 to 0,2 EUR/kWh; a fetch that heals on its own passes,
+as for the sheet.
 
 The parser is tested on the 2026 Zenne-Dijle sheet and the 2023 Antwerpen one
 as Fluvius served them on 2026-10-19 (`tests/fixtures/fluvius_*.xlsx`), and

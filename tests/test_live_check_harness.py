@@ -1809,6 +1809,9 @@ def test_the_loader_binds_what_the_providers_use(
         assert lc._parse_vreg_ceiling is parse.parse_vreg_network_ceiling
         const = sys.modules["be_pkg.const"]
         assert lc._MAX_WELCOME_CREDIT_MONTHS == const.MAX_QUOTED_WELCOME_WAIT_MONTHS
+        fluvius = sys.modules["be_pkg.fluvius"]
+        assert lc._READ_ANALOG_SURCHARGE is fluvius.read_analog_surcharge
+        assert len(lc._FLUVIUS_AREAS) == 8
     finally:
         for name in set(sys.modules) - before:
             if name == "be_pkg" or name.startswith("be_pkg."):
@@ -1948,6 +1951,8 @@ def _drive_run(
         "_check_catalogs": _async_no_op,
         "_fluvius_sheets": _async_no_sheets,
         "_check_fluvius_sheet": _sync_no_op,
+        "_fluvius_analog_surcharges": _async_no_sheets,
+        "_check_fluvius_analog": _sync_no_op,
         "_check_dso_schedules": _async_no_op,
         "_check_vreg_ceiling_consensus": _sync_no_op,
         "_check_federal_tax_consensus": _sync_no_op,
@@ -2047,6 +2052,11 @@ async def _async_crash(*_args: Any) -> None:
     [
         ("_check_catalogs", _async_crash, "_catalog: probe crashed"),
         ("_fluvius_sheets", _async_crash, "_federal: Fluvius sheet check crashed"),
+        (
+            "_fluvius_analog_surcharges",
+            _async_crash,
+            "_federal: Fluvius analog rate check crashed",
+        ),
         ("_check_dso_schedules", _async_crash, "_schedule: watch crashed"),
         (
             "_check_vreg_ceiling_consensus",
@@ -2223,6 +2233,15 @@ def test_the_tax_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
     assert _file_catalog_issue(
         sheet,
         "_federal: Fluvius 2026 tariff sheet unreadable\n",
+        step,
+        "tax",
+    ) == ("[live-check] the Fluvius tariff sheet can no longer be read")
+    analog = tmp_path / "analog"
+    analog.mkdir()
+    assert _file_catalog_issue(
+        analog,
+        "_federal: Fluvius 2026 tariff sheet unreadable\n"
+        "_federal: Fluvius 2026 analog kWh rate unreadable\n",
         step,
         "tax",
     ) == ("[live-check] the Fluvius tariff sheet can no longer be read")
@@ -3950,6 +3969,94 @@ def test_every_vreg_ceiling_allowance_expires_with_the_tariff_year() -> None:
     for (supplier, printed), (expires, why) in lc._KNOWN_VREG_CEILINGS.items():
         assert expires <= date(2027, 1, 1), f"{supplier} {printed} outlives the year"
         assert why.strip(), f"{supplier} {printed} carries no reason"
+
+
+def test_an_unreadable_analog_kwh_rate_is_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An area sheet whose analog kWh rate stops reading leaves analog meters
+    there on the peak-metered rate, 2 to 4 c/kWh short, with only a log line
+    in Home Assistant to say so. A fetch that heals on its own passes."""
+    monkeypatch.setattr(lc, "_is_transient_fetch_error", is_transient_fetch_error)
+    today = date(2026, 10, 24)
+    areas = ("antwerpen", "west", "zenne-dijle")
+    whole = dict.fromkeys(areas, 0.0257935)
+    lc._check_fluvius_analog(whole, {}, today)
+    assert lc.CHECKS == []
+    lc._check_fluvius_analog({**whole, "west": None}, {}, today)
+    (row,) = lc.CHECKS
+    assert row.label == "_federal: Fluvius 2026 analog kWh rate unreadable"
+    assert not row.ok and row.kind == "tax"
+    assert "west: not listed or not read" in row.detail
+    # A unit slip in the reader, a factor of ten on today's figures.
+    lc.CHECKS.clear()
+    lc._check_fluvius_analog({**whole, "antwerpen": 0.257935}, {}, today)
+    (row,) = lc.CHECKS
+    assert not row.ok and "antwerpen: 0.2579350 EUR/kWh" in row.detail
+    # The runner's DNS failing on www.fluvius.be heals and passes; a sheet
+    # that raised otherwise still files.
+    dns = (
+        "network error fetching https://www.fluvius.be/nl/factuur-en-tarieven/"
+        "netkosten/netkosten-afname-elektriciteit: Cannot connect to host "
+        "www.fluvius.be:443 ssl:default [Timeout while contacting DNS servers]"
+    )
+    lc.CHECKS.clear()
+    lc._check_fluvius_analog(
+        dict.fromkeys(areas, None), dict.fromkeys(areas, dns), today
+    )
+    (row,) = lc.CHECKS
+    assert row.ok and dns in row.detail
+    lc.CHECKS.clear()
+    lc._check_fluvius_analog(
+        {**whole, "west": None}, {"west": "BadZipFile: not a zip"}, today
+    )
+    (row,) = lc.CHECKS
+    assert not row.ok and "west: BadZipFile: not a zip" in row.detail
+
+
+def test_every_area_sheet_is_asked_for_this_years_analog_rate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Through the integration's own reader, which raises where the
+    integration logs, so a network error can be told from a sheet that does
+    not read. An ExtractorError keeps its own text, whose prefix says whether
+    it heals; anything else is named by its type."""
+
+    class _Fetch(Exception):
+        pass
+
+    asked: list[tuple[int, str]] = []
+
+    async def _read(_session: Any, year: int, area: str) -> float | None:
+        asked.append((year, area))
+        if area == "west":
+            raise _Fetch("network error fetching the listing: timeout")
+        if area == "imewo":
+            raise ValueError("not a workbook")
+        return None if area == "kempen" else 0.03
+
+    monkeypatch.setattr(lc, "_EXTRACTOR_ERROR", _Fetch)
+    monkeypatch.setattr(lc, "_READ_ANALOG_SURCHARGE", _read)
+    monkeypatch.setattr(lc, "_FLUVIUS_AREAS", ("antwerpen", "imewo", "kempen", "west"))
+    surcharges, errors = asyncio.run(
+        lc._fluvius_analog_surcharges(None, date(2026, 10, 24))  # type: ignore[arg-type]
+    )
+    assert asked == [
+        (2026, "antwerpen"),
+        (2026, "imewo"),
+        (2026, "kempen"),
+        (2026, "west"),
+    ]
+    assert surcharges == {
+        "antwerpen": 0.03,
+        "imewo": None,
+        "kempen": None,
+        "west": None,
+    }
+    assert errors == {
+        "imewo": "ValueError: not a workbook",
+        "west": "network error fetching the listing: timeout",
+    }
 
 
 def test_an_unreadable_fluvius_sheet_is_reported(

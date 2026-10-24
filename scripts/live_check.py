@@ -184,11 +184,15 @@ def _load_providers() -> dict[str, types.ModuleType]:
     # did exactly that and never ran.
     api = _load("be_pkg.api", PKG / "api.py")
     global _ENERGY_CHARTS_CLIENT, _SMARD_CLIENT, _FETCH_TARIFF_SHEET
+    global _READ_ANALOG_SURCHARGE, _FLUVIUS_AREAS
     _ENERGY_CHARTS_CLIENT = api.EnergyChartsClient
     _SMARD_CLIENT = api.SmardClient
     # The integration's own reader of Fluvius's sheet, for the same reason.
     fluvius = _load("be_pkg.fluvius", PKG / "fluvius.py")
     _FETCH_TARIFF_SHEET = fluvius._fetch_sheet
+    # And its reader of each area's analog kWh rate, over the areas it knows.
+    _READ_ANALOG_SURCHARGE = fluvius.read_analog_surcharge
+    _FLUVIUS_AREAS = tuple(fluvius._AREA_SLUGS.values())
     # And the hours it bills by, which the schedule watch holds against what
     # the operators publish.
     global _DAY_NIGHT, _IMPACT_BAND
@@ -367,6 +371,13 @@ _SMARD_CLIENT: Any = None
 # Bound by _load_providers to fluvius._fetch_sheet, the reader under
 # ensure_tariff_sheet, which raises where ensure_tariff_sheet logs.
 _FETCH_TARIFF_SHEET: Any = None
+# Bound by _load_providers to fluvius.read_analog_surcharge, the reader under
+# ensure_analog_surcharge, and to the areas fluvius reads it for.
+_READ_ANALOG_SURCHARGE: Any = None
+_FLUVIUS_AREAS: tuple[str, ...] = ()
+# Sized on the slip it catches, a factor of ten on the 2 to 4 c/kWh an analog
+# meter pays over a peak-metered one, not on what that ought to be.
+_MAX_ANALOG_SURCHARGE = 0.2
 # Bound by _load_providers to the day_night module and pricing.dso_impact_band.
 _DAY_NIGHT: Any = None
 _IMPACT_BAND: Any = None
@@ -3044,6 +3055,66 @@ async def _fluvius_sheets(
     return sheets, errors
 
 
+async def _fluvius_analog_surcharges(
+    session: aiohttp.ClientSession, today: date | None = None
+) -> tuple[dict[str, float | None], dict[str, str]]:
+    """This year's analog kWh rate off each area's Fluvius sheet, or ``None``,
+    and the fetch error of each area that raised one."""
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    surcharges: dict[str, float | None] = {}
+    errors: dict[str, str] = {}
+    for area in _FLUVIUS_AREAS:
+        try:
+            surcharges[area] = await _READ_ANALOG_SURCHARGE(session, today.year, area)
+        except Exception as err:
+            surcharges[area] = None
+            errors[area] = (
+                str(err)
+                if isinstance(err, _EXTRACTOR_ERROR)
+                else f"{type(err).__name__}: {err}"
+            )
+    return surcharges, errors
+
+
+def _check_fluvius_analog(
+    surcharges: Mapping[str, float | None],
+    errors: Mapping[str, str],
+    today: date | None = None,
+) -> None:
+    """Assert this year's analog kWh rate still reads off every area's sheet.
+
+    Without it an analog meter is billed the peak-metered kWh rate, 2 to 4
+    c/kWh short, with a log line in Home Assistant for the only sign. One tax
+    row for the eight areas, filed in the federal block's thread. An area whose
+    fetch failed the way a later one recovers from passes, as in
+    :func:`_check_fluvius_sheet`; a sheet that is not listed, does not read or
+    gives a figure outside the bound fails.
+    """
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    label = f"_federal: Fluvius {today.year} analog kWh rate unreadable"
+    unread: list[str] = []
+    passed: list[str] = []
+    for area, surcharge in sorted(surcharges.items()):
+        error = errors.get(area)
+        if error is not None and _is_transient_fetch_error(error):
+            passed.append(f"{area}: sheet not fetched: {error}")
+        elif surcharge is None:
+            unread.append(f"{area}: {error or 'not listed or not read'}")
+        elif not 0.0 < surcharge < _MAX_ANALOG_SURCHARGE:
+            unread.append(f"{area}: {surcharge:.7f} EUR/kWh")
+    if unread:
+        _record(
+            label,
+            False,
+            "the analog meter's kWh rate could not be read off this year's "
+            "Fluvius sheet, so analog meters there are billed the peak-metered "
+            f"one ({'; '.join(unread)}); see fluvius.py",
+            kind="tax",
+        )
+    elif passed:
+        _record(label, True, "; ".join(passed), kind="tax")
+
+
 def _check_fluvius_sheet(
     sheets: Mapping[int, Any],
     errors: Mapping[int, str],
@@ -5610,6 +5681,15 @@ async def _run(texts: Path | None = None) -> int:
                 ceilings = {}
                 _record(
                     "_federal: Fluvius sheet check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                )
+            try:
+                surcharges, analog_errors = await _fluvius_analog_surcharges(session)
+                _check_fluvius_analog(surcharges, analog_errors)
+            except Exception as err:
+                _record(
+                    "_federal: Fluvius analog rate check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                 )

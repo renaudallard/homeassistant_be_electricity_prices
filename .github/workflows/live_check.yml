@@ -502,14 +502,14 @@ jobs:
 
           # Titled after what failed, as the products issue is. Two kinds of
           # row are not a supplier's: Fluvius's tariff sheet no longer
-          # reading, and an operator's published hours no longer matching the
-          # ones the integration bills by. Both are code to change here, and
+          # reading, its analog kWh rate included, and an operator's published
+          # hours no longer matching the ones the integration bills by. Both are code to change here, and
           # filed as a supplier's block they would send the triager looking
           # for a card printing a wrong levy.
           # Each title has its own label, for the reason the products step
           # gives.
           if [ -s tax_failures.txt ] \
-            && ! grep -qv 'tariff sheet unreadable$' tax_failures.txt; then
+            && ! grep -qvE '(tariff sheet|analog kWh rate) unreadable$' tax_failures.txt; then
             title='[live-check] the Fluvius tariff sheet can no longer be read'
             label='live-check-tax-fluvius'
           elif [ -s tax_failures.txt ] \
