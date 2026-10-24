@@ -503,7 +503,10 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for label, key in FLUVIUS_CARD_LABELS.items():
         printed = label.replace("Fluvius ", "Fluvius (", 1) + ")"
-        row = numeric_row(text, printed, 8)
+        # The labels share all but the area, so "Fluvius (PBE)" on a 2024
+        # card reads as "Fluvius (Kempen)" at the default 0,82 (0,83); no
+        # two areas come closer than 0,85, a lost glyph stays above 0,96.
+        row = numeric_row(text, printed, 8, threshold=0.9)
         if row is None:
             continue
         data, single, excl_night, capacity, _, _, prosumer, _ = (

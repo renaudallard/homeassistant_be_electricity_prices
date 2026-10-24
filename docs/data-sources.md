@@ -600,6 +600,25 @@ area's overlay from the nearest card of the same calendar year that prints it
 months first. Never from another year: network
 tariffs change on 1 January, and Wallonia's of 2026 are not even shaped like those
 of 2025, so where no card of the year prints the area the month is still dropped.
+Flanders is the case for every month before 2025. The cards up to December 2024
+print the ten operators of those years (Gaselwest, Imewo, Intergem, Iveka,
+Iverlek, PBE, Sibelgas and Fluvius Antwerpen, Limburg and West), which became
+today's eight on 1 January 2025, and only the rows under a name that carried on
+are read: Antwerpen, Imewo, Limburg and West (Engie and OCTA+ print Imewo bare or
+in brackets on those cards, and their readers take three). None of the other six
+maps onto one of today's areas one to one, so none is mapped: Gaselwest merged
+into West, Iverlek and PBE into Zenne-Dijle, Halle-Vilvoorde was formed from
+municipalities of Iverlek, Sibelgas and PBE, and the areas that only changed
+name swapped municipalities too (Fluvius, Gaselwest annual report 2024; the
+regulator's BESL-2024-77, -79 and -80). Kempen, the former Iveka, took Essen and
+Merksplas from Antwerpen and Vosselaar from West and gave Grobbendonk to
+Antwerpen; Midden-Vlaanderen, the former Intergem, gave Affligem to
+Halle-Vilvoorde, and takes Zwijndrecht from Antwerpen from 2026; Imewo took De
+Haan and Nazareth from Gaselwest, Jabbeke from West and Zelzate from Antwerpen.
+So an entry on Halle-Vilvoorde, Kempen, Midden-Vlaanderen or Zenne-Dijle has no
+network before 2025 and its backfill leaves those months out, and an entry in a
+municipality that changed operator is billed those months on the row of its
+area's namesake rather than of the operator it was on.
 A card with no network table at all is not searched for and its month is dropped
 as before: an OCTA+ Walloon card from before 2026 whose aligned text damaged the
 table reads no row of it, and the search would ask the supplier's archive for every

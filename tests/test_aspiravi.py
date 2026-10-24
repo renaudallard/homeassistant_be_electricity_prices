@@ -196,13 +196,26 @@ def test_a_network_table_that_does_not_read_is_refused() -> None:
 
 
 def test_an_area_a_2024_card_does_not_print_is_left_out() -> None:
-    """The 2024 cards name the ten areas of that year, five of which read as
-    one of today's, and those cards still price their months."""
+    """The 2024 cards name the ten areas of that year, four of which carry
+    today's names, and those cards still price their months."""
     text = fixture_text(_SEPTEMBER).replace("Fluvius (Zenne-Dijle)", "Fluvius (PBE)")
     assert "Aug/26" in text
     snap = aspiravi.parse_snapshot(_CID, text.replace("Aug/26", "Aug/24"))
     assert snap.publication_label == "september 2024"
     assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_zenne_dijle"}
+
+
+def test_a_2024_area_is_not_read_as_a_similar_name_of_today() -> None:
+    """The 2024 cards print PBE where today's print Kempen, and the two labels
+    were close enough for the similarity match: PBE's 4,71 c/kWh and 56,59
+    EUR/kW were billed as Kempen's, where Iveka printed 4,64 and 43,70. A
+    2024 card leaves Kempen out, as it does the other areas it does not
+    print."""
+    text = fixture_text(_SEPTEMBER).replace("Fluvius (Kempen)", "Fluvius (PBE)")
+    assert "Fluvius (PBE)" in text
+    snap = aspiravi.parse_snapshot(_CID, text)
+    assert "fluvius_iveka" not in snap.dsos
+    assert set(snap.dsos) == FLUVIUS_KEYS - {"fluvius_iveka"}
 
 
 @pytest.mark.parametrize(

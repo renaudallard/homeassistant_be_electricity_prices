@@ -172,10 +172,14 @@ gives way to the law's one rate with the rest of the block.
 Every card from April 2024 on is in the current layout and parses. The cards
 before it, back to August 2022, print another layout and are left to the proxy.
 The 2024 cards' network tables still name the ten Fluvius areas of that year,
-five of which carry the names used today; those cards only ever price months of
-2024, and a month of 2024 on one of today's areas they do not print is still
-dropped, since no card of 2024 prints it and another year's network is never
-taken. Every card from
+four of which carry the names used today (Antwerpen, Imewo, Limburg, West); those
+cards only ever price months of 2024, and a month of 2024 on one of today's areas
+they do not print is still dropped, since no card of 2024 prints it and another
+year's network is never taken (see [data-sources.md](../data-sources.md) for why
+the others are not mapped). The rows are matched at a similarity of 0,9 rather
+than the default 0,82: "Fluvius (PBE)" scores 0,83 against "Fluvius (Kempen)",
+and PBE's row was billed as Kempen's
+(`test_a_2024_area_is_not_read_as_a_similar_name_of_today`). Every card from
 January 2025 on prints the eight of today, read over the archive on 2026-10-14.
 
 The archive page labels its links "900027 eco plus flex (huishoudelijk) aug 26",
