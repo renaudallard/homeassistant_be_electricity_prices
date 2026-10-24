@@ -256,7 +256,7 @@ def _card(supplier: str = "luminus") -> Any:
         ({"meter": "dynamic"}, False),
         ({"analog_meter": False}, False),
         ({"region": "wallonia", "dso": "ores"}, False),
-        ({"supplier": "custom"}, False),
+        ({"supplier": "custom"}, True),
         ({"supplier": "social"}, False),
     ],
 )
@@ -264,8 +264,8 @@ def test_an_analog_meter_is_a_flemish_one_billed_on_fluvius_tariffs(
     data: dict[str, Any], analog: bool
 ) -> None:
     """Only Fluvius bills it apart, a dynamic contract needs a digital meter,
-    the custom supplier bills the network figures typed for the meter, and the
-    social tariff's network component is the CREG's."""
+    and the social tariff's network component is the CREG's. The custom
+    supplier is asked too, for the cards it is compared with."""
     entry = _flemish("mono", analog_meter=True)
     assert analog_meter({**entry.data, **data}) is analog
 
@@ -785,3 +785,33 @@ async def test_ticking_analog_drops_the_peaks_measured_before(
     await coord._track_monthly_peak()
     assert coord._peak_terms() == [3.0]
     assert coord._billed_peak_kw() == 3.0
+
+
+def test_a_custom_household_on_an_analog_meter_is_quoted_analog_cards(
+    freezer: Any,
+) -> None:
+    """Its own typed network figures stay as typed, but every card the
+    comparison page sets against them was quoted on the digital kWh rate,
+    about 96 EUR a year too cheap at 3.500 kWh."""
+    from datetime import date
+
+    from custom_components.be_electricity_prices import fluvius
+    from custom_components.be_electricity_prices.compare_inputs import _quote_entry
+    from custom_components.be_electricity_prices.flow_schemas import _meter_schema
+
+    freezer.move_to("2026-10-23 13:00:00+02:00")
+    fluvius._analog[(2026, "fluvius_antwerpen")] = _ANTWERPEN_2026
+    entry = _flemish("mono", supplier="custom", contract="custom", analog_meter=True)
+    shown = {
+        str(key) for key in _meter_schema("custom", "custom", dict(entry.data)).schema
+    }
+    assert "analog_meter" in shown
+    october = date(2026, 10, 1)
+    candidate = _resolve_snapshot(
+        _quote_entry(entry, "none", meter="bi"), _card(), delivery_month=october
+    )
+    assert candidate.dsos["fluvius_antwerpen"].distribution_single == pytest.approx(
+        0.0535 + _ANTWERPEN_2026 * 1.06
+    )
+    own = _resolve_snapshot(entry, _card("custom"), delivery_month=october)
+    assert own.dsos["fluvius_antwerpen"].distribution_single == 0.0535

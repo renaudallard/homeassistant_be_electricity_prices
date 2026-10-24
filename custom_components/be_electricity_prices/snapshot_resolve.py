@@ -180,15 +180,16 @@ def offers_analog_meter(data: Mapping[str, Any]) -> bool:
 
     A Flemish mono, bi-hourly or exclusive-night meter: a dynamic contract is
     billed off a digital meter's quarter-hours, and only Fluvius bills the two
-    apart. Not on the custom supplier, whose network figures are the ones the
-    household typed for its own meter, nor on the social tariff, whose network
-    component is the CREG's.
+    apart. Not on the social tariff, whose network component is the CREG's. On
+    the custom supplier too: its own network figures are the ones typed for the
+    household's meter and stay as typed (:func:`_resolve_analog_meter`), but
+    the cards it is compared with are quoted on the meter it has.
     """
     return (
         data.get(CONF_REGION) == REGION_FLANDERS
         and data.get(CONF_METER, METER_MONO)
         in (METER_MONO, METER_BI, METER_EXCLUSIVE_NIGHT)
-        and data.get(CONF_SUPPLIER) not in (SUPPLIER_CUSTOM, SUPPLIER_SOCIAL)
+        and data.get(CONF_SUPPLIER) != SUPPLIER_SOCIAL
     )
 
 
@@ -230,8 +231,9 @@ def _resolve_analog_meter(
     billed on the minimum peak, the sheet's "Vaste term" to the cent.
 
     Identity on a digital meter, before the sheet is read, and on a card whose
-    network is not Fluvius's tariffs (custom, social). Only the entry's own
-    area, since the surcharge is that area's.
+    network is not Fluvius's tariffs: the custom supplier's, whose figures are
+    typed for the household's own meter, and the social tariff's. Only the
+    entry's own area, since the surcharge is that area's.
     """
     surcharge = entry_analog_surcharge(entry, month.year)
     if surcharge is None or snap.supplier in (SUPPLIER_CUSTOM, SUPPLIER_SOCIAL):

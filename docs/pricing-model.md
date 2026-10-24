@@ -1728,9 +1728,11 @@ accordingly:
   peak-metered rate while the capacity charge stays the flat one.
 
 Not offered on a dynamic meter, which a contract only a digital meter carries
-forces, nor on the custom supplier, whose network figures are typed for the
-household's own meter, nor on the social tariff, whose CREG component replaces
-the operator's tariffs. The answer rides the comparison proxy with the meter the
+forces, nor on the social tariff, whose CREG component replaces the operator's
+tariffs. On the custom supplier it is offered, but its card is left as typed,
+since its network figures are the household's own meter's: the answer moves its
+capacity peak to the minimum and the cards it is compared with to the analog
+network. The answer rides the comparison proxy with the meter the
 quote is priced on, so a dynamic target is quoted digital, on the minimum peak
 the household would start from.
 

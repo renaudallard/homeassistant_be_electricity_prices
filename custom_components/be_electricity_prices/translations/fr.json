@@ -55,7 +55,7 @@
         },
         "data_description": {
           "day_hours": "Fluvius facture le tarif jour de 07:00 à 22:00 en semaine, sauf dans les communes de sa liste, où il court de 06:00 à 21:00. Pour une commune marquée d'un astérisque sur la liste, l'heure de basculement a été fixée à la pose du compteur : vérifiez le vôtre. Utilisé uniquement avec un compteur bi-horaire ou numérique.",
-          "analog_meter": "Cochez si votre compteur est encore un compteur analogique (classique) que Fluvius n'a pas encore remplacé par un compteur numérique. Fluvius ne peut pas en mesurer le pic : il facture le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh."
+          "analog_meter": "Cochez si votre compteur est encore un compteur analogique (classique) que Fluvius n'a pas encore remplacé par un compteur numérique. Fluvius ne peut pas en mesurer le pic : il facture le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Avec le fournisseur 'Expert: custom formula', les tarifs réseau que vous saisissez sont facturés tels quels : la case facture le tarif capacitaire sur 2,5 kW et chiffre les cartes comparées aux tarifs analogiques."
         }
       },
       "professional": {
@@ -411,7 +411,7 @@
         },
         "data_description": {
           "day_hours": "Fluvius facture le tarif jour de 07:00 à 22:00 en semaine, sauf dans les communes de sa liste, où il court de 06:00 à 21:00. Pour une commune marquée d'un astérisque sur la liste, l'heure de basculement a été fixée à la pose du compteur : vérifiez le vôtre. Utilisé uniquement avec un compteur bi-horaire ou numérique.",
-          "analog_meter": "Cochez si votre compteur est encore un compteur analogique (classique) que Fluvius n'a pas encore remplacé par un compteur numérique. Fluvius ne peut pas en mesurer le pic : il facture le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh."
+          "analog_meter": "Cochez si votre compteur est encore un compteur analogique (classique) que Fluvius n'a pas encore remplacé par un compteur numérique. Fluvius ne peut pas en mesurer le pic : il facture le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Avec le fournisseur 'Expert: custom formula', les tarifs réseau que vous saisissez sont facturés tels quels : la case facture le tarif capacitaire sur 2,5 kW et chiffre les cartes comparées aux tarifs analogiques."
         }
       },
       "professional": {

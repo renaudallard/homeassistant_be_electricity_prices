@@ -55,7 +55,7 @@
         },
         "data_description": {
           "day_hours": "Fluvius bills the day rate from 07:00 to 22:00 on weekdays, except in the municipalities on its list, where it runs from 06:00 to 21:00. Where the list marks a municipality with an asterisk, the switch time was set when the meter was installed, so check yours. Only used with a dual-time or digital meter.",
-          "analog_meter": "Tick if your meter is still an analog (classic) one that Fluvius has not yet replaced by a digital meter. Fluvius cannot measure its peak: it bills the capacity tariff on a flat 2.5 kW and a higher network rate per kWh."
+          "analog_meter": "Tick if your meter is still an analog (classic) one that Fluvius has not yet replaced by a digital meter. Fluvius cannot measure its peak: it bills the capacity tariff on a flat 2.5 kW and a higher network rate per kWh. On the 'Expert: custom formula' supplier the network rates you type are billed as typed: the box bills the capacity tariff on 2.5 kW and quotes the cards you compare with on the analog rates."
         }
       },
       "professional": {
@@ -411,7 +411,7 @@
         },
         "data_description": {
           "day_hours": "Fluvius bills the day rate from 07:00 to 22:00 on weekdays, except in the municipalities on its list, where it runs from 06:00 to 21:00. Where the list marks a municipality with an asterisk, the switch time was set when the meter was installed, so check yours. Only used with a dual-time or digital meter.",
-          "analog_meter": "Tick if your meter is still an analog (classic) one that Fluvius has not yet replaced by a digital meter. Fluvius cannot measure its peak: it bills the capacity tariff on a flat 2.5 kW and a higher network rate per kWh."
+          "analog_meter": "Tick if your meter is still an analog (classic) one that Fluvius has not yet replaced by a digital meter. Fluvius cannot measure its peak: it bills the capacity tariff on a flat 2.5 kW and a higher network rate per kWh. On the 'Expert: custom formula' supplier the network rates you type are billed as typed: the box bills the capacity tariff on 2.5 kW and quotes the cards you compare with on the analog rates."
         }
       },
       "professional": {
