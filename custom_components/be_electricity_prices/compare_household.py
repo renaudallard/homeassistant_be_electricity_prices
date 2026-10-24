@@ -36,7 +36,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections.abc import Sequence
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -327,12 +327,17 @@ class _HouseholdMixin:
             from .api import fetch_day_ahead_or_fallback
 
             try:
-                midnight = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+                # Today's local day, as the live fetch and the auction cut it:
+                # a window from UTC midnight started at 01:00 or 02:00 local
+                # and returned a day short of its first hours.
+                local_midnight = dt_util.start_of_local_day(today_local)
                 spot_dict, _source = await fetch_day_ahead_or_fallback(
                     spot_key,
                     async_get_clientsession(self.hass),
-                    midnight,
-                    midnight + timedelta(days=1),
+                    local_midnight.astimezone(UTC),
+                    dt_util.start_of_local_day(
+                        today_local + timedelta(days=1)
+                    ).astimezone(UTC),
                 )
             except Exception:  # degrade to '-' for the dynamic side
                 pass

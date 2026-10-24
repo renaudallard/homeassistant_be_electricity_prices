@@ -1151,3 +1151,59 @@ async def test_old_days_and_part_days_are_not_shared(freezer: Any) -> None:
             _TOMORROW_START,
         )
     assert len(session.fallback_params) == 2
+
+
+@pytest.mark.parametrize(
+    ("when", "midnight", "hours"),
+    [
+        # An ordinary winter day: UTC midnight is 01:00 local.
+        ("2026-11-10 15:00:00+01:00", datetime(2026, 11, 9, 23, 0, tzinfo=UTC), 24),
+        # The fall-back Sunday, 25 hours: UTC midnight is 02:00 local.
+        ("2026-10-25 15:00:00+01:00", datetime(2026, 10, 24, 22, 0, tzinfo=UTC), 25),
+    ],
+)
+async def test_a_day_cut_by_the_request_window_is_not_shared(
+    freezer: Any, when: str, midnight: datetime, hours: int
+) -> None:
+    """The compare page asked for the day from UTC midnight, an hour or two
+    after local midnight, and the 23 hours it got back were shared as the
+    whole day: the next entry took them and never asked for its first hours
+    again. Only a day holding every hour of its own length is shared."""
+    freezer.move_to(when)
+    session = _Counting(
+        entsoe=EntsoeError("503"), fallback_body=_day_body(midnight, hours + 24)
+    )
+    utc_midnight = midnight.replace(hour=0) + timedelta(days=1)
+    await fetch_day_ahead_or_fallback(
+        None,
+        session,  # type: ignore[arg-type]
+        utc_midnight,
+        utc_midnight + timedelta(days=1),
+    )
+    prices, _ = await fetch_day_ahead_or_fallback(
+        None,
+        session,  # type: ignore[arg-type]
+        midnight,
+        midnight + timedelta(hours=hours),
+    )
+    assert len(session.fallback_params) == 2
+    assert len(prices) == hours
+    assert min(prices) == midnight
+
+
+async def test_the_spring_forward_day_is_shared_whole(freezer: Any) -> None:
+    """23 hours is the whole of the spring-forward day."""
+    freezer.move_to("2026-03-29 15:00:00+02:00")
+    midnight = datetime(2026, 3, 28, 23, 0, tzinfo=UTC)
+    session = _Counting(
+        entsoe=EntsoeError("503"), fallback_body=_day_body(midnight, 23)
+    )
+    for _ in range(2):
+        prices, _source = await fetch_day_ahead_or_fallback(
+            None,
+            session,  # type: ignore[arg-type]
+            midnight,
+            midnight + timedelta(hours=23),
+        )
+        assert len(prices) == 23
+    assert len(session.fallback_params) == 1

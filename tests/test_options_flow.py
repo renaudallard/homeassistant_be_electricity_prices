@@ -1419,6 +1419,12 @@ async def test_compare_quotes_a_dynamic_target_on_the_keyless_sources(
         assert result["step_id"] == "compare_result"
     assert fetch.await_args is not None
     assert fetch.await_args.args[0] is None
+    # Today's local day, as the live fetch asks for it: from UTC midnight the
+    # day came back short of its first hours.
+    start, end = fetch.await_args.args[2:4]
+    day = dt_util.as_local(start).date()
+    assert start == dt_util.start_of_local_day(day)
+    assert end == dt_util.start_of_local_day(day + timedelta(days=1))
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

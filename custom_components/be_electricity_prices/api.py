@@ -797,9 +797,19 @@ _inflight: dict[
     tuple[str, datetime, datetime], asyncio.Future[dict[datetime, float]]
 ] = {}
 
-# A day held with fewer hours than this is still being published, or has
-# gaps, and is not shared: the spring-forward day has 23.
-_WHOLE_DAY_HOURS = 23
+
+def _local_day_hours(day: date) -> int:
+    """The hours the local day ``day`` has: 23 on the spring-forward day, 25
+    on the fall-back Sunday, 24 otherwise.
+
+    A day is shared only once it holds all of them. One with fewer is still
+    being published, has gaps, or was cut by a request that did not start at
+    local midnight, and would be served short to every entry. Timestamps,
+    because two datetimes in one zone subtract as wall clocks.
+    """
+    start = dt_util.start_of_local_day(day).timestamp()
+    end = dt_util.start_of_local_day(day + timedelta(days=1)).timestamp()
+    return round((end - start) / 3600)
 
 
 def _on_grid(
@@ -934,7 +944,7 @@ async def fill_missing_days(
             by_day.setdefault(dt_util.as_local(slot).date(), {})[slot] = value
         for d, slots in by_day.items():
             hours = {slot.replace(minute=0) for slot in slots}
-            if d >= recent and len(hours) >= _WHOLE_DAY_HOURS:
+            if d >= recent and len(hours) >= _local_day_hours(d):
                 _shared_days[d] = (name, slots)
         for d in missing - by_day.keys():
             if d >= recent:

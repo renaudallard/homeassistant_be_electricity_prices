@@ -115,10 +115,12 @@ backup, and every entry asks for the same Belgian curve, so `fill_missing_days`
   auction's own grid (every keyless request asks for quarter-hours) with the
   source that answered. A caller billing hours reads them through `_on_grid`,
   which sums each hour's slots in time order and divides, the arithmetic the
-  parsers apply to an hourly request, so the floats are the same. Only a day of
-  at least `_WHOLE_DAY_HOURS` (23, the spring-forward day) is shared: one still
-  filling in would be served short to every entry. Older days, a backfill's
-  year, are not held; each entry asks for them once and keeps them itself.
+  parsers apply to an hourly request, so the floats are the same. Only a day
+  holding every hour of its own length (`_local_day_hours`: 23 on the
+  spring-forward day, 25 on the fall-back Sunday) is shared: one still filling
+  in, or cut by a request that did not start at local midnight, would be served
+  short to every entry. Older days, a backfill's year, are not held; each entry
+  asks for them once and keeps them itself.
 - **A miss is remembered for 20 minutes.** `_missed_days` records a recent day a
   source had nothing for, or failed on, and that source is not asked for it
   again for `_MISS_TTL`: tomorrow before the auction no longer costs one request
