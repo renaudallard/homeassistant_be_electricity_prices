@@ -59,6 +59,7 @@ from .excise_law import held_table as held_excise_table
 from .excise_law import restore as restore_excise_law
 from .providers.base import SupplierSnapshot
 from .snapshot_codec import _MigratingStore, _snapshot_from_dict, _snapshot_to_dict
+from .snapshot_feed_in import reference_rows_to_store, restore_reference_rows
 from .snapshot_months import monthly_rows_to_store, restore_monthly_rows
 from .spot_stats import spots_available
 from .vat_rates import held_table as held_vat_table
@@ -124,6 +125,7 @@ class _PersistMixin:
     _register_pair_covered: bool
     _register_pair_fault: str
     _saved_payload: dict[str, Any] | None
+    _snapshot: SupplierSnapshot | None
     _snapshot_fetched_at: datetime | None
     _snapshot_probe_key: str | None
     _snapshot_raw: SupplierSnapshot | None
@@ -293,6 +295,16 @@ class _PersistMixin:
                     restored,
                     self.entry.entry_id,
                 )
+        # And the other contract's cards its stand-in months settle their
+        # feed-in on (``snapshot_feed_in``), behind the same gate.
+        stored_references = stored.get("reference_cards")
+        if isinstance(stored_references, dict) and not tuple_mismatch:
+            restore_reference_rows(
+                self.hass,
+                self._supplier_tuple[0],
+                self._supplier_tuple[2],
+                stored_references,
+            )
         # Same tuple_mismatch gate as the snapshot above: ENTSO-E spots
         # were collected while the entry was on a *dynamic* contract on
         # the previous tuple. After an OptionsFlow swap to a static
@@ -600,13 +612,15 @@ class _PersistMixin:
         # the tuple guard above like everything else, and only for the
         # calendar year so far plus the signing month, so the blob does not
         # grow past a year of them (about 5 KB apiece).
-        monthly_cards = monthly_rows_to_store(
-            self.hass,
-            *self._supplier_tuple,
-            self._persisted_months(dt_util.now().date()),
-        )
+        months = self._persisted_months(dt_util.now().date())
+        monthly_cards = monthly_rows_to_store(self.hass, *self._supplier_tuple, months)
         if monthly_cards:
             payload["monthly_cards"] = monthly_cards
+        reference_cards = reference_rows_to_store(
+            self.hass, *self._supplier_tuple, months, self._snapshot, self.entry
+        )
+        if reference_cards:
+            payload["reference_cards"] = reference_cards
         if self._historical_spots:
             payload["historical_spots"] = {
                 h.isoformat(): v for h, v in self._historical_spots.items()

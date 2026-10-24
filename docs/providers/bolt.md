@@ -1021,11 +1021,14 @@ before's (the first October 2026 cards), and `stand_in_for_month` (`snapshot_fee
 the month's figures on its indices through the current card's formula (`settled_stand_in`,
 `_settle.py`); a figure the table prints no index for is dropped, so a two-register meter is
 credited the quarter's single figure. While the quarter after has no closed month the current
-card's table is the quarter's own. Where the fixed card cannot be had the month is credited per
-quarter-hour on the formula, as the dynamic settlement is, nothing without a spot, and the
-backfill waits for the card as for a month's own (`reference_failed`). The fixed cards' labels are
-not read: the April 2026 card as Bolt serves it now names the second quarter over the first
-quarter's indices.
+card's table is the quarter's own. Where the fixed card cannot be had an entry with a day-ahead
+source is credited the month per quarter-hour on the formula, as the dynamic settlement is,
+nothing for an hour without a spot, and one without a source the current card's figures, as it is
+billed the printed figures wherever a card prints them; the backfill waits for the card as for a
+month's own (`reference_failed`). The fixed cards read are kept in the entry's own blob
+(`reference_cards`, `reference_rows_to_store`), which keeps only its own contract's months, so a
+restart does not read them again. The fixed cards' labels are not read: the April 2026 card as
+Bolt serves it now names the second quarter over the first quarter's indices.
 
 The fixed cards print no Impact feed-in rows before September 2026, so an entry on the Impact
 tariff is credited the single figure in every band for the stand-in months of the first quarter

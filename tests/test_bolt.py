@@ -2687,10 +2687,12 @@ async def _stand_in(
     region: str = "flanders",
     dso: str = "fluvius_antwerpen",
     mode: str = "bi_horaire",
+    keyed: bool = True,
 ) -> SupplierSnapshot:
     """``month`` as a Bolt Online entry on the variable settlement is billed
     on 23 October 2026, the October card standing in for it, with the card
-    archive serving the fixed cards ``rows`` names by month."""
+    archive serving the fixed cards ``rows`` names by month. ``keyed`` gives
+    the entry an ENTSO-E key."""
     from unittest.mock import MagicMock
 
     from homeassistant.util import dt as dt_util
@@ -2727,6 +2729,7 @@ async def _stand_in(
         meter=meter,
         solar_regime="injection",
         dso_tariff_mode=mode,
+        api_key="k" if keyed else None,
     )
     now = datetime(2026, 10, 23, 10, tzinfo=dt_util.DEFAULT_TIME_ZONE)
     with (
@@ -2798,10 +2801,11 @@ async def test_a_month_no_archive_holds_is_credited_its_own_quarter_s_feed_in(
 async def test_a_month_whose_quarter_cannot_be_read_is_credited_per_slot(
     hass: Any,
 ) -> None:
-    """Where the fixed card of the quarter after cannot be had, the month is
-    not credited the current card's figures, another quarter's: it is credited
-    per quarter-hour on the card's formula, nothing without a spot, and the
-    backfill waits for the card as for the month's own."""
+    """Where the fixed card of the quarter after cannot be had, an entry with
+    a day-ahead source is not credited the current card's figures, another
+    quarter's: it is credited per quarter-hour on the card's formula, nothing
+    for an hour without a spot, and the backfill waits for the card as for
+    the month's own."""
     from homeassistant.util import dt as dt_util
 
     from custom_components.be_electricity_prices import snapshot_months
@@ -3156,3 +3160,100 @@ async def test_a_replay_drops_bands_its_settled_row_does_not_hold() -> None:
     assert inj.current == pytest.approx(0.0621, abs=5e-5)
     assert (inj.impact_eco, inj.impact_medium, inj.impact_pic) == (None, None, None)
     assert is_settled(replayed)
+
+
+async def test_a_month_whose_quarter_cannot_be_read_keeps_the_printed_figures_without_a_source(
+    hass: Any,
+) -> None:
+    """An entry with no key and no keyless setting bills the figures its
+    card prints wherever one does. Credited per quarter-hour on the formula,
+    with no spot to price it on, its stand-in months went uncredited while the
+    fixed card of the quarter after could not be read: 57,59 EUR on a
+    household's year to date in October 2026. It keeps the current card's
+    figures, as 0.42.1 credited them."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.injection import (
+        _historical_injection_rate,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_snapshots,
+    )
+
+    _monthly_snapshots(hass).clear()
+    snap = await _stand_in(hass, date(2026, 2, 1), {}, keyed=False)
+    inj = snap.injection
+    assert inj is not None and not inj.slot_indexed and inj.bi_hourly
+    noon = datetime(2026, 2, 11, 13, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    for spot in (None, 0.05):
+        assert _historical_injection_rate(
+            inj, spot, energy=snap.energy, when=noon, meter="bi", region="flanders"
+        ) == pytest.approx(0.94 * 0.09666 - 0.01133)
+
+
+async def test_the_reference_cards_a_stand_in_reads_survive_a_restart(
+    hass: Any, freezer: Any
+) -> None:
+    """The fixed cards Bolt's stand-in months settle their feed-in on are
+    another contract's rows, which the entry's blob did not keep: every
+    restart read them again, two 5 MB cards in 2026 with the card archive box
+    off. The entry keeps the ones its stand-in months read."""
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_fetched_at,
+        _monthly_snapshots,
+    )
+    from tests import make_entry
+
+    freezer.move_to("2026-10-23 10:00:00+02:00")
+    entry = make_entry(
+        supplier="bolt",
+        contract="bolt_online",
+        region="flanders",
+        dso="fluvius_antwerpen",
+        meter="bi",
+        solar_regime="injection",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    entry.runtime_data = coord
+    raw = parse_snapshot(
+        "bolt_online",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "flanders",
+    )
+    coord._snapshot = _resolve_snapshot(entry, raw)
+    key = ("bolt", "bolt_fix", "flanders", "2026-06")
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    _monthly_snapshots(hass)[key] = parse_snapshot(
+        "bolt_fix", fixture_text("bolt_fix.pdf", layout=True), "flanders"
+    )
+    # Read by no stand-in month of the year: the second quarter's reference
+    # is September's card, not August's.
+    _monthly_snapshots(hass)[("bolt", "bolt_fix", "flanders", "2026-08")] = (
+        _monthly_snapshots(hass)[key]
+    )
+
+    saved: dict[str, Any] = {}
+
+    async def _fake_save(payload: dict[str, Any]) -> None:
+        saved.update(payload)
+
+    with patch.object(coord._store, "async_save", new=_fake_save):
+        await coord._save_persistent()
+    assert set(saved["reference_cards"]) == {"bolt_fix"}
+    assert set(saved["reference_cards"]["bolt_fix"]) == {"2026-06"}
+
+    _monthly_snapshots(hass).clear()
+    fresh = BePricesCoordinator(hass, entry)
+    with patch.object(fresh._store, "async_load", AsyncMock(return_value=saved)):
+        await fresh.async_load_persistent()
+    restored = _monthly_snapshots(hass)[key]
+    assert restored is not None and restored.injection is not None
+    assert restored.injection.peak == pytest.approx(0.94 * 0.07414 - 0.01133)

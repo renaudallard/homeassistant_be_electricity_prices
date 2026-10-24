@@ -42,6 +42,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date
+from typing import Any
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
@@ -53,18 +54,19 @@ from .providers import EXTRACTORS
 from .providers._settle import settled_stand_in
 from .providers.base import SupplierExtractor, SupplierSnapshot
 from .snapshot_resolve import _resolve_snapshot
+from .spot_stats import spots_available
 
 
 def _reference(
     extractor: SupplierExtractor,
     contract: str,
     year_month: date,
-    current: SupplierSnapshot,
+    current: SupplierSnapshot | None,
     entry: ConfigEntry | None,
 ) -> tuple[str, date] | None:
     """The card a stand-in month's feed-in settles on, for an entry credited
     figures per register on its variable settlement, or None."""
-    inj = current.injection
+    inj = None if current is None else current.injection
     if (
         extractor.stand_in_reference is None
         or entry is None
@@ -95,12 +97,13 @@ async def stand_in_for_month(
     Given the card it was resolved from as ``current_raw``, with the federal
     levies the month owes (``_proxy_for_month``) and the feed-in figures of
     its own quarter, rebuilt on the reference card's indices. A reference
-    that cannot be read leaves the month credited per slot on the card's
-    formula, as the dynamic settlement is, rather than at the current card's
-    figures, another quarter's: a household's day-ahead prices then price it,
-    and without them it goes uncredited, while the backfill waits for the
-    read (``reference_failed``). The reference is read even without
-    ``current_raw``, so the warm-up fills it for the walks that bill.
+    that cannot be read leaves an entry with a day-ahead source credited per
+    slot on the card's formula, as the dynamic settlement is, rather than at
+    the current card's figures, another quarter's, while the backfill waits
+    for the read (``reference_failed``). One without a source is credited
+    the current card's figures, as such an entry is wherever a card prints
+    one. The reference is read even without ``current_raw``, so the warm-up
+    fills it for the walks that bill.
     """
     from . import snapshot_months
 
@@ -126,6 +129,8 @@ async def stand_in_for_month(
     settled = None
     if reference is not None and reference.injection is not None:
         settled = settled_stand_in(inj, reference.injection)
+    if settled is None and not spots_available(entry.data):
+        return proxy
     leg = settled if settled is not None else replace(inj, spp_redistributed=False)
     card = _resolve_snapshot(
         entry,
@@ -150,3 +155,56 @@ def reference_failed(
     return ref is not None and snapshot_months.month_card_failed(
         hass, supplier, ref[0], region, ref[1]
     )
+
+
+def reference_rows_to_store(
+    hass: HomeAssistant,
+    supplier: str,
+    contract: str,
+    region: str,
+    months: list[date],
+    current: SupplierSnapshot | None,
+    entry: ConfigEntry,
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """The rows of the cards the entry's stand-in ``months`` settle their
+    feed-in on, by contract, for the entry's own blob.
+
+    They are another contract's rows, which ``monthly_rows_to_store`` does not
+    write, so every restart read them again: two Bolt fixed cards in 2026,
+    5 MB of PDF apiece with the card archive box off. Only rows the month
+    cache holds are written.
+    """
+    from . import snapshot_months
+
+    extractor = EXTRACTORS.get(supplier)
+    if extractor is None:
+        return {}
+    wanted: dict[str, set[date]] = {}
+    for month in months:
+        ref = _reference(extractor, contract, month, current, entry)
+        if ref is not None:
+            wanted.setdefault(ref[0], set()).add(ref[1])
+    out: dict[str, dict[str, dict[str, Any]]] = {}
+    for ref_contract, ref_months in wanted.items():
+        rows = snapshot_months.monthly_rows_to_store(
+            hass, supplier, ref_contract, region, sorted(ref_months)
+        )
+        if rows:
+            out[ref_contract] = rows
+    return out
+
+
+def restore_reference_rows(
+    hass: HomeAssistant, supplier: str, region: str, stored: dict[str, Any]
+) -> int:
+    """Seed the month cache with the rows :func:`reference_rows_to_store`
+    wrote, returning the number restored (``restore_monthly_rows``)."""
+    from . import snapshot_months
+
+    restored = 0
+    for contract, rows in stored.items():
+        if isinstance(contract, str) and isinstance(rows, dict):
+            restored += snapshot_months.restore_monthly_rows(
+                hass, supplier, contract, region, rows
+            )
+    return restored
