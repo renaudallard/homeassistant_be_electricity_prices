@@ -671,6 +671,9 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     Layout (9 numbers per row):
       mono | jour | nuit | excl_nuit | terme_fixe (€/an) |
       PIC | MEDIUM | ECO | transport (c€/kWh)
+
+    A card where no row of this layout reads is read as the one printed
+    before the Impact bands (``_wallonia_2025_rows``).
     """
     # Mega lists prosumer rates in a separate small table further down.
     prosumer_by_key: dict[str, float] = {}
@@ -716,6 +719,45 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             pic=pic,
             medium=medium,
             eco=eco,
+            transport=transport,
+            terme_fixe=terme_fixe,
+            prosumer=prosumer_by_key.get(key),
+        )
+    return out or _wallonia_2025_rows(text, prosumer_by_key)
+
+
+def _wallonia_2025_rows(
+    text: str, prosumer_by_key: dict[str, float]
+) -> dict[str, DsoOverlay]:
+    """The Walloon rows of a card from before the Impact bands.
+
+    The cards up to December 2025 print six figures, one to a line after the
+    row's label, under "Mono-horaire | Jour | Nuit | Exclusif nuit (c€/kWh) |
+    Transport (c€/kWh) | Terme fixe (€/an)", and the prosumer tariff in a
+    table of its own as the 2026 cards do. AIEG on the November 2025 card,
+    9.46 9.56 7.65 6.99 2.98 19.08, is Eneco's row of that month, its 7,00
+    rounded. The sixth figure has to be the row's last, so a longer row is
+    never read as its first six.
+    """
+    out: dict[str, DsoOverlay] = {}
+    for label, key in _WALLONIA_LABELS.items():
+        match = re.search(
+            rf"{re.escape(label)}\s*\n"
+            + r"\s*([\d.,]+)\s*\n" * 5
+            + r"\s*([\d.,]+)(?![\d.,])(?!\s*\d)",
+            text,
+            re.IGNORECASE,
+        )
+        if match is None:
+            continue
+        mono, peak, offpeak, excl_night, transport, terme_fixe = (
+            to_float(value) for value in match.groups()
+        )
+        out[key] = walloon_dso_overlay(
+            mono=mono,
+            peak=peak,
+            offpeak=offpeak,
+            excl_night=excl_night,
             transport=transport,
             terme_fixe=terme_fixe,
             prosumer=prosumer_by_key.get(key),

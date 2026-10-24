@@ -558,6 +558,13 @@ PIC, MEDIUM, ECO, transport. The Impact triplet (`distribution_pic`,
 bands. Prosumer rates come from a separate small `Tarif Prosumer (€/kW/an)` table
 further down and are cross-referenced onto each overlay
 (`test_wallonia_dso_carries_prosumer_rate_from_separate_table`, `test_mega.py`).
+A card where no row of that layout reads is read as the one printed before the
+Impact bands, up to December 2025 (`_wallonia_2025_rows`, `_mega_overlays.py`): six
+figures a row, mono, jour, nuit, excl_nuit, transport, terme_fixe (€/an), the
+prosumer tariff in its own table as above. The sixth figure has to be the row's
+last, so a longer row is never read as its first six. Mega prints a few figures a
+cent below Eneco's of the same month (AIEG exclusive night 6.99 for 7,00), billed as
+printed (`test_wallonia_card_before_the_impact_bands_reads_six_figures`).
 
 Brussels (`_extract_brussels_dsos`, `_mega_overlays.py`) maps the single Sibelga row, an
 8-number block: mono, jour, nuit, excl_nuit, transport, mesure_comptage (€/an),
@@ -788,6 +795,7 @@ The fixtures under `tests/fixtures/` that this provider's tests exercise:
 | `mega_dynamic_w.pdf` | Dynamic, Wallonia (consumption + injection formulas, connection fee) |
 | `mega_dynamic_v.pdf` | Dynamic, Flanders (2-column Fluvius rows, external data fee, no prosumer, no PV forfait) |
 | `mega_offpeak_impact_w.pdf` | Off-peak Impact, Wallonia (three-tier rates, per-tier injection, Impact DSO triplet) |
+| `mega_cosy_fixed_w_2025-11.pdf` | Cosy Fixed, Wallonia, **November 2025** (the six-figure Walloon table printed before the Impact bands) |
 
 ## When the card changes, look here
 

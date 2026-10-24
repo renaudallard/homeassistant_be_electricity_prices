@@ -293,6 +293,58 @@ def test_wallonia_ores_subarea_divergence_is_fatal() -> None:
         parse_snapshot("engie_dynamic", {REGION_WALLONIA: wal})
 
 
+def test_wallonia_card_before_the_impact_bands_reads_seven_columns() -> None:
+    """The cards up to December 2025 print the Walloon table in seven columns,
+    without the three Impact bands, and no row of it read: a Walloon month
+    before 2026 was left out of the bill whole."""
+    snap = parse_snapshot(
+        "engie_easy_fixed",
+        {REGION_WALLONIA: fixture_text("engie_easy_fixed_w_2025-11.pdf")},
+    )
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    # AIEG 9,46 9,56 7,65 7,00 19,08 78,99 2,98, Eneco's row of the month.
+    aieg = snap.dsos["aieg"]
+    assert aieg.distribution_single == pytest.approx(0.0946)
+    assert aieg.distribution_peak == pytest.approx(0.0956)
+    assert aieg.distribution_offpeak == pytest.approx(0.0765)
+    assert aieg.distribution_exclusive_night == pytest.approx(0.0700)
+    assert aieg.data_management_per_year == pytest.approx(19.08)
+    assert aieg.prosumer_eur_per_kva_year == pytest.approx(78.99)
+    assert aieg.transport == pytest.approx(0.0298)
+    assert aieg.distribution_pic is None
+
+
+def test_dynamic_wallonia_card_before_the_impact_bands_reads_six_columns() -> None:
+    """The dynamic cards print the same table without the prosumer tariff,
+    which their header does not name either, so the transport is the sixth
+    figure and nothing is read as a prosumer tariff."""
+    snap = parse_snapshot(
+        "engie_dynamic",
+        {REGION_WALLONIA: fixture_text("engie_dynamic_w_2025-12.pdf")},
+    )
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    rew = snap.dsos["rew"]
+    # REGIE DE WAVRE 11,48 11,65 7,21 6,17 28,09 2,98
+    assert rew.distribution_single == pytest.approx(0.1148)
+    assert rew.distribution_exclusive_night == pytest.approx(0.0617)
+    assert rew.data_management_per_year == pytest.approx(28.09)
+    assert rew.transport == pytest.approx(0.0298)
+    assert rew.prosumer_eur_per_kva_year is None
+
+
+def test_wallonia_card_with_split_ores_sub_areas_leaves_ores_out() -> None:
+    """The cards of November and December 2023 print each ORES sub-area on a
+    distribution tariff of its own, which one ``ores`` area cannot tell
+    apart. Such a card leaves ORES out rather than bill every sub-area on
+    the Brabant Wallon row, and keeps the other areas and its energy: it is
+    what a contract signed then is billed on."""
+    text = fixture_text("engie_easy_fixed_w_2025-11.pdf")
+    split = text.replace("ORES (Est) 10,79 11,46", "ORES (Est) 11,46 12,24")
+    assert split != text, "the fixture stopped printing ORES (Est)"
+    snap = parse_snapshot("engie_easy_fixed", {REGION_WALLONIA: split})
+    assert set(snap.dsos) == {"aieg", "aiesh", "resa", "rew"}
+
+
 def test_dynamic_bills_per_quarter_hour() -> None:
     """The card indexes on eSpot_15, the price of that precise quarter hour,
     so it settles on 96 slots a day. Engie is the only supplier that SETS

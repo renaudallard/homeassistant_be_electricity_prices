@@ -635,6 +635,28 @@ def test_wallonia_dsos_extract_full_set() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.04)
 
 
+def test_wallonia_card_before_the_impact_tariff_reads_whole_rows() -> None:
+    """The cards up to December 2025 print the Walloon table in seven columns,
+    without the three Impact bands, and no row of it read. On most of them
+    the aligned text damages the table, so only a row of seven whole figures
+    is read: one that lost a glyph is left out, never read short."""
+    text = _text("octaplus_ecofixed_w_dec2025.pdf")
+    snap = parse_snapshot("octaplus_ecofixed", text, "wallonia")
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    # Aieg 9,46 9,56 7,65 7,00 19,08 2,98 78,99, Eneco's row of the month.
+    aieg = snap.dsos["aieg"]
+    assert aieg.distribution_single == pytest.approx(0.0946)
+    assert aieg.distribution_exclusive_night == pytest.approx(0.0700)
+    assert aieg.data_management_per_year == pytest.approx(19.08)
+    assert aieg.transport == pytest.approx(0.0298)
+    assert aieg.prosumer_eur_per_kva_year == pytest.approx(78.99)
+    assert aieg.distribution_pic is None
+    damaged = text.replace("Aieg 9,46 9,56 7,65 7,00", "Aieg 9,46 9,56 7,65 ,00")
+    assert damaged != text, "the fixture stopped printing AIEG's row whole"
+    short = parse_snapshot("octaplus_ecofixed", damaged, "wallonia")
+    assert set(short.dsos) == {"aiesh", "ores", "resa", "rew"}
+
+
 def test_wallonia_dsos_new_2026_template() -> None:
     # The 2026 template recased/renamed the row labels (AIEG -> Aieg,
     # TECTEO - RESA -> RESA, REGIEDEWAVRE -> Régie de Wavre) and swapped
@@ -1039,13 +1061,13 @@ async def test_archive_renders_the_base64_card_through_the_render_seam(
 async def test_an_archived_card_short_of_an_area_keeps_its_energy(
     monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:
-    """The Walloon cards of October to December 2025 print a seven-column
-    network table the reader does not take. The live card is refused for it,
-    but a past month's card is what a contract signed then is billed on:
-    refusing it too billed that contract's energy on today's card, and the
-    month itself on today's rates where it used to be dropped. The running
-    month's is refused as the live card is, or the month walk would drop the
-    month on the missing area where the last good card stands in."""
+    """The aligned text of the Walloon Fixed card of November 2025 damages its
+    seven-column network table, so no row of it reads. The live card is
+    refused for it, but a past month's card is what a contract signed then is
+    billed on: refusing it too billed that contract's energy on today's card,
+    and the month itself on today's rates where it used to be dropped. The
+    running month's is refused as the live card is, or the month walk would
+    drop the month on the missing area where the last good card stands in."""
     from custom_components.be_electricity_prices.providers import octaplus
 
     name = "octaplus_fixed_w_nov2025.pdf"

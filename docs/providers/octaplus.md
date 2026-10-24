@@ -410,13 +410,29 @@ the next good card (`test_a_live_card_missing_an_area_is_refused`,
 `tests/test_octaplus.py`). `fetch_for_month` refuses it for the running month
 alone (`running_month_short_of_an_area`, `_parse.py`), so the last good card
 stands in rather than the month walk dropping the running month. The Walloon
-cards of October to December 2025, before the Impact tariff, print a
-seven-column table this reader does not take, and on several of them the
-aligned text drops digits from it or loses it whole, so they come back with an
-empty table. Their energy is what those months and a contract signed in them
+cards up to December 2025, before the Impact tariff, print a seven-column table
+(mono, jour, nuit, exclusive night, meter rental, transport, prosumer), read by
+`_extract_wallonia_2025_dsos` (`_octaplus_overlays.py`) where no row of the 2026
+layout reads. On most of them the aligned text damages it: the first digit of a
+column lost (`,00` for the 7,00 of AIEG's exclusive night), a figure smeared into
+`22222222222,98`, the first letters of the labels. A row is read only when it ends
+in seven whole figures, so a damaged one is left out rather than read short; of
+the archive's 103 Walloon cards from October 2023 to December 2025, 44 read whole
+and 59 come back with an empty table. Every row read is what the card prints,
+which is not always what Engie's and Eneco's cards of the same month print: a
+cent of rounding, what OCTA+ printed behind the regulator or on its own
+(January 2025's whole table, 2024's; transport 2,61 into March 2024; AIESH's
+January 2024 tariff kept through 2024; in 2023 a transport of 2,71 and a Régie
+de Wavre row of its own), and the months the other two disagree themselves
+(Engie's AIEG and AIESH rows of November and December 2023 and its January 2024
+table, see [engie.md](engie.md)). The cards up to January 2024 print each ORES sub-area on a distribution
+tariff of its own, which one `ores` area cannot tell apart, so those leave ORES
+out (`ores_sub_areas_split`, `_parse.py`;
+`test_wallonia_card_before_the_impact_tariff_reads_whole_rows`). A card with an
+empty table keeps its energy, which those months and a contract signed in them
 are billed on. A month whose table read no area at all is dropped, with no
 search for another card (`_short_of`, `snapshot_areas.py`); one that read some
-areas bills the missing one on the nearest card of 2025 that prints it
+areas bills the missing one on the nearest card of its year that prints it
 (`_with_nearest_area`), or drops the month where none does: a card of 2026 is
 never taken, since the Impact tariff changed the Walloon network's very shape
 (`test_an_archived_card_short_of_an_area_keeps_its_energy`, on the real
@@ -565,7 +581,8 @@ cards unless the row names another month):
 | `octaplus_dynamic_w.pdf` | OCTA+ Dynamic, Wallonia. `Epex 15'` consumption + injection formulas, spaced DSO labels. |
 | `octaplus_dynamic_v_jan.pdf` | OCTA+ Dynamic, Flanders, **January 2026**. Both formulas name the index `Belpex 15'`, followed by the AMR clause the open injection search used to run into. |
 | `octaplus_dynamic_v_dec2025.pdf` | OCTA+ Dynamic, Flanders, **December 2025**, from the archive endpoint. Both formulas name `Belpex Hourly`, the index every dynamic card printed from 2023 to 2025. |
-| `octaplus_fixed_w_nov2025.pdf` | OCTA+ Fixed, Wallonia, **November 2025**, from the archive endpoint. The seven-column network table before the Impact tariff, which the reader does not take: the archive path keeps the card for its energy as a past month, the live fetch and the running month refuse it. |
+| `octaplus_fixed_w_nov2025.pdf` | OCTA+ Fixed, Wallonia, **November 2025**, from the archive endpoint. The seven-column network table before the Impact tariff, damaged in the aligned text so that no row of it reads: the archive path keeps the card for its energy as a past month, the live fetch and the running month refuse it. |
+| `octaplus_ecofixed_w_dec2025.pdf` | OCTA+ Eco Fixed, Wallonia, **December 2025**, from the archive endpoint. The same seven-column table, whole in the aligned text, so every row reads. |
 | `octaplus_fixed_v_mar.pdf` | OCTA+ Fixed, Flanders, **March 2026**, the card the archive lists as `FIXEDD`. Fetched from the archive endpoint. |
 | `octaplus_fixed_v_jan.pdf` | OCTA+ Fixed, Flanders, **January 2026**. The monthly feed-in formula reads `Belpex SPP x 0,852 - 13,39`. The same bytes as the card archive's row for the month. |
 | `octaplus_boostfix_w_oct.pdf` | OCTA+ Boost Fix, Wallonia, **October 2026**, the first card of the Boost range. Also parsed as Boost Fix Impact. |

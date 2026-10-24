@@ -126,12 +126,12 @@ def walloon_dso_overlay(
     peak: float,
     offpeak: float,
     excl_night: float,
-    pic: float,
-    medium: float,
-    eco: float,
     transport: float,
     terme_fixe: float,
     prosumer: float | None,
+    pic: float | None = None,
+    medium: float | None = None,
+    eco: float | None = None,
 ) -> DsoOverlay:
     """Build a Walloon :class:`DsoOverlay` from a card's c/kWh row.
 
@@ -145,11 +145,11 @@ def walloon_dso_overlay(
     PIC | MEDIUM | ECO and EnergyVision prints them ECO | MEDIUM | PIC, and
     both map onto the same call.
 
-    Luminus, Eneco and Cociter build :class:`DsoOverlay` directly, because
-    their rows do not always carry every column these parameters require:
-    the Impact ``pic`` / ``medium`` / ``eco`` triplet is nullable on their
-    cards, and Cociter's trihoraire table prints no mono or bi-hourly rate at
-    all. (An earlier version of this note also exempted providers that "index
+    The Impact ``pic`` / ``medium`` / ``eco`` triplet is left out of a card
+    from before the Impact tariff, which every supplier's card was up to
+    December 2025. Luminus, Eneco and Cociter build :class:`DsoOverlay`
+    directly, Cociter because its trihoraire table prints no mono or
+    bi-hourly rate at all. (An earlier version of this note also exempted providers that "index
     the row positionally (Engie, DATS24)" and ones whose cards "print values
     already in EUR/kWh (Eneco)". Neither held: Engie and DATS24 call this
     helper now, and Eneco divides by 100 like everyone else.)
@@ -159,9 +159,9 @@ def walloon_dso_overlay(
         distribution_peak=peak / 100.0,
         distribution_offpeak=offpeak / 100.0,
         distribution_exclusive_night=excl_night / 100.0,
-        distribution_pic=pic / 100.0,
-        distribution_medium=medium / 100.0,
-        distribution_eco=eco / 100.0,
+        distribution_pic=None if pic is None else pic / 100.0,
+        distribution_medium=None if medium is None else medium / 100.0,
+        distribution_eco=None if eco is None else eco / 100.0,
         transport=transport / 100.0,
         data_management_per_year=terme_fixe,
         prosumer_eur_per_kva_year=prosumer,

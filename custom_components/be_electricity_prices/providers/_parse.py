@@ -268,6 +268,22 @@ def numeric_row(
     return None if best is None else best[1]
 
 
+def ores_sub_areas_split(text: str) -> bool:
+    """Whether the card's ORES sub-area rows print different distribution rates.
+
+    ORES billed each of its sub-areas on a distribution tariff of its own
+    until the end of 2023 (Brabant wallon 8,63 c/kWh where Est printed
+    11,46), and the cards of that time list every one. A single ``ores``
+    area cannot say which of them an entry is on, so a reader leaves ORES
+    out of such a card rather than bill every sub-area on the first row.
+    Only the four distribution figures that open each row are compared: the
+    fixed fees after them may differ by cents a year (OCTA+'s meter rental
+    early in 2024) without making the first row wrong for a kWh.
+    """
+    rates = {tuple(row.split()[:4]) for row in _ORES_SUB_AREA_ROW.findall(text)}
+    return len(rates) > 1
+
+
 def parse_sign(char: str) -> float:
     """Return -1.0 for any hyphen / dash / Unicode-minus, +1.0 otherwise.
 
@@ -541,6 +557,11 @@ _NEGATIVE_SIGNS = ("-", "‐", "‑", "‒", "–", "—", "−")
 # a row look wider than it is. The cards print 20.000 and 1.000.000 (see
 # tier_bound_kwh), so this is not hypothetical.
 _ROW_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+# A row of a Walloon card's ORES sub-area, "ORES (Est) 11,46 12,24 ...", with
+# its figures on the same line.
+_ORES_SUB_AREA_ROW = re.compile(
+    r"^ORES\s*\([^)]+\)[^\S\n]+(.+?)[^\S\n]*$", re.MULTILINE | re.IGNORECASE
+)
 # Residential connection-power upper bounds (kVA) mapped to the OSP tier keys
 # shared with const.CONNECTION_KVA_TIER_*. Kept as literals so this low-level
 # helper stays decoupled from the config module; the keys must match.

@@ -601,9 +601,9 @@ months first. Never from another year: network
 tariffs change on 1 January, and Wallonia's of 2026 are not even shaped like those
 of 2025, so where no card of the year prints the area the month is still dropped.
 A card with no network table at all is not searched for and its month is dropped
-as before: the Walloon cards of October to December 2025 were read before their
-layout was, and the search asked the supplier's archive for every month of 2025
-before them, nine downloads for an Engie October, to bill a network never read.
+as before: an OCTA+ Walloon card from before 2026 whose aligned text damaged the
+table reads no row of it, and the search would ask the supplier's archive for every
+earlier month of its year, up to eleven downloads, to bill a network never read.
 The running month takes part both ways. Its own card, where the walk reads it
 short, receives the area from a closed card of its year, so that month to date is
 billed at the full-card figure rather than dropped (the suppliers on

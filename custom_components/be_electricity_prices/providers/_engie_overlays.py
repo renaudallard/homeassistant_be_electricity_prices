@@ -51,7 +51,13 @@ from ..const import (
     DSO_REW,
     DSO_SIBELGA,
 )
-from ._parse import numeric_row, parse_sibelga_row, tier_bound_kwh, to_float
+from ._parse import (
+    numeric_row,
+    ores_sub_areas_split,
+    parse_sibelga_row,
+    tier_bound_kwh,
+    to_float,
+)
 from .base import DsoOverlay, ExtractorError, walloon_dso_overlay
 
 
@@ -226,6 +232,9 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     Layout (c€/kWh except where noted):
         single | peak | offpeak | PIC | MEDIUM | ECO | excl_night |
         data_mgmt (€/an) | [prosumer (€/kVA/an)?] | transport
+
+    A card where no row of this layout reads is read as the one printed
+    before the Impact bands (``_extract_wallonia_2025_dsos``).
     """
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
@@ -283,6 +292,44 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
                 "Engie: ORES sub-area tariffs diverged from the first ORES "
                 "row; a sub-area split needs an explicit DSO key"
             )
+    return out or _extract_wallonia_2025_dsos(text)
+
+
+def _extract_wallonia_2025_dsos(text: str) -> dict[str, DsoOverlay]:
+    """The Walloon rows of a card from before the Impact bands.
+
+    The cards up to December 2025 print seven figures under "Distribution
+    Normal | Bihoraire heures pleines | heures creuses | Exclusif nuit |
+    Activité de mesure relevé annuel (€/an) | Tarif prosumer (€/kWe/an) |
+    Transport (€cent/kWh)", the dynamic ones six, without the prosumer
+    tariff their header does not name either. AIEG on the November 2025
+    card, 9,46 9,56 7,65 7,00 19,08 78,99 2,98, is Eneco's row of that month
+    column for column. A row is read at the width its header gives, so one
+    that lost a figure is never read with its columns shifted.
+
+    The cards of November and December 2023 print each ORES sub-area on a
+    distribution tariff of its own, and those leave ORES out
+    (``ores_sub_areas_split``) rather than raise as the guard above does:
+    their energy is still what a contract signed then is billed on.
+    """
+    prosumer = "Tarif prosumer" in text
+    out: dict[str, DsoOverlay] = {}
+    for label, key in _WALLONIA_2025_LABELS.items():
+        row = numeric_row(text, label, 7 if prosumer else 6)
+        if row is None:
+            continue
+        nums = [to_float(value) for value in row]
+        out[key] = walloon_dso_overlay(
+            mono=nums[0],
+            peak=nums[1],
+            offpeak=nums[2],
+            excl_night=nums[3],
+            terme_fixe=nums[4],
+            prosumer=nums[5] if prosumer else None,
+            transport=nums[-1],
+        )
+    if ores_sub_areas_split(text):
+        out.pop(DSO_ORES, None)
     return out
 
 
@@ -315,6 +362,15 @@ _WALLONIA_LABELS: dict[str, str] = {
     "AIEG": DSO_AIEG,
     "AIESH": DSO_AIESH,
     "ORES (Brab. Wal.)": DSO_ORES,
+    "REGIE DE WAVRE": DSO_REW,
+    "TECTEO - RESA": DSO_RESA,
+}
+# The same areas on a card from before the Impact bands, under the names those
+# cards print (``_extract_wallonia_2025_dsos``).
+_WALLONIA_2025_LABELS: dict[str, str] = {
+    "AIEG": DSO_AIEG,
+    "AIESH": DSO_AIESH,
+    "ORES (Brabant Wallon)": DSO_ORES,
     "REGIE DE WAVRE": DSO_REW,
     "TECTEO - RESA": DSO_RESA,
 }

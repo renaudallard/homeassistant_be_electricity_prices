@@ -408,6 +408,30 @@ def test_wallonia_dso_carries_prosumer_rate_from_separate_table() -> None:
     assert aieg.prosumer_eur_per_kva_year == pytest.approx(81.03)
 
 
+def test_wallonia_card_before_the_impact_bands_reads_six_figures() -> None:
+    """The cards up to December 2025 print six figures a row, without the
+    three Impact bands, and no row of them read: a Walloon month before
+    2026 was left out of the bill whole. The prosumer tariff still comes
+    from its own table."""
+    snap = parse_snapshot(
+        "mega_cosy_fixed", fixture_text("mega_cosy_fixed_w_2025-11.pdf"), "wallonia"
+    )
+    assert {"aieg", "aiesh", "ores", "resa", "rew"} <= set(snap.dsos)
+    # AIEG 9.46 9.56 7.65 6.99 2.98 19.08, prosumer 78.99.
+    aieg = snap.dsos["aieg"]
+    assert aieg.distribution_single == pytest.approx(0.0946)
+    assert aieg.distribution_peak == pytest.approx(0.0956)
+    assert aieg.distribution_offpeak == pytest.approx(0.0765)
+    assert aieg.distribution_exclusive_night == pytest.approx(0.0699)
+    assert aieg.transport == pytest.approx(0.0298)
+    assert aieg.data_management_per_year == pytest.approx(19.08)
+    assert aieg.prosumer_eur_per_kva_year == pytest.approx(78.99)
+    assert aieg.distribution_pic is None
+    resa = snap.dsos["resa"]
+    assert resa.distribution_single == pytest.approx(0.1062)
+    assert resa.data_management_per_year == pytest.approx(26.5)
+
+
 def test_supplier_pv_forfait_extracted_where_card_prints_it() -> None:
     # Compensation-regime cards print a supplier-side "Forfait panneaux
     # solaires (EUR/kVA par mois) 7.63" that is billed on top of the DSO

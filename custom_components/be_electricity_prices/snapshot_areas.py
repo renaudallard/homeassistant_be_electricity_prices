@@ -68,11 +68,11 @@ type _Held = tuple[bool, SupplierSnapshot | None]
 def _short_of(card: SupplierSnapshot, dso: str) -> bool:
     """Whether ``card`` prints a network table that lacks ``dso``.
 
-    Not a card with no table at all: the Walloon cards of October to
-    December 2025 were read before their layout was, and searching their
-    year for the area asked the supplier's archive for each month before
-    them, nine downloads for an Engie October, to bill a month whose own
-    network was never read. Such a month is dropped as it always was.
+    Not a card with no table at all: an OCTA+ Walloon card from before 2026
+    whose aligned text damaged the table reads no row of it, and searching
+    its year for the area would ask the supplier's archive for each month
+    before it, up to eleven downloads, to bill a month whose own network was
+    never read. Such a month is dropped as it always was.
     """
     return bool(dso) and bool(card.dsos) and dso not in card.dsos
 

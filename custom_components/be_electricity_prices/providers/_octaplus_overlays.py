@@ -44,7 +44,7 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_WALLONIA,
 )
-from ._parse import excise_tier_bands, to_float
+from ._parse import excise_tier_bands, ores_sub_areas_split, to_float
 from ._rates import TariffKind
 from .base import DsoOverlay, ExtractorError, walloon_dso_overlay
 
@@ -195,6 +195,9 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
 
     mono | jour | nuit | PIC | MEDIUM | ECO | excl_nuit | terme_fixe
     (€/an) | prosumer (€/kVA/an) | transport (c€/kWh)
+
+    A card where no row of this layout reads is read as the one printed
+    before the Impact tariff (``_extract_wallonia_2025_dsos``).
     """
     out: dict[str, DsoOverlay] = {}
     for pattern, key in _WALLONIA_LABELS:
@@ -236,6 +239,55 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             terme_fixe=terme_fixe,
             prosumer=prosumer,
         )
+    return out or _extract_wallonia_2025_dsos(text)
+
+
+# One whole figure of the table printed before the Impact tariff: a digit
+# first, after the blank that ends the previous cell.
+_FIGURE_2025 = r"[^\S\n]+(\d{1,3},\d{2})"
+
+
+def _extract_wallonia_2025_dsos(text: str) -> dict[str, DsoOverlay]:
+    """The Walloon rows of a card from before the Impact tariff.
+
+    The cards up to December 2025 print seven figures under "Distribution
+    Monohoraire | Bihoraire jour | Bihoraire nuit | Exclusif nuit | Location
+    compteur (€/an) | Transport | Tarif prosumer (€/kVA/an)". On most of
+    them the aligned text loses glyphs from the table: the first digit of a
+    column (",00" for the 7,00 of AIEG's exclusive night), a figure smeared
+    into "22222222222,98", the first letters of the labels. So a row is read
+    only when it ends in seven whole figures and holds nothing else, and a
+    damaged row is left out rather than read short: the November 2025 Fixed
+    card keeps its empty table. A row read is the card's own figures, which
+    differ from Engie's and Eneco's of the same month where
+    docs/providers/octaplus.md says.
+
+    The cards up to January 2024 print each ORES sub-area on a distribution
+    tariff of its own, and those leave ORES out (``ores_sub_areas_split``).
+    """
+    out: dict[str, DsoOverlay] = {}
+    for pattern, key in _WALLONIA_LABELS:
+        match = re.search(
+            rf"^[^\d\n]*?(?:{pattern})[^\d\n]*?{_FIGURE_2025 * 7}[^\S\n]*$",
+            text,
+            re.MULTILINE | re.IGNORECASE,
+        )
+        if match is None:
+            continue
+        mono, peak, offpeak, excl_night, terme_fixe, transport, prosumer = (
+            to_float(value) for value in match.groups()
+        )
+        out[key] = walloon_dso_overlay(
+            mono=mono,
+            peak=peak,
+            offpeak=offpeak,
+            excl_night=excl_night,
+            transport=transport,
+            terme_fixe=terme_fixe,
+            prosumer=prosumer,
+        )
+    if ores_sub_areas_split(text):
+        out.pop(DSO_ORES, None)
     return out
 
 
@@ -303,9 +355,9 @@ def _areas(region: str) -> Iterable[str]:
     """The areas a card read for ``region`` must hold.
 
     Asked of the live card and the running month's (see ``require_every_area``):
-    the Walloon cards of October to December 2025 print a seven-column table
-    the reader does not take, and as past months they still give a signing
-    cohort its energy.
+    the aligned text of most Walloon cards up to December 2025 damages their
+    seven-column table, which then reads no row, and as past months they
+    still give a signing cohort its energy.
     """
     if region == REGION_WALLONIA:
         return [key for _, key in _WALLONIA_LABELS]

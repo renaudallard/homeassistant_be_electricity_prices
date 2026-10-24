@@ -410,6 +410,26 @@ Two gotchas guard this parser:
   every ORES customer the Brab. Wal. rate. Test
   `test_wallonia_ores_subarea_divergence_is_fatal` (`tests/test_engie.py`).
 
+A card where no row of that layout reads is read as the one printed before the
+Impact bands, up to December 2025 (`_extract_wallonia_2025_dsos`,
+`_engie_overlays.py`): seven figures under "Normal | Bihoraire heures pleines |
+heures creuses | Exclusif nuit | Activité de mesure (€/an) | Tarif prosumer
+(€/kWe/an) | Transport", the dynamic cards six, without the prosumer tariff their
+header does not name either. The labels are those cards' own
+(`_WALLONIA_2025_LABELS`, `ORES (Brabant Wallon)` for ORES). Each figure is read
+as the card prints it, the professional cards' being the residential ones ex VAT.
+They mostly agree with Eneco's and OCTA+'s cards of the same month, but not
+always: the November and December 2023 cards print AIEG at 7,15 c/kWh and AIESH
+at 11,74 where Eneco and OCTA+ print 6,17 and 10,44, and the January 2024 card is
+on the 2024 tariffs while theirs are still on 2023's. ORES's sub-areas printed
+distribution tariffs of their own until the end of 2023, which one `ores` area
+cannot tell apart, so the cards of November and December 2023 leave ORES out
+(`ores_sub_areas_split`, `_parse.py`) rather than raise: their energy is what a
+contract signed then is billed on
+(`test_wallonia_card_before_the_impact_bands_reads_seven_columns`,
+`test_dynamic_wallonia_card_before_the_impact_bands_reads_six_columns`,
+`test_wallonia_card_with_split_ores_sub_areas_leaves_ores_out`).
+
 ### Brussels (`_extract_brussels_dsos`, `_engie_overlays.py`)
 
 Reads the single Sibelga row (`_engie_overlays.py`). Brussels has no separate capacity
@@ -560,6 +580,8 @@ re-index monthly, so they are frozen snapshots, not forever-facts.
 | `engie_empower_flextime_w.pdf` | Empower Flextime, Wallonia (7-price TOU triplet, per-slot injection). |
 | `engie_empower_variable_v.pdf` | Empower Variable, Flanders (7-price row, Flextime columns skipped). |
 | `engie_empty_house_v.pdf` | Empty House, Flanders (mono-only, `sans domicile` energy fund). |
+| `engie_easy_fixed_w_2025-11.pdf` | Easy Fixed, Wallonia, **November 2025**. The seven-column Walloon table printed before the Impact bands. |
+| `engie_dynamic_w_2025-12.pdf` | Dynamic, Wallonia, **December 2025**. The same table in six columns, without the prosumer tariff. |
 
 ## When the card changes, look here
 
