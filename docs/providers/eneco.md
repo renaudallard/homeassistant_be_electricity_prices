@@ -360,8 +360,13 @@ Wallonia (`_WALLONIA_LABELS`, `eneco.py`), via `_find_wallonia_row`
 The cards up to May 2025 print RESA's row as a bare `TECTEO`, too far from
 `TECTEO RESA` for the similarity match (`numeric_row`, `_parse.py`), so both
 spellings are listed; the figures did not move when the label did.
-ORES sub-zones share a uniform rate, so only the first ORES row encountered is
-kept as the canonical `ores` (`eneco.py`, dedup guard at `eneco.py`).
+ORES sub-zones share one rate since 2024, so only the first ORES row encountered
+is kept as the canonical `ores` (`eneco.py`, dedup guard at `eneco.py`). The cards
+of October 2023 to January 2024 print each sub-zone on a distribution tariff of
+its own (Brabant Wallon 8,63 c/kWh, Est 11,46), which one `ores` area cannot tell
+apart, so a card whose ORES rows disagree leaves ORES out (`ores_sub_areas_split`,
+`_parse.py`) rather than bill every sub-zone on the Brabant Wallon row
+(`test_a_card_splitting_the_ores_sub_areas_leaves_ores_out`).
 A Wallonia row carries 7 numbers on Power Dynamic or 10 on Power Fix. The optional
 middle triplet is the Tarif Impact (CWaPE 3-band) set, and Eneco's column order is
 `MEDIUM | PIC | ECO`, which differs from OCTA+ / Bolt (`PIC | MEDIUM | ECO`); the

@@ -67,6 +67,7 @@ from ._parse import (
     SIGN_CHARS,
     excise_tier_bands,
     numeric_row,
+    ores_sub_areas_split,
     parse_sign,
     require_every_area,
     running_month_short_of_an_area,
@@ -122,10 +123,10 @@ _CONTRACT_SLUGS: dict[str, str] = {
 }
 
 # Wallonia DSO labels (column layout: 4 distribution + optional [MEDIUM PIC ECO]
-# + transport + databeheer + prosument). ORES sub-zones share a uniform rate so
-# we just keep the first one encountered as the canonical "ores" row. The cards
-# up to May 2025 print RESA's row as a bare "TECTEO", too far from "TECTEO RESA"
-# for the similarity match, so that spelling is listed too.
+# + transport + databeheer + prosument). ORES sub-zones share one rate since
+# 2024, so the first is the canonical "ores" row; a card splitting them leaves
+# ORES out (``_extract_dsos``). The cards up to May 2025 print RESA's row as a
+# bare "TECTEO", too far from "TECTEO RESA" for the similarity match.
 _WALLONIA_LABELS: dict[str, str] = {
     "AIEG": DSO_AIEG,
     "AIESH": DSO_AIESH,
@@ -664,6 +665,8 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
         row = _find_wallonia_row(text, pdf_label)
         if row is not None:
             out[key] = row
+    if ores_sub_areas_split(text):
+        out.pop(DSO_ORES, None)
     for pdf_label, key in _FLUVIUS_LABELS.items():
         row = _find_fluvius_row(text, pdf_label)
         if row is not None:

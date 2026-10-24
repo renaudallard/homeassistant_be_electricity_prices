@@ -133,6 +133,22 @@ def test_resa_printed_as_bare_tecteo_is_read() -> None:
     assert same.dsos["resa"] == resa["resa"]
 
 
+def test_a_card_splitting_the_ores_sub_areas_leaves_ores_out() -> None:
+    """The cards of October 2023 to January 2024 print each ORES sub-area on
+    a distribution tariff of its own (Brabant Wallon 8,63 c/kWh, Est 11,46),
+    which one ``ores`` area cannot tell apart. Billing every sub-area on the
+    Brabant Wallon row put Est 2,8 c/kWh under its own, so such a card leaves
+    ORES out and keeps the other areas."""
+    text = fixture_text("eneco_flex_jun25.pdf")
+    split = text.replace("ORES (Est) 10,79 11,46", "ORES (Est) 11,46 12,24")
+    assert split != text, "the fixture stopped printing ORES (Est)"
+    whole = parse_snapshot(text, "power_flex", "test://flex", REGION_WALLONIA).dsos
+    assert "ores" in whole
+    dsos = parse_snapshot(split, "power_flex", "test://flex", REGION_WALLONIA).dsos
+    assert "ores" not in dsos
+    assert {"aieg", "aiesh", "resa", "rew"} <= set(dsos)
+
+
 def test_a_live_card_missing_an_area_is_refused(freezer: Any) -> None:
     """Every card prints both regions' tables, and a live one missing an area
     is refused rather than adopted without it, which left an entry on that
