@@ -105,15 +105,18 @@ class _PeakMixin:
         await self.async_request_refresh()
 
     async def _track_monthly_peak(self) -> None:
-        if not bills_capacity(self.entry.data):
-            # Outside Flanders the capacity tariff doesn't apply, and an
+        if not bills_capacity(self.entry.data) or analog_meter(self.entry.data):
+            # Outside Flanders the capacity tariff doesn't apply, an
             # exclusive-night circuit's quarter-hours are billed with the main
-            # meter's, on that entry. Reset any peak left over from a previous
-            # config so it doesn't linger in diagnostics or the persistent
-            # store. The banked window goes too, or moving back to Flanders
-            # later would resume billing on year-old peaks from the previous
-            # address; Fluvius likewise restarts the window when the grid user
-            # changes.
+            # meter's, on that entry, and an analog meter has no peak to read:
+            # it is billed the minimum. Reset any peak left over from a
+            # previous config so it doesn't linger in diagnostics or the
+            # persistent store. The banked window goes too, or moving back to
+            # Flanders later would resume billing on year-old peaks from the
+            # previous address, and unticking the analog box once the meter is
+            # replaced on months a clamp sensor measured before it was ticked;
+            # Fluvius likewise restarts the window when the grid user changes,
+            # and a digital meter it has just placed has no months of its own.
             self._peak_kw = 0.0
             self._peak_month = None
             self._peak_history.clear()
@@ -153,8 +156,7 @@ class _PeakMixin:
         mode = self.entry.data.get(CONF_CAPACITY_MODE)
         if not self._measures_peak():
             # Nothing is measured, and _billed_peak_kw reads the configured
-            # value directly, or the minimum on an analog meter, which has no
-            # peak to read. Writing it here banked it into every closed
+            # value directly. Writing it here banked it into every closed
             # month as if measured, and after a switch to the peak sensor the
             # running maximum could not come down below it for the rest of
             # the month, nor the mean for a year. With the running month at
@@ -202,11 +204,8 @@ class _PeakMixin:
                     self._peak_kw = value
 
     def _measures_peak(self) -> bool:
-        """Whether this entry reads its monthly peak off a sensor: neither a
-        stated fixed peak nor an analog meter, whose peak Fluvius cannot
-        measure, has one to read."""
-        if analog_meter(self.entry.data):
-            return False
+        """Whether this entry reads its monthly peak off a sensor rather than
+        stating a fixed one."""
         return self.entry.data.get(CONF_CAPACITY_MODE) != CAPACITY_MODE_FIXED
 
     def _peak_terms(self) -> list[float]:
@@ -228,8 +227,7 @@ class _PeakMixin:
         ``len(self._peak_history) + 1`` claimed a month the mean had not taken
         for as long as the in-progress one stayed unmeasured. None in fixed
         mode, which bills the configured kW and takes no mean, whatever
-        measured months it keeps for a return to the sensor, and none on an
-        analog meter, which is billed the minimum.
+        measured months it keeps for a return to the sensor.
         """
         if not self._measures_peak():
             return []

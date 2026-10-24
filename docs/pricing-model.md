@@ -1625,7 +1625,9 @@ meters publish it, other regions leave it `None`.
 `peak_kw` is the *billed* quantity, resolved by `_billed_peak_kw`, and applies
 only to a connection `bills_capacity` (`fees.py`) says is charged on its own:
 outside Flanders, and on an exclusive-night circuit, the peak is reset to `0.0`
-and `_billed_peak_kw` answers `0.0`. Fluvius bills a household with an
+and `_billed_peak_kw` answers `0.0`. On an analog meter the peak and the banked
+months are reset the same way and `_billed_peak_kw` answers the minimum (see
+[Analog meters](#analog-meters)). Fluvius bills a household with an
 exclusive-night meter one monthly peak, the highest simultaneous sum of both
 meters' quarter-hour peaks ("Jouw maandpiek is niet de som van deze twee
 getallen ... De hoogste som van die twee kwartierpieken, dat is de maandpiek die
@@ -1705,7 +1707,9 @@ ticks `CONF_ANALOG_METER` (`analog_meter`, `snapshot_resolve.py`) is billed
 accordingly:
 
 - `_billed_peak_kw` (`coordinator_peak.py`) answers the minimum peak whatever is
-  stored, `_track_monthly_peak` measures nothing, as in fixed mode, and the flow
+  stored, `_track_monthly_peak` measures nothing and drops the months measured
+  before the box was ticked, so the meter Fluvius later puts in its place starts
+  a mean of its own, and the flow
   asks no peak source, so `capacity_cost` is the vaste term on the card's own
   capacity rate (130,92 EUR a year with VAT on Fluvius Antwerpen in 2026, the
   figure Luminus prints in its "Compteur classique" column). An analog

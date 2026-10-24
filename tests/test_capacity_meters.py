@@ -756,3 +756,32 @@ async def test_leaving_an_analog_meter_offers_the_new_meters_peak(
     digital = _flemish("mono", solar_regime="none")
     digital.add_to_hass(hass)
     assert f"offered {peak}" not in await _steps(hass, digital, {})
+
+
+async def test_ticking_analog_drops_the_peaks_measured_before(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Months a clamp sensor measured before the box was ticked belong to no
+    meter Fluvius bills on: kept, they came back into the mean the day the
+    replaced meter's box was unticked, 6 kW against the 3 kW it reads."""
+    freezer.move_to("2026-10-23 12:00:00+02:00")
+    hass.states.async_set(_PEAK, "3.0", {"unit_of_measurement": "kW"})
+    entry = _flemish(
+        "mono",
+        analog_meter=True,
+        capacity_mode="sensor",
+        capacity_peak_sensor=_PEAK,
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._peak_history = {f"2026-{m:02d}-01": 6.0 for m in range(3, 7)}
+    coord._peak_kw = 6.0
+    await coord._track_monthly_peak()
+    assert (coord._peak_kw, coord._peak_history) == (0.0, {})
+    assert coord._billed_peak_kw() == 2.5
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "analog_meter": False}
+    )
+    await coord._track_monthly_peak()
+    assert coord._peak_terms() == [3.0]
+    assert coord._billed_peak_kw() == 3.0
