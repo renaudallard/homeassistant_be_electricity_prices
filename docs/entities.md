@@ -485,14 +485,24 @@ window it is accumulating over.
 
 One consequence worth knowing: under the **compensation regime** the month is
 netted as its own window, per register and clamped at zero, so twelve monthly
-figures do not add up to `current_year_cost` on such an entry. On every other
-regime they do, but for a percentage welcome credit
-(`welcome_credit_pct_of_energy`): each window takes it on the energy rate it
-billed, a mean weighted by that window's own consumption, so on a card whose
-rate moves month to month the months' credits and the year's differ by around
-a euro. The annual netting is what the supplier actually settles, so
-the yearly sensor stays the authority and the monthly one answers "what did
-this month cost, on its own".
+figures do not add up to `current_year_cost` on such an entry. The annual
+netting is what the supplier actually settles, so the yearly sensor stays the
+authority and the monthly one answers "what did this month cost, on its own".
+On every other regime they do add up.
+
+Off the compensation regime, the welcome credit is the one part of the month
+not priced on the month's own window. Capped on what the month charged, a month
+whose charges fell under its share took less than the year does over the same
+days, and a percentage credit was valued on the month's own energy rate, so the
+months and the year parted by up to about a euro. The tick takes the year's
+credit to date less the year's to the day before the month instead, which needs
+a third pass over those earlier days (`window_end`), walked only where the
+credit can have reached them (`credit_accrued_before`, `coordinator_costs.py`):
+a pro-rata credit whose first year began before the month, or a lump paid in
+those days. Under compensation the month keeps the credit of its own netted
+window: a per-kWh credit is valued on the window's net share, which a summer of
+export pulls down, so the year's share of it came out negative in July and
+August.
 
 ### `monthly_peak_kw`: why MEASUREMENT
 

@@ -5483,6 +5483,140 @@ async def test_the_tick_bakes_each_cost_sensor_its_own_reset(
     assert data.current_year_cost_reset != data.current_month_cost_reset
 
 
+async def _tick_with_credits(
+    hass: HomeAssistant,
+    start: str,
+    credits: dict[tuple[Any, Any], float],
+    regime: str = "none",
+) -> tuple[Any, list[tuple[Any, Any]]]:
+    """A tick whose bill over each window costs 100 EUR less that window's
+    welcome credit in ``credits``, keyed on its (window start override, window
+    end), and the windows it was asked for, on an entry on solar ``regime``."""
+    from custom_components.be_electricity_prices.cohort import _CohortLegs
+    from custom_components.be_electricity_prices.providers._rates import FixedRates
+
+    entry = make_entry(contract_start_date=start, solar_regime=regime)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = replace(
+        make_snapshot(energy=FixedRates(single=0.30)), welcome_credit_eur=250.0
+    )
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    asked: list[tuple[Any, Any]] = []
+
+    async def _bill(
+        *_a: object,
+        breakdown: dict[str, float] | None = None,
+        window_start_override: date | None = None,
+        window_end: date | None = None,
+        **_k: object,
+    ) -> float:
+        window = (window_start_override, window_end)
+        asked.append(window)
+        if breakdown is not None:
+            breakdown["welcome_credit_eur"] = credits[window]
+        return 100.0 - credits[window]
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_tick._cohort_legs",
+            AsyncMock(return_value=_CohortLegs(None, None)),
+        ),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_costs."
+            "_compute_current_year_cost",
+            new=_bill,
+        ),
+        # The signing month's card, which no archive holds here.
+        patch(
+            "custom_components.be_electricity_prices.coordinator_costs."
+            "signing_month_snapshot",
+            AsyncMock(return_value=coord._snapshot),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._update_body()
+    return data, asked
+
+
+async def test_a_months_welcome_credit_is_the_years_less_the_year_before_it(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A month takes as much of a first-year welcome credit as the year to date
+    took over its days: the year's credit less the year's to the day before the
+    month. Capped on the month's own charges, a 2.500 kWh GS1800V contract
+    signed on 10 July took 0,77 EUR less over July to September than its year,
+    and the months stopped adding up to it."""
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    year, month, before = (
+        (None, None),
+        (date(2026, 9, 1), None),
+        (None, date(2026, 8, 31)),
+    )
+    data, asked = await _tick_with_credits(
+        hass, "2026-07-10", {year: 50.0, month: 2.0, before: 36.3}
+    )
+    assert before in asked
+    # The month's bill before its own credit, less its share of the year's.
+    assert data.current_month_cost_eur == pytest.approx(100.0 - (50.0 - 36.3))
+
+
+async def test_a_compensation_month_keeps_its_own_welcome_credit(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Under compensation the month nets its own window, and a per-kWh credit
+    is valued on that window's net share, which a summer of export pulls down:
+    the year's share of a Mega Smart Flex credit signed on 15 March came out
+    negative in July and August. The month keeps its own window's credit
+    there, as it keeps its own netting."""
+    freezer.move_to("2026-07-20 12:00:00+02:00")
+    year, month = (None, None), (date(2026, 7, 1), None)
+    data, asked = await _tick_with_credits(
+        hass, "2026-03-15", {year: 60.0, month: 7.0}, regime="compensation"
+    )
+    assert asked == [year, month]
+    assert data.current_month_cost_eur == pytest.approx(100.0 - 7.0)
+
+
+async def test_a_credit_starting_in_the_month_needs_no_earlier_walk(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Signed in the running month, none of the credit reached the days before
+    it, so the month takes the year's whole credit without walking them."""
+    freezer.move_to("2026-09-20 12:00:00+02:00")
+    year, month = (None, None), (date(2026, 9, 1), None)
+    data, asked = await _tick_with_credits(
+        hass, "2026-09-05", {year: 10.96, month: 4.0}
+    )
+    assert asked.count((None, date(2026, 8, 31))) == 0
+    assert data.current_month_cost_eur == pytest.approx(100.0 - 10.96)
+
+
+def test_a_credit_reaches_the_days_before_the_month_as_its_kind_says() -> None:
+    """A pro-rata credit accrues on every first-year day before the month; a
+    lump only where its anniversary fell among them."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.coordinator_costs import (
+        credit_accrued_before,
+    )
+
+    jan, sep = date(2026, 1, 1), date(2026, 9, 1)
+    card = make_snapshot(welcome_credit_eur=250.0)
+    lump = replace(card, welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY)
+    assert credit_accrued_before(card, date(2026, 7, 10), jan, sep)
+    # First year over before the year began, or not begun before the month.
+    assert not credit_accrued_before(card, date(2025, 1, 1), jan, sep)
+    assert not credit_accrued_before(card, date(2026, 9, 5), jan, sep)
+    assert not credit_accrued_before(card, None, jan, sep)
+    assert not credit_accrued_before(make_snapshot(), date(2026, 7, 10), jan, sep)
+    # The lump of a contract signed on 15 March 2025 landed in March 2026.
+    assert credit_accrued_before(lump, date(2025, 3, 15), jan, sep)
+    assert not credit_accrued_before(lump, date(2025, 9, 15), jan, sep)
+
+
 @pytest.mark.parametrize(
     ("quarter_indexed", "first"),
     [(True, date(2026, 10, 1)), (False, date(2026, 11, 10))],

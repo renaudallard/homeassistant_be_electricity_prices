@@ -37,6 +37,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -46,12 +47,14 @@ from homeassistant.util import dt as dt_util
 
 from .cohort import (
     _effective_snapshot_for_month,
+    _parse_iso_date,
     signing_month_snapshot,
     ytd_window_start,
 )
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
     CONF_KEYLESS_SPOTS,
     CONF_REGION,
     CONF_SOLAR_REGIME,
@@ -60,6 +63,7 @@ from .const import (
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_INJECTION,
+    WELCOME_CREDIT_ANNIVERSARY,
 )
 from .contract_periods import (
     ContractPeriod,
@@ -79,6 +83,7 @@ from .coordinator_data import (
     ytd_window_reset,
 )
 from .coordinator_persist import settings_digest
+from .fees import grants_a_welcome_credit, last_credited_day
 from .projected_cost import _compute_projected_year_cost
 from .projected_volume import _compute_projected_year_kwh, _compute_rolling_year_kwh
 from .providers import (
@@ -135,6 +140,25 @@ class TickCosts:
     rolling_breakdown: dict[str, dict[str, Any]]
     year_end_cost: float | None
     year_end_breakdown: dict[str, Any]
+
+
+def credit_accrued_before(
+    signing: SupplierSnapshot, start: date | None, year_from: date, month_from: date
+) -> bool:
+    """Whether a welcome credit can have reached the year's days before the
+    month, which is when the month's share has to be told from the year's.
+
+    A lump is credited on one day, so it counts only where that day fell
+    among them; a pro-rata credit accrues on every first-year day that did.
+    """
+    if start is None or month_from <= max(start, year_from):
+        return False
+    if not grants_a_welcome_credit(signing):
+        return False
+    last = last_credited_day(signing, start)
+    if signing.welcome_credit_kind == WELCOME_CREDIT_ANNIVERSARY:
+        return year_from <= last < month_from
+    return last >= year_from
 
 
 def held_costs_blob(
@@ -245,7 +269,9 @@ class _CostsMixin:
         # below. Without one this is the window's first day, as it always was.
         periods = previous_periods(self.entry.data, ytd_start, window_now.date())
         own_start = current_period_start(self.entry.data, ytd_start)
-        current_year_cost = await _compute_current_year_cost(
+        # The one bill, over each window this tick prices it on.
+        bill = partial(
+            _compute_current_year_cost,
             self.hass,
             self._session,
             get_extractor(self.entry.data[CONF_SUPPLIER]),
@@ -257,11 +283,13 @@ class _CostsMixin:
             rlp_weights=(
                 (self._rlp_weights or None) if (rlp_weighted or allocating) else None
             ),
-            breakdown=ytd_breakdown,
             billed_peak_kw=billed_peak,
             cached_only=cached_months_only,
-            window_start_override=own_start if own_start != ytd_start else None,
             snapshot_raw=self._snapshot_raw,
+        )
+        year_override = own_start if own_start != ytd_start else None
+        current_year_cost = await bill(
+            breakdown=ytd_breakdown, window_start_override=year_override
         )
         # The same bill over the running month. A second pass rather than an
         # accumulator inside the first: the walk has four branches and four
@@ -271,23 +299,56 @@ class _CostsMixin:
         # it costs is one short recorder read and the pricing loop over ~30
         # days.
         month_start = month_window_start(self.entry, window_now.date())
-        month_cost = await _compute_current_year_cost(
+        month_from = max(month_start, own_start)
+        month_breakdown: dict[str, float] = {}
+        month_cost = await bill(
+            breakdown=month_breakdown, window_start_override=month_from
+        )
+        # The card the welcome credit is read off, the same row the
+        # year-to-date walk just resolved, so a cache hit.
+        signing = await signing_month_snapshot(
             self.hass,
             self._session,
             get_extractor(self.entry.data[CONF_SUPPLIER]),
-            self._snapshot,
+            self.entry.data[CONF_CONTRACT],
+            self.entry.data.get(CONF_REGION, ""),
             self.entry,
-            historical_spots=self._historical_spots,
-            spot_quarters=self._historical_spot_quarters,
-            spp_weights=self._spp_weights if spp_weighted else None,
-            rlp_weights=(
-                (self._rlp_weights or None) if (rlp_weighted or allocating) else None
-            ),
-            billed_peak_kw=billed_peak,
+            self._snapshot,
             cached_only=cached_months_only,
-            window_start_override=max(month_start, own_start),
-            snapshot_raw=self._snapshot_raw,
         )
+        # Except the welcome credit, which is the year's to date less the
+        # year's to the day before the month. Capped on its own window, a
+        # month whose charges fell under its share of the credit took less of
+        # it than the year does over the same days, so the months stopped
+        # adding up to the year: 0,77 EUR over July to September on a 2.500
+        # kWh GS1800V contract signed on 10 July. Not under compensation,
+        # where the month nets its own window and a per-kWh credit is valued
+        # on that window's net share: a summer of export pulls the year's
+        # share below what came before, which showed July and August a
+        # negative credit, and such months do not add up to the year anyway.
+        if (
+            month_cost is not None
+            and current_year_cost is not None
+            and self.entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_COMPENSATION
+        ):
+            before: dict[str, float] = {}
+            if not credit_accrued_before(
+                signing,
+                _parse_iso_date(self.entry.data.get(CONF_CONTRACT_START_DATE)),
+                own_start,
+                month_from,
+            ) or (
+                await bill(
+                    breakdown=before,
+                    window_start_override=year_override,
+                    window_end=month_from - timedelta(days=1),
+                )
+                is not None
+            ):
+                month_cost += month_breakdown.get("welcome_credit_eur", 0.0) - (
+                    ytd_breakdown.get("welcome_credit_eur", 0.0)
+                    - before.get("welcome_credit_eur", 0.0)
+                )
         if periods:
             self._schedule_previous_pricing(periods, window_now.date())
         # Unknown rather than short while the earlier contracts are not priced
@@ -313,18 +374,6 @@ class _CostsMixin:
                 f"{DOMAIN}_month_cards_{self.entry.entry_id}",
             )
         projection_breakdown: dict[str, Any] = {}
-        # The card the welcome credit is read off, the same row the
-        # year-to-date walk just resolved, so a cache hit.
-        signing = await signing_month_snapshot(
-            self.hass,
-            self._session,
-            get_extractor(self.entry.data[CONF_SUPPLIER]),
-            self.entry.data[CONF_CONTRACT],
-            self.entry.data.get(CONF_REGION, ""),
-            self.entry,
-            self._snapshot,
-            cached_only=cached_months_only,
-        )
         projected_year_cost = await _compute_projected_year_cost(
             self.hass,
             self.entry,
