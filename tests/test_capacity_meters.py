@@ -93,6 +93,12 @@ def test_only_a_flemish_main_meter_is_billed_a_charge_of_its_own(
     region: str, meter: str, billed: bool
 ) -> None:
     assert bills_capacity({"region": region, "meter": meter}) is billed
+    # Analog or not: the regulator bills an analog household one flat amount,
+    # on the main entry.
+    assert (
+        bills_capacity({"region": region, "meter": meter, "analog_meter": True})
+        is billed
+    )
 
 
 async def test_a_night_circuit_tracks_no_peak_and_is_billed_none(
@@ -156,13 +162,22 @@ def test_a_night_circuit_gets_no_capacity_sensors() -> None:
 
 @pytest.mark.usefixtures("enable_custom_integrations")
 async def test_a_night_circuit_gets_no_reset_peak_button(hass: HomeAssistant) -> None:
-    for meter, count in (("mono", 1), ("exclusive_night", 0)):
-        entry = _flemish(meter, capacity_mode="sensor", capacity_peak_sensor=_PEAK)
+    for meter, analog, count in (
+        ("mono", False, 1),
+        ("exclusive_night", False, 0),
+        ("exclusive_night", True, 0),
+    ):
+        entry = _flemish(
+            meter,
+            capacity_mode="sensor",
+            capacity_peak_sensor=_PEAK,
+            analog_meter=analog,
+        )
         entry.add_to_hass(hass)
         entry.runtime_data = BePricesCoordinator(hass, entry)  # type: ignore[misc]
         added: list[Any] = []
         await button_setup(hass, entry, added.extend)  # type: ignore[arg-type]
-        assert len(added) == count, meter
+        assert len(added) == count, (meter, analog)
 
 
 async def _steps(
@@ -306,8 +321,10 @@ async def test_an_analog_meter_is_billed_the_minimum_peak(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """Nothing measured and nothing stated counts: 2,5 kW, the sheet's "Vaste
-    term" of 130,92 EUR a year on Luminus's 52,37 per kW. An analog night
-    meter pays it too; a digital one none (the main entry carries it)."""
+    term" of 130,92 EUR a year on Luminus's 52,37 per kW. A night meter pays
+    none, analog or digital: "Heb je nog een klassieke meter? Dan betaal je het
+    capaciteitstarief als een vast bedrag", one for the household, which the
+    main entry carries."""
     freezer.move_to("2026-10-23 12:00:00+02:00")
     hass.states.async_set(_PEAK, "5.2", {"unit_of_measurement": "kW"})
     billed: dict[str, float] = {}
@@ -339,16 +356,16 @@ async def test_an_analog_meter_is_billed_the_minimum_peak(
     assert billed == {
         "analog": 2.5,
         "analog, fixed": 2.5,
-        "analog night": 2.5,
+        "analog night": 0.0,
         "digital night": 0.0,
     }
     analog = _flemish("mono", analog_meter=True)
     assert 12 * _compute_capacity(_card(), analog, 2.5) == pytest.approx(130.925)
 
 
-def test_an_analog_night_meter_keeps_its_capacity_sensors() -> None:
-    """It is billed the flat charge, which capacity_cost shows."""
-    assert {"capacity_cost", "monthly_peak_kw"} <= _sensor_keys(
+def test_an_analog_night_meter_gets_no_capacity_sensors_either() -> None:
+    """The household's one flat amount is on the main entry's capacity_cost."""
+    assert not {"capacity_cost", "monthly_peak_kw"} & _sensor_keys(
         _flemish("exclusive_night", analog_meter=True)
     )
 

@@ -80,7 +80,7 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 | `projected_year_consumption`, `rolling_year_consumption` (2) | `sensor.py` | always |
 | `EV_RATE_SENSORS` (1) | `sensor.py` | `CONF_EV_HOME_CHARGING_RATE` is on |
 | `BI_HOURLY_SENSORS` (2 band prices) | `sensor.py` | `CONF_METER == METER_BI`, or `METER_DYNAMIC` on a contract whose kind is not in `SMART_METER_CONTRACT_KINDS`, except on Tarif Impact (`DSO_MODE_IMPACT`) for any supplier but the custom one |
-| `CAPACITY_SENSORS` (2) | `sensor.py` | `bills_capacity` (`fees.py`): `CONF_REGION == REGION_FLANDERS` and the meter is not a digital exclusive-night circuit (an analog one pays the flat charge every analog meter does) |
+| `CAPACITY_SENSORS` (2) | `sensor.py` | `bills_capacity` (`fees.py`): `CONF_REGION == REGION_FLANDERS` and the meter is not an exclusive-night circuit, analog or digital |
 | `PROSUMER_SENSORS` (1) | `sensor.py` | `solar_kva > 0`, `CONF_SOLAR_REGIME == SOLAR_REGIME_COMPENSATION` and `CONF_REGION == REGION_WALLONIA` |
 | `projected_year_injection`, `rolling_year_injection` (2) | `sensor.py` | `CONF_SOLAR_REGIME` is compensation or injection |
 | `INJECTION_SENSORS` (1) | `sensor.py` | `CONF_SOLAR_REGIME == SOLAR_REGIME_INJECTION` |
@@ -91,11 +91,11 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
 `_track_monthly_peak` forces the peak to 0 anyway (see the button section). The
-gate is `bills_capacity` (`fees.py`), which also leaves out a digital
-exclusive-night circuit: Fluvius bills its quarter-hours with the main meter's,
-as one monthly peak, so the main entry carries the charge and the night entry
-has none. An analog night meter has no quarter-hours to add and is billed the
-flat charge every analog meter is, so it keeps the sensors. The
+gate is `bills_capacity` (`fees.py`), which also leaves out an exclusive-night
+circuit: Fluvius bills its quarter-hours with the main meter's, as one monthly
+peak, so the main entry carries the charge and the night entry has none. An
+analog household is billed one flat amount instead, on the main entry too, so
+an analog night meter has no capacity sensors either. The
 two solar groups are mutually exclusive by regime: the Walloon compensation
 regime ("compteur qui tourne a l'envers") yields a net-cost sensor, the
 post-2024 injection tariff yields a per-kWh injection credit sensor.
@@ -146,8 +146,8 @@ pulls (all fields defined at `coordinator_data.py`).
 | Projected year-end cost | `projected_year_end_cost` | - | MEASUREMENT | EUR | `year_end_cost_eur` (`year_end_cost.py`); `energy_basis`, `volume_basis`, `contract_basis`, `consumption_kwh`, `injection_kwh`, `fees_eur`, `welcome_credit_eur`, the walk's coverage (`days_seen`, `days_priced`, `days_elapsed`, or `hours_seen`, `hours_priced`, `hours_elapsed` on an hourly walk, over the whole year) and, when they apply, `previous_contracts_eur` and `injection_hours_uncredited` attributes from `year_end_diagnostics` |
 | Rolling year consumption | `rolling_year_consumption` | - | MEASUREMENT | kWh | `rolling_year_consumption_kwh` (`projected_volume.py`), the volume `projected_year_cost` prices; `volume_basis` attribute from `rolling_volume_diagnostics["consumption"]` |
 | Rolling year injection | `rolling_year_injection` | - | MEASUREMENT | kWh | `rolling_year_injection_kwh`, the same for feed-in (created only on the compensation or injection regime) |
-| Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only, not on a digital exclusive-night circuit, `bills_capacity`; on an analog meter the flat charge on the minimum peak); also `billed_peak_kw` / `months_counted` attributes, the latter 0 in fixed capacity mode, which takes no mean |
-| Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw`, the running month as measured and NOT floored (Flanders only, not on a digital exclusive-night circuit; 0 on an analog meter, which measures nothing); 0 in fixed capacity mode, which measures nothing and banks no month, while keeping the months measured before |
+| Capacity cost | `capacity_cost` | - | MEASUREMENT | EUR | `capacity_cost_eur` (Flanders only, not on an exclusive-night circuit, `bills_capacity`; on an analog meter the flat charge on the minimum peak); also `billed_peak_kw` / `months_counted` attributes, the latter 0 in fixed capacity mode, which takes no mean |
+| Monthly peak power | `monthly_peak_kw` | POWER | MEASUREMENT | kW | `monthly_peak_kw`, the running month as measured and NOT floored (Flanders only, not on an exclusive-night circuit; 0 on an analog meter, which measures nothing); 0 in fixed capacity mode, which measures nothing and banks no month, while keeping the months measured before |
 | Prosumer cost | `prosumer_cost` | - | MEASUREMENT | EUR | `prosumer_cost_eur` (compensation regime in Wallonia, the one region that bills it; an entry saved with compensation elsewhere before the regime was restricted to Wallonia no longer gets it) |
 | Injection price | `injection_price` | - | MEASUREMENT | EUR/kWh | current slot of `injection_hourly`, else `injection_price_eur_per_kwh` (injection regime); also `today`/`tomorrow` arrays whenever the card prices the feed-in |
 | Peak price | `price_peak` | - | MEASUREMENT | EUR/kWh | `static_peak_price.all_in`, the contract's CONSTANT all-in day rate rather than the price now (created only on a two-register meter: `CONF_METER == METER_BI`, or `METER_DYNAMIC` on a contract whose kind is not in `SMART_METER_CONTRACT_KINDS`, read through `_contract_kind` with the settlement answer as the meter step reads it, since the engine bills a digital meter's two registers on the same two rates; and not on the Walloon Impact DSO tariff, whose energy leg follows the CWaPE bands whether or not the card prints them, unless the entry is a custom one, which bills one distribution rate without them). A monthly leg (`SpotMonthlyRates`, which is also what a month-indexed variable card becomes once a key is set) is priced at the mean its price table was built on (`static_breakdown(..., month_mean)`, `_static_monthly` in `pricing.py`); it used to have no rate here and sat unavailable. Unavailable where no such constant exists (`unavailable_when_none`; it used to read unknown): a dynamic or time-of-use contract, the Walloon Impact tariff, or a DSO the snapshot does not carry |
@@ -570,7 +570,7 @@ One button, and only on an entry billed a capacity charge of its own: `ResetMont
 unique id `{entry_id}_reset_monthly_peak`.
 
 `async_setup_entry` (`button.py`) creates it only when `bills_capacity`
-(`fees.py`) holds, a Flemish entry that is not a digital exclusive-night circuit,
+(`fees.py`) holds, a Flemish entry that is not an exclusive-night circuit,
 because elsewhere no capacity charge is billed on the entry and
 `_track_monthly_peak` forces `_peak_kw` to 0 every tick, so a reset would do
 nothing. Elsewhere it still records an empty

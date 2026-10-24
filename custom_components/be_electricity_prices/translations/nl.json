@@ -47,7 +47,7 @@
       },
       "meter": {
         "title": "Metertype",
-        "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten. Het exclusief-nachtcircuit is alleen voor een tweede invoer voor een aparte meter die enkel 's nachts telt: hier gekozen rekent het de hele invoer tegen het nachttarief aan, en in Vlaanderen zonder capaciteitstarief: Fluvius rekent het gezin één maandpiek aan, op de hoofdinvoer.",
+        "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten. Het exclusief-nachtcircuit is alleen voor een tweede invoer voor een aparte meter die enkel 's nachts telt: hier gekozen rekent het de hele invoer tegen het nachttarief aan, en in Vlaanderen zonder capaciteitstarief: Fluvius rekent het gezin het capaciteitstarief één keer aan, op de hoofdinvoer (op de maandpiek, of als vast bedrag bij analoge meters).",
         "data": {
           "meter": "Meter",
           "day_hours": "Uren van het dagtarief",
@@ -403,7 +403,7 @@
       },
       "meter": {
         "title": "Metertype",
-        "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten. Het exclusief-nachtcircuit is alleen voor een tweede invoer voor een aparte meter die enkel 's nachts telt: hier gekozen rekent het de hele invoer tegen het nachttarief aan, en in Vlaanderen zonder capaciteitstarief: Fluvius rekent het gezin één maandpiek aan, op de hoofdinvoer.",
+        "description": "Enkelvoudige meter (mono), tweevoudige meter (dag/nacht), of digitale meter voor dynamische contracten. Het exclusief-nachtcircuit is alleen voor een tweede invoer voor een aparte meter die enkel 's nachts telt: hier gekozen rekent het de hele invoer tegen het nachttarief aan, en in Vlaanderen zonder capaciteitstarief: Fluvius rekent het gezin het capaciteitstarief één keer aan, op de hoofdinvoer (op de maandpiek, of als vast bedrag bij analoge meters).",
         "data": {
           "meter": "Meter",
           "day_hours": "Uren van het dagtarief",

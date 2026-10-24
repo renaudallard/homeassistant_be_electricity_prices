@@ -1814,11 +1814,12 @@ same quarter-hour. So the night entry asks for no peak sensor and bills no
 `capacity_cost`, and the primary entry's peak source stands for the whole
 household: a sensor adding both meters' quarter-hour demand gives the figure
 Fluvius bills, while the main meter's own *Maximum demand current month*
-leaves out whatever the night circuit drew in that quarter-hour. An analog
-exclusive-night meter, which Fluvius may leave in place until 2028, has no
-quarter-hours to add: tick **Analog meter** on the night entry and it is
-billed the flat 2,5 kW charge and the analog kWh rate every analog meter
-pays.
+leaves out whatever the night circuit drew in that quarter-hour. A household
+whose exclusive-night meter is still analog keeps its analog meters until
+2028 (Fluvius defers the digital meter for it) and pays the capacity tariff
+as one flat amount, the minimum contribution: tick **Analog meter** on both
+entries, and the primary one bills that flat charge while the night entry
+bills the analog kWh rate and no capacity at all.
 
 ## Development
 

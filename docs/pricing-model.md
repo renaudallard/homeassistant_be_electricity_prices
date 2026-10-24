@@ -1633,8 +1633,12 @@ wij je zullen aanrekenen"). The night circuit is a second entry beside the main
 one, so the main entry carries the charge and the night entry none: every path
 multiplies the billed peak, so a zero there keeps the live sensor, the
 year-to-date walk, the backfill and the comparison page alike from charging the
-household twice. The decision is the connection's, read off the entry and never
-off a comparison proxy, so a what-if meter does not move it.
+household twice. An analog night meter is no exception: Fluvius leaves such a
+household its analog meters until 2028, and the regulator bills it one flat
+amount ("Heb je nog een klassieke meter? Dan betaal je het capaciteitstarief als
+een vast bedrag. Dat bedrag komt overeen met de minimumbijdrage"), which the
+main entry carries. The decision is the connection's, read off the entry and
+never off a comparison proxy, so a what-if meter does not move it.
 
 Fluvius bills the "gemiddelde maandpiek": the mean of the last twelve monthly
 peaks, where one monthly peak is the highest quarter-hour offtake of that month
@@ -1705,8 +1709,8 @@ accordingly:
   asks no peak source, so `capacity_cost` is the vaste term on the card's own
   capacity rate (130,92 EUR a year with VAT on Fluvius Antwerpen in 2026, the
   figure Luminus prints in its "Compteur classique" column). An analog
-  exclusive-night meter is billed it too (`bills_capacity`, `fees.py`): it has
-  no quarter-hours to add to the main meter's.
+  exclusive-night meter is not billed it again: the household pays the one
+  flat amount, on the main entry (`bills_capacity`, `fees.py`).
 - `_resolve_analog_meter` (`snapshot_resolve.py`) adds the analog surcharge, the
   analog kWh rate less the piekmeting one, to every distribution rate of the
   entry's own overlay, the exclusive-night one included, and clears the

@@ -71,15 +71,15 @@ from .providers.base import (
     DsoOverlay,
     SupplierSnapshot,
 )
-from .snapshot_resolve import analog_meter, entry_annual_kwh
+from .snapshot_resolve import entry_annual_kwh
 
 
 def bills_capacity(data: Mapping[str, Any]) -> bool:
     """Whether the connection this entry describes is billed a capacity charge
     of its own.
 
-    Every Flemish meter is, except a digital exclusive-night one. Fluvius bills
-    a household with an exclusive-night meter ONE monthly peak: "Jouw maandpiek
+    Every Flemish meter is, except an exclusive-night one. Fluvius bills a
+    household with an exclusive-night meter ONE monthly peak: "Jouw maandpiek
     is niet de som van deze twee getallen. Voor het berekenen van jouw
     maandpiek tellen we je gelijktijdige kwartierpiek (van je exclusief
     nachtmeter en je standaard meter) samen. De hoogste som van die twee
@@ -88,8 +88,11 @@ def bills_capacity(data: Mapping[str, Any]) -> bool:
     entry carries the household's charge and this one none: billing both
     charged the household twice, a full charge on the night entry with the
     peak sensor the capacity step offered it, and the 2,5 kW minimum without.
-    An analog night meter has no quarter-hours to add, and pays the flat charge
-    every analog meter does (``analog_meter``).
+    An analog night meter is no exception: Fluvius leaves such a household its
+    analog meters until 2028, and the regulator bills it ONE flat amount, "Heb
+    je nog een klassieke meter? Dan betaal je het capaciteitstarief als een
+    vast bedrag. Dat bedrag komt overeen met de minimumbijdrage", which the
+    main entry, analog too, carries.
 
     Asked of the entry's own data, never of a comparison proxy's: the charge
     belongs to the connection, so a what-if meter does not move it. The quote
@@ -98,7 +101,7 @@ def bills_capacity(data: Mapping[str, Any]) -> bool:
     """
     if data.get(CONF_REGION) != REGION_FLANDERS:
         return False
-    return data.get(CONF_METER) != METER_EXCLUSIVE_NIGHT or analog_meter(data)
+    return data.get(CONF_METER) != METER_EXCLUSIVE_NIGHT
 
 
 def _capacity_monthly_eur(overlay: DsoOverlay | None, peak_kw: float) -> float:
