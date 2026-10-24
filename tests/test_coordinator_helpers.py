@@ -14975,6 +14975,67 @@ async def test_a_closed_first_year_is_walked_once(
         assert await charges(proxy) == 175.0
 
 
+async def test_a_first_year_walk_the_recorder_did_not_answer_is_not_kept(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A busy recorder answers each read with nothing, and the first walk after
+    the anniversary then priced none of the year, or part of it. Kept, it left
+    the lump on the stretched estimate until 31 December: 4,15 EUR on the
+    anniversary and 4,45 by 24 October for a 700 kWh GS1800V on the April 2026
+    card. Such a walk serves its own tick and is asked again on the next, as
+    the day's meter results are (``energy_meters.noting_failed_reads``)."""
+    from custom_components.be_electricity_prices import energy_meters, first_year
+
+    entry = _entry(region="flanders", contract="test")
+    entry.runtime_data = SimpleNamespace(_first_year_memo={})
+    answers = iter([(True, None), (True, 120.0), (False, None), (False, 171.0)])
+    walks: list[float | None] = []
+
+    async def walk(*_a: Any, **_k: Any) -> float | None:
+        busy, value = next(answers)
+        if busy:
+            energy_meters._note_failed_read("sensor.cons")
+        walks.append(value)
+        return value
+
+    async def charges() -> float | None:
+        return await first_year.first_year_charges(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            make_snapshot(),
+            entry,
+            date(2026, 5, 10),
+            date(2027, 5, 9),
+        )
+
+    freezer.move_to("2027-05-10 01:30:00+02:00")
+    with patch.object(first_year, "_walked_charges", walk):
+        # Nothing, then a figure short of the year, while the recorder is
+        # busy, then nothing priced at all: none of them kept.
+        assert await charges() is None
+        assert await charges() == 120.0
+        assert await charges() is None
+        # The first full answer is.
+        assert await charges() == 171.0
+        assert await charges() == 171.0
+    assert walks == [None, 120.0, None, 171.0]
+
+
+def test_a_failed_read_reaches_every_enclosing_collector() -> None:
+    """A block collecting failed reads inside another hands them on, so the
+    first-year walk's own check cannot hide a busy recorder from a caller
+    that opened one around it."""
+    from custom_components.be_electricity_prices import energy_meters
+
+    with energy_meters.noting_failed_reads() as outer:
+        with energy_meters.noting_failed_reads() as inner:
+            energy_meters._note_failed_read("sensor.cons")
+        assert inner == {"sensor.cons"}
+        energy_meters._note_failed_read("sensor.inj")
+    assert outer == {"sensor.cons", "sensor.inj"}
+
+
 async def test_welcome_credit_is_read_from_the_signing_month_card(
     hass: HomeAssistant, freezer: Any
 ) -> None:

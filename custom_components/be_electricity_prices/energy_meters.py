@@ -676,13 +676,19 @@ def noting_failed_reads() -> Iterator[set[str]]:
     exactly like a meter that measured nothing. The day's meter results are
     kept, and stored, until the next day, so they must not be taken from such
     a read: the caller keeps what it had and asks again on the next tick.
+
+    A block inside another hands what it collected on to the enclosing one,
+    so a read failing there is not hidden from the caller that opened it.
     """
+    enclosing = _FAILED_READS.get()
     failed: set[str] = set()
     token = _FAILED_READS.set(failed)
     try:
         yield failed
     finally:
         _FAILED_READS.reset(token)
+        if enclosing is not None:
+            enclosing.update(failed)
 
 
 def _note_failed_read(entity_id: str) -> None:

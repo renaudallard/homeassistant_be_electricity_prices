@@ -535,7 +535,8 @@ and the months of that year add up to it. Measured on the window instead, stretc
 year, a 200 EUR lump signed in May 2026 by a 1.000 kWh household came to 187,20 EUR in May
 2027 against a first year of 171,73 and then moved every month. Once that year is over its
 charges are kept on the coordinator for as long as the cards of its months and the profiles
-it was priced on stay the same, rather than walked again on every tick to 31 December. A
+it was priced on stay the same, rather than walked again on every tick to 31 December; not
+from a walk a busy recorder did not answer in full, which is asked again on the next tick. A
 quote of the coming year, which cannot walk a year that is not over, measures it on the year
 it quotes. It binds only on a small connection.
 The Walloon cards word the same rules in French (*"accordée après douze (12) mois complets

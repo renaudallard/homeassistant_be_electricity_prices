@@ -42,6 +42,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_CONTRACT, CONF_REGION
+from .energy_meters import noting_failed_reads
 from .providers.base import SupplierExtractor, SupplierSnapshot
 from .snapshot_store import cached_month_card
 
@@ -65,7 +66,8 @@ async def first_year_charges(
     none answers None, as one that could not run at all does.
 
     Kept on the coordinator once those days are over and the last of them is
-    in the recorder (``_first_year_memo``), for as long as the cards of their
+    in the recorder, from a walk the recorder answered in full and that priced
+    something (``_first_year_memo``), for as long as the cards of their
     months and the profiles they were priced on stay the same: nothing else
     about a closed year moves, and walking it again cost every tick from the
     anniversary to 31 December 0,3 to 3,5 s on a Raspberry Pi. Two inputs
@@ -106,10 +108,15 @@ async def first_year_charges(
         held = memo.get(slot)
         if held is not None and held[0] == inputs:
             return held[1]
-    eligible = await _walked_charges(
-        hass, session, extractor, snapshot, entry, first, last, **walk
-    )
-    if memo is not None and closed:
+    # Kept only from a walk every recorder read answered, and that priced
+    # something. A busy recorder answers each read with nothing, and the walk
+    # then comes back with no figure, or a figure short of the year; kept, it
+    # left the lump on the stretched estimate until 31 December.
+    with noting_failed_reads() as failed:
+        eligible = await _walked_charges(
+            hass, session, extractor, snapshot, entry, first, last, **walk
+        )
+    if memo is not None and closed and not failed and eligible is not None:
         memo[slot] = (inputs, eligible)
     return eligible
 
