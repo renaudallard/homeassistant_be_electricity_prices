@@ -1039,7 +1039,10 @@ one, starting from what you have now. From then on:
   an earlier contract cannot be priced at all, and is tried again every hour:
   a contract the integration can never price (a supplier it no longer knows,
   or a card that does not cover your network operator) keeps it unknown, and
-  the log names the contract. A contract whose own cards cannot be had is
+  the log names the contract. A pricing made while Home Assistant's database
+  did not answer, which reads as a contract that used nothing, is not kept:
+  the last one stands, or the figure stays unknown when there is none, and it
+  is tried again the next hour. A contract whose own cards cannot be had is
   priced on your current card instead, as the next point says.
 - `current_month_cost` includes the old contract's days in the month of the
   switch, the comparison pages price *your contract* the same way, and the

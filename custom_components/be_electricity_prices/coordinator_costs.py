@@ -84,6 +84,7 @@ from .coordinator_data import (
     ytd_window_reset,
 )
 from .coordinator_persist import settings_digest
+from .energy_meters import noting_failed_reads
 from .fees import billed_peak_for, grants_a_welcome_credit, last_credited_day
 from .projected_cost import _compute_projected_year_cost
 from .projected_volume import _compute_projected_year_kwh, _compute_rolling_year_kwh
@@ -763,6 +764,14 @@ class _CostsMixin:
         The load profile likewise, for an old contract settled on its weighted
         mean or netted over it, and the solar profile for one whose feed-in
         settles on it (decided on the card, in ``price_previous_periods``).
+
+        Not kept from a pricing whose recorder reads failed. A busy database
+        answers each read with nothing, which priced the earlier contract at
+        its fees alone and passed for settled: kept for the day and in the
+        store, over the good pricing before it, it put a contract left on 1
+        July at 130,36 EUR where it cost 602,79, the whole year 472 EUR low
+        until the next day. The pricing before it is served meanwhile, and
+        the next tick asks again once ``_PREVIOUS_RETRY`` has passed.
         """
         if periods_need_spots(periods):
             # The entry's own key first. A household that left a dynamic
@@ -802,19 +811,27 @@ class _CostsMixin:
         peak = self._previous_peak_kw(periods)
         try:
             month_start = month_window_start(self.entry, today)
-            rows = await price_previous_periods(
-                self.hass,
-                self._session,
-                self,
-                periods,
-                month_start=month_start,
-                load_profiles=True,
-            )
+            with noting_failed_reads() as failed:
+                rows = await price_previous_periods(
+                    self.hass,
+                    self._session,
+                    self,
+                    periods,
+                    month_start=month_start,
+                    load_profiles=True,
+                )
         except Exception as err:  # the next tick asks again
             _LOGGER.warning(
                 "Could not price the contracts %s held earlier this year: %s",
                 self.entry.title,
                 err,
+            )
+            return
+        if failed:
+            _LOGGER.debug(
+                "%s: earlier contracts not priced, the recorder did not answer for %s",
+                self.entry.entry_id,
+                ", ".join(sorted(failed)),
             )
             return
         if self._unloaded:

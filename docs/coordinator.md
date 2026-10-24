@@ -580,7 +580,13 @@ its own cards (a stand-in, or none at all) gives way to the last pricing's row
 for the same periods that did (`keep_settled`), and a failed read to a settled
 stand-in, so one timeout on the old supplier's site neither replaces its own
 figure with another supplier's for the day nor writes that over it in the
-store. Until one lands, usually the minutes after a switch
+store. A pricing during which the recorder did not answer a meter read is not
+kept at all (`noting_failed_reads`, `energy_meters.py`): a busy or locked
+database answers each read with no rows, which priced the contract at its fees
+alone and passed for settled, so a contract left on 1 July read 130,36 EUR
+where it cost 602,79 for the rest of the day and in the store. The last pricing
+is served meanwhile, and the next tick asks again once `_PREVIOUS_RETRY` has
+passed. Until one lands, usually the minutes after a switch
 is recorded, and while any contract fails to price, the year reads unknown rather than short by a whole contract,
 which on the recorder would read as a large negative change and then the same
 positive one. The spot and load-profile gates ask `periods_need_spots` and

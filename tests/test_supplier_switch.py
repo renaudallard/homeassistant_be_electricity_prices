@@ -1417,6 +1417,83 @@ async def test_a_stand_in_keeps_the_pricing_on_its_own_cards_and_is_asked_again(
     priced_again.assert_awaited_once()
 
 
+async def test_a_pricing_the_recorder_did_not_answer_keeps_the_one_before(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A busy recorder answers each read with nothing, which priced the
+    earlier contract at its fees alone and passed for settled: kept for the
+    day and in the store over the good pricing before it, a contract left on
+    1 July read 130,36 EUR where it cost 602,79, and the year 472 EUR low until
+    the next day. The pricing before it is served, and the next tick asks again
+    once the wait has passed, as it does for a stand-in."""
+    from custom_components.be_electricity_prices import energy_meters
+
+    freezer.move_to("2026-10-24 00:30:00+02:00")
+    entry = make_entry(
+        previous_contracts=[
+            {
+                "until": "2026-07-01",
+                "data": _held("totalenergies", "totalenergies_electricite_fixe"),
+            }
+        ]
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=FixedRates(single=0.25))
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    today = date(2026, 10, 24)
+    periods = previous_periods(entry.data, date(2026, 1, 1), today)
+    good = PricedPeriod(
+        start=date(2026, 1, 1),
+        end=date(2026, 6, 30),
+        supplier="totalenergies",
+        contract="totalenergies_electricite_fixe",
+        cost=602.79,
+        month_cost=None,
+        stand_in=False,
+    )
+    fees_only = dataclasses.replace(good, cost=130.36)
+    yesterday = PricedPeriods(
+        key=periods_key(periods),
+        day=date(2026, 10, 23),
+        month=date(2026, 10, 1),
+        rows=(good,),
+    )
+    coord._previous_priced = yesterday
+
+    async def busy(*_a: Any, **_k: Any) -> list[PricedPeriod]:
+        energy_meters._note_failed_read("sensor.cons")
+        return [fees_only]
+
+    with patch(f"{_COSTS}.price_previous_periods", new=busy):
+        coord._schedule_previous_pricing(periods, today)
+        assert coord._previous_pricing is not None
+        await coord._previous_pricing
+    assert coord._previous_priced is yesterday
+    coord.async_request_refresh.assert_not_awaited()
+    # The next tick within the wait does not ask again; the one after it does,
+    # and keeps what the recorder answered.
+    answered = AsyncMock(return_value=[good])
+    with patch(f"{_COSTS}.price_previous_periods", new=answered):
+        freezer.move_to("2026-10-24 01:00:00+02:00")
+        coord._schedule_previous_pricing(periods, today)
+        answered.assert_not_awaited()
+        freezer.move_to("2026-10-24 01:30:00+02:00")
+        coord._schedule_previous_pricing(periods, today)
+        assert coord._previous_pricing is not None
+        await coord._previous_pricing
+    assert coord._previous_priced.day == today
+    assert coord._previous_priced.rows == (good,)
+    # With no pricing before it, the year stays unknown rather than short.
+    coord._previous_priced = None
+    coord._previous_tried = None
+    with patch(f"{_COSTS}.price_previous_periods", new=busy):
+        coord._schedule_previous_pricing(periods, today)
+        assert coord._previous_pricing is not None
+        await coord._previous_pricing
+    assert coord._previous_priced is None
+
+
 async def test_a_stand_in_for_cards_no_archive_kept_is_priced_once_a_day(
     hass: HomeAssistant, freezer: Any
 ) -> None:
