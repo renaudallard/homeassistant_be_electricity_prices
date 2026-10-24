@@ -634,9 +634,13 @@ def _welcome_credit_eur(
     whole in the window the wait completes in and nothing before it. Frank's
     card states no ceiling and none is applied; Mega's is the same kind and
     does state one ("plafonne a 848 EUR"), which ``welcome_credit_cap_eur``
-    carries and which binds above. The ELIGIBLE-charge cap is the one the
-    anniversary shape has no use for, because there is no running figure to
-    hold against the days it accrued over.
+    carries and which binds above. EnergyVision's cards up to June 2026 pay
+    a lump too (*"De korting wordt pas toegekend na één ononderbroken jaar
+    verbruik"*), and the ones from April hold it to the ELIGIBLE charges of
+    the year (``welcome_credit_lump_capped``). Those are not a running figure
+    here: the first year lies mostly before the window its anniversary falls
+    in, so the window's eligible charges, stretched to a year, stand in for
+    them.
 
     A card may state the credit as a reduction on the ENERGY PRICE instead of
     a lump, or as both: Mega's ristourne is *"une reduction de 4.929 c EUR/kWh
@@ -739,9 +743,17 @@ def _welcome_credit_eur(
         # Credited in whichever window contains the anniversary and in no
         # other, which is what stops a figure that resets every 1 January from
         # granting the same lump a second time.
-        if window_start <= last_credited_day(snapshot, start) <= today:
-            return amount
-        return 0.0
+        if not window_start <= last_credited_day(snapshot, start) <= today:
+            return 0.0
+        if getattr(snapshot, "welcome_credit_lump_capped", False):
+            # Held to what the first year charged for the three components.
+            # That year lies mostly before a window the anniversary falls in,
+            # so the window's own charges stand in for it, at a year's length.
+            window_days = (today - window_start).days + 1
+            amount = min(
+                amount, max(eligible_eur, 0.0) * _WELCOME_YEAR_DAYS / window_days
+            )
+        return amount
     first = max(start, window_start)
     last = min(today, last_credited_day(snapshot, start))
     days = (last - first).days + 1

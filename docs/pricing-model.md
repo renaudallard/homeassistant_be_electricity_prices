@@ -714,12 +714,13 @@ place it in. `SupplierSnapshot` carries the amount and the rule its card states
 
 | kind | who | grant | cap |
 | --- | --- | --- | --- |
-| `pro_rata` | EnergyVision, four cards · Mega's residential cards from October 2026 | accrued by the day across 365 days from the start date, totalling the printed amount over a full year | the supplier's energy component of the consumption (gross of any feed-in credit, never the network or tax legs) + the supplier's standing charge + the region's green / CHP contribution, prorated onto the credited days |
-| `anniversary` | Frank Energie, JN (and HV and Korting until September 2026) · Mega, 19 of 21 contracts up to September 2026, and its professional cards since · Bolt's Plenty cards · OCTA+'s June to September 2026 Fixed, Fixed Impact, Flux and Dynamic cards | the whole amount, in the window the first anniversary falls in and no other | Frank's, Bolt's and OCTA+'s cards state none; Mega's states its own ceiling (`welcome_credit_cap_eur`, 848 EUR on the residential cards and 800 on the professional ones, which is the same figure ex-VAT) |
+| `pro_rata` | EnergyVision's cards from July 2026 · Mega's residential cards from October 2026 | accrued by the day across 365 days from the start date, totalling the printed amount over a full year | the supplier's energy component of the consumption (gross of any feed-in credit, never the network or tax legs) + the supplier's standing charge + the region's green / CHP contribution, prorated onto the credited days |
+| `anniversary` | Frank Energie, JN (and HV and Korting until September 2026) · Mega, 19 of 21 contracts up to September 2026, and its professional cards since · Bolt's Plenty cards · OCTA+'s June to September 2026 Fixed, Fixed Impact, Flux and Dynamic cards · EnergyVision's cards from November 2025 to June 2026 | the whole amount, in the window the first anniversary falls in and no other | Frank's, Bolt's, OCTA+'s and EnergyVision's cards up to March 2026 state none; Mega's states its own ceiling (`welcome_credit_cap_eur`, 848 EUR on the residential cards and 800 on the professional ones, which is the same figure ex-VAT); EnergyVision's April to June 2026 cards hold the lump to the three components above (`welcome_credit_lump_capped`), measured on the eligible charges of the window it lands in, stretched to a year |
 
-The two rules travel together on one field because each card states one complete rule
-rather than two independent ones. Mega changed rule between two months of the same
-products: its October 2026 residential cards grant the ristourne *"des la premiere facture
+The pro-rata kind always carries its cap; a lump carries one only where its card states
+it, which `welcome_credit_lump_capped` says. Suppliers change rule between two months of
+the same products: EnergyVision's July 2026 cards accrue a credit its June cards paid at
+the anniversary, and Mega's October 2026 residential cards grant the ristourne *"des la premiere facture
 d'acompte durant la premiere annee du contrat ... au prorata des jours de fourniture
 d'energie"* and state no ceiling and no direct-debit condition, where every earlier card
 paid at the anniversary. `ristourne_kind` (`_mega_overlays.py`) reads which per card, so a

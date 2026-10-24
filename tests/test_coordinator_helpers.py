@@ -14655,6 +14655,41 @@ def test_anniversary_credit_lands_whole_in_the_window_that_holds_it() -> None:
     assert credit(date(2027, 1, 1), anniversary, 5.0) == pytest.approx(120.0)
 
 
+def test_a_capped_anniversary_lump_is_held_to_a_year_of_eligible_charges() -> None:
+    """EnergyVision's April to June 2026 cards pay the credit as a lump after a
+    year and add *"Indien de som van deze componenten lager is dan de vermelde
+    welkomstkorting, wordt de korting beperkt tot maximaal het bedrag van deze
+    som"*. That year lies mostly before the window its anniversary falls in,
+    so the window's eligible charges, stretched to a year, stand in for it."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import _welcome_credit_eur
+
+    snap = replace(
+        make_snapshot(
+            welcome_credit_eur=250.0, welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY
+        ),
+        welcome_credit_lump_capped=True,
+    )
+    start = date(2026, 6, 10)
+    anniversary = date(2027, 6, 10)
+    # 1 January to 10 June 2027 is 161 days: 60 EUR charged over them is a
+    # year of 136,02, which is all the lump may come to.
+    assert _welcome_credit_eur(
+        snap, start, date(2027, 1, 1), anniversary, 60.0
+    ) == pytest.approx(60.0 * 365 / 161)
+    # A household whose charges pass the credit gets the whole of it.
+    assert _welcome_credit_eur(
+        snap, start, date(2027, 1, 1), anniversary, 400.0
+    ) == pytest.approx(250.0)
+    # Still a lump: nothing before the anniversary.
+    assert (
+        _welcome_credit_eur(snap, start, date(2026, 6, 10), date(2026, 12, 31), 60.0)
+        == 0.0
+    )
+
+
 async def test_welcome_credit_is_read_from_the_signing_month_card(
     hass: HomeAssistant, freezer: Any
 ) -> None:

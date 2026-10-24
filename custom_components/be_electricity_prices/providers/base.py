@@ -332,17 +332,25 @@ class SupplierSnapshot:
     #
     #   "pro_rata"    accrued by the day across the first subscription year
     #                 and capped at what that period charged for energy, the
-    #                 standing charge and the green contribution. EnergyVision
-    #                 footnote e.
+    #                 standing charge and the green contribution.
+    #                 EnergyVision's footnote from July 2026.
     #   "anniversary" a lump granted on the invoice once a full year has been
-    #                 consumed without interruption, with no cap stated. Frank
-    #                 Energie's Dynamisch Korting: "De korting wordt toegekend
-    #                 via de factuur na een jaar ononderbroken verbruik".
+    #                 consumed without interruption. Frank Energie's
+    #                 Dynamisch Korting: "De korting wordt toegekend via de
+    #                 factuur na een jaar ononderbroken verbruik", and
+    #                 EnergyVision's footnote on its cards up to June 2026.
     #
-    # The cap rides with the kind because each card states one complete rule
-    # rather than two independent ones. A future card that pro-rates without a
-    # cap, or caps a lump, is what would split this into two fields.
+    # The pro-rata kind always carries its cap. A lump carries one only where
+    # the card states it, which ``welcome_credit_lump_capped`` says.
     welcome_credit_kind: str = WELCOME_CREDIT_PRO_RATA
+    # True when the card holds an anniversary lump to what the first year
+    # charged for the components the credit may come off, as the pro-rata kind
+    # always is. EnergyVision's April to June 2026 cards state it beside their
+    # anniversary rule: "Indien de som van deze componenten lager is dan de
+    # vermelde welkomstkorting, wordt de korting beperkt tot maximaal het
+    # bedrag van deze som". Its cards before April pay the same lump without
+    # that sentence, and Frank's state none. Read on the anniversary kind only.
+    welcome_credit_lump_capped: bool = False
     # What the supplier takes off the YEARLY STANDING CHARGE when the customer
     # pays by direct debit, in EUR/year, or None where the card offers no such
     # reduction, which is every card but Brusol's Groene stroom today. Read

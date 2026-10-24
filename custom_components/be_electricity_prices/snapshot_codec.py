@@ -666,6 +666,7 @@ def _snapshot_to_dict(
             snap.welcome_credit_excludes_night_meter
         ),
         "welcome_credit_kind": snap.welcome_credit_kind,
+        "welcome_credit_lump_capped": snap.welcome_credit_lump_capped,
         "welcome_credit_signing_month": (
             snap.welcome_credit_signing_month.isoformat()
             if snap.welcome_credit_signing_month
@@ -765,6 +766,7 @@ def _snapshot_from_dict(
             data.get("welcome_credit_excludes_night_meter")
         ),
         welcome_credit_kind=data.get("welcome_credit_kind", WELCOME_CREDIT_PRO_RATA),
+        welcome_credit_lump_capped=bool(data.get("welcome_credit_lump_capped")),
         welcome_credit_signing_month=_iso_date(
             data.get("welcome_credit_signing_month")
         ),

@@ -335,6 +335,7 @@ def test_every_snapshot_field_survives_the_round_trip() -> None:
         "valid_until": date(2026, 9, 30),
         "welcome_credit_eur": 74.2,
         "welcome_credit_kind": WELCOME_CREDIT_ANNIVERSARY,
+        "welcome_credit_lump_capped": True,
         "direct_debit_discount_eur": 12.0,
         "welcome_credit_eur_per_kwh": 0.0424,
         "welcome_credit_cap_eur": 848.0,

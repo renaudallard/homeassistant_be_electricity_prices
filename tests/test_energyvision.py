@@ -42,6 +42,8 @@ from custom_components.be_electricity_prices.const import (
     DSO_REW,
     DSO_SIBELGA,
     FLUVIUS_KEYS,
+    WELCOME_CREDIT_ANNIVERSARY,
+    WELCOME_CREDIT_PRO_RATA,
 )
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers._rates import (
@@ -955,6 +957,50 @@ def test_welcome_credit_is_read_where_the_card_prints_one() -> None:
     lp = _tiered(_TIERED_LP, "energyvision_laadpunt_sep.pdf")
     assert lp.welcome_credit_eur is None
     assert _wal_aug().welcome_credit_eur is None
+
+
+def _credit_rule(snap: SupplierSnapshot) -> tuple[float | None, str, bool]:
+    return (
+        snap.welcome_credit_eur,
+        snap.welcome_credit_kind,
+        snap.welcome_credit_lump_capped,
+    )
+
+
+def test_welcome_credit_is_paid_as_each_cards_own_footnote_says() -> None:
+    """The welcome footnote says when the credit lands, and it changed in July
+    2026. Up to June: *"De korting wordt pas toegekend na één ononderbroken
+    jaar verbruik en wordt toegepast op de afrekeningsfactuur"*, a lump at the
+    anniversary, which the April to June cards hold to *"maximaal het bedrag
+    van deze som"* of the energy, standing charge and green contribution. From
+    July: *"De korting wordt toegekend pro rata per dag over de facturatie
+    periode"*. The earlier cards also print "pro rata per dag" in footnotes a
+    and 4, about the 1.800 kWh allowance and energy sharing, which say nothing
+    about the credit."""
+    feb = _tiered(_TIERED_1800, "energyvision_tiered_1800_feb.pdf")
+    assert _credit_rule(feb) == (300.0, WELCOME_CREDIT_ANNIVERSARY, False)
+    jun = _tiered(_TIERED_1800, "energyvision_tiered_1800_jun.pdf")
+    assert _credit_rule(jun) == (250.0, WELCOME_CREDIT_ANNIVERSARY, True)
+    assert _credit_rule(_tiered_1800()) == (200.0, WELCOME_CREDIT_PRO_RATA, False)
+    # The dynamic card letters the same footnote d.
+    assert _credit_rule(_dyn()) == (180.0, WELCOME_CREDIT_PRO_RATA, False)
+
+
+def test_a_february_2026_signing_is_credited_at_its_anniversary_only() -> None:
+    """A GS1800V signed on 10 February 2026 gets its 300 EUR on the settlement
+    invoice after a year, not 0,82 EUR a day from the start: nothing in the
+    2026 bill, the whole of it in 2027's."""
+    from custom_components.be_electricity_prices.fees import _welcome_credit_eur
+
+    feb = _tiered(_TIERED_1800, "energyvision_tiered_1800_feb.pdf")
+    start = date(2026, 2, 10)
+    assert (
+        _welcome_credit_eur(feb, start, date(2026, 1, 1), date(2026, 12, 31), 900.0)
+        == 0.0
+    )
+    assert _welcome_credit_eur(
+        feb, start, date(2027, 1, 1), date(2027, 2, 10), 900.0
+    ) == pytest.approx(300.0)
 
 
 def test_archive_reads_a_past_month_by_its_plain_filename() -> None:

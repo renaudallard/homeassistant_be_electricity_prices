@@ -96,6 +96,8 @@ from ..const import (
     REGION_BRUSSELS,
     REGION_FLANDERS,
     REGION_WALLONIA,
+    WELCOME_CREDIT_ANNIVERSARY,
+    WELCOME_CREDIT_PRO_RATA,
 )
 from ._energyvision_cards import (
     _VAT_RE,
@@ -358,6 +360,26 @@ DISCOVER_IDS: frozenset[str] = frozenset(
 # to grant. Only the Dutch wording is matched, because that is the only one
 # any card has ever printed a figure next to.
 _WELCOME_RE = re.compile(rf"Eenmalige\s+welkomstkorting\s+{_NUM}\s*€", re.IGNORECASE)
+
+# The footnote stating how that credit is paid ("e/" on most cards, "d/" on
+# the dynamic card and Brusol's Groene stroom), from its opening sentence to
+# the next footnote's letter. The rule is read inside it alone: the "pro rata
+# per dag" the same cards print in footnotes a and 4 are about the 1.800 kWh
+# allowance and energy sharing.
+_WELCOME_NOTE_RE = re.compile(
+    r"We\s+kennen\s+je\s+een\s+eenmalige\s+welkomstkorting\s+toe"
+    r".*?(?=\s[a-z]/\s|\sVoorwaarden\b|\Z)",
+    re.DOTALL,
+)
+# Up to June 2026: "De korting wordt pas toegekend na één ononderbroken jaar
+# verbruik en wordt toegepast op de afrekeningsfactuur".
+_ANNIVERSARY_RE = re.compile(
+    r"pas\s+toegekend\s+na\s+(?:één|een)\s+ononderbroken\s+jaar", re.IGNORECASE
+)
+# April to June 2026 add: "Indien de som van deze componenten lager is dan de
+# vermelde welkomstkorting, wordt de korting beperkt tot maximaal het bedrag
+# van deze som".
+_LUMP_CAP_RE = re.compile(r"korting\s+beperkt\s+tot\s+maximaal", re.IGNORECASE)
 
 
 _LABEL_RE = re.compile(r"Tariefkaart\s+([A-Za-z]+\s+20\d{2})", re.IGNORECASE)
@@ -744,6 +766,7 @@ def parse_snapshot(
     # The energy leg is worded identically in both regions and needs no
     # branch; the network and tax blocks are each region's own.
     brussels = region == REGION_BRUSSELS
+    kind, lump_capped = _welcome_credit_rule(text)
     return with_vat_basis(
         SupplierSnapshot(
             supplier="energyvision",
@@ -756,6 +779,8 @@ def parse_snapshot(
             valid_until=parse_valid_until(text),
             injection=injection,
             welcome_credit_eur=_welcome_credit(text),
+            welcome_credit_kind=kind,
+            welcome_credit_lump_capped=lump_capped,
             direct_debit_discount_eur=_direct_debit_discount(
                 text, energy.yearly_fixed_fee
             ),
@@ -777,6 +802,21 @@ def _welcome_credit(text: str) -> float | None:
     """
     m = _WELCOME_RE.search(text)
     return None if m is None else to_float(m.group(1))
+
+
+def _welcome_credit_rule(text: str) -> tuple[str, bool]:
+    """How the card pays its welcome credit, and whether a lump is capped.
+
+    The cards up to June 2026 pay it at the anniversary, on the settlement
+    invoice after a year of uninterrupted supply; from July 2026 it is
+    "toegekend pro rata per dag over de facturatie periode". The October 2026
+    1.800 kWh card states neither and is read as pro rata, the rule the cards
+    before it stated, which is also what a card printing no footnote gets.
+    """
+    note = _WELCOME_NOTE_RE.search(text)
+    if note is None or _ANNIVERSARY_RE.search(note.group(0)) is None:
+        return WELCOME_CREDIT_PRO_RATA, False
+    return WELCOME_CREDIT_ANNIVERSARY, _LUMP_CAP_RE.search(note.group(0)) is not None
 
 
 # ---- Wallonia parsers --------------------------------------------------------

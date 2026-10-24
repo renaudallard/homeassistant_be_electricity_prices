@@ -494,11 +494,33 @@ into `SupplierSnapshot.welcome_credit_eur`, and unlike the standing charge a mis
 is not an error: GSLP prints none, and the Walloon card carries footnote e describing the
 credit while printing no amount for it, so there is nothing to grant.
 
-Footnote e is the whole rule. It applies **only during the first subscription year for
-that product version**, is granted **pro rata per day** over the billing period, comes off
-**energy, the standing charge and the green electricity / WKK contribution only**, and is
-capped at the sum of those three where they come to less than the credit. It never touches
-network tariffs, taxes or levies, and it does not stack with other promotions.
+Footnote e (d on the dynamic card and Brusol's Groene stroom) is the whole rule, and it changed in July
+2026. It applies **only during the first subscription year for that product version**,
+comes off **energy, the standing charge and the green electricity / WKK contribution
+only**, never touches network tariffs, taxes or levies, and does not stack with other
+promotions. When it is paid depends on the card:
+
+| cards | when | cap |
+| --- | --- | --- |
+| November 2025 to March 2026 | *"De korting wordt pas toegekend na één ononderbroken jaar verbruik en wordt toegepast op de afrekeningsfactuur"*: a lump at the first anniversary | none stated |
+| April to June 2026, on the cards that print an amount | the same lump | *"Indien de som van deze componenten lager is dan de vermelde welkomstkorting, wordt de korting beperkt tot maximaal het bedrag van deze som"* |
+| July to September 2026 | *"De korting wordt toegekend pro rata per dag over de facturatie periode"* | the same sentence |
+| October 2026 | the footnote names neither (the GS1800V card), or the pro-rata one without the cap | none stated |
+
+The laadpunt card and Brusol's 1.800 kWh card kept the March wording a little longer, but
+print no amount. `_welcome_credit_rule` reads the footnote alone, from its opening sentence to the next
+footnote's letter, because the cards up to June also print "pro rata per dag" in footnotes
+a and 4 (the 1.800 kWh allowance and energy sharing). The anniversary sentence makes the
+card `welcome_credit_kind = "anniversary"` and the cap sentence beside it sets
+`welcome_credit_lump_capped`; anything else is pro rata. That covers the October GS1800V
+card, which states no timing: pro rata is the rule the cards before it stated, and its
+50 EUR can never pass the 50 EUR standing charge it comes off, so the cap the pro-rata
+kind always carries never binds on it. The other October cards keep the pro-rata sentence
+without the cap and grant nothing. The anniversary lump's cap is measured on
+the eligible charges of the window the anniversary falls in, stretched to a year, since
+the year it is about lies mostly before that window; it binds only on a small connection.
+The Walloon cards word the same rules in French (*"accordée après douze (12) mois complets
+de consommation ininterrompue"*) but print no amount, so nothing reads them.
 
 `_welcome_credit_eur` (`fees.py`) implements exactly that, and the year-to-date engine
 subtracts it through the one finaliser every branch returns by. Three gates matter:
@@ -666,6 +688,8 @@ The fixtures live under `tests/fixtures/`:
 | `energyvision_fixed_1y_wal_jul.pdf` | the GS1JV "Électricité bon marché 1 an fixe" Walloon card, July 2026 |
 | `energyvision_fixed_1y_wal_aug.pdf` | the same card for August 2026, carrying the rewritten tax block |
 | `energyvision_tiered_1800_sep.pdf` | the GS1800V card for Flanders, September 2026 |
+| `energyvision_tiered_1800_feb.pdf` | the same card for February 2026 (the `_4` reissue the archive holds): a welcome credit paid at the anniversary |
+| `energyvision_tiered_1800_jun.pdf` | the same card for June 2026: the anniversary lump with its cap |
 | `energyvision_tiered_1800_bxl_sep.pdf` | the Brusol GS1800V card for Brussels, same month |
 | `energyvision_groene_stroom_bxl_sep.pdf` | the Brusol GRS card, September 2026: the untranched shape |
 | `energyvision_groene_stroom_bxl_jan.pdf` | the same card for January 2026, the archive's copy: the degressive excise table on a Brussels card |

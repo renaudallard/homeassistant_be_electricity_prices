@@ -359,7 +359,8 @@ SPOT_PRICED_CONTRACT_KINDS: Final[tuple[str, ...]] = ("dynamic", "spot_monthly")
 # itself states. PRO_RATA accrues by the day over the first subscription year
 # and is capped at what that period charged for the three components the credit
 # may come off; ANNIVERSARY is a lump granted once a full year has been
-# consumed, with no cap stated. See SupplierSnapshot.welcome_credit_kind.
+# consumed, capped the same way only where the card says so. See
+# SupplierSnapshot.welcome_credit_kind.
 WELCOME_CREDIT_PRO_RATA: Final = "pro_rata"
 WELCOME_CREDIT_ANNIVERSARY: Final = "anniversary"
 
