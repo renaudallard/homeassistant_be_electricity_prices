@@ -79,6 +79,7 @@ from .fees import (
     lump_held_to_first_year,
     window_energy_rate,
 )
+from .first_year import first_year_charges
 from .injection import _historical_injection_rate, _injection_is_spot_formula
 from .meter_hourly import _metered_sides
 from .pricing import (
@@ -106,7 +107,6 @@ from .spot_stats import (
     own_day_ahead,
 )
 from .synergrid import SppWeights
-from .ytd_cost import first_year_charges
 from .ytd_legs import _dso_prosumer_day
 
 if TYPE_CHECKING:

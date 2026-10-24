@@ -93,6 +93,7 @@ relative to that package directory.
 | `injection.py` | The injection taxonomy: which shape a card is, the per-slot rate shared by the live scalar and the YTD walk, and the historical rate. |
 | `fees.py` | Standing charges: capacity tariff, Brussels OSP, prosumer forfait, and the annual static-fee sum the three cost paths share. |
 | `ytd_cost.py` | The year-to-date cost walk itself: which months it covers, what each is billed on, and the total the sensor publishes. |
+| `first_year.py` | What the first contract year charged for the components a welcome credit may come off, walked on its own for a lump capped at it (`first_year_charges`) and kept on the coordinator once that year is over. |
 | `ytd_energy.py` | The two legs that have to replay the year hour by hour: the energy a spot-priced contract is billed at, and the feed-in credit settled the same way. |
 | `ytd_legs.py` | The legs charged per day rather than per kWh: the standing charges, the Walloon prosumer fee and the Flemish capacity term, each pro-rated over the days the contract covered. |
 | `projected_cost.py` | The rolling-year cost behind `projected_year_cost`: one pass at today's tariffs over the entry's own metered volume of the last 365 days, plus the basis strings that say what was measured and what was assumed. |

@@ -529,13 +529,15 @@ without the cap and grant nothing. The anniversary lump's cap is what the first 
 year itself charged, from the start date to the day before the anniversary. That year
 straddles 1 January, so no window the lump lands in holds it; the year-to-date walk and the
 backfill walk it on its own (`lump_held_to_first_year`, `fees.py`, through
-`first_year_charges`, `ytd_cost.py`), stretching only the days they could not price, and
+`first_year_charges`, `first_year.py`), stretching only the days they could not price, and
 hold the lump to that figure in every window, so it keeps one value after the anniversary
 and the months of that year add up to it. Measured on the window instead, stretched to a
 year, a 200 EUR lump signed in May 2026 by a 1.000 kWh household came to 187,20 EUR in May
-2027 against a first year of 171,73 and then moved every month. A quote of the coming year,
-which cannot walk a year that is not over, measures it on the year it quotes. It binds only
-on a small connection.
+2027 against a first year of 171,73 and then moved every month. Once that year is over its
+charges are kept on the coordinator for as long as the cards of its months and the profiles
+it was priced on stay the same, rather than walked again on every tick to 31 December. A
+quote of the coming year, which cannot walk a year that is not over, measures it on the year
+it quotes. It binds only on a small connection.
 The Walloon cards word the same rules in French (*"accordée après douze (12) mois complets
 de consommation ininterrompue"*) but print no amount, so nothing reads them.
 

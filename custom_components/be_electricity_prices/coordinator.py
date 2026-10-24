@@ -215,6 +215,13 @@ class BePricesCoordinator(
         self._year_end_memo: (
             tuple[tuple[Any, ...], float | None, dict[str, Any]] | None
         ) = None
+        # What a closed first contract year charged for the components a
+        # welcome credit may come off, per contract, meter and year, with the
+        # inputs it was walked on (first_year.first_year_charges).
+        self._first_year_memo: dict[
+            tuple[str, str | None, date, date],
+            tuple[tuple[Any, ...], float | None],
+        ] = {}
         self._snapshot_raw: SupplierSnapshot | None = None
         # The household's measured yearly consumption, and the day it was
         # measured on. ``None`` until the recorder holds enough of it to be

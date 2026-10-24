@@ -14914,6 +14914,67 @@ async def test_a_capped_lump_holds_one_value_after_the_anniversary(
     assert november["welcome_credit_eur"] == pytest.approx(first_year)
 
 
+async def test_a_closed_first_year_is_walked_once(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The first contract year a capped lump is held to is over once the lump
+    is paid, so what it charged is kept on the coordinator and walked again
+    only when the cards of its months change. Walking it on every tick to 31
+    December cost 0,3 to 3,5 s a tick on a Raspberry Pi, the lump coming out
+    the same each time. Not before the year is over and its last day is in
+    the recorder, and never for the compare page's proxy, which carries no
+    coordinator."""
+    from custom_components.be_electricity_prices import first_year
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _month_key,
+        _monthly_snapshots,
+    )
+
+    entry = _entry(region="flanders", contract="test")
+    entry.runtime_data = SimpleNamespace(_first_year_memo={})
+    proxy = _entry(region="flanders", contract="test")
+    first, last = date(2026, 5, 10), date(2027, 5, 9)
+    walked = AsyncMock(side_effect=[171.0, 172.0, 173.0, 174.0, 175.0])
+
+    async def charges(on: Any = entry) -> float | None:
+        return await first_year.first_year_charges(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            make_snapshot(),
+            on,
+            first,
+            last,
+        )
+
+    with patch.object(first_year, "_walked_charges", walked):
+        # The anniversary's first hour, before the year's last one is in the
+        # recorder: walked, and not kept.
+        freezer.move_to("2027-05-10 00:30:00+02:00")
+        assert await charges() == 171.0
+        freezer.move_to("2027-05-10 01:30:00+02:00")
+        assert await charges() == 172.0
+        # Kept from then on, whatever the day.
+        freezer.move_to("2027-12-31 23:59:30+01:00")
+        assert await charges() == 172.0
+        assert walked.await_count == 2
+        # A card of one of its months settling is a change, and is walked.
+        _monthly_snapshots(hass)[
+            _month_key("test", "test", "flanders", date(2026, 9, 1))
+        ] = make_snapshot()
+        assert await charges() == 173.0
+        assert await charges() == 173.0
+        # A later month's card is not one of them.
+        _monthly_snapshots(hass)[
+            _month_key("test", "test", "flanders", date(2027, 9, 1))
+        ] = make_snapshot()
+        assert await charges() == 173.0
+        assert walked.await_count == 3
+        # The proxy walks every time.
+        assert await charges(proxy) == 174.0
+        assert await charges(proxy) == 175.0
+
+
 async def test_welcome_credit_is_read_from_the_signing_month_card(
     hass: HomeAssistant, freezer: Any
 ) -> None:

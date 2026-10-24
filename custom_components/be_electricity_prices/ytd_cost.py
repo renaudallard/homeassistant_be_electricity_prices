@@ -78,6 +78,7 @@ from .fees import (
     lump_held_to_first_year,
     window_energy_rate,
 )
+from .first_year import first_year_charges
 from .injection import (
     _historical_injection_rate,
 )
@@ -186,51 +187,6 @@ def window_welcome_credit(
         # injection regime or without a measured year of it.
         first_year_injection_kwh=entry_annual_injection_kwh(entry),
     )
-
-
-async def first_year_charges(
-    hass: HomeAssistant,
-    session: aiohttp.ClientSession,
-    extractor: SupplierExtractor,
-    snapshot: SupplierSnapshot,
-    entry: ConfigEntry,
-    first: date,
-    last: date,
-    **walk: Any,
-) -> float | None:
-    """What ``[first, last]`` charged for the three components a welcome
-    credit may come off, by the year-to-date bill over those days.
-
-    The metered part is stretched over the days or hours the walk could not
-    price (no meter reading, no spot), so a history starting part-way through
-    the first year does not pass for a year of small bills; a walk that priced
-    none answers None, as one that could not run at all does.
-    """
-    year: dict[str, float] = {}
-    if (
-        await _compute_current_year_cost(
-            hass,
-            session,
-            extractor,
-            snapshot,
-            entry,
-            breakdown=year,
-            window_start_override=first,
-            window_end=last,
-            **walk,
-        )
-        is None
-    ):
-        return None
-    eligible = year.get("welcome_credit_eligible_eur")
-    priced = year.get("days_priced", year.get("hours_priced", 0.0))
-    elapsed = year.get("days_elapsed", year.get("hours_elapsed", 0.0))
-    if eligible is None or priced <= 0.0:
-        return None
-    metered = year.get("energy_component_ytd_eur", 0.0) + year.get(
-        "green_component_ytd_eur", 0.0
-    )
-    return eligible + metered * (elapsed / priced - 1.0)
 
 
 async def _compute_current_year_cost(
