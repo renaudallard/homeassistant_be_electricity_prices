@@ -3433,6 +3433,10 @@ _NETWORK_STRUCTURAL: dict[tuple[str, str, str], str] = {
     # forces the Impact mode, so the single rate it stores (the Pic figure) is
     # never billed.
     ("cociter_variable_impact", "wallonia", "distribution_single"): "never billed",
+    # The same card's terme fixe: the Impact configuration charges none, which
+    # the card prints as 0,00 from October 2026, and fees.py drops the Walloon
+    # fixed term on an Impact entry whatever the card says.
+    ("cociter_variable_impact", "wallonia", "data_management_per_year"): "never billed",
 }
 
 # A card figure that disagrees with the fleet, already looked at: the
@@ -3587,9 +3591,11 @@ def _check_network_consensus(archive: Path | None, today: date | None = None) ->
                 continue
             for field in _NETWORK_FIELDS:
                 value = overlay.get(field)
-                # Zero is a published value only where a whole region folds
-                # the term away (Flemish transport), and it agrees with itself.
-                if not isinstance(value, (int, float)) or not value:
+                # A zero votes like any other figure. Where a whole region
+                # folds the term away (Flemish transport) every card prints
+                # it, and a reader falling back to zero for a column it could
+                # not read disagrees with the cards that read one.
+                if not isinstance(value, (int, float)):
                     continue
                 if (contract, region, field) in _NETWORK_STRUCTURAL or (
                     supplier,
@@ -3607,7 +3613,10 @@ def _check_network_consensus(archive: Path | None, today: date | None = None) ->
         for key in sorted(figures, key=lambda k: figures[k][0]):
             for cluster in clusters:
                 anchor = figures[cluster[0]][0]
-                if abs(figures[key][0] / anchor - 1.0) < _NETWORK_TOLERANCE:
+                figure = figures[key][0]
+                if figure == anchor or (
+                    anchor and abs(figure / anchor - 1.0) < _NETWORK_TOLERANCE
+                ):
                     cluster.append(key)
                     break
             else:

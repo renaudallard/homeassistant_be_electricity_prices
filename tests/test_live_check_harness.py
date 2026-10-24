@@ -3150,6 +3150,29 @@ def test_a_network_figure_is_put_ex_vat_at_the_rate_its_card_states(
     assert "0.099358 ex VAT on 2 suppliers' cards" in check.detail
 
 
+def test_a_network_figure_read_as_zero_is_caught(tmp_path: Path) -> None:
+    """The consensus skipped every zero, so a reader falling back to 0.0 for
+    a column it could not read billed no transport at all and nothing
+    reported it. Flemish transport, zero on every card, still agrees with
+    itself, and a zero sorting first in its cluster divides nothing."""
+    archive = _network_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "wallonia"): (0.0, {"transport": 0.0274}),
+            ("b", "b_fixed", "wallonia"): (0.0, {"transport": 0.0274}),
+            ("c", "c_pro", "wallonia"): (0.21, {"transport": 0.025849}),
+            ("odd", "odd_fixed", "wallonia"): (0.0, {"transport": 0.0}),
+            ("a", "a_fixed", "flanders"): (0.0, {"transport": 0.0}),
+            ("b", "b_fixed", "flanders"): (0.0, {"transport": 0.0}),
+            ("c", "c_pro", "flanders"): (0.21, {"transport": 0.0}),
+        },
+    )
+    lc._check_network_consensus(archive, date(2026, 9, 25))
+    (check,) = lc.CHECKS
+    assert check.label == "odd/ores transport 0.0 disagrees for 2026-09"
+    assert "0.025849 ex VAT on 3 suppliers' cards" in check.detail
+
+
 def test_the_social_tariff_is_left_out_of_the_regulated_consensus(
     tmp_path: Path,
 ) -> None:

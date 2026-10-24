@@ -410,7 +410,9 @@ every card carries the same figure once put on one VAT basis: a residential card
 including 6% and a professional card the regulator's ex-VAT figure. Figures within 1% of each
 other count as one (the round trip moves the last digit; the smallest real disagreement in the
 September 2026 archive is 2%), the supplier is the voter, a tie is not reported, and the month is
-the one most cards are filed under, as for the federal check. The social tariff's rows are left
+the one most cards are filed under, as for the federal check. A zero votes like any other figure,
+so a reader that falls back to zero for a column it could not read is outvoted, while Flemish
+transport, zero on every card, agrees with itself. The social tariff's rows are left
 out of this, the federal and the VREG ceiling consensus (`_OFF_MARKET_SUPPLIERS`): they carry the
 protected customer's excise and the CREG's flat network component in place of each operator's
 tariffs, which are right and agree with no market card.
@@ -420,10 +422,11 @@ households the card's figure. That is what nothing reported before the check exi
 professional card prints the Pic rate in the Medium column for ORES, RESA, REW and AIESH, which
 bills every Medium hour of an Impact entry at Pic.
 
-Three figures differ from the fleet by the card's structure and are left out of the vote
+Four figures differ from the fleet by the card's structure and are left out of the vote
 (`_NETWORK_STRUCTURAL`): Luminus Dynamic's quarter-hourly metering fee (its own footnote), Bolt's
-Brussels metering term (the Brugel power term is added by the resolver) and the single rate on
-Cociter's trihoraire card (never billed, the contract forces the Impact mode). The disagreements
+Brussels metering term (the Brugel power term is added by the resolver), and the single rate and
+the terme fixe on Cociter's trihoraire card (never billed, the contract forces the Impact mode,
+which charges no fixed term and which the card prints as 0,00 from October 2026). The disagreements
 already looked at go in `_KNOWN_NETWORK_FIGURES`, keyed on the exact figure and expiring on
 2027-01-01, when the DSOs publish next year's tariffs: Bolt's professional ORES and AIEG rows
 (January's set) and its Medium column, Bolt's residential ORES Medium rate, EBEM Dynamic's
