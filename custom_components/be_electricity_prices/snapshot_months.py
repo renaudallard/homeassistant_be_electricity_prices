@@ -567,7 +567,12 @@ def _month_card_retrievable(
 
 
 def month_card_failed(
-    hass: HomeAssistant, supplier: str, contract: str, region: str, year_month: date
+    hass: HomeAssistant,
+    supplier: str,
+    contract: str,
+    region: str,
+    year_month: date,
+    entry: ConfigEntry | None = None,
 ) -> bool:
     """Whether ``_snapshot_for_month`` last handed back the current card for
     this month because reading the month's own card failed.
@@ -578,13 +583,15 @@ def month_card_failed(
     walk heals on its own next tick; a caller that keeps what it priced (the
     backfill) must tell the two apart, and only the caches can. A cached row,
     a card or ``None``, is an answer; a fresh failure marker with no row is a
-    failed read. A month no archive holds also waits for the card its
-    stand-in's feed-in settles on (``snapshot_feed_in.reference_failed``).
+    failed read. ``entry``'s month no archive holds also waits for the card
+    its stand-in's feed-in settles on (``snapshot_feed_in.reference_failed``).
     """
     key = _month_key(supplier, contract, region, year_month)
     if key in _monthly_snapshots(hass):
-        return _monthly_snapshots(hass)[key] is None and reference_failed(
-            hass, supplier, contract, region, year_month
+        return (
+            entry is not None
+            and _monthly_snapshots(hass)[key] is None
+            and reference_failed(hass, supplier, contract, region, year_month, entry)
         )
     failed_at = _monthly_failed_fetches(hass).get(key)
     return failed_at is not None and dt_util.utcnow() - failed_at < _MONTHLY_FAILURE_TTL

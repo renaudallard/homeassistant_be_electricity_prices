@@ -2815,6 +2815,7 @@ async def test_a_month_whose_quarter_cannot_be_read_is_credited_per_slot(
     from custom_components.be_electricity_prices.snapshot_store import (
         _monthly_snapshots,
     )
+    from tests import make_entry
 
     _monthly_snapshots(hass).clear()
     snap = await _stand_in(hass, date(2026, 2, 1), {})
@@ -2831,13 +2832,40 @@ async def test_a_month_whose_quarter_cannot_be_read_is_credited_per_slot(
         is None
     )
     now = datetime(2026, 10, 23, 10, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    solar = make_entry(
+        supplier="bolt",
+        contract="bolt_online",
+        region="flanders",
+        solar_regime="injection",
+    )
     with patch.object(snapshot_months.dt_util, "now", return_value=now):
         assert snapshot_months.month_card_failed(
-            hass, "bolt", "bolt_online", "flanders", date(2026, 2, 1)
+            hass, "bolt", "bolt_online", "flanders", date(2026, 2, 1), solar
         )
         assert not snapshot_months.month_card_failed(
-            hass, "bolt", "bolt_online", "flanders", date(2026, 8, 1)
+            hass, "bolt", "bolt_online", "flanders", date(2026, 8, 1), solar
         )
+        # Nor does an entry whose stand-in never reads the fixed card: one
+        # exporting nothing, and one credited per quarter-hour.
+        others = (
+            make_entry(
+                supplier="bolt",
+                contract="bolt_online",
+                region="flanders",
+                solar_regime="none",
+            ),
+            make_entry(
+                supplier="bolt",
+                contract="bolt_online",
+                region="flanders",
+                solar_regime="injection",
+                quarter_hourly=True,
+            ),
+        )
+        for other in others:
+            assert not snapshot_months.month_card_failed(
+                hass, "bolt", "bolt_online", "flanders", date(2026, 2, 1), other
+            )
 
 
 _OCTOBER_BANDS = {"impact_eco": 0.0441, "impact_medium": 0.0917, "impact_pic": 0.1093}
@@ -3257,3 +3285,68 @@ async def test_the_reference_cards_a_stand_in_reads_survive_a_restart(
     restored = _monthly_snapshots(hass)[key]
     assert restored is not None and restored.injection is not None
     assert restored.injection.peak == pytest.approx(0.94 * 0.07414 - 0.01133)
+
+
+async def test_the_backfill_waits_for_a_stand_in_s_reference_where_it_reads_it(
+    hass: Any, freezer: Any
+) -> None:
+    """A backfill leaves out a month whose card could not be read just now, and
+    a Bolt stand-in month whose fixed card of the quarter after could not be
+    read with it, for an entry its stand-in reads that card for. One exporting
+    nothing was held back too while another entry's read had failed."""
+    from unittest.mock import MagicMock
+
+    from custom_components.be_electricity_prices import backfill_window, snapshot_months
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+    from custom_components.be_electricity_prices.snapshot_store import (
+        _monthly_failed_fetches,
+        _monthly_snapshots,
+    )
+    from tests import make_entry
+
+    freezer.move_to("2026-10-23 10:00:00+02:00")
+    raw = parse_snapshot(
+        "bolt_online",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "flanders",
+    )
+    _monthly_snapshots(hass).clear()
+    _monthly_failed_fetches(hass).clear()
+    spans: dict[str, list[tuple[date, date, bool]]] = {}
+    for regime in ("injection", "none"):
+        entry = make_entry(
+            supplier="bolt",
+            contract="bolt_online",
+            region="flanders",
+            dso="fluvius_antwerpen",
+            meter="bi",
+            solar_regime=regime,
+            api_key="k",
+        )
+        with (
+            patch.object(
+                snapshot_months,
+                "_archived_card_from_github",
+                AsyncMock(return_value=None),
+            ),
+            patch.object(
+                bolt_mod,
+                "fetch_pdf_text_layout",
+                AsyncMock(
+                    side_effect=ExtractorError("network error fetching x: timeout")
+                ),
+            ),
+        ):
+            found = await backfill_window._months_not_read(
+                hass,
+                MagicMock(),
+                entry,
+                _resolve_snapshot(entry, raw),
+                date(2026, 2, 1),
+                date(2026, 2, 28),
+            )
+        spans[regime] = [(first, last, failed) for first, last, _why, failed in found]
+    assert spans["injection"] == [(date(2026, 2, 1), date(2026, 2, 28), True)]
+    assert spans["none"] == []

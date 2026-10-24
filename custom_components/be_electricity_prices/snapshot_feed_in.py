@@ -49,12 +49,24 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_SOLAR_REGIME, SOLAR_REGIME_INJECTION
+from .const import CONF_QUARTER_HOURLY, CONF_SOLAR_REGIME, SOLAR_REGIME_INJECTION
 from .providers import EXTRACTORS
 from .providers._settle import settled_stand_in
 from .providers.base import SupplierExtractor, SupplierSnapshot
 from .snapshot_resolve import _resolve_snapshot
 from .spot_stats import spots_available
+
+
+def _reads_reference(entry: ConfigEntry | None) -> bool:
+    """Whether an entry is credited the feed-in figures a card prints per
+    register: one on the injection regime, and on the variable settlement
+    rather than the quarter-hourly one, which credits each quarter at its own
+    spot."""
+    return (
+        entry is not None
+        and entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
+        and not entry.data.get(CONF_QUARTER_HOURLY)
+    )
 
 
 def _reference(
@@ -69,8 +81,7 @@ def _reference(
     inj = None if current is None else current.injection
     if (
         extractor.stand_in_reference is None
-        or entry is None
-        or entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION
+        or not _reads_reference(entry)
         or inj is None
         or not inj.spp_redistributed
         or inj.slot_indexed
@@ -142,14 +153,25 @@ async def stand_in_for_month(
 
 
 def reference_failed(
-    hass: HomeAssistant, supplier: str, contract: str, region: str, year_month: date
+    hass: HomeAssistant,
+    supplier: str,
+    contract: str,
+    region: str,
+    year_month: date,
+    entry: ConfigEntry,
 ) -> bool:
-    """Whether a month no archive holds waits for the card its feed-in
-    settles on, whose read failed just now (``month_card_failed``)."""
+    """Whether ``entry``'s month no archive holds waits for the card its
+    feed-in settles on, whose read failed just now (``month_card_failed``).
+    Only an entry whose stand-in reads that card waits for it: another entry
+    on the same contract may have failed to read it."""
     from . import snapshot_months
 
     extractor = EXTRACTORS.get(supplier)
-    if extractor is None or extractor.stand_in_reference is None:
+    if (
+        extractor is None
+        or extractor.stand_in_reference is None
+        or not _reads_reference(entry)
+    ):
         return False
     ref = extractor.stand_in_reference(contract, year_month, dt_util.now().date())
     return ref is not None and snapshot_months.month_card_failed(

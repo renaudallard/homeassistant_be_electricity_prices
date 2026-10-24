@@ -646,7 +646,7 @@ async def _months_not_read(
         await _snapshot_for_month(
             hass, session, extractor, contract, region, month, card, entry
         )
-        return month_card_failed(hass, extractor.id, contract, region, month)
+        return month_card_failed(hass, extractor.id, contract, region, month, entry)
 
     signing = _tariff_card_month(entry)
     if signing is not None and signing < this_month:

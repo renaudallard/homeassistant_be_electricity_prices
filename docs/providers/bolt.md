@@ -1024,8 +1024,9 @@ credited the quarter's single figure. While the quarter after has no closed mont
 card's table is the quarter's own. Where the fixed card cannot be had an entry with a day-ahead
 source is credited the month per quarter-hour on the formula, as the dynamic settlement is,
 nothing for an hour without a spot, and one without a source the current card's figures, as it is
-billed the printed figures wherever a card prints them; the backfill waits for the card as for a
-month's own (`reference_failed`). The fixed cards read are kept in the entry's own blob
+billed the printed figures wherever a card prints them; the backfill of an entry whose stand-in
+reads the card, one on the injection regime and the variable settlement, waits for it as for a
+month's own (`reference_failed`), and no other entry does. The fixed cards read are kept in the entry's own blob
 (`reference_cards`, `reference_rows_to_store`), which keeps only its own contract's months, so a
 restart does not read them again. The fixed cards' labels are not read: the April 2026 card as
 Bolt serves it now names the second quarter over the first quarter's indices.
