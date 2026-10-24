@@ -1586,9 +1586,11 @@ async def test_the_automatic_backfill_imports_the_year_once(
 
     up = False
 
-    async def blocked(*_a: Any) -> Any:
+    async def blocked(_session: Any, supplier: str, *_a: Any) -> Any:
         if not up:
             raise aiohttp.ClientConnectionError("Cannot connect to host")
+        if supplier == "totalenergies":
+            return None
         return ArchivedCard(
             snapshot=make_snapshot(energy=FixedRates(single=0.2)), read_by_ocr=False
         )

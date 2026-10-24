@@ -264,8 +264,9 @@ household began being supplied.
 **Cohort resolution order** (`_cohort_legs`, `cohort.py`): the
 hand-entered signing rate first, then the archived signing-month card, then the
 card of the month being billed (the current card on the live path). The signing-month card comes from the supplier's own archive or
-from the repository's card archive, which from August 2026 holds the cards of
-suppliers that keep none (`_month_card_retrievable`, `snapshot_months.py`); asking
+from the repository's card archive, which holds the cards of suppliers that keep
+none from August 2026, Ecofix's from May (`_month_card_retrievable`,
+`snapshot_months.py`); asking
 the supplier's alone left a TotalEnergies or Ecofix cohort billed on each month's
 card. When neither of the first two yields a rate (a contract signed
 this month, a month neither archive holds, a month older than the archive

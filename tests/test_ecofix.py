@@ -276,6 +276,21 @@ def test_flexy_is_variable_with_indicative_monthly_rate() -> None:
     assert snap.energy.formula is not None and "BELPEX-RLP-M" in snap.energy.formula
 
 
+def test_the_archive_is_asked_for_the_may_2026_cards() -> None:
+    """Ecofix keeps no archive of its own and overwrites its cards in place,
+    so the repository's archive is the only copy of a past month. It holds
+    the May 2026 cards, filed by hand from the copies these tests read, and
+    the month cache has to ask for them or May bills on the current card."""
+    from custom_components.be_electricity_prices.snapshot_months import (
+        _card_archive_may_hold,
+    )
+
+    ecofix_ex = EXTRACTORS["ecofix"]
+    today = date(2026, 10, 5)
+    assert _card_archive_may_hold(ecofix_ex, date(2026, 5, 1), today, None)
+    assert not _card_archive_may_hold(ecofix_ex, date(2026, 4, 1), today, None)
+
+
 def test_publication_scan_skips_colliding_version_token() -> None:
     # The product name prints on the line above the month; a future
     # "Versie 2026" header token must not shadow the real month line.

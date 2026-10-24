@@ -54,7 +54,10 @@ from custom_components.be_electricity_prices import (
     energy_meters,
     snapshot_months,
 )
-from custom_components.be_electricity_prices.const import DOMAIN
+from custom_components.be_electricity_prices.const import (
+    CARD_ARCHIVE_FIRST_MONTH,
+    DOMAIN,
+)
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import get as get_extractor
@@ -3578,8 +3581,11 @@ async def test_a_restart_during_the_wait_still_runs_the_retry(
         rows = store.get(sid, {})
         return {sid: [row for hour, row in rows.items() if start <= hour < end]}
 
-    # The archive fails for this month and every later one.
+    # The archive fails for this month and every later one. TotalEnergies
+    # keeps no archive of its own, so the first month asked of it is the
+    # first one the repository's can hold.
     down_from: date | None = date(2026, 1, 1)
+    first_held = date(*CARD_ARCHIVE_FIRST_MONTH, 1)
 
     async def archive(*args: Any) -> ArchivedCard:
         if down_from is not None and args[4] >= down_from:
@@ -3616,10 +3622,11 @@ async def test_a_restart_during_the_wait_still_runs_the_retry(
     ):
         with pytest.raises(asyncio.CancelledError):
             await bf.backfill_if_missing(hass, entry)
-        assert coordinator._backfill_retry_from == date(2026, 8, 1)
+        assert coordinator._backfill_retry_from == first_held
         coordinator._save_persistent.assert_awaited()
-        # August reads again, September still fails, and Home Assistant stops
-        # before the retry imports its rows: August is still to be written.
+        # The months to August read again, September still fails, and Home
+        # Assistant stops before the retry imports its rows: they are still to
+        # be written.
         down_from = date(2026, 9, 1)
         freezer.tick(timedelta(hours=2))
         with (
@@ -3631,7 +3638,7 @@ async def test_a_restart_during_the_wait_still_runs_the_retry(
             pytest.raises(asyncio.CancelledError),
         ):
             await bf.backfill_if_missing(hass, entry)
-        assert coordinator._backfill_retry_from == date(2026, 8, 1)
+        assert coordinator._backfill_retry_from == first_held
         down_from = None
         # Today's card changed since the first run.
         coordinator._snapshot = make_snapshot(
@@ -3645,12 +3652,12 @@ async def test_a_restart_during_the_wait_still_runs_the_retry(
     days = {dt_util.as_local(hour).date() for hour in store[ids["current_price"]]}
     assert len(days) == (date(2026, 11, 20) - date(2026, 1, 1)).days + 1
     cost = store[ids["current_year_cost"]]
-    aug = dt_util.start_of_local_day(date(2026, 8, 1)).astimezone(UTC)
+    start = dt_util.start_of_local_day(first_held).astimezone(UTC)
     hour = timedelta(hours=1)
     # The retry rewrote the running total from 1 January on the new card, so
     # the day it started from carries no step for the months before it.
-    step = cost[aug]["sum"] - cost[aug - hour]["sum"]
-    assert step == pytest.approx(cost[aug + hour]["sum"] - cost[aug]["sum"])
+    step = cost[start]["sum"] - cost[start - hour]["sum"]
+    assert step == pytest.approx(cost[start + hour]["sum"] - cost[start]["sum"])
 
 
 async def test_a_pending_backfill_retry_survives_a_restart(

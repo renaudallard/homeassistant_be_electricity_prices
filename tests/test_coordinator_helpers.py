@@ -6076,8 +6076,10 @@ async def test_months_before_the_captures_began_are_not_asked_for(
     hass: HomeAssistant, freezer: Any
 ) -> None:
     """A supplier with no archive of its own has nothing in the archive from
-    before the first captured month, so those months are never fetched; a
-    supplier with an archive may have been backfilled and is still asked."""
+    before the first month filed for it, so those months are never fetched; a
+    supplier with an archive may have been backfilled and is still asked.
+    That first month is May 2026, whose Ecofix cards were filed by hand: gated
+    at August, May was billed on the October card."""
 
     freezer.move_to("2026-10-05 09:00:00+02:00")
     current = _archive_snapshot("2026-10")
@@ -6100,17 +6102,17 @@ async def test_months_before_the_captures_began_are_not_asked_for(
     github = AsyncMock(return_value=_archive_row(_archive_snapshot("stored")))
     with patch.object(snapshot_months, "_archived_card_from_github", github):
         snap = await _snapshot_for_month(
-            hass, MagicMock(), without, "test", "wallonia", date(2026, 7, 1), current
+            hass, MagicMock(), without, "test", "wallonia", date(2026, 4, 1), current
         )
         assert snap is current
         github.assert_not_awaited()
-        assert _monthly_snapshots(hass)[("test", "test", "wallonia", "2026-07")] is None
+        assert _monthly_snapshots(hass)[("test", "test", "wallonia", "2026-04")] is None
         snap = await _snapshot_for_month(
-            hass, MagicMock(), without, "test", "wallonia", date(2026, 8, 1), current
+            hass, MagicMock(), without, "test", "wallonia", date(2026, 5, 1), current
         )
         assert snap is github.return_value.snapshot
         github.assert_awaited_once_with(
-            ANY, "test", "test", "wallonia", date(2026, 8, 1)
+            ANY, "test", "test", "wallonia", date(2026, 5, 1)
         )
         github.reset_mock()
         snap = await _snapshot_for_month(

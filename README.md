@@ -373,8 +373,8 @@ same measure steps the excise down each January, to 43, 40 and then 38 € per
 MWh excluding VAT from 2027 to 2029, and each step is billed from its own month
 because the law states it. Your card's own excise is used for the months
 before August 2026, which the correction leaves alone, except where a later
-card stands in for a month whose own card no archive kept (TotalEnergies and
-Ecofix before August 2026): that month is billed the excise table and the
+card stands in for a month whose own card no archive kept (TotalEnergies
+before September 2026, Ecofix before August 2026 but for May): that month is billed the excise table and the
 energy contribution the law set then, read once from Justel's archived copy
 of the same article, from July 2023, since the law that wrote that table set
 another rate on its first band until June 2023 (read from that law too);
@@ -1967,8 +1967,9 @@ month is still its live one. Bolt's variable cards are settled in place
 too, a quarter at a time: a closed quarter's months move to the indices the
 next quarter's card prints, one per meter register and Impact band. The request names the supplier, contract, region and month
 and nothing else, and the month lookup only asks for a month the archive can
-hold: a closed one, and for a supplier with no archive of its own not before August
-2026, the earliest month the daily captures reach. A signing month older than
+hold: a closed one, and for a supplier with no archive of its own not before May
+2026, the earliest month filed for one (Ecofix's May cards, filed by hand before
+the daily captures began). A signing month older than
 the twelve kept, which the supplier's own archive does not hold either, bills
 each month on that month's own card as an entry with no signing month does,
 unless you typed the rate you signed. A signing card an installation has read is kept on disk until an

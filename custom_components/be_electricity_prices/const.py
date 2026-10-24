@@ -615,13 +615,16 @@ VAT_TABLE_URL: Final = (
 # The earliest month the archive can hold for a supplier with no archive of
 # its own. A backfill only mirrors a supplier's own archive, so for those
 # suppliers the archive starts at its daily captures, which began in
-# September 2026. This is August rather than September because the walk keeps
-# the bytes of a card no reader could read and retries them whenever the
-# reader improves, so a month captured before it could be parsed can become a
-# row later. Ecofix's August 2026 cards are that case: captured in August,
-# read and filed in September. Below this month the cache does not ask, since
-# the answer would be a 404 a day for nothing.
-CARD_ARCHIVE_FIRST_MONTH: Final = (2026, 8)
+# September 2026, and at the few cards filed by hand before them. The walk
+# keeps the bytes of a card no reader could read and retries them whenever
+# the reader improves, so a month captured before it could be parsed can
+# become a row later: Ecofix's August 2026 cards were captured in August and
+# filed in September. Its May 2026 cards, the copies the tests read, were
+# filed by hand, and with the gate at August that month was billed on the
+# October card (19,04 c/kWh on Flexy where May's printed 11,81). Below this
+# month the cache does not ask, since the answer would be a 404 a day for
+# nothing; a month after it with no row costs that 404 once a day.
+CARD_ARCHIVE_FIRST_MONTH: Final = (2026, 5)
 
 # The month the federal "bijdrage op de energie" stopped being levied as a
 # line of its own: abolished on 2026-08-01 and folded into the special
