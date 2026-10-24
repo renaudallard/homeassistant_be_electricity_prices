@@ -183,7 +183,7 @@ async def _ytd_static_fees(
     total = 0.0
     supplier_fee = 0.0
     for_meter = meter or entry.data.get(CONF_METER, METER_MONO)
-    async for snap_m, _, _, days_in_ytd in _walk_ytd_months(
+    async for snap_m, month_first, _, days_in_ytd in _walk_ytd_months(
         hass,
         session,
         extractor,
@@ -195,7 +195,7 @@ async def _ytd_static_fees(
         cached_only=cached_only,
     ):
         share = days_in_ytd / days_in_year
-        total += _annual_static_fees(snap_m, for_meter, entry) * share
+        total += _annual_static_fees(snap_m, for_meter, entry, day=month_first) * share
         supplier_fee += (
             float(yearly_fixed_fee_for_meter(snap_m.energy, for_meter) or 0.0) * share
         )

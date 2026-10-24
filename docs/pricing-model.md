@@ -1239,10 +1239,14 @@ else falls back to single/current (`pricing.py`).
 `const.py`) is orthogonal to the supplier meter: it is the billing mode
 set on the user's grid connection, and the coordinator falls back automatically
 when the DSO does not publish Impact rates (`const.py`). The Impact configuration
-took effect on 2026-01-01, with the Walloon schedule below, so an hour before it
-is billed bi-horaire on both legs whatever the entry is on now
-(`_tariff_mode_at`, `pricing.py`): a backfill reaching into 2025 banded the
-energy leg by the CWaPE bands while the network leg had none.
+took effect on 2026-01-01, with the Walloon schedule below, so a day before it
+is billed on the bi-hourly configuration whatever the entry is on now, by one
+rule (`impact_in_force`, `day_night.py`): both per-kWh legs
+(`_tariff_mode_at`, `pricing.py`), the Walloon terme fixe the Impact
+configuration drops (`_walloon_fixed_term_applies`, `fees.py`) and a feed-in
+figure per band (`_tou_injection_rate`, `injection.py`). A backfill reaching
+into 2025 banded the energy leg by the CWaPE bands while the network leg had
+none, and dropped 78,84 EUR of ORES fixed term from a 2025 year.
 
 ### is_offpeak schedule, per region
 

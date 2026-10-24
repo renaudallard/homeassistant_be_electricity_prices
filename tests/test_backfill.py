@@ -4116,3 +4116,42 @@ async def test_the_backfill_bills_a_contract_with_no_source_on_its_card(
     else:
         assert sums[0] == pytest.approx(sums[1])
         assert prices[0] == prices[1] == [pytest.approx(0.0904)] * len(refill)
+
+
+async def test_a_2025_backfill_bills_the_walloon_fixed_term_on_an_impact_entry(
+    hass: HomeAssistant,
+) -> None:
+    """The Impact configuration, which carries no terme fixe, took effect on
+    1 January 2026. A year walked over 2025 for an entry now on it dropped
+    the term all the same, 78,84 EUR on ORES in the year-to-date walk and the
+    backfilled cost alike. Over 2025 such an entry bills what the bi-hourly
+    configuration bills, fees included."""
+    from custom_components.be_electricity_prices.providers._rates import (
+        FixedRates,
+    )
+
+    snap = make_snapshot(
+        energy=FixedRates(single=0.25, peak=0.27, offpeak=0.21),
+        dsos={
+            "ores": DsoOverlay(
+                distribution_single=0.10,
+                distribution_peak=0.11,
+                distribution_offpeak=0.08,
+                distribution_pic=0.15,
+                distribution_medium=0.10,
+                distribution_eco=0.05,
+                transport=0.02,
+                data_management_per_year=78.84,
+            )
+        },
+    )
+    out: dict[str, tuple[float, float]] = {}
+    for mode in ("impact", "bi_horaire"):
+        entry = make_entry(
+            dso_tariff_mode=mode, solar_regime="none", consumption_kwh="sensor.cons"
+        )
+        out[mode] = await _live_and_backfill(
+            hass, entry, snap, date(2025, 12, 31), _evening_draw_midday_export
+        )
+    assert out["impact"][0] == pytest.approx(out["bi_horaire"][0])
+    assert out["impact"][1] == pytest.approx(out["bi_horaire"][1])

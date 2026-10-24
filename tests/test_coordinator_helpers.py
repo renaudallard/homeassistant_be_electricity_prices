@@ -318,14 +318,23 @@ def test_walloon_fixed_term_is_not_billed_on_the_impact_tariff() -> None:
     )
     assert snap.dsos["resa"].data_management_per_year == pytest.approx(26.5)
 
-    def fees(mode: str, region: str = "wallonia", dso: str = "resa") -> float:
+    def fees(
+        mode: str,
+        region: str = "wallonia",
+        dso: str = "resa",
+        day: date = date(2026, 6, 1),
+    ) -> float:
         entry = SimpleNamespace(
             data={"dso": dso, "region": region, "dso_tariff_mode": mode}
         )
-        return _annual_static_fees(snap, "bi", entry)  # type: ignore[arg-type]
+        return _annual_static_fees(snap, "bi", entry, day=day)  # type: ignore[arg-type]
 
     assert fees("bi_horaire") == pytest.approx(116.50)
     assert fees("impact") == pytest.approx(90.00)
+    # The incitative configuration took effect on 1 January 2026: a day of a
+    # backfill reaching into 2025 bills the standard one's fixed term.
+    assert fees("impact", day=date(2025, 12, 31)) == pytest.approx(116.50)
+    assert fees("impact", day=date(2026, 1, 1)) == pytest.approx(90.00)
 
     # The field carries three different charges. Only the Walloon one is tied
     # to the tariff configuration, so a Flemish databeheer or a Brussels
@@ -347,9 +356,12 @@ def test_walloon_fixed_term_is_not_billed_on_the_impact_tariff() -> None:
                 "dso_tariff_mode": mode,
             }
         )
-        assert _annual_static_fees(flanders, "mono", entry) == pytest.approx(  # type: ignore[arg-type]
-            18.92
-        )
+        assert _annual_static_fees(
+            flanders,
+            "mono",
+            entry,  # type: ignore[arg-type]
+            day=date(2026, 6, 1),
+        ) == pytest.approx(18.92)
 
 
 def test_the_vreg_ceiling_is_the_regulators_figure_not_a_cards_copy() -> None:
@@ -640,7 +652,7 @@ def test_a_brussels_connection_above_13_kva_is_billed_its_own_band() -> None:
                 "connection_kva_tier": tier,
             }
         )
-        return _annual_static_fees(snap, "mono", entry)  # type: ignore[arg-type]
+        return _annual_static_fees(snap, "mono", entry, day=date(2026, 6, 1))  # type: ignore[arg-type]
 
     # At or below the line nothing moves.
     assert fees("le13") - fees("le6") == pytest.approx(26.71 - 13.36)

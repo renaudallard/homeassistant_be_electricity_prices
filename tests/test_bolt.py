@@ -2917,7 +2917,9 @@ def test_an_impact_entry_is_credited_the_feed_in_band_the_hour_falls_in() -> Non
     single = snap.injection.current
     hours = ((13, "impact_eco"), (9, "impact_medium"), (19, "impact_pic"))
 
-    def credited(mode: str, meter: str, hour: int, quarter: bool = False) -> Any:
+    def credited(
+        mode: str, meter: str, hour: int, quarter: bool = False, year: int = 2026
+    ) -> Any:
         entry = make_entry(
             supplier="bolt",
             contract="bolt_online",
@@ -2927,7 +2929,7 @@ def test_an_impact_entry_is_credited_the_feed_in_band_the_hour_falls_in() -> Non
         )
         leg = _resolve_snapshot(entry, snap)
         assert leg.injection is not None
-        when = datetime(2026, 10, 14, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        when = datetime(year, 10, 14, hour, tzinfo=dt_util.DEFAULT_TIME_ZONE)
         historical = _historical_injection_rate(
             leg.injection,
             0.05,
@@ -2953,6 +2955,9 @@ def test_an_impact_entry_is_credited_the_feed_in_band_the_hour_falls_in() -> Non
                 _OCTOBER_BANDS[field], abs=5e-5
             ), (meter, hour)
             assert credited("bi_horaire", meter, hour) == pytest.approx(single)
+            # Before 2026 the Impact tariff did not exist: a backfilled 2025
+            # hour is credited as on the bi-hourly configuration.
+            assert credited("impact", meter, hour, year=2025) == pytest.approx(single)
     for hour, _field in hours:
         assert credited("impact", "exclusive_night", hour) == pytest.approx(single)
         # The quarter-hourly settlement credits the slot's spot in any band.

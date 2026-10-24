@@ -61,6 +61,7 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     WELCOME_CREDIT_ANNIVERSARY,
 )
+from .day_night import impact_in_force
 from .fluvius import capacity_floor_kw
 from .pricing import (
     MeterType,
@@ -308,7 +309,7 @@ def _brussels_power_term(
     return overlay.brussels_power_term_above_13kva
 
 
-def _walloon_fixed_term_applies(entry: ConfigEntry) -> bool:
+def _walloon_fixed_term_applies(entry: ConfigEntry, day: date) -> bool:
     """Whether this entry pays the Walloon DSO's ``terme fixe``.
 
     The CWaPE tariff sheets print two configurations per DSO. The standard
@@ -328,11 +329,15 @@ def _walloon_fixed_term_applies(entry: ConfigEntry) -> bool:
     """
     if entry.data.get(CONF_REGION) != REGION_WALLONIA:
         return True
-    return entry.data.get(CONF_DSO_TARIFF_MODE) != DSO_MODE_IMPACT
+    # The incitative configuration exists from 2026 on (impact_in_force): a
+    # day before it bills the standard one's fixed term.
+    return entry.data.get(CONF_DSO_TARIFF_MODE) != DSO_MODE_IMPACT or (
+        not impact_in_force(day)
+    )
 
 
 def _annual_static_fees(
-    snapshot: SupplierSnapshot, meter: MeterType, entry: ConfigEntry
+    snapshot: SupplierSnapshot, meter: MeterType, entry: ConfigEntry, *, day: date
 ) -> float:
     """Fixed EUR/year fees that do not depend on consumption: the supplier
     yearly fixed fee (for ``meter``), twelve times the monthly energy-fund
@@ -344,12 +349,13 @@ def _annual_static_fees(
     instead of drifting between the three paths. That is also why the
     Walloon IMPACT exemption belongs here: the per-kWh legs already read the
     tariff mode, and this was the one leg that did not, so the fixed term was
-    billed on all four paths at once.
+    billed on all four paths at once. ``day`` is the day billed, which decides
+    whether that configuration was in force yet.
     """
     overlay = snapshot.dsos.get(entry.data.get(CONF_DSO, ""))
     fixed_term = (
         overlay.data_management_per_year
-        if overlay is not None and _walloon_fixed_term_applies(entry)
+        if overlay is not None and _walloon_fixed_term_applies(entry, day)
         else 0.0
     )
     above_13 = _brussels_power_term(overlay, entry)

@@ -782,7 +782,7 @@ async def _accrue_cost(
         # annual/(days_in_year*24) rate accrued 23 or 25 hours' worth on
         # the seam days, drifting from the live sensor at the seam.
         days_in_year = 366 if calendar.isleap(local.year) else 365
-        annual_static = _annual_static_fees(snap_h, meter, entry)
+        annual_static = _annual_static_fees(snap_h, meter, entry, day=local.date())
         running_fees += (
             annual_static / days_in_year / hours_per_local_date[local.date()]
         )

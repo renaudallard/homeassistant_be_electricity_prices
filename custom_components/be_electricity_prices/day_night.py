@@ -147,6 +147,18 @@ def is_offpeak(
 # bound, so a manual backfill reaching into 2025 would otherwise re-band six
 # hours of every day onto a tariff that was not in force yet. Every automatic
 # path anchors at 1 January of the current year and never sees these hours.
-# The CWaPE Impact configuration took effect the same day, which is why
-# ``pricing._tariff_mode_at`` reads this date too.
+# The CWaPE Impact configuration took effect the same day (impact_in_force).
 _WALLONIA_SCHEDULE_FROM: Final[date] = date(2026, 1, 1)
+
+
+def impact_in_force(day: date) -> bool:
+    """Whether the CWaPE Impact configuration applies on ``day``.
+
+    It took effect on 1 January 2026, with the Walloon schedule, so an entry
+    on it bills a day before that on the bi-hourly configuration: the energy
+    and network legs (``pricing._tariff_mode_at``), the terme fixe
+    (``fees._walloon_fixed_term_applies``) and a feed-in figure per band
+    (``injection._tou_injection_rate``) alike. Only a backfill reaching into
+    2025 meets such a day.
+    """
+    return day >= _WALLONIA_SCHEDULE_FROM

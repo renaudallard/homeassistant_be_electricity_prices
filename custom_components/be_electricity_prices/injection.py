@@ -51,7 +51,7 @@ from .const import (
     REGION_FLANDERS,
     SOLAR_REGIME_INJECTION,
 )
-from .day_night import day_start_for, is_offpeak
+from .day_night import day_start_for, impact_in_force, is_offpeak
 from .pricing import MeterType, dso_impact_band, tou_slot
 from .providers._rates import (
     DynamicRates,
@@ -399,7 +399,11 @@ def _tou_injection_rate(
     used to pass this answer on unclamped.
     """
     bands = _impact_band_rates(inj)
-    if bands is not None and meter != "exclusive_night":
+    if (
+        bands is not None
+        and meter != "exclusive_night"
+        and impact_in_force(when.date())
+    ):
         return _floor_injection(bands[dso_impact_band(when)], inj)
     rule = _tou_weekend_rule(energy)
     if inj.peak is None:

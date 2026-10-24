@@ -44,6 +44,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .cohort import _signed_in
 from .compare_weighting import (
@@ -369,7 +370,7 @@ def _annual_fees(
     year's capacity charge against a quarter of a year's consumption, so the
     cap bit where it does not belong and the page quoted 11 to 18 EUR under
     the sensor it is meant to match, on an ordinary 3 500 kWh household."""
-    static = _annual_static_fees(snapshot, meter, entry)
+    static = _annual_static_fees(snapshot, meter, entry, day=dt_util.now().date())
     capacity = 0.0
     if include_capacity and entry.data.get(CONF_REGION) == REGION_FLANDERS:
         capacity = 12.0 * _compute_capacity(snapshot, entry, peak_kw, meter)
