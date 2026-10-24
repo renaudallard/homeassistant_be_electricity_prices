@@ -569,9 +569,15 @@ runs 11:00-17:00 since 2026 and holds most of a household's export, so the card'
 not its register's mean there (1,82 c/kWh against about 4,4 over those hours in the third quarter):
 a Walloon card carries the single figure alone and a two-register meter is credited it, within 3%
 of the mean over its own registers' hours. A closed quarter's months settle the figures with the
-energy on the next quarter's table (`settle_month`, `settled_spp_registers`, `_settle.py`), and a
-replay puts them back (`settled_as`). The running quarter stands at the previous quarter's figures,
-as the card prints them, key or not
+energy on the next quarter's table (`settle_month`, `settled_spp_registers`, `_settle.py`), which
+marks them `spp_settled`, and a replay puts back only figures so marked (`settled_as`). The mark
+is the leg's own, since `index_realised` on it would stand in for every slot's spot on the
+dynamic settlement, and `is_settled` asks for it: the September 2026 rows settled their energy on
+the third quarter's table before the figures were read, a replay then put the second quarter's
+back, and counted settled on the energy alone they credited 3,40 c/kWh where 6,21 settled, asked
+again by neither the month cache nor the archive. A next card whose feed-in rows do not read
+settles the energy and leaves the month `provisional`. The running quarter stands at the previous
+quarter's figures, as the card prints them, key or not
 (`test_the_variable_settlement_credits_the_spp_figures_per_register`,
 `test_a_walloon_meter_is_credited_the_single_spp_figure`, `tests/test_bolt.py`).
 
@@ -977,4 +983,5 @@ was served, holds the month, and an unsettled one is handed back as it is. A rep
 parser change puts each register's index back on the re-parsed card (`settled_as`, `_settle.py`).
 The feed-in leg settles on the same table, on its SPP-weighted rows, for an entry on the variable
 settlement; on the dynamic one it is credited per quarter-hour, or at its printed indicative
-without a key.
+without a key. A month is settled once both have: a next card whose feed-in rows do not read
+settles the energy and keeps the month `provisional`.

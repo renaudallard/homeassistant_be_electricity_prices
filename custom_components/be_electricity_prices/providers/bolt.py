@@ -115,7 +115,7 @@ from ._rates import (
     VariableRates,
     vat_basis,
 )
-from ._settle import settled_registers, settled_spp_registers
+from ._settle import settled_registers, settled_spp_registers, settles_registers
 from ._validity import (
     archive_validity_check,
     parse_valid_until,
@@ -614,7 +614,9 @@ async def settle_month(
     and CWaPE band (``quarter_indices``), and every rate is rebuilt on the
     month's own formula at its index (``settled_registers``). The feed-in
     figures the variable settlement credits are rebuilt the same way, on the
-    SPP-weighted rows of that table (``quarter_injection_indices``).
+    SPP-weighted rows of that table (``quarter_injection_indices``), and a
+    month whose feed-in rows do not read there stays ``provisional`` with its
+    energy settled, rather than keep the quarter before's figures as settled.
 
     In place, as at TotalEnergies: the variable folder addresses no card by
     month, so the next quarter's card is only ever the live one. Before the
@@ -649,17 +651,14 @@ async def settle_month(
     if settled is None:
         return replace(held, provisional=True)
     # The feed-in rows of the same table, which the variable settlement
-    # credits per register; a card that does not print them leaves the
-    # held figures.
+    # credits per register.
     injection = held.injection
-    feed_in = quarter_injection_indices(text)
-    if (
-        injection is not None
-        and injection.spp_redistributed
-        and feed_in is not None
-        and feed_in[0] == named
-    ):
-        injection = settled_spp_registers(injection, feed_in[1])
+    if injection is not None and settles_registers(injection):
+        feed_in = quarter_injection_indices(text)
+        if feed_in is not None and feed_in[0] == named:
+            injection = settled_spp_registers(injection, feed_in[1])
+        if not injection.spp_settled:
+            return replace(held, energy=settled, provisional=True)
     return replace(held, energy=settled, injection=injection)
 
 

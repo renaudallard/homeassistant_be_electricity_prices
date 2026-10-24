@@ -271,9 +271,11 @@ def test_a_stated_settlement_is_written_only_where_a_month_has_one() -> None:
 def test_the_spp_redistributed_flag_is_written_only_where_a_card_sets_it() -> None:
     """Bolt's variable cards credit their variable settlement per register;
     every other row leaves the flag out and stays byte-identical, and a
-    flagged one reads back as written."""
+    flagged one reads back as written. The mark of a quarter settled on
+    those figures is left out the same way until a month is settled."""
     plain = make_snapshot(injection=InjectionRates(current=0.05))
     assert "spp_redistributed" not in _snapshot_to_dict(plain, NOW)["injection"]
+    assert "spp_settled" not in _snapshot_to_dict(plain, NOW)["injection"]
     flagged = make_snapshot(
         injection=InjectionRates(
             current=0.0621,
@@ -287,7 +289,13 @@ def test_the_spp_redistributed_flag_is_written_only_where_a_card_sets_it() -> No
     )
     row = _snapshot_to_dict(flagged, NOW)
     assert row["injection"]["spp_redistributed"] is True
+    assert "spp_settled" not in row["injection"]
     assert _snapshot_from_dict(row).injection == flagged.injection
+    assert flagged.injection is not None
+    settled = make_snapshot(injection=replace(flagged.injection, spp_settled=True))
+    row = _snapshot_to_dict(settled, NOW)
+    assert row["injection"]["spp_settled"] is True
+    assert _snapshot_from_dict(row).injection == settled.injection
 
 
 def test_the_forward_index_flag_is_written_only_where_a_card_sets_it() -> None:

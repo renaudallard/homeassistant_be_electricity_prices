@@ -2057,6 +2057,124 @@ async def test_a_replayed_month_keeps_the_feed_in_it_settled_at() -> None:
     assert replayed.injection.factor == pytest.approx(0.94)
 
 
+def _settled_on_energy_alone() -> tuple[SupplierSnapshot, str]:
+    """August 2026's Flemish card as the card archive held the 24 September
+    2026 variable rows: the energy settled on October's third quarter table,
+    the feed-in figures still the second quarter's the card prints (3,40 /
+    4,95 / -0,43 c/kWh). Returned with October's text."""
+    from custom_components.be_electricity_prices.providers._bolt_cards import (
+        quarter_indices,
+    )
+    from custom_components.be_electricity_prices.providers._settle import (
+        settled_registers,
+    )
+
+    held = parse_snapshot(
+        "bolt_variable",
+        fixture_text("bolt_variable_impact_w.pdf", layout=True),
+        "flanders",
+    )
+    october = fixture_text("bolt_online_oct_reissue.pdf", layout=True)
+    table = quarter_indices(october.replace(" ", "\n"))
+    assert table is not None and table[0] == "Q3 2026"
+    assert isinstance(held.energy, VariableRates)
+    energy = settled_registers(held.energy, table[1])
+    assert energy is not None
+    return replace(held, energy=energy), october
+
+
+async def _settle_september(held: SupplierSnapshot, live: str) -> SupplierSnapshot:
+    """``held`` settled as September 2026 on 15 October with ``live`` served."""
+    from homeassistant.util import dt as dt_util
+
+    now = datetime(2026, 10, 15, tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    with (
+        patch.object(
+            bolt_mod, "_fetch_pdf_text", AsyncMock(return_value=("url", live))
+        ),
+        patch.object(bolt_mod.dt_util, "now", return_value=now),
+    ):
+        return await bolt_mod.settle_month(
+            None,  # type: ignore[arg-type]
+            "bolt_variable",
+            "flanders",
+            date(2026, 9, 1),
+            held,
+        )
+
+
+async def test_a_month_settled_on_its_energy_alone_is_settled_again() -> None:
+    """The card archive settled the September 2026 rows on their energy before
+    the feed-in figures were read, and its replay then put the second
+    quarter's figures back on them. Counted settled on the energy alone, the
+    month was asked again by neither the month cache nor the archive, and a
+    September export was credited 3,40 c/kWh where the third quarter's table
+    gives 6,21. The figures settle off the same table, and only then is the
+    month settled."""
+    from custom_components.be_electricity_prices.providers._settle import is_settled
+
+    held, october = _settled_on_energy_alone()
+    assert held.injection is not None
+    assert held.injection.current == pytest.approx(0.0340, abs=5e-5)
+    assert not held.injection.spp_settled
+    assert not is_settled(held)
+
+    settled = await _settle_september(held, october)
+    inj = settled.injection
+    assert inj is not None and inj.spp_settled
+    for field, figure in (("current", 0.0621), ("peak", 0.0795), ("offpeak", 0.0182)):
+        assert getattr(inj, field) == pytest.approx(figure, abs=5e-5), field
+    assert inj.index_realised is None and inj.factor == pytest.approx(0.94)
+    assert settled.energy == held.energy
+    assert is_settled(settled) and not settled.provisional
+
+
+async def test_a_month_whose_feed_in_rows_do_not_read_stays_provisional() -> None:
+    """A next card whose energy table reads and whose feed-in rows do not
+    settles the energy and leaves the month provisional, so it is asked
+    again rather than kept with the quarter before's figures as settled."""
+    from custom_components.be_electricity_prices.providers._settle import is_settled
+
+    held, october = _settled_on_energy_alone()
+    unread = october.replace("Injection jour", "Injection du jour")
+    settled = await _settle_september(held, unread)
+    assert settled.provisional
+    assert settled.injection == held.injection
+    assert settled.energy == held.energy
+    assert not is_settled(settled)
+
+
+async def test_a_replay_keeps_only_feed_in_figures_that_settled() -> None:
+    """The archive's replay puts back what a month settled at. Feed-in figures
+    a row holds unsettled are the quarter before's, so the re-read card keeps
+    its own, unmarked, and the month is asked again."""
+    from custom_components.be_electricity_prices.providers._settle import (
+        is_settled,
+        settled_as,
+    )
+
+    held, october = _settled_on_energy_alone()
+    printed = replace(
+        held,
+        energy=parse_snapshot(
+            "bolt_variable",
+            fixture_text("bolt_variable_impact_w.pdf", layout=True),
+            "flanders",
+        ).energy,
+    )
+    replayed = settled_as(printed, held)
+    assert isinstance(replayed.energy, VariableRates)
+    assert isinstance(held.energy, VariableRates)
+    assert replayed.energy.current == pytest.approx(held.energy.current)
+    assert replayed.energy.index_realised == pytest.approx(held.energy.index_realised)
+    assert replayed.injection == printed.injection
+    assert not is_settled(replayed)
+    settled = await _settle_september(held, october)
+    replayed = settled_as(printed, settled)
+    assert replayed.injection == settled.injection
+    assert is_settled(replayed)
+
+
 @pytest.mark.parametrize(
     ("today", "live", "provisional", "asked"),
     [

@@ -501,13 +501,14 @@ _DEGRADED_MIN_SCHEMA_VERSION = 16
 # added it: measured on the 1.686 stored rows, 1.683 carry an injection leg
 # and every one of them would have been rewritten with the field at null.
 # ``settled_as_stated`` joined both lists for Mega's stated settlements,
-# ``spp_redistributed`` for Bolt's variable cards, and ``forward_indexed``
-# both for Engie's Easy Variable.
+# ``spp_redistributed`` and ``spp_settled`` for Bolt's variable cards, and
+# ``forward_indexed`` both for Engie's Easy Variable.
 _INJECTION_OPTIONAL_KEYS = (
     "bi_hourly",
     "index_realised",
     "settled_as_stated",
     "spp_redistributed",
+    "spp_settled",
     "forward_indexed",
 )
 _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}

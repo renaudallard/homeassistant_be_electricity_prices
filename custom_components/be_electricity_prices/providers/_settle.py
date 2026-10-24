@@ -195,7 +195,8 @@ def settled_spp_registers(
 ) -> InjectionRates:
     """A feed-in leg crediting its variable settlement per meter register
     (``InjectionRates.spp_redistributed``) rebuilt on ``indices``, each
-    register's SPP-weighted index by the field it prices.
+    register's SPP-weighted index by the field it prices, and marked
+    ``spp_settled``.
 
     The formula stays on the leg for the dynamic settlement, and no
     ``index_realised`` is recorded: on that leg it would stand in for every
@@ -210,7 +211,14 @@ def settled_spp_registers(
     rates: dict[str, Any] = {
         field: inj.factor * indices[field] + inj.base for field in carried
     }
-    return replace(inj, **rates)
+    return replace(inj, spp_settled=True, **rates)
+
+
+def settles_registers(inj: InjectionRates) -> bool:
+    """Whether a feed-in leg credits figures per register that its quarter
+    settles (``InjectionRates.spp_redistributed``): one carrying the formula
+    they are rebuilt on, which a card printing none does not."""
+    return inj.spp_redistributed and inj.factor is not None and inj.base is not None
 
 
 def _spp_register_indices(inj: InjectionRates) -> dict[str, float]:
@@ -242,18 +250,30 @@ def _indexed_legs(snap: SupplierSnapshot) -> list[EnergyRates | InjectionRates]:
     if indexed_energy(snap.energy):
         legs.append(snap.energy)
     inj = snap.injection
-    if inj is not None and (inj.month_indexed or inj.spp_indexed):
+    if inj is not None and (
+        inj.month_indexed or inj.spp_indexed or settles_registers(inj)
+    ):
         legs.append(inj)
     return legs
 
 
+def _leg_settled(leg: EnergyRates | InjectionRates) -> bool:
+    """Whether one indexed leg carries what its month settled at: the index,
+    or for figures per register the mark they were rebuilt with."""
+    if isinstance(leg, InjectionRates) and leg.spp_redistributed:
+        return leg.spp_settled
+    return getattr(leg, "index_realised", None) is not None
+
+
 def is_settled(snap: SupplierSnapshot) -> bool:
-    """Whether every leg ``snap`` indexes on the month carries the index the
-    month settled at."""
+    """Whether every leg ``snap`` indexes on the month carries what the
+    month settled at.
+
+    Every leg: a Bolt variable month whose energy settled on the quarter's
+    table while its feed-in figures stayed on the quarter before is still
+    asked again, by the month cache and by the card archive alike."""
     legs = _indexed_legs(snap)
-    return bool(legs) and all(
-        getattr(leg, "index_realised", None) is not None for leg in legs
-    )
+    return bool(legs) and all(_leg_settled(leg) for leg in legs)
 
 
 def settled_as(snap: SupplierSnapshot, settled: SupplierSnapshot) -> SupplierSnapshot:
@@ -264,7 +284,11 @@ def settled_as(snap: SupplierSnapshot, settled: SupplierSnapshot) -> SupplierSna
     back what its month settled at, read off the stored row rather than off
     a next card that may no longer be served. A leg ``settled`` holds no
     index for is left as it is. A quarter-indexed leg settled on an index
-    per register takes each back from the rate it was settled to.
+    per register takes each back from the rate it was settled to, and so do
+    feed-in figures per register, but only where the stored ones were
+    settled (``spp_settled``): figures a row printed for the quarter before,
+    or a row older than the figures themselves, are left as parsed, so the
+    month is asked again (``is_settled``).
     """
     held = settled.energy
     index = getattr(held, "index_realised", None)
@@ -286,14 +310,13 @@ def settled_as(snap: SupplierSnapshot, settled: SupplierSnapshot) -> SupplierSna
     ):
         injection = settled_injection(injection, held_injection.index_realised)
     if (
-        index is not None
-        and injection is not None
+        injection is not None
         and held_injection is not None
         and injection.spp_redistributed
-        and held_injection.spp_redistributed
+        and held_injection.spp_settled
     ):
-        # Settled with the energy leg, off the same table, and recorded in
-        # the figures alone (``settled_spp_registers``).
+        # Settled off the energy leg's table and recorded in the figures and
+        # their mark (``settled_spp_registers``).
         injection = settled_spp_registers(
             injection, _spp_register_indices(held_injection)
         )

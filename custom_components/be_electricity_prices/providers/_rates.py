@@ -845,6 +845,13 @@ class InjectionRates:
     # while ``bi_hourly`` is off, and ``resolve_settlement_grid`` turns it into
     # the register rates for an entry on the variable settlement.
     spp_redistributed: bool = False
+    # True once those register figures stand at the delivery quarter's own
+    # indices, rebuilt on the next quarter's table
+    # (``_settle.settled_spp_registers``), rather than at the quarter before,
+    # which is what the card prints while its quarter runs. Not recorded as
+    # ``index_realised``, which on the per-slot reading of the same leg would
+    # stand in for every slot's spot.
+    spp_settled: bool = False
     # An explicit guaranteed minimum in EUR/kWh, for a card that promises more
     # than "never negative". EnergyVision guarantees 1 c/kWh: *"Als de
     # berekening van onze formule lager zou uitkomen dan 1 EURcent/kWh, dan

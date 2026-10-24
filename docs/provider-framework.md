@@ -180,7 +180,9 @@ month at the current rate. Return-value semantics:
   still provisional or a failure leaves the row billing but provisional, and
   `None` leaves it as it is. An extractor with `settle_month` is never asked
   for a replacement: whichever tier gave the month's card, it is re-priced in
-  place until its month-indexed legs carry `index_realised` (`is_settled`).
+  place until its month-indexed legs carry `index_realised` and its feed-in
+  figures per register, where the card prints them, `spp_settled`
+  (`is_settled`).
 
 An extractor whose `fetch_for_month` field is itself `None` means the supplier
 has no archive at all; its past months come from the repository archive alone.

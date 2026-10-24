@@ -691,6 +691,120 @@ async def test_a_supplier_settling_in_place_keeps_the_card_it_caught(
     assert replayed["publication_label"] == "augustus 2026"
 
 
+async def test_a_row_settled_on_its_energy_alone_is_asked_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bolt's September 2026 variable rows settled their energy on the third
+    quarter's table while their feed-in figures stayed the second quarter's,
+    and the backfill counted them settled: 3,40 c/kWh credited for good where
+    6,21 settled. The figures per register are a leg of their own, asked
+    again until they settle, and a replay keeps them once they have."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.providers._settle import (
+        settled_registers,
+        settled_spp_registers,
+    )
+
+    asked: list[str] = []
+    feed_in: dict[str, float] = {}
+
+    async def fetch(_session: Any, contract: str, _region: str) -> SupplierSnapshot:
+        await fetch_text(_Session({CARD_URL: "card"}), CARD_URL)  # type: ignore[arg-type]
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=VariableRates(
+                current=0.1418,
+                formula_factor=1.0,
+                formula_base=0.0,
+                quarter_indexed=True,
+            ),
+            injection=InjectionRates(
+                current=0.0340,
+                factor=0.94,
+                base=-0.01133,
+                slot_indexed=True,
+                spp_redistributed=True,
+            ),
+            publication_label=(
+                "augustus 2026" if dt_util.now().month == 8 else "september 2026"
+            ),
+            source_url=CARD_URL,
+        )
+
+    async def settle_month(
+        _session: Any, _contract: str, _region: str, month: date, held: SupplierSnapshot
+    ) -> SupplierSnapshot:
+        asked.append(f"settle {month:%Y-%m}")
+        assert isinstance(held.energy, VariableRates) and held.injection is not None
+        energy = settled_registers(held.energy, {"current": 0.19})
+        assert energy is not None
+        return replace(
+            held,
+            energy=energy,
+            injection=settled_spp_registers(held.injection, feed_in),
+        )
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_flex",
+                label="Flex",
+                kind="variable",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=fetch,
+        settles_on_next_card=True,
+        settle_month=settle_month,
+    )
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    row = tmp_path / "cards/acme/acme_flex/wallonia/2026-08.json"
+    with monkeypatch.context() as clock:
+        clock.setattr(dt_util, "now", lambda *_a: datetime(2026, 8, 20, tzinfo=UTC))
+        await ac.archive(
+            tmp_path,
+            extractors=[extractor],
+            now=datetime(2026, 8, 20, 6, 0, tzinfo=UTC),
+            sleep=_no_sleep,
+        )
+    # The next card's feed-in rows do not read: the energy settles alone.
+    await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    held = json.loads(row.read_text())
+    assert held["energy"]["index_realised"] == pytest.approx(0.19)
+    assert held["injection"]["current"] == pytest.approx(0.0340)
+
+    asked.clear()
+    feed_in["current"] = 0.07809
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert asked == ["settle 2026-08"]
+    assert summary.settled == 1
+    settled = json.loads(row.read_text())
+    assert settled["injection"]["current"] == pytest.approx(0.94 * 0.07809 - 0.01133)
+    assert settled["injection"]["spp_settled"] is True
+
+    asked.clear()
+    await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=1, now=NOW, sleep=_no_sleep
+    )
+    assert asked == []
+
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    await ac.archive(tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep)
+    replayed = json.loads(row.read_text())
+    assert replayed["injection"]["current"] == pytest.approx(
+        settled["injection"]["current"]
+    )
+    assert replayed["injection"]["spp_settled"] is True
+
+
 async def test_a_quarter_indexed_row_settles_in_place_on_every_register(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
