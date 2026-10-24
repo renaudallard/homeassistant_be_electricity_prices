@@ -63,8 +63,8 @@ from .compare_quote import (
     _ytd_welcome_credit,
 )
 from .compare_table import (
-    _NO_DAY_AHEAD,
     _card_caveats,
+    _no_day_ahead,
     _populate_charts,
     _solar_note,
     _uncredited_note,
@@ -550,7 +550,7 @@ class _PlaceholdersMixin(OptionsFlow):
         # both sides, and its every caveat read twice in a row.
         caveats = list(dict.fromkeys(caveats))
         if own_gaps.day_ahead or other_gaps.day_ahead:
-            caveats.append(_NO_DAY_AHEAD)
+            caveats.append(_no_day_ahead(own_gaps.day_ahead))
         rewired = _meters_rewired(self.config_entry, today_local)
         if rewired:
             caveats.append(

@@ -366,6 +366,12 @@ def test_the_ranking_says_which_rows_lack_their_curve() -> None:
     assert [row.day_ahead_missing for row in restored.rows] == [True, False, True]
     # A stored ranking says it too.
     assert _ranking_table(restored.rows).count(line) == 1
+    # The own contract is named only when its own feed-in is one of them: one
+    # fixed for the term is credited as its card says.
+    fixed_own = [replace(rows[0], day_ahead_missing=False), *rows[1:]]
+    without = _ranking_table(fixed_own)
+    assert "your own contract" not in without
+    assert without.count(line.removesuffix(", your own contract's included.")) == 1
 
 
 async def test_without_a_day_ahead_source_the_cause_is_the_source(
@@ -451,6 +457,24 @@ async def test_the_one_off_quote_says_once_that_there_is_no_day_ahead(
     note = p["card_note"]
     assert note.count("without a day-ahead source") == 1
     assert "Eneco's feed-in" not in note
+    assert note.endswith("your own contract's included")
+    # An own feed-in fixed for the term is credited as its card says, so the
+    # note names only the others when the quoted card is month-indexed.
+    own = replace(card, injection=InjectionRates(current=0.05))
+    entry = make_entry(solar_regime="injection", injection_kwh="sensor.i")
+    entry.add_to_hass(hass)
+    entry.runtime_data = _real_coordinator(hass, entry, own)
+    with patch.object(compare_household, "_measured_kwh", measured):
+        p = await _drive_compare(
+            hass,
+            entry,
+            other_snap=card,
+            other_supplier="eneco",
+            other_contract="power_flex",
+        )
+    note = p["card_note"]
+    assert note.count("without a day-ahead source") == 1
+    assert "your own contract" not in note
 
 
 async def test_the_own_contract_against_itself_says_each_caveat_once(

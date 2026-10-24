@@ -252,14 +252,25 @@ _NO_FEED_IN = "`NO FEED-IN`"
 _NO_DIRECT_DEBIT = "`NO DIRECT DEBIT`"
 # And for a row priced without the Synergrid profile its card's index names.
 _NO_PROFILE = "`NO PROFILE`"
-# Said once, under the ranking and in a quote's note, rather than per row: a
-# household with no day-ahead source has every month-indexed feed-in on the
-# printed figure, which is a fact about it and not about any one card.
-_NO_DAY_AHEAD = (
-    "without a day-ahead source (an ENTSO-E key or the keyless setting) every "
-    "feed-in indexed on a month is credited at the figure its card prints, your "
-    "own contract's included"
-)
+
+
+def _no_day_ahead(own: bool) -> str:
+    """What a household with no day-ahead source is told once, under the
+    ranking and in a quote's note, rather than per row: every month-indexed
+    feed-in is on the figure its card prints, which is a fact about the
+    household and not about any one card.
+
+    ``own`` is whether the household's own contract is one of them, which it
+    is only when its own feed-in settles on a month: one fixed for the term
+    is credited exactly as the card says, and naming it read as though its
+    own figure were a stand-in too.
+    """
+    note = (
+        "without a day-ahead source (an ENTSO-E key or the keyless setting) "
+        "every feed-in indexed on a month is credited at the figure its card "
+        "prints"
+    )
+    return f"{note}, your own contract's included" if own else note
 
 
 def _ranking_table(
@@ -354,8 +365,9 @@ def _ranking_table(
             "with an ENTSO-E key or the keyless setting."
         )
     if any(row.day_ahead_missing for row in priced):
+        note = _no_day_ahead(any(r.is_own and r.day_ahead_missing for r in priced))
         out.append("")
-        out.append(f"{_NO_DAY_AHEAD[0].upper()}{_NO_DAY_AHEAD[1:]}.")
+        out.append(f"{note[0].upper()}{note[1:]}.")
 
     if unpriced:
         out.append("")
@@ -511,7 +523,7 @@ def _card_caveats(
     household still pays, or an index it names that a profile not held kept
     from being resolved (``gaps``, which the caller asks of the household). A
     household with no day-ahead source is told that once for the page
-    (``_NO_DAY_AHEAD``), not once per card.
+    (``_no_day_ahead``), not once per card.
 
     Returned per side and joined by the caller, so the page names which
     supplier each caveat belongs to rather than hedging the whole quote.
