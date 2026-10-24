@@ -492,6 +492,42 @@ async def test_a_switch_to_another_supplier_offers_the_switch_day_as_its_start(
     assert shown[CONF_TARIFF_CARD_DATE] is None
 
 
+@pytest.mark.parametrize(
+    ("switch_day", "shown"), [("2026-09-01", "2026-09-01"), ("2025-09-01", None)]
+)
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_correcting_the_supplier_picked_at_a_switch_keeps_the_switch_day(
+    hass: HomeAssistant, freezer: Any, switch_day: str, shown: str | None
+) -> None:
+    """A switch recorded onto the wrong supplier is corrected in Edit settings.
+    The start date the switch set is the day the contract after it began,
+    whichever supplier that is: dropped as an answer of the contract left, it
+    put the corrected Engie Easy Fixed on October's card instead of
+    September's, 0,2310 against 0,18695 EUR/kWh. A switch from an earlier
+    year is a settled change, and a move away from the contract that followed
+    it is a new contract with dates of its own."""
+    freezer.move_to("2026-10-23 12:00:00+02:00")
+    data = _record_switch(dict(make_entry().data), date.fromisoformat(switch_day))
+    data.update(supplier="luminus", contract="luminus_comfy")
+    entry = MockConfigEntry(domain=DOMAIN, data=data)
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "edit"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"supplier": "engie", "region": "wallonia"}
+    )
+    assert result["step_id"] == "contract"
+    schema = result["data_schema"]
+    assert schema is not None
+    suggested = {
+        str(marker.schema): (marker.description or {}).get("suggested_value")
+        for marker in schema.schema
+    }
+    assert suggested[CONF_CONTRACT_START_DATE] == shown
+
+
 def test_removing_the_last_switch_puts_the_settings_back_as_they_were() -> None:
     first = _held("bolt", "bolt_variable")
     data = dict(

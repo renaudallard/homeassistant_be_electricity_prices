@@ -182,15 +182,24 @@ def _drop_left_contract_answers(
     for Frank's quarter-hour grid and submitted as shown, it made a Bolt
     variable card dynamic. Only an answer still holding the stored value goes:
     the start date a recorded switch has just moved to the switch day is the
-    new contract's own.
+    new contract's own. So is a stored start date on the day of the last
+    switch recorded this year (``_removable_switch``), whichever supplier the
+    edit moves to: it is the day the contract after the switch began, so
+    correcting the supplier picked at the switch keeps it.
     """
     if not _another_contract(stored, data):
         return
+    switch = _removable_switch(stored, dt_util.now().date())
+    starts_on_switch = switch is not None and (
+        stored.get(CONF_CONTRACT_START_DATE) == switch[0].isoformat()
+    )
     for key in (
         *_CONTRACT_DATE_KEYS,
         CONF_YTD_FROM_CONTRACT_START,
         CONF_QUARTER_HOURLY,
     ):
+        if key == CONF_CONTRACT_START_DATE and starts_on_switch:
+            continue
         if key in data and data[key] == stored.get(key):
             del data[key]
 

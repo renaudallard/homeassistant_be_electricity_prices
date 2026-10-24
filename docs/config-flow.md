@@ -764,7 +764,11 @@ the month the old contract was signed, which a newly typed start date does not
 override (`_tariff_card_month`, `cohort.py`). A supply that starts on 1 January
 cannot be recorded as a switch, so this path is how that change is made. Only a
 value still equal to the stored one goes, so the start date a switch has just
-moved to the switch day stays. Another contract of the same supplier and region
+moved to the switch day stays. So does a stored start date on the day of the
+last switch recorded this year (`_removable_switch`): it is when the contract
+after that switch began, whichever supplier an edit correcting the switch picks,
+while one on a switch from an earlier year belongs to a settled contract and
+goes. Another contract of the same supplier and region
 is only known once the contract step is submitted: when it comes back with the
 stored card month as shown (`_carried_card_month`, `flow_switch.py`), the step
 is re-shown with `card_date_of_other_contract` and the box empty, and what is
