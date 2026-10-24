@@ -240,7 +240,7 @@ async def _compute_projected_year_cost(
     from .compare_quote import (
         _annual_bill,
         _annual_volume,
-        _covers_a_year,
+        _full_year_kwh,
     )
     from .compare_weighting import (
         _compare_injection_credit,
@@ -392,14 +392,13 @@ async def _compute_projected_year_cost(
                 credit_year=year,
             )
             spot_credited = inj_rate is not None
-        if _covers_a_year(measured_inj.days_with_data) and measured_inj.kwh > 0:
+        year_inj = _full_year_kwh(measured_inj)
+        if year_inj is not None:
             # Scaled across any missing days, the same way the consumption leg
             # is. Demanding all 365 made one absent bucket drop the whole leg,
             # which under the netting regime stopped the meter being netted at
             # all and multiplied the bill by ten.
-            annual_inj = (
-                measured_inj.kwh * MEASURED_FULL_YEAR_DAYS / measured_inj.days_with_data
-            )
+            annual_inj = year_inj
             injection_basis = f"measured ({measured_inj.days_with_data} days)"
             if spot_credited:
                 injection_basis += ", credited on the past year's day-ahead prices"

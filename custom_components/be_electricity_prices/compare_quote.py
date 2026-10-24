@@ -625,6 +625,22 @@ def _covers_a_year(days_with_data: int) -> bool:
     return days_with_data >= MEASURED_FULL_YEAR_DAYS - MEASURED_YEAR_GAP_DAYS
 
 
+def _full_year_kwh(measured: MeasuredKwh) -> float | None:
+    """A measured window as a year, or ``None`` short of one.
+
+    Scaled across the few days the recorder missed, which at a full year's
+    coverage is a correction under 5% with no seasonal bias worth the name.
+    One rule for both legs and every reader: the compare page's volumes, the
+    rolling-year cost sensor and the yearly export a feed-in bonus rides on.
+    Below a full year it answers nothing, because a partial window of export
+    cannot be scaled by a day count (PV is far too seasonal for that).
+    """
+    days = measured.days_with_data
+    if measured.kwh > 0 and _covers_a_year(days):
+        return measured.kwh * MEASURED_FULL_YEAR_DAYS / days
+    return None
+
+
 @dataclass(frozen=True)
 class _AnnualVolume:
     """A yearly kWh figure with the days of history behind it and a label
@@ -690,11 +706,9 @@ async def _annual_volume(
 def _volume_of(measured: MeasuredKwh, entry: ConfigEntry) -> _AnnualVolume:
     """The three bands of :func:`_annual_volume`, from a measurement in hand."""
     days = measured.days_with_data
-    if measured.kwh > 0 and _covers_a_year(days):
-        # Scaled across whatever few days are missing. At this coverage the
-        # correction is under 5% and carries no seasonal bias worth the name.
-        kwh = measured.kwh * MEASURED_FULL_YEAR_DAYS / days
-        return _AnnualVolume(kwh, days, f"measured ({days} days)", measured=True)
+    year = _full_year_kwh(measured)
+    if year is not None:
+        return _AnnualVolume(year, days, f"measured ({days} days)", measured=True)
     typed = entry.data.get(CONF_ANNUAL_CONSUMPTION_KWH)
     if typed:
         return _AnnualVolume(

@@ -62,6 +62,7 @@ from .compare_quote import (
     _annual_volume,
     _annual_welcome_credit,
     _covers_a_year,
+    _full_year_kwh,
     _read_total_kwh,
 )
 from .compare_table import _solar_note
@@ -527,22 +528,32 @@ class _HouseholdMixin:
         ytd_inj_kwh = 0.0
         inj_full_year = False
         if regime != SOLAR_REGIME_NONE or stored_regime != SOLAR_REGIME_NONE:
-            # Injection stays on the raw window sum. Putting it through
-            # _annual_volume looked symmetric and is wrong in both bands: below
-            # the floor it discards a real feed-in measurement, and _solar_note
-            # reads that zero as "no injection sensor wired" while the same page
-            # prints the YTD injected kWh; above it, PV is far more seasonal
-            # than consumption, so a 365/days factor on a spring window can
-            # over-credit enough to drive the compensation net to its zero clamp
-            # and quote both sides at fees only. Annualising this leg needs a
-            # production profile, not a day count.
+            # Short of a full year, injection stays on the raw window sum.
+            # Putting it through _annual_volume looked symmetric and is wrong in
+            # both bands: below the floor it discards a real feed-in
+            # measurement, and _solar_note reads that zero as "no injection
+            # sensor wired" while the same page prints the YTD injected kWh;
+            # above it, PV is far more seasonal than consumption, so a 365/days
+            # factor on a spring window can over-credit enough to drive the
+            # compensation net to its zero clamp and quote both sides at fees
+            # only. Annualising a partial window needs a production profile,
+            # not a day count.
+            #
+            # A window that counts as a full year is another matter: it is
+            # scaled across the few days the recorder missed, as consumption
+            # is and as the rolling-year cost sensor scales this leg. Left raw,
+            # 14 missing days netted a scaled year of draw against 96% of a
+            # year of feed-in, and the own row stood 54 EUR above the sensor.
             measured_inj = await _measured_kwh(
                 self.hass, self.config_entry, year_ago, today_local, side="injection"
             )
             y = await _read_total_kwh(
                 self.hass, self.config_entry, ytd_from, today_local, side="injection"
             )
-            rolling_inj_kwh = measured_inj.kwh if measured_inj.kwh > 0 else 0.0
+            year_inj = _full_year_kwh(measured_inj)
+            rolling_inj_kwh = (
+                year_inj if year_inj is not None else max(measured_inj.kwh, 0.0)
+            )
             inj_full_year = _covers_a_year(measured_inj.days_with_data)
             ytd_inj_kwh = y or 0.0
         annual = await _annual_volume(

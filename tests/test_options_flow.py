@@ -2313,6 +2313,56 @@ async def test_compare_uses_measured_rolling_year_kwh(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_scales_a_full_year_of_feed_in_across_a_recorder_gap(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A trailing year the recorder covers but for a few days counts as a full
+    year, and consumption is scaled across the gap. The feed-in leg was left on
+    the raw sum, so under netting a whole year of draw was netted against 96%
+    of a year of export: 14 missing days in June put the own row 54 EUR above
+    the rolling-year cost sensor, which scales both. The same days missing
+    from both meters must move nothing."""
+    freezer.move_to("2026-10-23 13:00:00+02:00")
+    entry, current_snap, other_snap = _prosumer_entry_and_snapshots(hass)
+    entry.runtime_data = _real_coordinator(hass, entry, current_snap)
+    per_day = {"sensor.cons": 5000.0 / 365, "sensor.inj": 4000.0 / 365}
+
+    async def _quote(gap: set[date]) -> dict[str, str]:
+        async def _fake_recorder_daily_kwh(
+            _hass: HomeAssistant, entity_id: str, start: Any, end: Any
+        ) -> dict[Any, float]:
+            kwh = per_day.get(entity_id)
+            if kwh is None:
+                return {}
+            days = (end - start).days + 1
+            return {
+                day: kwh
+                for day in (start + timedelta(days=i) for i in range(days))
+                if day not in gap
+            }
+
+        with patch(
+            "custom_components.be_electricity_prices.energy_meters._recorder_daily_kwh",
+            new=_fake_recorder_daily_kwh,
+        ):
+            return await _drive_compare(
+                hass,
+                entry,
+                other_snap=other_snap,
+                other_supplier="mega",
+                other_contract="mega_online_fixed",
+            )
+
+    whole = await _quote(set())
+    short = await _quote({date(2026, 6, 10) + timedelta(days=i) for i in range(14)})
+    assert short["consumption_source"] == "measured (351 days)"
+    assert short["solar_note"] == whole["solar_note"]
+    assert "consumption -= 4000 kWh" in short["solar_note"]
+    assert short["current_annual"] == whole["current_annual"]
+    assert short["compare_annual"] == whole["compare_annual"]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_rolling_window_is_365_days_not_366(
     hass: HomeAssistant,
 ) -> None:

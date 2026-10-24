@@ -247,7 +247,7 @@ class _SnapshotMixin:
         Soft-fail like the profile fetches around it: the recorder can be busy
         or mid-purge, and a yearly volume is not worth failing a tick over.
         """
-        from .compare_quote import _annual_volume, _covers_a_year
+        from .compare_quote import _annual_volume, _covers_a_year, _full_year_kwh
 
         today = dt_util.now().date()
         if self._annual_kwh_day == today:
@@ -281,19 +281,15 @@ class _SnapshotMixin:
             injection: float | None = None
             if self.entry.data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION:
                 with contextlib.suppress(Exception):
-                    injected = await _measured_kwh(
-                        self.hass,
-                        self.entry,
-                        today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1),
-                        today,
-                        side="injection",
-                    )
-                    if injected.kwh > 0 and _covers_a_year(injected.days_with_data):
-                        injection = (
-                            injected.kwh
-                            * MEASURED_FULL_YEAR_DAYS
-                            / injected.days_with_data
+                    injection = _full_year_kwh(
+                        await _measured_kwh(
+                            self.hass,
+                            self.entry,
+                            today - timedelta(days=MEASURED_FULL_YEAR_DAYS - 1),
+                            today,
+                            side="injection",
                         )
+                    )
         if failed:
             _LOGGER.debug(
                 "%s: annual volume unavailable, the recorder did not answer for %s",
