@@ -1015,3 +1015,18 @@ def test_a_social_household_on_an_analog_meter_is_quoted_analog_cards(
     own = _resolve_snapshot(entry, _card("social"), delivery_month=october)
     assert own.dsos["fluvius_antwerpen"].distribution_single == 0.0535
     assert _meters_rewired(entry, date(2026, 10, 23)) is False
+
+
+def test_the_help_bills_no_capacity_tariff_on_the_social_tariff() -> None:
+    """The social card has no capacity term: the box only moves the cards it
+    is compared with there, and the help said it billed one."""
+    import json
+    from pathlib import Path
+
+    base = Path("custom_components/be_electricity_prices")
+    for path in (base / "strings.json", base / "translations" / "en.json"):
+        text = json.loads(path.read_text(encoding="utf-8"))["config"]["step"]["meter"][
+            "data_description"
+        ]["analog_meter"]
+        social = next(s for s in text.split(". ") if "social tariff" in s)
+        assert "bills the capacity tariff" not in social, path

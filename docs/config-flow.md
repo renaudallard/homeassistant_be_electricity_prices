@@ -326,8 +326,9 @@ default, wherever `offers_analog_meter` (`snapshot_resolve.py`) holds for a mete
 the form can pick: not on a contract only a digital meter carries. On the custom
 supplier and the social tariff it is asked, their own network figures (typed on
 the first, the CREG's on the second) still billed as they are
-(`_resolve_analog_meter` skips their card), for the capacity peak and the cards
-the comparison page quotes against them. The step drops the
+(`_resolve_analog_meter` skips their card): for the custom supplier's capacity
+peak, and on both for the cards the comparison page quotes against them, the
+social card having no capacity term at all. The step drops the
 answer when the meter picked is one it does not hold for (a dynamic one, or after
 a move out of Flanders), so it cannot come back into force unasked. What it
 changes is in [pricing-model.md](pricing-model.md#capacity-tariff).

@@ -548,10 +548,12 @@ dropped rather than billed on the new card.
    is run again.
    A Flemish mono, bi-hourly or exclusive-night meter is also asked whether it
    is still an **Analog meter** (off by default). On the *Expert: custom
-   formula* supplier the network figures you type are billed as typed, and on
-   the social tariff the CREG's network component as published: there the box
-   bills the capacity tariff on 2,5 kW and quotes the cards the comparison
-   page sets against yours on the analog rates. Fluvius cannot measure an analog meter's
+   formula* supplier the network figures you type are billed as typed: there
+   the box bills the capacity tariff on 2,5 kW and quotes the cards the
+   comparison page sets against yours on the analog rates. The social tariff
+   has no capacity tariff and keeps the CREG's network component: there the
+   box changes nothing on your own bill and only quotes the cards compared
+   with yours on the analog rates and 2,5 kW. Fluvius cannot measure an analog meter's
    peak: it bills the capacity tariff on a flat 2,5 kW (the "vaste term" of
    its tariff sheet), applies no maximum tariff, and charges every kWh,
    exclusive-night ones included, its analog kWh rate instead of the digital

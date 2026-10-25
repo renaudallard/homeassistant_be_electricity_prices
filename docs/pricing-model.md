@@ -1737,8 +1737,9 @@ Not offered on a dynamic meter, which a contract only a digital meter carries
 forces. On the custom supplier and the social tariff it is offered, but their
 card is left as it is, since the custom supplier's network figures are the
 household's own meter's and the social tariff's CREG component replaces the
-operator's tariffs: the answer moves the capacity peak to the minimum and the
-cards they are compared with to the analog network. The answer rides the comparison proxy with the meter the
+operator's tariffs. The answer moves the cards either is compared with onto the
+analog network and the minimum peak, and on the custom supplier its own
+capacity term onto the minimum too; the social card has no capacity term. The answer rides the comparison proxy with the meter the
 quote is priced on, so a dynamic target is quoted digital, on the minimum peak
 the household would start from.
 
