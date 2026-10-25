@@ -1247,8 +1247,8 @@ rule (`impact_in_force`, `day_night.py`): both per-kWh legs
 configuration drops (`_walloon_fixed_term_applies`, `fees.py`) and a feed-in
 figure per band (`_tou_injection_rate`, `injection.py`). A backfill reaching
 into 2025 banded the energy leg by the CWaPE bands while the network leg had
-none, netted a compensation year per band, and dropped 78,84 EUR of ORES fixed
-term from a 2025 year.
+none, netted a compensation year per band, and dropped the fixed term from a
+2025 year, 13,84 EUR on ORES.
 
 ### is_offpeak schedule, per region
 
