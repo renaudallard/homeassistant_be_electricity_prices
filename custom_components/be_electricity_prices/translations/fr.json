@@ -211,7 +211,7 @@
       },
       "custom_tax": {
         "title": "Taxes et prélèvements",
-        "description": "Taxes et prélèvements régulés, hors TVA. Le taux de TVA ci-dessous s'applique à l'énergie, au réseau et aux taxes (l'injection reste exonérée). La TVA résidentielle belge est 0.06 ; mettez 0 si vous avez tout saisi TVA comprise.",
+        "description": "Taxes et prélèvements régulés, hors TVA. Le taux de TVA ci-dessous s'applique à l'énergie, au réseau et aux taxes (l'injection reste exonérée). La TVA résidentielle belge est 0.06 ; mettez 0 si vous avez tout saisi TVA comprise, ou avec « Contrat professionnel » coché si vous déduisez la TVA et avez tout saisi hors TVA : les montants des régulateurs, comme le plafond réseau, sont alors facturés hors TVA eux aussi.",
         "data": {
           "custom_tax_federal_excise": "Accise fédérale (EUR/kWh)",
           "custom_tax_energy_contribution": "Cotisation énergie (EUR/kWh)",
@@ -567,7 +567,7 @@
       },
       "custom_tax": {
         "title": "Taxes et prélèvements",
-        "description": "Taxes et prélèvements régulés, hors TVA. Le taux de TVA ci-dessous s'applique à l'énergie, au réseau et aux taxes (l'injection reste exonérée). La TVA résidentielle belge est 0.06 ; mettez 0 si vous avez tout saisi TVA comprise.",
+        "description": "Taxes et prélèvements régulés, hors TVA. Le taux de TVA ci-dessous s'applique à l'énergie, au réseau et aux taxes (l'injection reste exonérée). La TVA résidentielle belge est 0.06 ; mettez 0 si vous avez tout saisi TVA comprise, ou avec « Contrat professionnel » coché si vous déduisez la TVA et avez tout saisi hors TVA : les montants des régulateurs, comme le plafond réseau, sont alors facturés hors TVA eux aussi.",
         "data": {
           "custom_tax_federal_excise": "Accise fédérale (EUR/kWh)",
           "custom_tax_energy_contribution": "Cotisation énergie (EUR/kWh)",

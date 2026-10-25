@@ -211,7 +211,7 @@
       },
       "custom_tax": {
         "title": "Taxes and levies",
-        "description": "Regulated taxes and levies, excluding VAT. The VAT rate below grosses up energy, grid and taxes (injection stays VAT-exempt). Belgian residential VAT is 0.06; set 0 if you entered VAT-inclusive numbers everywhere.",
+        "description": "Regulated taxes and levies, excluding VAT. The VAT rate below grosses up energy, grid and taxes (injection stays VAT-exempt). Belgian residential VAT is 0.06; set 0 if you entered VAT-inclusive numbers everywhere, or with 'Business contract' ticked if you deduct VAT and entered them excluding it: the regulators' figures, such as the network ceiling, are then billed excluding VAT too.",
         "data": {
           "custom_tax_federal_excise": "Federal excise (EUR/kWh)",
           "custom_tax_energy_contribution": "Energy contribution (EUR/kWh)",
@@ -567,7 +567,7 @@
       },
       "custom_tax": {
         "title": "Taxes and levies",
-        "description": "Regulated taxes and levies, excluding VAT. The VAT rate below grosses up energy, grid and taxes (injection stays VAT-exempt). Belgian residential VAT is 0.06; set 0 if you entered VAT-inclusive numbers everywhere.",
+        "description": "Regulated taxes and levies, excluding VAT. The VAT rate below grosses up energy, grid and taxes (injection stays VAT-exempt). Belgian residential VAT is 0.06; set 0 if you entered VAT-inclusive numbers everywhere, or with 'Business contract' ticked if you deduct VAT and entered them excluding it: the regulators' figures, such as the network ceiling, are then billed excluding VAT too.",
         "data": {
           "custom_tax_federal_excise": "Federal excise (EUR/kWh)",
           "custom_tax_energy_contribution": "Energy contribution (EUR/kWh)",

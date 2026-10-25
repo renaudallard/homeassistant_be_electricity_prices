@@ -211,7 +211,7 @@
       },
       "custom_tax": {
         "title": "Steuern und Abgaben",
-        "description": "Regulierte Steuern und Abgaben, ohne MwSt. Der MwSt.-Satz unten rechnet Energie, Netz und Steuern auf (Einspeisung bleibt MwSt.-frei). Der belgische MwSt.-Satz für Haushalte ist 0.06; setzen Sie 0, wenn Sie alles inklusive MwSt. eingegeben haben.",
+        "description": "Regulierte Steuern und Abgaben, ohne MwSt. Der MwSt.-Satz unten rechnet Energie, Netz und Steuern auf (Einspeisung bleibt MwSt.-frei). Der belgische MwSt.-Satz für Haushalte ist 0.06; setzen Sie 0, wenn Sie alles inklusive MwSt. eingegeben haben, oder mit angekreuztem „Geschäftsvertrag“, wenn Sie die MwSt. abziehen und alles ohne MwSt. eingegeben haben: die Beträge der Regulierungsbehörden, etwa die Netzobergrenze, werden dann ebenfalls ohne MwSt. abgerechnet.",
         "data": {
           "custom_tax_federal_excise": "Bundesverbrauchsteuer (EUR/kWh)",
           "custom_tax_energy_contribution": "Energiebeitrag (EUR/kWh)",
@@ -567,7 +567,7 @@
       },
       "custom_tax": {
         "title": "Steuern und Abgaben",
-        "description": "Regulierte Steuern und Abgaben, ohne MwSt. Der MwSt.-Satz unten rechnet Energie, Netz und Steuern auf (Einspeisung bleibt MwSt.-frei). Der belgische MwSt.-Satz für Haushalte ist 0.06; setzen Sie 0, wenn Sie alles inklusive MwSt. eingegeben haben.",
+        "description": "Regulierte Steuern und Abgaben, ohne MwSt. Der MwSt.-Satz unten rechnet Energie, Netz und Steuern auf (Einspeisung bleibt MwSt.-frei). Der belgische MwSt.-Satz für Haushalte ist 0.06; setzen Sie 0, wenn Sie alles inklusive MwSt. eingegeben haben, oder mit angekreuztem „Geschäftsvertrag“, wenn Sie die MwSt. abziehen und alles ohne MwSt. eingegeben haben: die Beträge der Regulierungsbehörden, etwa die Netzobergrenze, werden dann ebenfalls ohne MwSt. abgerechnet.",
         "data": {
           "custom_tax_federal_excise": "Bundesverbrauchsteuer (EUR/kWh)",
           "custom_tax_energy_contribution": "Energiebeitrag (EUR/kWh)",

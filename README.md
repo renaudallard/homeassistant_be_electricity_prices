@@ -265,7 +265,9 @@ professional excise and the contribution, so tick **Business contract** on the
 tax step and the two levies you type are billed as typed. The box also puts the
 entry in the professional segment, so the comparisons quote it against
 professional cards, excluding VAT when the VAT rate you typed is 0 and
-including it otherwise. Coefficients
+including it otherwise. At 0 the figures read from the regulators, the
+Flemish network ceiling and Brugel's power term, are billed excluding VAT
+too, like the ones you typed. Coefficients
 are entered excluding VAT and the VAT rate grosses them up; its box starts at
 the month's residential rate. The spot and the base
 are both in EUR/kWh, so a formula printed in c€/kWh on a Belpex in EUR/MWh has to
