@@ -60,7 +60,7 @@
       },
       "analog_replaced": {
         "title": "Compteur analogique remplacé",
-        "description": "Votre compteur était indiqué comme analogique, et Compteur analogique est maintenant décoché, ou le compteur ou le contrat choisi demande un compteur numérique. Fluvius a facturé les jours précédant la pose du compteur numérique sur le compteur analogique : le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Indiquez le jour de la pose : le coût de l'année facture alors les jours qui le précèdent en analogique et les jours à partir de celui-ci sur le compteur numérique. Cette étape revient à chaque modification tant qu'un jour est enregistré, pour pouvoir le changer. Cocher à nouveau Compteur analogique l'efface.",
+        "description": "Votre compteur était indiqué comme analogique, et Compteur analogique est maintenant décoché, ou le compteur ou le contrat choisi demande un compteur numérique. Fluvius a facturé les jours précédant la pose du compteur numérique sur le compteur analogique : le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Indiquez le jour de la pose : le coût de l'année facture alors les jours qui le précèdent en analogique et les jours à partir de celui-ci sur le compteur numérique. Cette étape revient à chaque modification tant que le jour tombe cette année ou l'année passée, pour pouvoir le changer. Cocher à nouveau Compteur analogique l'efface.",
         "data": {
           "analog_meter_replaced": "Jour de la pose du compteur numérique"
         },
@@ -427,7 +427,7 @@
       },
       "analog_replaced": {
         "title": "Compteur analogique remplacé",
-        "description": "Votre compteur était indiqué comme analogique, et Compteur analogique est maintenant décoché, ou le compteur ou le contrat choisi demande un compteur numérique. Fluvius a facturé les jours précédant la pose du compteur numérique sur le compteur analogique : le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Indiquez le jour de la pose : le coût de l'année facture alors les jours qui le précèdent en analogique et les jours à partir de celui-ci sur le compteur numérique. Cette étape revient à chaque modification tant qu'un jour est enregistré, pour pouvoir le changer. Cocher à nouveau Compteur analogique l'efface.",
+        "description": "Votre compteur était indiqué comme analogique, et Compteur analogique est maintenant décoché, ou le compteur ou le contrat choisi demande un compteur numérique. Fluvius a facturé les jours précédant la pose du compteur numérique sur le compteur analogique : le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Indiquez le jour de la pose : le coût de l'année facture alors les jours qui le précèdent en analogique et les jours à partir de celui-ci sur le compteur numérique. Cette étape revient à chaque modification tant que le jour tombe cette année ou l'année passée, pour pouvoir le changer. Cocher à nouveau Compteur analogique l'efface.",
         "data": {
           "analog_meter_replaced": "Jour de la pose du compteur numérique"
         },

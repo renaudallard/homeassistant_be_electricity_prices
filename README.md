@@ -577,7 +577,7 @@ dropped rather than billed on the new card.
    the days before it stay billed as analog while the days from it are billed on the digital meter, the
    capacity tariff on the peak it measures from then on, the contract kept at
    a switch included. **Edit settings** shows the day again on every edit
-   while one is held, so a wrong one can be changed. Ticking the box again
+   while it falls in this year or the last, so a wrong one can be changed. Ticking the box again
    drops the day, and so does a move
    out of Flanders. Hours already written to the long-term statistics keep the
    meter they were priced on until the

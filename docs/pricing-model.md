@@ -1776,7 +1776,8 @@ Online in Antwerpen at 0,4 kWh an hour, replaced on 1 July with a 5 kW mean,
 bills 1158,70 EUR to 24 October rather than the 1176,66 of an all-digital year:
 6 months on 2,5 kW rather than 5 (65,46 less) and the analog rate on their
 1.737,2 kWh (47,50 more). Ticking the box again drops the day, and so does
-leaving it blank, which Edit settings offers on every edit while one is held. An entry without
+leaving it blank, which Edit settings offers on every edit while the day held falls in this year
+or the last. An entry without
 one bills as before.
 
 ## Prosumer term

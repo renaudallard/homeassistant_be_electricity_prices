@@ -60,7 +60,7 @@
       },
       "analog_replaced": {
         "title": "Analoge meter vervangen",
-        "description": "Je meter stond als analoog ingesteld, en Analoge meter is nu uitgevinkt, of de gekozen meter of het gekozen contract vraagt een digitale meter. Fluvius rekende de dagen vóór de plaatsing van de digitale meter aan op de analoge meter: het capaciteitstarief op een forfaitaire 2,5 kW en een hoger nettarief per kWh. Vul de dag van de plaatsing in: de kost van dit jaar rekent dan de dagen ervoor aan als analoog en de dagen vanaf die dag op de digitale meter. Deze stap komt bij elke wijziging terug zolang er een dag bewaard is, zodat je die kunt aanpassen. Vink je Analoge meter opnieuw aan, dan vervalt de datum.",
+        "description": "Je meter stond als analoog ingesteld, en Analoge meter is nu uitgevinkt, of de gekozen meter of het gekozen contract vraagt een digitale meter. Fluvius rekende de dagen vóór de plaatsing van de digitale meter aan op de analoge meter: het capaciteitstarief op een forfaitaire 2,5 kW en een hoger nettarief per kWh. Vul de dag van de plaatsing in: de kost van dit jaar rekent dan de dagen ervoor aan als analoog en de dagen vanaf die dag op de digitale meter. Deze stap komt bij elke wijziging terug zolang de dag in dit of vorig jaar valt, zodat je die kunt aanpassen. Vink je Analoge meter opnieuw aan, dan vervalt de datum.",
         "data": {
           "analog_meter_replaced": "Dag waarop de digitale meter geplaatst werd"
         },
@@ -427,7 +427,7 @@
       },
       "analog_replaced": {
         "title": "Analoge meter vervangen",
-        "description": "Je meter stond als analoog ingesteld, en Analoge meter is nu uitgevinkt, of de gekozen meter of het gekozen contract vraagt een digitale meter. Fluvius rekende de dagen vóór de plaatsing van de digitale meter aan op de analoge meter: het capaciteitstarief op een forfaitaire 2,5 kW en een hoger nettarief per kWh. Vul de dag van de plaatsing in: de kost van dit jaar rekent dan de dagen ervoor aan als analoog en de dagen vanaf die dag op de digitale meter. Deze stap komt bij elke wijziging terug zolang er een dag bewaard is, zodat je die kunt aanpassen. Vink je Analoge meter opnieuw aan, dan vervalt de datum.",
+        "description": "Je meter stond als analoog ingesteld, en Analoge meter is nu uitgevinkt, of de gekozen meter of het gekozen contract vraagt een digitale meter. Fluvius rekende de dagen vóór de plaatsing van de digitale meter aan op de analoge meter: het capaciteitstarief op een forfaitaire 2,5 kW en een hoger nettarief per kWh. Vul de dag van de plaatsing in: de kost van dit jaar rekent dan de dagen ervoor aan als analoog en de dagen vanaf die dag op de digitale meter. Deze stap komt bij elke wijziging terug zolang de dag in dit of vorig jaar valt, zodat je die kunt aanpassen. Vink je Analoge meter opnieuw aan, dan vervalt de datum.",
         "data": {
           "analog_meter_replaced": "Dag waarop de digitale meter geplaatst werd"
         },

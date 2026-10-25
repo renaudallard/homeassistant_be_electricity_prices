@@ -135,6 +135,14 @@ from .providers import (
 from .snapshot_resolve import analog_meter, analog_replaced_on, offers_analog_meter
 
 
+def _day_still_billed(data: Mapping[str, Any]) -> bool:
+    """Whether the analog meter's replacement day held falls in this year or
+    the one before, which the running bill and the rolling year still price.
+    An older one stays stored for a backfill but is not shown on every edit."""
+    held = analog_replaced_on(data)
+    return held is not None and held.year >= dt_util.now().year - 1
+
+
 class _WizardStepsMixin:
     """Wizard steps shared by ``BePricesConfigFlow`` and ``BePricesOptionsFlow``.
 
@@ -411,11 +419,11 @@ class _WizardStepsMixin:
                 # Analog again, or another connection after a move: no day of
                 # it is on a meter Fluvius replaced.
                 self._data.pop(CONF_ANALOG_REPLACED, None)
-            elif analog_meter(stored) or analog_replaced_on(self._data):
+            elif analog_meter(stored) or _day_still_billed(self._data):
                 # Unticked, or a meter or contract only a digital meter carries
                 # picked: either way Fluvius has replaced the analog one. And
-                # shown again while a day is held, so a wrong one can be put
-                # right.
+                # shown again while the day held is still billed, so a wrong
+                # one can be put right.
                 return await self.async_step_analog_replaced()
             return await self._ask_professional()
         return self.async_show_form(
@@ -432,8 +440,8 @@ class _WizardStepsMixin:
 
         Asked when Edit settings unticks the box, or moves a Flemish entry
         stored analog onto a meter or contract only a digital meter carries,
-        where the box is not offered, and on every edit of an entry holding a
-        day, to change it. The answer is one per entry, so without the day
+        where the box is not offered, and on every edit while the day held falls
+        in this year or the last, to change it. The answer is one per entry, so without the day
         every month of the year was billed on the digital meter, the months
         before it without their analog kWh rate and on the new meter's short
         mean. Every day before it bills as analog (``analog_meter``); one in

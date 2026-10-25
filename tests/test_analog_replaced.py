@@ -696,3 +696,20 @@ async def test_a_switch_off_a_social_entry_never_asked_keeps_it_analog(
     assert social.data["supplier"] == "engie"
     assert social.data["analog_meter"] is True
     assert "analog_meter_replaced" not in social.data
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_the_day_is_shown_again_only_while_it_is_still_billed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Shown on every edit for good once a day was held. This year's and
+    last year's are still priced, by the running bill and the rolling year;
+    an older one stays stored for a backfill, without the step."""
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    for held, shown in (("2025-03-01", True), ("2024-12-31", False)):
+        entry = _entry(analog_meter=False, analog_meter_replaced=held)
+        entry.add_to_hass(hass)
+        steps = await _walked(hass, entry, {"meter": {"meter": "bi"}})
+        assert ("analog_replaced" in steps) is shown, held
+        assert entry.data["analog_meter_replaced"] == held
+        await hass.config_entries.async_remove(entry.entry_id)
