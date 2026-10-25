@@ -136,10 +136,11 @@ def _meters_rewired(entry: ConfigEntry, today: date) -> bool:
     EUR apart over half a year on the same card. The year-to-date of a quoted
     side is left out instead.
 
-    The meter's kind is its stored answer, not ``analog_meter``: that one
-    leaves the social tariff out, whose network is the CREG's, and a household
-    leaving it for a commercial contract keeps the analog meter it had, which
-    the copy kept at the switch holds as the entry's (``_UNASKED_FACTS``).
+    The meter's kind is the answer stored with each side, the social tariff's
+    included, so a household moving between it and a commercial contract on
+    the same analog meter answers alike on both. A copy kept on the social
+    tariff before the box was asked there holds none and takes the entry's
+    (``_UNASKED_FACTS``).
     """
     data = entry.data
     return any(

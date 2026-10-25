@@ -180,16 +180,17 @@ def offers_analog_meter(data: Mapping[str, Any]) -> bool:
 
     A Flemish mono, bi-hourly or exclusive-night meter: a dynamic contract is
     billed off a digital meter's quarter-hours, and only Fluvius bills the two
-    apart. Not on the social tariff, whose network component is the CREG's. On
-    the custom supplier too: its own network figures are the ones typed for the
-    household's meter and stay as typed (:func:`_resolve_analog_meter`), but
-    the cards it is compared with are quoted on the meter it has.
+    apart. On the custom supplier and the social tariff too: the network
+    figures of the first are the ones typed for the household's meter, and the
+    CREG's network component replaces the operator's tariffs on the second, so
+    both cards stay as they are (:func:`_resolve_analog_meter`), but the cards
+    either is compared with are quoted on the meter it has.
     """
-    return (
-        data.get(CONF_REGION) == REGION_FLANDERS
-        and data.get(CONF_METER, METER_MONO)
-        in (METER_MONO, METER_BI, METER_EXCLUSIVE_NIGHT)
-        and data.get(CONF_SUPPLIER) != SUPPLIER_SOCIAL
+    meter = data.get(CONF_METER, METER_MONO)
+    return data.get(CONF_REGION) == REGION_FLANDERS and meter in (
+        METER_MONO,
+        METER_BI,
+        METER_EXCLUSIVE_NIGHT,
     )
 
 

@@ -131,7 +131,9 @@ Nobody can switch to the social tariff: it follows a protected status, not a
 choice. So it is never a candidate on the comparison pages, neither the 1:1
 quote (`_compare_supplier_options`, `compare_flow.py`) nor the ranking
 (`_sweep_candidates`, `flow_contracts.py`), while a social tariff entry can still compare itself
-with the commercial offers.
+with the commercial offers. A Flemish one is asked whether its meter is still
+analog: the social card stays as published, and the offers it is compared with
+are quoted on Fluvius's analog kWh rate and the capacity tariff's 2,5 kW minimum.
 
 The project's card archive keeps it like any card, so a past month is one
 small JSON row in `be_price_cards` rather than a CREG PDF and a supplier card.

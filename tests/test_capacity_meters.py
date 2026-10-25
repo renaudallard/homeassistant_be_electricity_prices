@@ -257,15 +257,15 @@ def _card(supplier: str = "luminus") -> Any:
         ({"analog_meter": False}, False),
         ({"region": "wallonia", "dso": "ores"}, False),
         ({"supplier": "custom"}, True),
-        ({"supplier": "social"}, False),
+        ({"supplier": "social"}, True),
     ],
 )
 def test_an_analog_meter_is_a_flemish_one_billed_on_fluvius_tariffs(
     data: dict[str, Any], analog: bool
 ) -> None:
-    """Only Fluvius bills it apart, a dynamic contract needs a digital meter,
-    and the social tariff's network component is the CREG's. The custom
-    supplier is asked too, for the cards it is compared with."""
+    """Only Fluvius bills it apart and a dynamic contract needs a digital
+    meter. The custom supplier and the social tariff are asked too, for the
+    cards they are compared with."""
     entry = _flemish("mono", analog_meter=True)
     assert analog_meter({**entry.data, **data}) is analog
 
@@ -946,8 +946,8 @@ async def test_the_backfill_reads_the_rate_before_the_contracts_card(
         (False, {"analog_meter": False}, False),
         # A copy kept before the question existed takes the entry's answer.
         (True, {}, False),
-        # Leaving the social tariff, whose meter step never asks, on the same
-        # analog meter: the copy holds the entry's answer.
+        # Leaving the social tariff, whose meter step did not ask before, on
+        # the same analog meter: the copy holds the entry's answer.
         (True, {"supplier": "social", "contract": "social_engie"}, False),
     ],
 )
@@ -971,3 +971,47 @@ def test_a_quoted_ytd_is_left_out_across_a_replaced_meter(
         previous_contracts=[{"until": "2026-07-01", "data": earlier}],
     )
     assert _meters_rewired(entry, date(2026, 10, 23)) is left_out
+
+
+def test_a_social_household_on_an_analog_meter_is_quoted_analog_cards(
+    freezer: Any,
+) -> None:
+    """Its own card's network is the CREG's and stays as printed, but every
+    card the comparison page sets against it was quoted on the digital kWh
+    rate and with the ceiling, 95,69 EUR a year too cheap at 3.500 kWh in
+    Antwerpen. Leaving a commercial contract for it on the same analog meter
+    read as a replaced meter, since the social entry held no answer."""
+    from datetime import date
+
+    from custom_components.be_electricity_prices import fluvius
+    from custom_components.be_electricity_prices.compare_household import (
+        _meters_rewired,
+    )
+    from custom_components.be_electricity_prices.compare_inputs import _quote_entry
+    from custom_components.be_electricity_prices.flow_schemas import _meter_schema
+
+    freezer.move_to("2026-10-23 13:00:00+02:00")
+    fluvius._analog[(2026, "fluvius_antwerpen")] = _ANTWERPEN_2026
+    earlier = {**_flemish("mono").data, "analog_meter": True}
+    entry = _flemish(
+        "mono",
+        supplier="social",
+        contract="social_engie",
+        analog_meter=True,
+        previous_contracts=[{"until": "2026-07-01", "data": earlier}],
+    )
+    shown = {
+        str(key)
+        for key in _meter_schema("social", "social_engie", dict(entry.data)).schema
+    }
+    assert "analog_meter" in shown
+    october = date(2026, 10, 1)
+    candidate = _resolve_snapshot(
+        _quote_entry(entry, "none", meter="mono"), _card(), delivery_month=october
+    )
+    network = candidate.dsos["fluvius_antwerpen"]
+    assert network.distribution_single == pytest.approx(0.0535 + _ANTWERPEN_2026 * 1.06)
+    assert network.network_ceiling_eur_per_kwh is None
+    own = _resolve_snapshot(entry, _card("social"), delivery_month=october)
+    assert own.dsos["fluvius_antwerpen"].distribution_single == 0.0535
+    assert _meters_rewired(entry, date(2026, 10, 23)) is False
