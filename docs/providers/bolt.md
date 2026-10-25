@@ -1019,9 +1019,12 @@ itself is not credited. `stand_in_reference` (`bolt.py`) names the fixed card of
 a stand-in month, its latest closed month, since a quarter's first edition has printed the quarter
 before's (the first October 2026 cards), and `stand_in_for_month` (`snapshot_feed_in.py`) rebuilds
 the month's figures on its indices through the current card's formula (`settled_stand_in`,
-`_settle.py`); a figure the table prints no index for is dropped, so a two-register meter is
-credited the quarter's single figure. While the quarter after has no closed month the current
-card's table is the quarter's own. Where the fixed card cannot be had an entry with a day-ahead
+`_settle.py`); a figure the table prints no index for, a band of the Impact tariff, is dropped,
+so an entry on that tariff is credited the quarter's single figure. While the quarter after has no
+closed month the current card's table is the quarter's own. The fixed cards before April 2025 print
+no table, only the RLP-weighted Belpex of the latest month beside the feed-in (9,02 c/kWh on the
+March 2025 card), which no quarter settled at: a card carrying its single figure alone is taken as
+one that cannot be had, which is where the months of 2024 land. Where the fixed card cannot be had an entry with a day-ahead
 source is credited the month per quarter-hour on the formula, as the dynamic settlement is,
 nothing for an hour without a spot, and one without a source the current card's figures, as it is
 billed the printed figures wherever a card prints them; the backfill of an entry whose stand-in

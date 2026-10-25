@@ -233,19 +233,23 @@ def settled_stand_in(
 ) -> InjectionRates | None:
     """``inj``, a feed-in leg crediting figures per register, standing in for
     a closed month, rebuilt on the indices ``reference`` prints for that
-    month's quarter, or ``None`` where it prints no single-register one.
+    month's quarter, or ``None`` where it prints no index table.
 
     ``reference`` is a card of the quarter after, whose figures per register
-    are the formula at those indices (``_spp_register_indices``). A figure it
-    prints no index for is dropped rather than left at the current card's
-    quarter, so a two-register meter, or an entry on the Impact tariff, is
-    credited the quarter's single figure.
+    are the formula at those indices (``_spp_register_indices``). The table
+    prints a single, a day and a night index, so a card carrying its single
+    figure alone printed none: Bolt's fixed cards before April 2025 print the
+    RLP-weighted Belpex of the latest month there, 9,02 c/kWh on the March
+    2025 card, which read back as the quarter's index credited the months of
+    2024 a figure no quarter settled at. A figure it prints no index for, a
+    band of the Impact tariff, is dropped rather than left at the current
+    card's quarter, so an entry on that tariff is credited the quarter's
+    single figure.
     """
     indices = _spp_register_indices(reference)
-    if "current" not in indices:
+    if any(field not in indices for field in _SPP_REGISTERS):
         return None
-    unread: dict[str, Any] = {f: None for f in _SPP_REGISTERS if f not in indices}
-    return settled_spp_registers(replace(inj, **unread), indices)
+    return settled_spp_registers(inj, indices)
 
 
 def settles_registers(inj: InjectionRates) -> bool:

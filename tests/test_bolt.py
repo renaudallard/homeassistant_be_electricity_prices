@@ -2799,6 +2799,30 @@ async def test_a_month_no_archive_holds_is_credited_its_own_quarter_s_feed_in(
         ) == pytest.approx(inj.peak)
 
 
+def test_a_fixed_card_printing_no_index_table_settles_no_stand_in() -> None:
+    """The fixed cards before April 2025 print no SPP index table, only the
+    RLP-weighted Belpex of the latest month, 9,02 c/kWh on the March 2025
+    card. Read back as the quarter's index it credited the months of 2024 a
+    figure no quarter settled at, so such a card is no reference: the month
+    is credited as one whose reference cannot be had."""
+    from custom_components.be_electricity_prices.providers._settle import (
+        settled_stand_in,
+    )
+
+    variable = parse_snapshot(
+        "bolt_online",
+        fixture_text("bolt_online_oct_reissue.pdf", layout=True),
+        "flanders",
+    ).injection
+    fixed = parse_snapshot(
+        "bolt_fix", fixture_text("bolt_fix.pdf", layout=True), "flanders"
+    ).injection
+    assert variable is not None and fixed is not None
+    assert settled_stand_in(variable, fixed) is not None
+    tableless = replace(fixed, current=0.0902, peak=None, offpeak=None)
+    assert settled_stand_in(variable, tableless) is None
+
+
 async def test_a_month_whose_quarter_cannot_be_read_is_credited_per_slot(
     hass: Any,
 ) -> None:
