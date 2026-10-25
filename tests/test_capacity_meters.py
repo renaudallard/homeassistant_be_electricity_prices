@@ -453,7 +453,8 @@ async def test_the_meter_step_asks_and_drops_the_analog_answer(
     shown = await _form(hass, stored, "meter")
     assert shown["analog_meter"] is True
     data = await _saved(hass, stored, {"meter": {"meter": "dynamic"}})
-    assert "analog_meter" not in data
+    # Answered "not analog" rather than dropped, since a day follows it.
+    assert data["analog_meter"] is False
 
 
 async def _form(hass: HomeAssistant, entry: MockConfigEntry, step: str) -> Any:

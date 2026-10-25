@@ -95,16 +95,16 @@ def _engie_basic_online(energy: Any = None) -> Any:
 
 
 def _entry(**extra: Any) -> MockConfigEntry:
-    return make_entry(
-        supplier="engie",
-        contract="engie_basic_online",
-        region="flanders",
-        dso="fluvius_antwerpen",
-        meter="mono",
-        solar_regime="none",
-        consumption_kwh="sensor.cons_total",
-        **extra,
-    )
+    base: dict[str, Any] = {
+        "supplier": "engie",
+        "contract": "engie_basic_online",
+        "region": "flanders",
+        "dso": "fluvius_antwerpen",
+        "meter": "mono",
+        "solar_regime": "none",
+        "consumption_kwh": "sensor.cons_total",
+    }
+    return make_entry(**{**base, **extra})
 
 
 async def _ytd(
@@ -613,3 +613,44 @@ async def test_a_meter_only_a_digital_one_carries_asks_the_day_too(
     )
     assert "analog_replaced" not in steps
     assert "analog_meter_replaced" not in moved.data
+
+
+@pytest.mark.parametrize(
+    "answer", [{}, {"analog_meter": True}], ids=["never", "ticked"]
+)
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_social_entry_picking_the_smart_meter_keeps_its_day(
+    hass: HomeAssistant, freezer: Any, answer: dict[str, Any]
+) -> None:
+    """The box is not offered on the smart meter, so it was dropped, and a
+    social entry holding no answer takes the kept contract's again, which
+    made the day it had just been given do nothing: the kept contract analog
+    to its last day, and the step never shown again to put it right."""
+    from custom_components.be_electricity_prices.contract_periods import (
+        previous_periods,
+    )
+
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    kept = {**_entry(analog_meter=True).data}
+    days = (date(2026, 2, 28), date(2026, 3, 1), date(2026, 6, 30))
+    social = _entry(
+        supplier="social",
+        contract="social_engie",
+        previous_contracts=[{"until": "2026-07-01", "data": kept}],
+        **answer,
+    )
+    social.add_to_hass(hass)
+    await _walked(
+        hass,
+        social,
+        {
+            "meter": {"meter": "dynamic"},
+            "analog_replaced": {"analog_meter_replaced": "2026-03-01"},
+        },
+    )
+    assert social.data["analog_meter"] is False
+    held = previous_periods(social.data, date(2026, 1, 1), date(2026, 10, 24))
+    assert [analog_meter(held[0].data, d) for d in days] == [True, False, False]
+    steps = await _walked(hass, social, {})
+    assert "analog_replaced" in steps
+    assert social.data["analog_meter_replaced"] == "2026-03-01"

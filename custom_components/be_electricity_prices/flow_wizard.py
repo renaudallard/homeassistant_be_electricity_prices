@@ -393,18 +393,25 @@ class _WizardStepsMixin:
                 # move to another region would be inert, and would come back
                 # into force if the entry moved back without being asked.
                 self._data.pop(CONF_DAY_HOURS, None)
+            stored = self._stored_data() or {}
             if not offers_analog_meter(self._data):
                 # Likewise, and on the digital meter a dynamic contract needs.
+                # A Flemish entry that was analog, or holds the day it stopped,
+                # is answered "not analog" instead, which a day always follows:
+                # dropped, a social entry never asked would take the kept
+                # contract's answer again (analog_answer) and ignore the day.
                 self._data.pop(CONF_ANALOG_METER, None)
+                if self._data[CONF_REGION] == REGION_FLANDERS and (
+                    analog_meter(stored) or analog_replaced_on(stored)
+                ):
+                    self._data[CONF_ANALOG_METER] = False
             if self._data[CONF_REGION] != REGION_FLANDERS or self._data.get(
                 CONF_ANALOG_METER
             ):
                 # Analog again, or another connection after a move: no day of
                 # it is on a meter Fluvius replaced.
                 self._data.pop(CONF_ANALOG_REPLACED, None)
-            elif analog_meter(self._stored_data() or {}) or analog_replaced_on(
-                self._data
-            ):
+            elif analog_meter(stored) or analog_replaced_on(self._data):
                 # Unticked, or a meter or contract only a digital meter carries
                 # picked: either way Fluvius has replaced the analog one. And
                 # shown again while a day is held, so a wrong one can be put
