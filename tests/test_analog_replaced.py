@@ -269,8 +269,10 @@ def test_an_entry_without_the_day_is_billed_as_before() -> None:
 async def test_unticking_the_box_asks_the_day_the_meter_was_replaced(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """Only on an entry stored analog, never in the future, and ticking the
-    box again drops the day."""
+    """Only on an entry stored analog or holding a day, never in the future,
+    and ticking the box again drops the day. Shown again on every edit while a
+    day is held, so a wrong one can be changed, and left blank for a box
+    ticked by mistake, which bills the year as before the day was asked."""
     freezer.move_to("2026-10-24 12:00:00+02:00")
     digital = _entry(analog_meter=False)
     digital.add_to_hass(hass)
@@ -305,11 +307,29 @@ async def test_unticking_the_box_asks_the_day_the_meter_was_replaced(
     )
     assert data["analog_meter"] is False
     assert data["analog_meter_replaced"] == "2026-07-01"
-    # Edited again with the box left unticked: not asked, the day kept.
-    assert "analog_replaced" not in await _steps(hass, analog, {})
-    assert analog.data["analog_meter_replaced"] == "2026-07-01"
+    # Edited again with the box left unticked: the day held, shown to change.
+    steps = await _walked(
+        hass, analog, {"analog_replaced": {"analog_meter_replaced": "2026-07-15"}}
+    )
+    assert "analog_replaced" in steps
+    assert analog.data["analog_meter_replaced"] == "2026-07-15"
+    await _walked(hass, analog, {})
+    assert analog.data["analog_meter_replaced"] == "2026-07-15"
     data = await _saved(hass, analog, {"meter": {"analog_meter": True}})
     assert "analog_meter_replaced" not in data
+
+    # Ticked by mistake: unticked with the day left blank, no day is analog.
+    await _walked(
+        hass,
+        analog,
+        {
+            "meter": {"analog_meter": False},
+            "analog_replaced": {"analog_meter_replaced": None},
+        },
+    )
+    assert analog.data["analog_meter"] is False
+    assert "analog_meter_replaced" not in analog.data
+    assert "analog_replaced" not in await _steps(hass, analog, {})
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -509,7 +529,8 @@ async def _walked(
     switch: str | None = None,
 ) -> list[str]:
     """The steps Edit settings, or a supplier switch recorded on ``switch``,
-    walks with ``answers``, the entry saved at the end."""
+    walks with ``answers``, the entry saved at the end. An answer of None
+    leaves its field blank."""
     from homeassistant.data_entry_flow import FlowResultType
 
     opts = hass.config_entries.options
@@ -527,9 +548,11 @@ async def _walked(
             )
         while result["type"] == FlowResultType.FORM:
             steps.append(result["step_id"])
+            form = {**_shown(result), **answers.get(result["step_id"], {})}
             result = await opts.async_configure(
                 result["flow_id"],
-                {**_shown(result), **answers.get(result["step_id"], {})},
+                # None leaves the field blank.
+                {key: value for key, value in form.items() if value is not None},
             )
     return steps
 

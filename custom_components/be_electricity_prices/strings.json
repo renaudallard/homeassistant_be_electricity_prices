@@ -60,12 +60,12 @@
       },
       "analog_replaced": {
         "title": "Analog meter replaced",
-        "description": "Your meter was set as analog, and Analog meter is now unticked, or the meter or contract you picked needs a digital meter. Fluvius billed the days before the digital meter was placed on the analog one: the capacity tariff on a flat 2.5 kW and a higher network rate per kWh. Enter the day it was placed: this year's cost then bills the days before it as analog and the days from it on the digital meter. Ticking Analog meter again clears it.",
+        "description": "Your meter was set as analog, and Analog meter is now unticked, or the meter or contract you picked needs a digital meter. Fluvius billed the days before the digital meter was placed on the analog one: the capacity tariff on a flat 2.5 kW and a higher network rate per kWh. Enter the day it was placed: this year's cost then bills the days before it as analog and the days from it on the digital meter. This step comes back on every edit while a day is held, so it can be changed. Ticking Analog meter again clears it.",
         "data": {
           "analog_meter_replaced": "Day the digital meter was placed"
         },
         "data_description": {
-          "analog_meter_replaced": "As on Fluvius's letter or the meter's placement report. Not in the future. From that day the capacity tariff is billed on the digital meter's peak."
+          "analog_meter_replaced": "As on Fluvius's letter or the meter's placement report. Not in the future. From that day the capacity tariff is billed on the digital meter's peak. Leave it empty if the meter was not analog this year, a box ticked by mistake for one: every day is then billed on the digital meter."
         }
       },
       "professional": {

@@ -38,7 +38,7 @@ blanked box has to be popped from the entry or the stored value survives.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -470,12 +470,11 @@ def _meter_schema(
     return vol.Schema(fields)
 
 
-def _analog_replaced_schema(today: date) -> vol.Schema:
+def _analog_replaced_schema() -> vol.Schema:
     """The day Fluvius replaced the analog meter, asked once its box is
-    unticked on an entry that had it ticked."""
-    return vol.Schema(
-        {vol.Required(CONF_ANALOG_REPLACED, default=today.isoformat()): DateSelector()}
-    )
+    unticked on an entry that had it ticked, and shown again to change while
+    one is held. Optional: left blank, no day of the year is analog."""
+    return vol.Schema({vol.Optional(CONF_ANALOG_REPLACED): DateSelector()})
 
 
 def _settlement_schema(defaults: dict[str, Any]) -> vol.Schema:

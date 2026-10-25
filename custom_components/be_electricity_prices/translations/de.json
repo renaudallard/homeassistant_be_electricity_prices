@@ -60,12 +60,12 @@
       },
       "analog_replaced": {
         "title": "Analoger Zähler ersetzt",
-        "description": "Ihr Zähler war als analog angegeben, und Analoger Zähler ist jetzt abgewählt, oder der gewählte Zähler oder Vertrag verlangt einen digitalen Zähler. Fluvius hat die Tage vor dem Einbau des digitalen Zählers über den analogen Zähler abgerechnet: den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh. Geben Sie den Tag des Einbaus ein: Die Kosten dieses Jahres rechnen dann die Tage davor als analog und die Tage ab diesem Tag über den digitalen Zähler ab. Wird Analoger Zähler erneut angekreuzt, entfällt das Datum.",
+        "description": "Ihr Zähler war als analog angegeben, und Analoger Zähler ist jetzt abgewählt, oder der gewählte Zähler oder Vertrag verlangt einen digitalen Zähler. Fluvius hat die Tage vor dem Einbau des digitalen Zählers über den analogen Zähler abgerechnet: den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh. Geben Sie den Tag des Einbaus ein: Die Kosten dieses Jahres rechnen dann die Tage davor als analog und die Tage ab diesem Tag über den digitalen Zähler ab. Dieser Schritt erscheint bei jeder Bearbeitung wieder, solange ein Tag gespeichert ist, damit er geändert werden kann. Wird Analoger Zähler erneut angekreuzt, entfällt das Datum.",
         "data": {
           "analog_meter_replaced": "Tag des Einbaus des digitalen Zählers"
         },
         "data_description": {
-          "analog_meter_replaced": "Wie im Schreiben von Fluvius oder im Einbauprotokoll des Zählers. Nicht in der Zukunft. Ab diesem Tag wird der Kapazitätstarif auf die Spitze des digitalen Zählers berechnet."
+          "analog_meter_replaced": "Wie im Schreiben von Fluvius oder im Einbauprotokoll des Zählers. Nicht in der Zukunft. Ab diesem Tag wird der Kapazitätstarif auf die Spitze des digitalen Zählers berechnet. Leer lassen, wenn der Zähler dieses Jahr nicht analog war, etwa wenn das Kästchen versehentlich angekreuzt wurde: Jeder Tag wird dann über den digitalen Zähler abgerechnet."
         }
       },
       "professional": {
@@ -427,12 +427,12 @@
       },
       "analog_replaced": {
         "title": "Analoger Zähler ersetzt",
-        "description": "Ihr Zähler war als analog angegeben, und Analoger Zähler ist jetzt abgewählt, oder der gewählte Zähler oder Vertrag verlangt einen digitalen Zähler. Fluvius hat die Tage vor dem Einbau des digitalen Zählers über den analogen Zähler abgerechnet: den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh. Geben Sie den Tag des Einbaus ein: Die Kosten dieses Jahres rechnen dann die Tage davor als analog und die Tage ab diesem Tag über den digitalen Zähler ab. Wird Analoger Zähler erneut angekreuzt, entfällt das Datum.",
+        "description": "Ihr Zähler war als analog angegeben, und Analoger Zähler ist jetzt abgewählt, oder der gewählte Zähler oder Vertrag verlangt einen digitalen Zähler. Fluvius hat die Tage vor dem Einbau des digitalen Zählers über den analogen Zähler abgerechnet: den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh. Geben Sie den Tag des Einbaus ein: Die Kosten dieses Jahres rechnen dann die Tage davor als analog und die Tage ab diesem Tag über den digitalen Zähler ab. Dieser Schritt erscheint bei jeder Bearbeitung wieder, solange ein Tag gespeichert ist, damit er geändert werden kann. Wird Analoger Zähler erneut angekreuzt, entfällt das Datum.",
         "data": {
           "analog_meter_replaced": "Tag des Einbaus des digitalen Zählers"
         },
         "data_description": {
-          "analog_meter_replaced": "Wie im Schreiben von Fluvius oder im Einbauprotokoll des Zählers. Nicht in der Zukunft. Ab diesem Tag wird der Kapazitätstarif auf die Spitze des digitalen Zählers berechnet."
+          "analog_meter_replaced": "Wie im Schreiben von Fluvius oder im Einbauprotokoll des Zählers. Nicht in der Zukunft. Ab diesem Tag wird der Kapazitätstarif auf die Spitze des digitalen Zählers berechnet. Leer lassen, wenn der Zähler dieses Jahr nicht analog war, etwa wenn das Kästchen versehentlich angekreuzt wurde: Jeder Tag wird dann über den digitalen Zähler abgerechnet."
         }
       },
       "professional": {

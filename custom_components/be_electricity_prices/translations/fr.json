@@ -60,12 +60,12 @@
       },
       "analog_replaced": {
         "title": "Compteur analogique remplacé",
-        "description": "Votre compteur était indiqué comme analogique, et Compteur analogique est maintenant décoché, ou le compteur ou le contrat choisi demande un compteur numérique. Fluvius a facturé les jours précédant la pose du compteur numérique sur le compteur analogique : le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Indiquez le jour de la pose : le coût de l'année facture alors les jours qui le précèdent en analogique et les jours à partir de celui-ci sur le compteur numérique. Cocher à nouveau Compteur analogique l'efface.",
+        "description": "Votre compteur était indiqué comme analogique, et Compteur analogique est maintenant décoché, ou le compteur ou le contrat choisi demande un compteur numérique. Fluvius a facturé les jours précédant la pose du compteur numérique sur le compteur analogique : le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Indiquez le jour de la pose : le coût de l'année facture alors les jours qui le précèdent en analogique et les jours à partir de celui-ci sur le compteur numérique. Cette étape revient à chaque modification tant qu'un jour est enregistré, pour pouvoir le changer. Cocher à nouveau Compteur analogique l'efface.",
         "data": {
           "analog_meter_replaced": "Jour de la pose du compteur numérique"
         },
         "data_description": {
-          "analog_meter_replaced": "Tel qu'indiqué sur le courrier de Fluvius ou le rapport de pose du compteur. Pas dans le futur. À partir de ce jour, le tarif capacitaire est facturé sur le pic du compteur numérique."
+          "analog_meter_replaced": "Tel qu'indiqué sur le courrier de Fluvius ou le rapport de pose du compteur. Pas dans le futur. À partir de ce jour, le tarif capacitaire est facturé sur le pic du compteur numérique. Laissez-le vide si le compteur n'était pas analogique cette année, par exemple si la case a été cochée par erreur : chaque jour est alors facturé sur le compteur numérique."
         }
       },
       "professional": {
@@ -427,12 +427,12 @@
       },
       "analog_replaced": {
         "title": "Compteur analogique remplacé",
-        "description": "Votre compteur était indiqué comme analogique, et Compteur analogique est maintenant décoché, ou le compteur ou le contrat choisi demande un compteur numérique. Fluvius a facturé les jours précédant la pose du compteur numérique sur le compteur analogique : le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Indiquez le jour de la pose : le coût de l'année facture alors les jours qui le précèdent en analogique et les jours à partir de celui-ci sur le compteur numérique. Cocher à nouveau Compteur analogique l'efface.",
+        "description": "Votre compteur était indiqué comme analogique, et Compteur analogique est maintenant décoché, ou le compteur ou le contrat choisi demande un compteur numérique. Fluvius a facturé les jours précédant la pose du compteur numérique sur le compteur analogique : le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Indiquez le jour de la pose : le coût de l'année facture alors les jours qui le précèdent en analogique et les jours à partir de celui-ci sur le compteur numérique. Cette étape revient à chaque modification tant qu'un jour est enregistré, pour pouvoir le changer. Cocher à nouveau Compteur analogique l'efface.",
         "data": {
           "analog_meter_replaced": "Jour de la pose du compteur numérique"
         },
         "data_description": {
-          "analog_meter_replaced": "Tel qu'indiqué sur le courrier de Fluvius ou le rapport de pose du compteur. Pas dans le futur. À partir de ce jour, le tarif capacitaire est facturé sur le pic du compteur numérique."
+          "analog_meter_replaced": "Tel qu'indiqué sur le courrier de Fluvius ou le rapport de pose du compteur. Pas dans le futur. À partir de ce jour, le tarif capacitaire est facturé sur le pic du compteur numérique. Laissez-le vide si le compteur n'était pas analogique cette année, par exemple si la case a été cochée par erreur : chaque jour est alors facturé sur le compteur numérique."
         }
       },
       "professional": {

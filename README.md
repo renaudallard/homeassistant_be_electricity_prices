@@ -572,10 +572,13 @@ dropped rather than billed on the new card.
    own. Once Fluvius has replaced the meter, untick the box in **Edit
    settings**, or pick the smart meter or a contract that needs one there or
    in a supplier switch: it then asks the **Day the digital meter was placed**
-   (today by default, never in the future), and the days before it stay billed
+   (today by default, never in the future, left empty if the box was ticked by
+   mistake), and the days before it stay billed
    as analog while the days from it are billed on the digital meter, the
    capacity tariff on the peak it measures from then on, the contract kept at
-   a switch included. Ticking the box again drops the day, and so does a move
+   a switch included. **Edit settings** shows the day again on every edit
+   while one is held, so a wrong one can be changed. Ticking the box again
+   drops the day, and so does a move
    out of Flanders. Hours already written to the long-term statistics keep the
    meter they were priced on until the
    [backfill service](#be_electricity_pricesbackfill_statistics-service) is

@@ -402,9 +402,13 @@ class _WizardStepsMixin:
                 # Analog again, or another connection after a move: no day of
                 # it is on a meter Fluvius replaced.
                 self._data.pop(CONF_ANALOG_REPLACED, None)
-            elif analog_meter(self._stored_data() or {}):
+            elif analog_meter(self._stored_data() or {}) or analog_replaced_on(
+                self._data
+            ):
                 # Unticked, or a meter or contract only a digital meter carries
-                # picked: either way Fluvius has replaced the analog one.
+                # picked: either way Fluvius has replaced the analog one. And
+                # shown again while a day is held, so a wrong one can be put
+                # right.
                 return await self.async_step_analog_replaced()
             return await self._ask_professional()
         return self.async_show_form(
@@ -421,25 +425,34 @@ class _WizardStepsMixin:
 
         Asked when Edit settings unticks the box, or moves a Flemish entry
         stored analog onto a meter or contract only a digital meter carries,
-        where the box is not offered. The answer is one per entry,
-        so without the day every month of the year was billed on the digital
-        meter, the months before it without their analog kWh rate and on the
-        new meter's short mean. Every day before it bills as analog
-        (``analog_meter``); one in the future is refused.
+        where the box is not offered, and on every edit of an entry holding a
+        day, to change it. The answer is one per entry, so without the day
+        every month of the year was billed on the digital meter, the months
+        before it without their analog kWh rate and on the new meter's short
+        mean. Every day before it bills as analog (``analog_meter``); one in
+        the future is refused. Left blank, no day is: a box ticked by mistake
+        bills the year as it did before the day was asked.
         """
         today = dt_util.now().date()
         errors: dict[str, str] = {}
         if user_input is not None:
+            if not user_input.get(CONF_ANALOG_REPLACED):
+                self._data.pop(CONF_ANALOG_REPLACED, None)
+                return await self._ask_professional()
             replaced = analog_replaced_on(user_input)
             if replaced is not None and replaced <= today:
                 self._data[CONF_ANALOG_REPLACED] = replaced.isoformat()
                 return await self._ask_professional()
             errors[CONF_ANALOG_REPLACED] = "analog_replaced_in_future"
+        # The day held, else today; a rejected one comes back as typed.
+        shown = user_input or {
+            CONF_ANALOG_REPLACED: self._data.get(CONF_ANALOG_REPLACED)
+            or today.isoformat()
+        }
         return self.async_show_form(
             step_id="analog_replaced",
-            # A rejected date comes back as typed, not reset to today.
             data_schema=self.add_suggested_values_to_schema(
-                _analog_replaced_schema(today), user_input
+                _analog_replaced_schema(), shown
             ),
             errors=errors,
         )
