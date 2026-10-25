@@ -554,7 +554,9 @@ class _HouseholdMixin:
                 return month
             return _consumption_weighted_spot(spot_dict, hour_weights) or avg_spot
 
-        def _index_gaps(snapshot: SupplierSnapshot | None) -> IndexGaps:
+        def _index_gaps(
+            snapshot: SupplierSnapshot | None, *, own: bool = False
+        ) -> IndexGaps:
             """The index this side's card names that the page could not
             resolve, by cause (``IndexGaps``), so the page and the ranking say
             so rather than ranking the row as though its own index had been
@@ -570,6 +572,10 @@ class _HouseholdMixin:
             measured, and where the card prints a figure to fall back on;
             without one the credit is left out, which ``feed_in_uncredited``
             says.
+
+            ``own`` asks it of the household's own side, which reads only the
+            entry's own source (:func:`_credit_month_spot_for`): a key typed
+            on the page is not one.
             """
             if snapshot is None:
                 return IndexGaps()
@@ -580,7 +586,8 @@ class _HouseholdMixin:
                 and rolling_inj_kwh > 0
                 and getattr(inj, "current", None) is not None
             )
-            if not (spot_key or spot_keyless):
+            source = spots_available(current) if own else spot_key or spot_keyless
+            if not source:
                 return IndexGaps(
                     day_ahead=credited
                     and (

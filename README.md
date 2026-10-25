@@ -958,7 +958,10 @@ opens a menu of four options, five once a supplier switch has been recorded this
   would help, since there is no day-ahead to weigh: every feed-in that settles
   on a month of the day-ahead price is credited at the figure its card prints,
   your own contract's too when its feed-in is one of them, as your sensors
-  credit it, and the note and the ranking say so once.
+  credit it, and the note and the ranking say so once. Your own contract reads
+  only the entry's own source, as your sensors do: a key typed on the
+  comparison page prices the others on the month and leaves yours at its
+  printed figure, and the note then says that of your own contract alone.
   The sweep is **bounded by a clock, not a timeout** — a tariff card cannot be
   parsed halfway and abandoned — so it fetches the cheapest cards first, and
   **the table is on screen while it fills**, rows appearing and reordering as

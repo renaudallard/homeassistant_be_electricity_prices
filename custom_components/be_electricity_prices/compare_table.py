@@ -254,7 +254,7 @@ _NO_DIRECT_DEBIT = "`NO DIRECT DEBIT`"
 _NO_PROFILE = "`NO PROFILE`"
 
 
-def _no_day_ahead(own: bool) -> str:
+def _no_day_ahead(own: bool, others: bool) -> str:
     """What a household with no day-ahead source is told once, under the
     ranking and in a quote's note, rather than per row: every month-indexed
     feed-in is on the figure its card prints, which is a fact about the
@@ -263,8 +263,18 @@ def _no_day_ahead(own: bool) -> str:
     ``own`` is whether the household's own contract is one of them, which it
     is only when its own feed-in settles on a month: one fixed for the term
     is credited exactly as the card says, and naming it read as though its
-    own figure were a stand-in too.
+    own figure were a stand-in too. ``others`` is whether any other contract
+    is. The own side reads only the entry's own source, as its sensor does,
+    so a key typed on the page resolves the others and leaves the own one on
+    its printed figure: said of every feed-in, the note was wrong, and left
+    out, the page showed a contract costing more than itself unexplained.
     """
+    if not others:
+        return (
+            "your own contract's feed-in, indexed on a month, is credited at "
+            "the figure its card prints, as its sensor credits it without a "
+            "day-ahead source (an ENTSO-E key or the keyless setting) of its own"
+        )
     note = (
         "without a day-ahead source (an ENTSO-E key or the keyless setting) "
         "every feed-in indexed on a month is credited at the figure its card "
@@ -365,7 +375,10 @@ def _ranking_table(
             "with an ENTSO-E key or the keyless setting."
         )
     if any(row.day_ahead_missing for row in priced):
-        note = _no_day_ahead(any(r.is_own and r.day_ahead_missing for r in priced))
+        note = _no_day_ahead(
+            any(r.is_own and r.day_ahead_missing for r in priced),
+            any(not r.is_own and r.day_ahead_missing for r in priced),
+        )
         out.append("")
         out.append(f"{note[0].upper()}{note[1:]}.")
 

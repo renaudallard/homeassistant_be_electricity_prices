@@ -372,6 +372,18 @@ def test_the_ranking_says_which_rows_lack_their_curve() -> None:
     without = _ranking_table(fixed_own)
     assert "your own contract" not in without
     assert without.count(line.removesuffix(", your own contract's included.")) == 1
+    # The own row alone: a key typed on the page resolved every other row, and
+    # the own one stays on its printed figure, as its sensor does.
+    own_only = _ranking_table([rows[0], replace(rows[2], day_ahead_missing=False)])
+    assert "every feed-in" not in own_only
+    assert (
+        own_only.count(
+            "Your own contract's feed-in, indexed on a month, is credited at the "
+            "figure its card prints, as its sensor credits it without a day-ahead "
+            "source (an ENTSO-E key or the keyless setting) of its own."
+        )
+        == 1
+    )
 
 
 async def test_without_a_day_ahead_source_the_cause_is_the_source(
@@ -475,6 +487,78 @@ async def test_the_one_off_quote_says_once_that_there_is_no_day_ahead(
     note = p["card_note"]
     assert note.count("without a day-ahead source") == 1
     assert "your own contract" not in note
+
+
+async def test_a_key_typed_on_the_page_says_the_own_feed_in_stays_printed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The own side reads only the entry's own day-ahead source, as its sensor
+    does, so a key typed on the page resolves the quoted side's month and not
+    the own one. The gap was put down to the page's source, so the note said
+    nothing and the contract quoted against itself cost 130 EUR a year more
+    than itself, unexplained."""
+    from custom_components.be_electricity_prices import compare_flow, ytd_cost
+    from custom_components.be_electricity_prices.meter_daily import MeasuredKwh
+    from tests.test_options_flow import _compare_placeholders
+
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    card = replace(
+        _stub_snapshot("eneco", "power_flex", 0.2),
+        injection=InjectionRates(
+            current=0.0904, factor=0.77, base=-0.03, month_indexed=True
+        ),
+    )
+    october = datetime(2026, 9, 30, 22, tzinfo=UTC)
+    month = {october + timedelta(hours=h): 0.10 for h in range(23 * 24)}
+
+    async def fetch(
+        self: Any, start: Any, end: Any, api_key: Any = None, *, keyless: bool = False
+    ) -> None:
+        if api_key or keyless:
+            self._historical_spots.update(month)
+
+    async def measured(*_a: Any, side: str = "consumption", **_k: Any) -> Any:
+        return MeasuredKwh(3000.0 if side == "injection" else 3500.0, 365)
+
+    household = "custom_components.be_electricity_prices.compare_household."
+    for typed, note in (
+        (" ", "every feed-in indexed on a month"),
+        ("TESTKEY", "as its sensor credits it without a day-ahead source"),
+    ):
+        entry = make_entry(
+            contract="power_flex",
+            solar_regime="injection",
+            consumption_kwh="sensor.c",
+            injection_kwh="sensor.i",
+        )
+        entry.add_to_hass(hass)
+        coord = _real_coordinator(hass, entry, card)
+        entry.runtime_data = coord
+        with (
+            patch(household + "_measured_hourly", AsyncMock(return_value=None)),
+            patch(household + "_measured_kwh", measured),
+            patch.object(type(coord), "_ensure_historical_spots", fetch),
+            patch.object(
+                compare_flow, "_validate_entsoe_key", AsyncMock(return_value=None)
+            ),
+            patch(
+                "custom_components.be_electricity_prices.api."
+                "fetch_day_ahead_or_fallback",
+                AsyncMock(return_value=({}, "entsoe")),
+            ),
+            patch.object(
+                ytd_cost, "_compute_current_year_cost", AsyncMock(return_value=100.0)
+            ),
+        ):
+            p = await _compare_placeholders(
+                hass,
+                entry,
+                supplier="eneco",
+                contract="power_flex",
+                target_snapshot=card,
+                api_key=typed,
+            )
+        assert p["card_note"].count(note) == 1
 
 
 async def test_the_own_contract_against_itself_says_each_caveat_once(

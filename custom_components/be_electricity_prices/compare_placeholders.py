@@ -531,7 +531,7 @@ class _PlaceholdersMixin(OptionsFlow):
             missing_kva=_kva(current) <= 0.0,
         )
         caveats: list[str] = []
-        own_gaps = hh.index_gaps(current_snapshot)
+        own_gaps = hh.index_gaps(current_snapshot, own=True)
         other_gaps = hh.index_gaps(other_snap)
         if current_snapshot is not None:
             caveats += _card_caveats(
@@ -550,7 +550,7 @@ class _PlaceholdersMixin(OptionsFlow):
         # both sides, and its every caveat read twice in a row.
         caveats = list(dict.fromkeys(caveats))
         if own_gaps.day_ahead or other_gaps.day_ahead:
-            caveats.append(_no_day_ahead(own_gaps.day_ahead))
+            caveats.append(_no_day_ahead(own_gaps.day_ahead, other_gaps.day_ahead))
         rewired = _meters_rewired(self.config_entry, today_local)
         if rewired:
             caveats.append(

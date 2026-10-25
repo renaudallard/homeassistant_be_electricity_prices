@@ -612,7 +612,7 @@ class _SweepEngine(_HouseholdMixin):
             )
         except Exception:  # the alternatives are still useful
             return None
-        gaps = hh.index_gaps(hh.current_snapshot)
+        gaps = hh.index_gaps(hh.current_snapshot, own=True)
         return RankedRow(
             label=label,
             annual=annual,
