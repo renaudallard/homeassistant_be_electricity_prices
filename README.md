@@ -555,8 +555,9 @@ dropped rather than billed on the new card.
    box changes nothing on your own bill and only quotes the cards compared
    with yours on the analog rates and 2,5 kW. A social-tariff entry that
    recorded its switch from a commercial contract under 0.43.0, which did not
-   ask it there, takes that contract's answer until you answer the box. Fluvius cannot measure an analog meter's
-   peak: it bills the capacity tariff on a flat 2,5 kW (the "vaste term" of
+   ask it there, takes that contract's answer until you answer the box, a
+   later switch to another supplier included. Fluvius cannot measure an analog
+   meter's peak: it bills the capacity tariff on a flat 2,5 kW (the "vaste term" of
    its tariff sheet), applies no maximum tariff, and charges every kWh,
    exclusive-night ones included, its analog kWh rate instead of the digital
    one, 2,73 c/kWh more with VAT on Fluvius Antwerpen in 2026. That rate is

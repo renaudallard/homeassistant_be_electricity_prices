@@ -93,6 +93,7 @@ from homeassistant.util import dt as dt_util
 
 from .compare_sweep_flow import _SweepStepsMixin
 from .const import (
+    CONF_ANALOG_METER,
     CONF_CONTRACT,
     CONF_DSO,
     CONF_METER,
@@ -117,6 +118,7 @@ from .providers import (
 from .providers._rates import SpotMonthlyRates
 from .providers._resolve import card_formula
 from .providers.base import ExtractorError
+from .snapshot_resolve import analog_answer
 
 # ---- shared schema builders ---------------------------------------------------
 
@@ -347,7 +349,14 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
     _entry_step_id = "edit"
 
     def _seed_data(self) -> dict[str, Any]:
-        return {**self.config_entry.data, **self.config_entry.options}
+        data = {**self.config_entry.data, **self.config_entry.options}
+        # A social entry never asked the analog box takes the kept contract's
+        # answer (analog_answer), which a move to another supplier no longer
+        # reads: carried in as its own before the supplier can change, so a
+        # switch neither shows the box unticked nor asks a replacement day.
+        if CONF_ANALOG_METER not in data and analog_answer(data):
+            data[CONF_ANALOG_METER] = True
+        return data
 
     def _stored_data(self) -> Mapping[str, Any] | None:
         return self.config_entry.data

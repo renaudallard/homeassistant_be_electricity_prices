@@ -330,7 +330,9 @@ the first, the CREG's on the second) still billed as they are
 peak, and on both for the cards the comparison page quotes against them, the
 social card having no capacity term at all. The box starts from
 `analog_answer`, which on a social entry never asked is the answer of the
-contract kept at its switch. The step drops the
+contract kept at its switch; Edit settings seeds it into the flow's data
+(`_seed_data`, `config_flow.py`), so a switch away from the social tariff keeps
+it rather than showing the box unticked. The step drops the
 answer when the meter picked is one it does not hold for (a dynamic one, or after
 a move out of Flanders), so it cannot come back into force unasked. A Flemish
 entry that was analog, or holds a replacement day, keeps it unticked instead: a

@@ -654,3 +654,37 @@ async def test_a_social_entry_picking_the_smart_meter_keeps_its_day(
     steps = await _walked(hass, social, {})
     assert "analog_replaced" in steps
     assert social.data["analog_meter_replaced"] == "2026-03-01"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_switch_off_a_social_entry_never_asked_keeps_it_analog(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The box read the kept contract's answer only while the entry was on
+    the social tariff, so a switch to a commercial supplier showed it
+    unticked and, submitted as shown, recorded a replacement on a meter still
+    analog."""
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    kept = {**_entry(analog_meter=True).data}
+    social = _entry(
+        supplier="social",
+        contract="social_engie",
+        previous_contracts=[{"until": "2026-07-01", "data": kept}],
+    )
+    social.add_to_hass(hass)
+    steps = await _walked(
+        hass,
+        social,
+        {
+            "edit": {"supplier": "engie"},
+            "contract": {
+                "contract": "engie_basic_online",
+                "contract_start_date": "2026-09-01",
+            },
+        },
+        switch="2026-09-01",
+    )
+    assert "analog_replaced" not in steps
+    assert social.data["supplier"] == "engie"
+    assert social.data["analog_meter"] is True
+    assert "analog_meter_replaced" not in social.data
