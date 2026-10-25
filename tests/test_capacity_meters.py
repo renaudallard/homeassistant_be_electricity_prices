@@ -1030,3 +1030,43 @@ def test_the_help_bills_no_capacity_tariff_on_the_social_tariff() -> None:
         ]["analog_meter"]
         social = next(s for s in text.split(". ") if "social tariff" in s)
         assert "bills the capacity tariff" not in social, path
+
+
+def test_a_social_entry_never_asked_takes_the_kept_contracts_answer() -> None:
+    """Switched from a commercial contract on an analog meter under 0.43.0,
+    whose meter step did not ask the social tariff: the quoted year to date
+    was left out as if the meter had been replaced, and every compared card
+    was quoted digital."""
+    from datetime import date
+
+    from custom_components.be_electricity_prices import fluvius
+    from custom_components.be_electricity_prices.compare_household import (
+        _meters_rewired,
+    )
+    from custom_components.be_electricity_prices.compare_inputs import _quote_entry
+    from custom_components.be_electricity_prices.flow_schemas import _meter_schema
+
+    fluvius._analog[(2026, "fluvius_antwerpen")] = _ANTWERPEN_2026
+    earlier = {**_flemish("mono").data, "analog_meter": True}
+    entry = _flemish(
+        "mono",
+        supplier="social",
+        contract="social_engie",
+        previous_contracts=[{"until": "2026-07-01", "data": earlier}],
+    )
+    assert "analog_meter" not in entry.data
+    assert _meters_rewired(entry, date(2026, 10, 23)) is False
+    candidate = _resolve_snapshot(
+        _quote_entry(entry, "none", meter="mono"),
+        _card(),
+        delivery_month=date(2026, 10, 1),
+    )
+    assert candidate.dsos["fluvius_antwerpen"].distribution_single == pytest.approx(
+        0.0535 + _ANTWERPEN_2026 * 1.06
+    )
+    schema = _meter_schema("social", "social_engie", dict(entry.data)).schema
+    shown = {str(key): key.default() for key in schema if str(key) == "analog_meter"}
+    assert shown == {"analog_meter": True}
+    # Answered since, the answer stands.
+    unticked = {**entry.data, "analog_meter": False}
+    assert analog_meter(unticked) is False

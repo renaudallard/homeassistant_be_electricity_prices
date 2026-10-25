@@ -1739,7 +1739,11 @@ card is left as it is, since the custom supplier's network figures are the
 household's own meter's and the social tariff's CREG component replaces the
 operator's tariffs. The answer moves the cards either is compared with onto the
 analog network and the minimum peak, and on the custom supplier its own
-capacity term onto the minimum too; the social card has no capacity term. The answer rides the comparison proxy with the meter the
+capacity term onto the minimum too; the social card has no capacity term. A
+social entry that holds no answer, because its switch from a commercial contract
+was recorded under 0.43.0 whose meter step did not ask, takes the answer of the
+contract kept at that switch (`analog_answer`, `snapshot_resolve.py`), the same
+meter, until the box is answered. The answer rides the comparison proxy with the meter the
 quote is priced on, so a dynamic target is quoted digital, on the minimum peak
 the household would start from.
 

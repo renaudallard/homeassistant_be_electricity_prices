@@ -553,7 +553,9 @@ dropped rather than billed on the new card.
    comparison page sets against yours on the analog rates. The social tariff
    has no capacity tariff and keeps the CREG's network component: there the
    box changes nothing on your own bill and only quotes the cards compared
-   with yours on the analog rates and 2,5 kW. Fluvius cannot measure an analog meter's
+   with yours on the analog rates and 2,5 kW. A social-tariff entry that
+   recorded its switch from a commercial contract under 0.43.0, which did not
+   ask it there, takes that contract's answer until you answer the box. Fluvius cannot measure an analog meter's
    peak: it bills the capacity tariff on a flat 2,5 kW (the "vaste term" of
    its tariff sheet), applies no maximum tariff, and charges every kWh,
    exclusive-night ones included, its analog kWh rate instead of the digital

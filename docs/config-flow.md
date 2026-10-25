@@ -328,7 +328,9 @@ supplier and the social tariff it is asked, their own network figures (typed on
 the first, the CREG's on the second) still billed as they are
 (`_resolve_analog_meter` skips their card): for the custom supplier's capacity
 peak, and on both for the cards the comparison page quotes against them, the
-social card having no capacity term at all. The step drops the
+social card having no capacity term at all. The box starts from
+`analog_answer`, which on a social entry never asked is the answer of the
+contract kept at its switch. The step drops the
 answer when the meter picked is one it does not hold for (a dynamic one, or after
 a move out of Flanders), so it cannot come back into force unasked. What it
 changes is in [pricing-model.md](pricing-model.md#capacity-tariff).

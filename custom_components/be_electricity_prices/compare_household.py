@@ -141,9 +141,9 @@ def _meters_rewired(entry: ConfigEntry, today: date) -> bool:
     days (``analog_meter``), the social tariff's included, so a household
     moving between it and a commercial contract on the same analog meter
     answers alike on both. A copy kept before a question was asked takes the
-    entry's answer (``_UNASKED_FACTS``). A replacement recorded on the entry is
-    no reason on its own: the quote replays the days before it on the analog
-    meter too, the date riding the proxy with the rest of the entry's data.
+    entry's answer (``_UNASKED_FACTS``), a social entry never asked the copy's
+    (``analog_answer``). A replacement day on the entry is no reason on its
+    own: the quote replays the days before it on the analog meter too.
     """
     data = entry.data
     return any(

@@ -61,6 +61,7 @@ from .const import (
     CONF_DSO_TARIFF_MODE,
     CONF_INCLUDE_VAT,
     CONF_METER,
+    CONF_PREVIOUS_CONTRACTS,
     CONF_QUARTER_HOURLY,
     CONF_REGION,
     CONF_SOLAR_REGIME,
@@ -195,11 +196,23 @@ def offers_analog_meter(data: Mapping[str, Any]) -> bool:
     )
 
 
+def analog_answer(data: Mapping[str, Any]) -> bool:
+    """The analog box as the entry answers it. A social-tariff entry that left
+    a commercial contract under 0.43.0 holds none, since its meter step did
+    not ask it then; the meter is the one the contract kept at that switch was
+    on, so that contract's answer stands until the box is answered."""
+    if CONF_ANALOG_METER in data or data.get(CONF_SUPPLIER) != SUPPLIER_SOCIAL:
+        return bool(data.get(CONF_ANALOG_METER, False))
+    kept = data.get(CONF_PREVIOUS_CONTRACTS) or [{}]
+    last = kept[-1].get("data") if isinstance(kept[-1], Mapping) else None
+    return isinstance(last, Mapping) and bool(last.get(CONF_ANALOG_METER, False))
+
+
 def analog_replaced_on(data: Mapping[str, Any]) -> date | None:
     """The day Fluvius put a digital meter in place of the analog one, on an
     entry whose box was unticked since (``CONF_ANALOG_REPLACED``), else None."""
     raw = data.get(CONF_ANALOG_REPLACED)
-    if not raw or data.get(CONF_ANALOG_METER, False):
+    if not raw or analog_answer(data):
         return None
     try:
         return date.fromisoformat(str(raw))
@@ -230,7 +243,7 @@ def analog_meter(data: Mapping[str, Any], day: date | None = None) -> bool:
     """
     if not offers_analog_meter(data):
         return False
-    if data.get(CONF_ANALOG_METER, False):
+    if analog_answer(data):
         return True
     replaced = analog_replaced_on(data)
     return day is not None and replaced is not None and day < replaced

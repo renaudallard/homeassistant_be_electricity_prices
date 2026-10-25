@@ -132,7 +132,7 @@ from .flow_contracts import (
     _supplier_options,
 )
 from .flow_switch import _add_contract_date_fields
-from .snapshot_resolve import offers_analog_meter
+from .snapshot_resolve import analog_answer, offers_analog_meter
 
 
 def _professional_schema(defaults: dict[str, Any]) -> vol.Schema:
@@ -464,7 +464,7 @@ def _meter_schema(
         fields[
             vol.Required(
                 CONF_ANALOG_METER,
-                default=bool(defaults.get(CONF_ANALOG_METER, False)),
+                default=analog_answer(defaults),
             )
         ] = BooleanSelector()
     return vol.Schema(fields)
