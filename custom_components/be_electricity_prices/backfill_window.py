@@ -417,11 +417,11 @@ async def _build_context(
         for year in years:
             await ensure_power_term(coordinator._session, year)
     # The VREG network ceiling of a Flemish entry, for the same reason, and an
-    # analog meter's kWh rate off its area's sheet.
+    # analog meter's kWh rate off its area's sheet for every year it billed in.
     if region == REGION_FLANDERS:
         for year in years:
             await ensure_tariff_sheet(coordinator._session, year)
-            if analog_meter(entry.data):
+            if analog_meter(entry.data, date(year, 1, 1)):
                 await ensure_analog_surcharge(
                     coordinator._session, year, str(entry.data[CONF_DSO])
                 )

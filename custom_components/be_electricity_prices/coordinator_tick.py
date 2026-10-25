@@ -263,11 +263,12 @@ class _TickMixin:
             await ensure_power_term(self._session, dt_util.now().year)
         # The VREG network ceiling, off Fluvius's tariff sheet, for a Flemish
         # entry and for the same reason, and on an analog meter its own area's
-        # kWh rate, the year before standing in until Fluvius publishes one.
+        # kWh rate, the year before standing in until Fluvius publishes one,
+        # which a meter replaced this year still bills its first days on.
         if self.entry.data.get(CONF_REGION) == REGION_FLANDERS:
             year = dt_util.now().year
             await ensure_tariff_sheet(self._session, year)
-            if analog_meter(self.entry.data):
+            if analog_meter(self.entry.data, date(year, 1, 1)):
                 await ensure_analog_surcharge(
                     self._session, year, str(self.entry.data.get(CONF_DSO, ""))
                 )

@@ -124,6 +124,17 @@ def billed_peak_for(data: Mapping[str, Any], peak_kw: float) -> float:
     return peak_kw
 
 
+def billed_peak_on(data: Mapping[str, Any], peak_kw: float, day: date) -> float:
+    """``peak_kw``, what :func:`billed_peak_for` bills the meter the entry has
+    now on, as ``day`` was billed: the minimum on a day before a recorded
+    replacement of the analog meter (``analog_meter``), which the digital one
+    that measures ``peak_kw`` was not yet in place for. Unchanged on every
+    other day and every other entry, and on a connection billed none."""
+    if peak_kw and not analog_meter(data) and analog_meter(data, day):
+        return capacity_floor_kw()
+    return peak_kw
+
+
 def _capacity_monthly_eur(overlay: DsoOverlay | None, peak_kw: float) -> float:
     """One month of the Flemish capacity charge, or 0.0 when it isn't billed.
 

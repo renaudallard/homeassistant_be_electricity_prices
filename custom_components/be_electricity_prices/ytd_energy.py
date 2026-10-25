@@ -78,6 +78,7 @@ from .pricing import (
 )
 from .providers._rates import InjectionRates
 from .providers.base import SupplierExtractor, SupplierSnapshot
+from .snapshot_resolve import meter_segment
 from .spot_stats import (
     _bucket_by_local_month,
     _energy_is_quarter_hourly,
@@ -372,7 +373,7 @@ async def _ytd_hourly_energy(
         if not unrecorded:
             hours_seen += 1
         local = dt_util.as_local(utc_hour)
-        snap_h = await _snap_for(date(local.year, local.month, 1))
+        snap_h = await _snap_for(meter_segment(entry.data, local.date()))
         # The HOUR's own leg decides, not the branch the caller dispatched on:
         # a spot-monthly leg takes the month's index (the supplier's published
         # realised value first, then the RLP-weighted or plain mean of the

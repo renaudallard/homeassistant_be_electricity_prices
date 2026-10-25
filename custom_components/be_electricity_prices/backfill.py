@@ -103,6 +103,7 @@ from .pricing import (
     compute_breakdown,
 )
 from .providers import get as get_extractor
+from .snapshot_resolve import meter_segment
 from .spot_stats import (
     _bucket_by_local_month,
     _energy_needs_spot,
@@ -299,7 +300,7 @@ async def _backfill_price_sensors(
         hourly_injection = ctx.hourly_injection
         async for utc_hour in _in_turns(seg_hours):
             local = dt_util.as_local(utc_hour)
-            snap_h = await _snap_for(date(local.year, local.month, 1))
+            snap_h = await _snap_for(meter_segment(seg_entry.data, local.date()))
             spot = _hour_spot(
                 snap_h.energy,
                 local,

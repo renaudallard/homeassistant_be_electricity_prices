@@ -98,7 +98,12 @@ from .providers.base import (
 )
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .snapshot_months import month_card, month_card_failed
-from .snapshot_resolve import _resolve_snapshot, analog_meter, entry_annual_kwh
+from .snapshot_resolve import (
+    _resolve_snapshot,
+    analog_meter,
+    entry_annual_kwh,
+    replaced_meter_facts,
+)
 from .snapshot_stand_ins import card_for_unreadable_month
 from .snapshot_store import fetch_shared
 from .spot_stats import _energy_is_rlp_indexed, _spp_weighting_enabled, spots_available
@@ -299,10 +304,10 @@ def _unasked_facts(
 ) -> dict[str, Any]:
     """Each of ``_UNASKED_FACTS`` that ``settings`` does not hold, from the
     entry's ``data``: a copy kept before the question existed has no answer
-    of its own, and the entry's is the household's."""
-    return {
-        key: data[key] for key in _UNASKED_FACTS if key not in settings and key in data
-    }
+    of its own, and the entry's is the household's, the day it says the
+    analog meter was replaced included (``replaced_meter_facts``)."""
+    filled = {k: data[k] for k in _UNASKED_FACTS if k not in settings and k in data}
+    return filled | replaced_meter_facts(settings, data)
 
 
 def previous_periods(
@@ -623,7 +628,7 @@ async def ensure_period_analog_rates(
     session: aiohttp.ClientSession, periods: list[ContractPeriod]
 ) -> None:
     """Read the area's analog kWh rate for every year an earlier contract held
-    on an analog meter covers.
+    on an analog meter covers, until the meter was replaced where it was.
 
     The tick reads it for the entry's own meter only, so a contract kept analog
     at a recorded switch found none once the entry had gone digital and was
@@ -633,7 +638,7 @@ async def ensure_period_analog_rates(
     (``period_card``), which is where a month no archive holds takes it.
     """
     for period in periods:
-        if not analog_meter(period.data):
+        if not analog_meter(period.data, period.start):
             continue
         dso = str(period.data.get(CONF_DSO, ""))
         for year in range(period.start.year, period.end.year + 1):

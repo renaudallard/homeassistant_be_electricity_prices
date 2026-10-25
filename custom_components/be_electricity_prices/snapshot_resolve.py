@@ -52,6 +52,7 @@ from homeassistant.util import dt as dt_util
 from .brugel import cached_power_term
 from .const import (
     CONF_ANALOG_METER,
+    CONF_ANALOG_REPLACED,
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_CUSTOM_PROFESSIONAL,
     CONF_CUSTOM_VAT_RATE,
@@ -194,8 +195,21 @@ def offers_analog_meter(data: Mapping[str, Any]) -> bool:
     )
 
 
-def analog_meter(data: Mapping[str, Any]) -> bool:
-    """Whether this entry is on a meter Fluvius still reads as analog.
+def analog_replaced_on(data: Mapping[str, Any]) -> date | None:
+    """The day Fluvius put a digital meter in place of the analog one, on an
+    entry whose box was unticked since (``CONF_ANALOG_REPLACED``), else None."""
+    raw = data.get(CONF_ANALOG_REPLACED)
+    if not raw or data.get(CONF_ANALOG_METER, False):
+        return None
+    try:
+        return date.fromisoformat(str(raw))
+    except ValueError:
+        return None
+
+
+def analog_meter(data: Mapping[str, Any], day: date | None = None) -> bool:
+    """Whether this entry is on a meter Fluvius still reads as analog, or with
+    ``day``, whether it was on that delivery day.
 
     Fluvius cannot measure such a meter's peak: "Je betaalt dan een forfaitair
     bedrag voor 2.5 kW als maandpiek en een aanvullend tarief voor je verbruik
@@ -207,21 +221,76 @@ def analog_meter(data: Mapping[str, Any]) -> bool:
     Asked of the entry's data, which a comparison proxy carries with the meter
     the quote is priced on: a dynamic target is sold on a digital meter, so it
     is quoted digital, on the minimum peak the household would start from.
+
+    The answer is one per entry, so a meter Fluvius replaced during the year
+    would bill every day of it on the digital one once the box is unticked,
+    the months before without their analog kWh rate and on the new meter's
+    short mean. The day it was replaced is asked then (:func:`analog_replaced_on`)
+    and every day before it is still analog.
     """
-    return offers_analog_meter(data) and bool(data.get(CONF_ANALOG_METER, False))
+    if not offers_analog_meter(data):
+        return False
+    if data.get(CONF_ANALOG_METER, False):
+        return True
+    replaced = analog_replaced_on(data)
+    return day is not None and replaced is not None and day < replaced
 
 
-def entry_analog_surcharge(entry: ConfigEntry, year: int) -> float | None:
+def replaced_meter_facts(
+    settings: Mapping[str, Any], data: Mapping[str, Any]
+) -> dict[str, Any]:
+    """The entry's replacement day (:func:`analog_replaced_on`) on the
+    settings of a contract kept at a switch while its meter was still analog,
+    or before the box was asked: the meter is the one Fluvius replaced, so its
+    days before that day are analog and those from it digital, as the entry's
+    own are. Nothing on a copy that answered digital, which keeps its answer."""
+    if analog_replaced_on(data) is None or not settings.get(CONF_ANALOG_METER, True):
+        return {}
+    return {CONF_ANALOG_METER: False, CONF_ANALOG_REPLACED: data[CONF_ANALOG_REPLACED]}
+
+
+def meter_segment(data: Mapping[str, Any], day: date) -> date:
+    """The first day of the part of ``day``'s month billed on the meter
+    ``day`` was: the 1st, or the day the analog meter was replaced for a day
+    from it in that month. What a walk resolves and keeps a day's card under,
+    so the month of a replacement is billed per day on each side of it."""
+    first = day.replace(day=1)
+    replaced = analog_replaced_on(data)
+    if replaced is not None and first < replaced <= day:
+        return replaced
+    return first
+
+
+def entry_analog_surcharge(
+    entry: ConfigEntry, year: int, day: date | None = None
+) -> float | None:
     """What this entry's analog meter pays per kWh over a peak-metered one in
-    ``year``, EUR/kWh excl. VAT, or ``None`` on a digital meter or before the
-    area's sheet has been read (``fluvius.cached_analog_surcharge``)."""
-    if not analog_meter(entry.data):
+    ``year``, EUR/kWh excl. VAT, or ``None`` on a digital meter, on ``day``
+    when given (:func:`analog_meter`), or before the area's sheet has been
+    read (``fluvius.cached_analog_surcharge``)."""
+    if not analog_meter(entry.data, day):
         return None
     return cached_analog_surcharge(year, str(entry.data.get(CONF_DSO, "")))
 
 
+def meter_of_day(
+    entry: ConfigEntry, snap: SupplierSnapshot, day: date
+) -> SupplierSnapshot:
+    """``snap``, resolved for the meter the entry has now, as ``day`` was
+    billed: on the analog meter the replacement date says it still had
+    (:func:`analog_meter`). Identity on every other day and every other entry,
+    whose card :func:`_resolve_snapshot` already resolved for its meter."""
+    if analog_meter(entry.data) or not analog_meter(entry.data, day):
+        return snap
+    return _resolve_analog_meter(entry, snap, day.replace(day=1), day=day)
+
+
 def _resolve_analog_meter(
-    entry: ConfigEntry, snap: SupplierSnapshot, month: date
+    entry: ConfigEntry,
+    snap: SupplierSnapshot,
+    month: date,
+    *,
+    day: date | None = None,
 ) -> SupplierSnapshot:
     """The entry's own network overlay as an analog meter is billed.
 
@@ -234,9 +303,10 @@ def _resolve_analog_meter(
     Identity on a digital meter, before the sheet is read, and on a card whose
     network is not Fluvius's tariffs: the custom supplier's, whose figures are
     typed for the household's own meter, and the social tariff's. Only the
-    entry's own area, since the surcharge is that area's.
+    entry's own area, since the surcharge is that area's. On the meter the
+    entry has now, or the one ``day`` was billed on (:func:`meter_of_day`).
     """
-    surcharge = entry_analog_surcharge(entry, month.year)
+    surcharge = entry_analog_surcharge(entry, month.year, day)
     if surcharge is None or snap.supplier in (SUPPLIER_CUSTOM, SUPPLIER_SOCIAL):
         return snap
     dso = str(entry.data.get(CONF_DSO, ""))

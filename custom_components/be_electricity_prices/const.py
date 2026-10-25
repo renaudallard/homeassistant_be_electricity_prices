@@ -458,6 +458,10 @@ CONF_CAPACITY_FIXED_KW: Final = "capacity_fixed_kw"
 # the minimum peak and a higher kWh rate (snapshot_resolve.analog_meter). Off
 # unless ticked, so an entry saved before it was asked bills as it did.
 CONF_ANALOG_METER: Final = "analog_meter"
+# The day Fluvius put a digital meter in place of the analog one, asked when
+# Edit settings unticks the box: the days before it bill as analog
+# (snapshot_resolve.analog_meter). Ticking the box again drops it.
+CONF_ANALOG_REPLACED: Final = "analog_meter_replaced"
 
 # Brussels contractual connection power (kVA), used only to pick the Brugel
 # OSP (Obligations de Service Public) annual-fee tier off the Sibelga card.

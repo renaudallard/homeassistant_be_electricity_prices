@@ -1742,6 +1742,36 @@ cards they are compared with to the analog network. The answer rides the compari
 quote is priced on, so a dynamic target is quoted digital, on the minimum peak
 the household would start from.
 
+#### A meter replaced during the year
+
+The answer is one per entry, so once Fluvius replaces the meter and the box is
+unticked every day of the year would bill digital: the months before without
+their analog kWh rate, and on the new meter's short mean. Edit settings asks the
+day the meter was replaced when the box goes from ticked to unticked
+(`CONF_ANALOG_REPLACED`, see [config-flow.md](config-flow.md)), and
+`analog_meter(data, day)` answers per delivery day: analog before it, digital
+from it. One place applies it, `meter_of_day` (`snapshot_resolve.py`), called by
+`_effective_snapshot_for_month` (`cohort.py`), which every walk billing a past
+day reads its card through: the live year to date and its hourly replay, the
+backfill, the earlier contracts, both comparison year-to-date figures, the
+year-end and the first contract year. The card is resolved for the meter the
+entry has now (`_resolve_snapshot`), and `meter_of_day` puts the analog
+surcharge on it and clears the ceiling for a day before the replacement. A month
+the meter was replaced in is billed per day on each side: the walks key their
+card on `meter_segment`, the 1st or the replacement day, and the year-to-date
+month walk (`_walk_ytd_months`, `ytd_legs.py`) yields that month in two parts.
+The capacity term of a day before it is billed on the minimum peak
+(`billed_peak_on`, `fees.py`), the days from it on the billed peak the
+coordinator holds, which is the new meter's own: the months measured before were
+dropped when the box was ticked and nothing was measured while it stayed ticked,
+so the mean counts only what the digital meter measured since it was unticked,
+as Fluvius bills a meter it has just placed on the months it has. Engie Basic
+Online in Antwerpen at 0,4 kWh an hour, replaced on 1 July with a 5 kW mean,
+bills 1158,70 EUR to 24 October rather than the 1176,66 of an all-digital year:
+6 months on 2,5 kW rather than 5 (65,46 less) and the analog rate on their
+1.737,2 kWh (47,50 more). Ticking the box again drops the day. An entry without
+one bills as before.
+
 ## Prosumer term
 
 The prosumer (compensation-regime) fee is Walloon-only and monthly

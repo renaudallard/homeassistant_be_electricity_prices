@@ -57,9 +57,11 @@ from .fees import (
     _compensation_kva,
     _dso_prosumer_monthly_fee,
     _prosumer_monthly_fee,
+    billed_peak_on,
 )
 from .pricing import MeterType, yearly_fixed_fee_for_meter
 from .providers.base import SupplierExtractor, SupplierSnapshot
+from .snapshot_resolve import analog_replaced_on, meter_segment
 
 
 def _days_through(start: date, end: date) -> list[date]:
@@ -105,6 +107,11 @@ async def _walk_ytd_months(
     the window's: they address the month's archived card and divide a MONTHLY
     fee, and neither of those is about how much of the month was billed.
 
+    A month the analog meter was replaced in is yielded twice, the days
+    before the replacement and the days from it, each on the meter it was on:
+    ``month_first`` is then the replacement day for the second part
+    (``meter_segment``), and ``days_in_ytd`` counts each part's days.
+
     ``contract`` overrides the entry's stored contract id; the
     OptionsFlow compare path uses this to walk months for an
     alternative supplier without mutating the live entry.
@@ -116,9 +123,10 @@ async def _walk_ytd_months(
     """
     region = entry.data.get(CONF_REGION, "")
     contract = contract or entry.data[CONF_CONTRACT]
+    replaced = analog_replaced_on(entry.data)
     cur = window_start
     while cur <= today:
-        month_first = date(cur.year, cur.month, 1)
+        month_first = meter_segment(entry.data, cur)
         snap_m = await _effective_snapshot_for_month(
             hass,
             session,
@@ -134,11 +142,13 @@ async def _walk_ytd_months(
             next_first = date(cur.year + 1, 1, 1)
         else:
             next_first = date(cur.year, cur.month + 1, 1)
-        days_in_full_month = (next_first - month_first).days
-        month_end_in_ytd = min(next_first - timedelta(days=1), today)
-        days_in_ytd = (month_end_in_ytd - cur).days + 1
+        days_in_full_month = (next_first - cur.replace(day=1)).days
+        end = min(next_first - timedelta(days=1), today)
+        if replaced is not None and cur < replaced <= end:
+            end = replaced - timedelta(days=1)
+        days_in_ytd = (end - cur).days + 1
         yield snap_m, month_first, days_in_full_month, days_in_ytd
-        cur = next_first
+        cur = end + timedelta(days=1)
 
 
 class _StaticFees(NamedTuple):
@@ -294,6 +304,9 @@ async def _ytd_capacity(
     where Fluvius billed against meter history we never saw. The current mean
     is the honest stand-in precisely because it is a twelve-month mean, so it
     moves slowly and is close to what each month of this year was billed on.
+    The days before a recorded replacement of an analog meter are billed the
+    minimum instead (``billed_peak_on``), and ``billed_peak_kw`` is then the
+    new meter's mean, counted from the day the box was unticked.
     """
     if entry.data.get(CONF_REGION) != REGION_FLANDERS:
         return 0.0
@@ -302,7 +315,7 @@ async def _ytd_capacity(
         return 0.0
 
     total = 0.0
-    async for snap_m, _, days_in_full_month, days_in_ytd in _walk_ytd_months(
+    async for snap_m, first, days_in_full_month, days_in_ytd in _walk_ytd_months(
         hass,
         session,
         extractor,
@@ -316,7 +329,7 @@ async def _ytd_capacity(
         monthly = _capped_capacity_monthly_eur(
             snap_m.dsos.get(dso),
             entry,
-            billed_peak_kw,
+            billed_peak_on(entry.data, billed_peak_kw, first),
             meter,
             snap_m.taxes.vat_rate,
         )

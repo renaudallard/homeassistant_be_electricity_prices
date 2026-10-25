@@ -1315,7 +1315,8 @@ then not be the whole difference, and a figure outside 0 to 0,2 EUR/kWh.
 
 `ensure_tariff_sheet` runs in the tick of a Flemish entry, before the card
 is resolved, and for every year a backfill window spans, and so does
-`ensure_analog_surcharge` on an analog meter, and for every year an earlier
+`ensure_analog_surcharge` on an analog meter, or for a year with days before
+the recorded replacement of one, and for every year an earlier
 contract held on one covers, before it is priced or backfilled
 (`ensure_period_analog_rates`). It reads the year before off
 the same listing when the listing has no sheet for the year yet, or the one it

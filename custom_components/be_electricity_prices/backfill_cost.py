@@ -73,6 +73,7 @@ from .fees import (
     _prosumer_monthly_fee,
     _welcome_credit_eur,
     billed_peak_for,
+    billed_peak_on,
     bills_gross_network,
     first_year_net_kwh,
     gross_network_rebate,
@@ -93,6 +94,7 @@ from .pricing import (
 from .providers import get as get_extractor
 from .providers._rates import InjectionRates
 from .providers.base import SupplierSnapshot
+from .snapshot_resolve import meter_segment
 from .spot_stats import (
     _bucket_by_local_month,
     _energy_is_quarter_hourly,
@@ -591,7 +593,8 @@ async def _accrue_cost(
     # _ytd_capacity does; the rolling mean is not reconstructable per past
     # month, so both use the current one (see _ytd_capacity). Asked of the
     # contract's own settings, as price_previous_periods asks it: one held
-    # earlier on an analog meter was billed the flat charge.
+    # earlier on an analog meter was billed the flat charge, and so was each
+    # day before a recorded replacement of one, asked per day below.
     billed_peak_kw = (
         billed_peak_for(entry.data, coordinator._billed_peak_kw())
         if region == REGION_FLANDERS
@@ -707,7 +710,7 @@ async def _accrue_cost(
     async for utc_hour in _in_turns(hours):
         local = dt_util.as_local(utc_hour)
         month_first = date(local.year, local.month, 1)
-        snap_h = await _snap_for(month_first)
+        snap_h = await _snap_for(meter_segment(entry.data, local.date()))
         spot = _hour_spot(
             snap_h.energy,
             local,
@@ -838,7 +841,7 @@ async def _accrue_cost(
             monthly = _capped_capacity_monthly_eur(
                 snap_h.dsos.get(dso),
                 entry,
-                billed_peak_kw,
+                billed_peak_on(entry.data, billed_peak_kw, local.date()),
                 vat_rate=snap_h.taxes.vat_rate,
             )
             if monthly:

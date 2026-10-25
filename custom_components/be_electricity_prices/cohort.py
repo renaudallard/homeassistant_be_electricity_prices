@@ -83,6 +83,7 @@ from .snapshot_months import (
     month_card,
     month_card_cached,
 )
+from .snapshot_resolve import meter_of_day, meter_segment
 from .spot_stats import spots_available
 from .vat_rates import residential_vat
 from .year_ahead import YEAR_AHEAD
@@ -713,7 +714,8 @@ async def _effective_snapshot_for_month(
     cached_only: bool = False,
     current_raw: SupplierSnapshot | None = None,
 ) -> SupplierSnapshot:
-    """Delivery-month snapshot with the signing cohort's energy leg spliced in.
+    """Delivery-month snapshot with the signing cohort's energy leg spliced in,
+    on the meter the day ``year_month`` was on.
 
     Every archive-walking cost path calls this instead of
     :func:`_snapshot_for_month`: it resolves the delivery month's regulated
@@ -731,10 +733,18 @@ async def _effective_snapshot_for_month(
     A month after the running one, read ahead for the year-end cost
     (:mod:`year_ahead`), has no card anywhere yet and bills on the card as it
     prices today, which nothing is fetched for.
+
+    ``year_month`` may be any day of the month: the month's snapshot is then
+    put onto the meter that day was on (``meter_of_day``), which differs from
+    the entry's own only before a recorded replacement of an analog meter.
+    Here rather than in each walk, since every walk billing a past day comes
+    through it, and one minding a month split by the replacement passes the
+    day (``meter_segment``).
     """
+    day, year_month = year_month, year_month.replace(day=1)
     ahead = YEAR_AHEAD.get()
     if ahead is not None and year_month > ahead.pivot.replace(day=1):
-        return ahead.card
+        return meter_of_day(entry, ahead.card, day)
     snap_m = await _snapshot_for_month(
         hass,
         session,
@@ -759,7 +769,7 @@ async def _effective_snapshot_for_month(
         year_month=year_month,
     )
     if legs.energy is None and legs.injection is None:
-        return snap_m
+        return meter_of_day(entry, snap_m, day)
     # The month the contract was signed in bills what its supplier states the
     # month settled at (Mega, whose figures are the next card's formulas at
     # the month's index), keyed or not: the coefficients it locks apply from
@@ -796,7 +806,7 @@ async def _effective_snapshot_for_month(
         changes["injection"] = legs.injection
     if signed and snap_m.injection is not None and snap_m.injection.settled_as_stated:
         changes.pop("injection", None)
-    return replace(snap_m, **changes)  # type: ignore[arg-type]
+    return meter_of_day(entry, replace(snap_m, **changes), day)  # type: ignore[arg-type]
 
 
 def _month_snapshot_cache(
@@ -811,8 +821,9 @@ def _month_snapshot_cache(
     cached_only: bool = False,
     current_raw: SupplierSnapshot | None = None,
 ) -> Callable[[date], Awaitable[SupplierSnapshot]]:
-    """Return a memoised ``snap_for(month_first)`` fetching each delivery
-    month's effective snapshot once.
+    """Return a memoised ``snap_for(day)`` fetching the effective snapshot
+    of each delivery month, or each part of one billed on another meter
+    (``meter_segment``), once.
 
     The live YTD cost and both backfill passes walk the same months
     repeatedly; the per-call cache keeps archive fetches to at most one
@@ -822,20 +833,21 @@ def _month_snapshot_cache(
     """
     cache: dict[date, SupplierSnapshot] = {}
 
-    async def _snap_for(month_first: date) -> SupplierSnapshot:
-        if month_first not in cache:
-            cache[month_first] = await _effective_snapshot_for_month(
+    async def _snap_for(day: date) -> SupplierSnapshot:
+        first = meter_segment(entry.data, day)
+        if first not in cache:
+            cache[first] = await _effective_snapshot_for_month(
                 hass,
                 session,
                 extractor,
                 contract,
                 region,
-                month_first,
+                first,
                 snapshot,
                 entry,
                 cached_only=cached_only,
                 current_raw=current_raw,
             )
-        return cache[month_first]
+        return cache[first]
 
     return _snap_for

@@ -55,7 +55,17 @@
         },
         "data_description": {
           "day_hours": "Fluvius facture le tarif jour de 07:00 à 22:00 en semaine, sauf dans les communes de sa liste, où il court de 06:00 à 21:00. Pour une commune marquée d'un astérisque sur la liste, l'heure de basculement a été fixée à la pose du compteur : vérifiez le vôtre. Utilisé uniquement avec un compteur bi-horaire ou numérique.",
-          "analog_meter": "Cochez si votre compteur est encore un compteur analogique (classique) que Fluvius n'a pas encore remplacé par un compteur numérique. Fluvius ne peut pas en mesurer le pic : il facture le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Avec le fournisseur « Expert: custom formula », les tarifs réseau que vous saisissez sont facturés tels quels, et au tarif social ceux de la CREG tels que publiés : la case facture le tarif capacitaire sur 2,5 kW et chiffre les cartes tarifaires comparées aux tarifs analogiques."
+          "analog_meter": "Cochez si votre compteur est encore un compteur analogique (classique) que Fluvius n'a pas encore remplacé par un compteur numérique. Fluvius ne peut pas en mesurer le pic : il facture le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Avec le fournisseur « Expert: custom formula », les tarifs réseau que vous saisissez sont facturés tels quels, et au tarif social ceux de la CREG tels que publiés : la case facture le tarif capacitaire sur 2,5 kW et chiffre les cartes tarifaires comparées aux tarifs analogiques. La décocher dans « Modifier les paramètres » une fois le compteur remplacé par Fluvius demande le jour du remplacement, pour que les jours qui le précèdent restent en analogique."
+        }
+      },
+      "analog_replaced": {
+        "title": "Compteur analogique remplacé",
+        "description": "Vous avez décoché Compteur analogique. Fluvius a facturé les jours précédant la pose du compteur numérique sur le compteur analogique : le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Indiquez le jour de la pose : le coût de l'année facture alors les jours qui le précèdent en analogique et les jours à partir de celui-ci sur le compteur numérique. Cocher à nouveau Compteur analogique l'efface.",
+        "data": {
+          "analog_meter_replaced": "Jour de la pose du compteur numérique"
+        },
+        "data_description": {
+          "analog_meter_replaced": "Tel qu'indiqué sur le courrier de Fluvius ou le rapport de pose du compteur. Pas dans le futur. À partir de ce jour, le tarif capacitaire est facturé sur le pic du compteur numérique."
         }
       },
       "professional": {
@@ -279,7 +289,8 @@
       "whatif_volumes_required": "Chiffrer un autre régime demande vos volumes annuels prélevés et injectés en kWh: aucun compteur d'injection n'est associé à cette entrée, ils ne peuvent donc pas être lus.",
       "switch_date_outside_year": "La date du changement doit se situer entre le 2 janvier et aujourd'hui.",
       "switch_date_before_last": "La date du changement doit suivre le dernier changement enregistré cette année.",
-      "switch_date_before_start": "La date du changement doit suivre la date de début du contrat que vous quittez."
+      "switch_date_before_start": "La date du changement doit suivre la date de début du contrat que vous quittez.",
+      "analog_replaced_in_future": "Le jour du remplacement du compteur ne peut pas être dans le futur."
     },
     "step": {
       "init": {
@@ -411,7 +422,17 @@
         },
         "data_description": {
           "day_hours": "Fluvius facture le tarif jour de 07:00 à 22:00 en semaine, sauf dans les communes de sa liste, où il court de 06:00 à 21:00. Pour une commune marquée d'un astérisque sur la liste, l'heure de basculement a été fixée à la pose du compteur : vérifiez le vôtre. Utilisé uniquement avec un compteur bi-horaire ou numérique.",
-          "analog_meter": "Cochez si votre compteur est encore un compteur analogique (classique) que Fluvius n'a pas encore remplacé par un compteur numérique. Fluvius ne peut pas en mesurer le pic : il facture le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Avec le fournisseur « Expert: custom formula », les tarifs réseau que vous saisissez sont facturés tels quels, et au tarif social ceux de la CREG tels que publiés : la case facture le tarif capacitaire sur 2,5 kW et chiffre les cartes tarifaires comparées aux tarifs analogiques."
+          "analog_meter": "Cochez si votre compteur est encore un compteur analogique (classique) que Fluvius n'a pas encore remplacé par un compteur numérique. Fluvius ne peut pas en mesurer le pic : il facture le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Avec le fournisseur « Expert: custom formula », les tarifs réseau que vous saisissez sont facturés tels quels, et au tarif social ceux de la CREG tels que publiés : la case facture le tarif capacitaire sur 2,5 kW et chiffre les cartes tarifaires comparées aux tarifs analogiques. La décocher dans « Modifier les paramètres » une fois le compteur remplacé par Fluvius demande le jour du remplacement, pour que les jours qui le précèdent restent en analogique."
+        }
+      },
+      "analog_replaced": {
+        "title": "Compteur analogique remplacé",
+        "description": "Vous avez décoché Compteur analogique. Fluvius a facturé les jours précédant la pose du compteur numérique sur le compteur analogique : le tarif capacitaire sur 2,5 kW forfaitaires et un tarif réseau plus élevé par kWh. Indiquez le jour de la pose : le coût de l'année facture alors les jours qui le précèdent en analogique et les jours à partir de celui-ci sur le compteur numérique. Cocher à nouveau Compteur analogique l'efface.",
+        "data": {
+          "analog_meter_replaced": "Jour de la pose du compteur numérique"
+        },
+        "data_description": {
+          "analog_meter_replaced": "Tel qu'indiqué sur le courrier de Fluvius ou le rapport de pose du compteur. Pas dans le futur. À partir de ce jour, le tarif capacitaire est facturé sur le pic du compteur numérique."
         }
       },
       "professional": {

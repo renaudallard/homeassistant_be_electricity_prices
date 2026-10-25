@@ -73,7 +73,6 @@ from .compare_weighting import (
     _tou_weighted_per_kwh,
 )
 from .const import (
-    CONF_ANALOG_METER,
     CONF_API_KEY,
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
@@ -111,12 +110,14 @@ from .pricing import MeterType
 from .providers import get as get_extractor
 from .providers import settlement_answer
 from .providers.base import SupplierSnapshot
+from .snapshot_resolve import analog_meter
 from .spot_stats import (
     _energy_is_rlp_indexed,
     _injection_is_spp_indexed,
     _rlp_blend_for,
     spots_available,
 )
+from .ytd_legs import _days_through
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -136,15 +137,20 @@ def _meters_rewired(entry: ConfigEntry, today: date) -> bool:
     EUR apart over half a year on the same card. The year-to-date of a quoted
     side is left out instead.
 
-    The meter's kind is the answer stored with each side, the social tariff's
-    included, so a household moving between it and a commercial contract on
-    the same analog meter answers alike on both. A copy kept on the social
-    tariff before the box was asked there holds none and takes the entry's
-    (``_UNASKED_FACTS``).
+    The meter's kind is asked of each side for each of the earlier contract's
+    days (``analog_meter``), the social tariff's included, so a household
+    moving between it and a commercial contract on the same analog meter
+    answers alike on both. A copy kept before a question was asked takes the
+    entry's answer (``_UNASKED_FACTS``). A replacement recorded on the entry is
+    no reason on its own: the quote replays the days before it on the analog
+    meter too, the date riding the proxy with the rest of the entry's data.
     """
     data = entry.data
     return any(
-        bool(period.data.get(CONF_ANALOG_METER)) != bool(data.get(CONF_ANALOG_METER))
+        any(
+            analog_meter(period.data, day) != analog_meter(data, day)
+            for day in _days_through(period.start, period.end)
+        )
         or any(
             (period.data.get(key) or None) != (data.get(key) or None)
             for key in METER_SENSOR_KEYS

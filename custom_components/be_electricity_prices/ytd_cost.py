@@ -94,7 +94,11 @@ from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
 )
-from .snapshot_resolve import entry_annual_injection_kwh, entry_annual_kwh
+from .snapshot_resolve import (
+    entry_annual_injection_kwh,
+    entry_annual_kwh,
+    meter_segment,
+)
 from .spot_stats import (
     _bucket_by_local_month,
     _day_register_weights,
@@ -673,21 +677,24 @@ async def _compute_current_year_cost(
 
     # Precompute the snapshot + breakdowns for each month touched, so
     # the per-day loop stays O(days) without repeating the breakdown
-    # math for every day in a month.
+    # math for every day in a month. Keyed on the part of the month billed
+    # on one meter (meter_segment), the whole month but where the analog
+    # meter was replaced in it.
     month_breakdowns: dict[date, tuple[Any, Any, Any, SupplierSnapshot] | None] = {}
 
     async def _resolve_month(
-        month_first: date,
+        first: date,
     ) -> tuple[Any, Any, Any, SupplierSnapshot] | None:
-        if month_first in month_breakdowns:
-            return month_breakdowns[month_first]
+        if first in month_breakdowns:
+            return month_breakdowns[first]
+        month_first = first.replace(day=1)
         snap_m = await _effective_snapshot_for_month(
             hass,
             session,
             extractor,
             contract,
             region,
-            month_first,
+            first,
             snapshot,
             entry,
             cached_only=cached_only,
@@ -704,7 +711,7 @@ async def _compute_current_year_cost(
             # running instead of tearing the whole tick down with
             # UpdateFailed.
             _warn_month_dropped(snap_m, month_first, f"has no row for DSO {dso}")
-            month_breakdowns[month_first] = None
+            month_breakdowns[first] = None
             return None
         if single_bd is None or peak_bd is None or offpeak_bd is None:
             # An archived month on a dynamic or time-of-use card under a
@@ -714,10 +721,10 @@ async def _compute_current_year_cost(
                 month_first,
                 "has no flat rate a whole day can be billed at",
             )
-            month_breakdowns[month_first] = None
+            month_breakdowns[first] = None
             return None
         bundle = (single_bd, peak_bd, offpeak_bd, snap_m)
-        month_breakdowns[month_first] = bundle
+        month_breakdowns[first] = bundle
         return bundle
 
     energy_cost = 0.0
@@ -747,7 +754,7 @@ async def _compute_current_year_cost(
     # days_seen instead of both reading a full year over a bill a month light.
     billed_kwh: dict[date, tuple[float, float, float, float]] = {}
     for day in _days_through(window_start, end):
-        bundle = await _resolve_month(date(day.year, day.month, 1))
+        bundle = await _resolve_month(meter_segment(entry.data, day))
         if bundle is None:
             # Warned about once for the month by _resolve_month.
             continue

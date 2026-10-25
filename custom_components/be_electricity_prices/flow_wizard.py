@@ -42,9 +42,11 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_ANALOG_METER,
+    CONF_ANALOG_REPLACED,
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_API_KEY,
     CONF_CAPACITY_PEAK_SENSOR,
@@ -86,6 +88,7 @@ from .flow_prefill import (
 from .flow_schemas import (
     _CUSTOM_DSO_FALLBACK_KEYS,
     _CUSTOM_ENERGY_FALLBACK_KEYS,
+    _analog_replaced_schema,
     _api_key_schema,
     _connection_power_schema,
     _contract_schema,
@@ -129,7 +132,7 @@ from .providers import (
     settlement_answer,
     takes_signing_rate,
 )
-from .snapshot_resolve import analog_meter, offers_analog_meter
+from .snapshot_resolve import analog_meter, analog_replaced_on, offers_analog_meter
 
 
 class _WizardStepsMixin:
@@ -393,12 +396,46 @@ class _WizardStepsMixin:
             if not offers_analog_meter(self._data):
                 # Likewise, and on the digital meter a dynamic contract needs.
                 self._data.pop(CONF_ANALOG_METER, None)
+                self._data.pop(CONF_ANALOG_REPLACED, None)
+            elif self._data.get(CONF_ANALOG_METER):
+                # Analog again: no day of it is on the digital meter.
+                self._data.pop(CONF_ANALOG_REPLACED, None)
+            elif analog_meter(self._stored_data() or {}):
+                return await self.async_step_analog_replaced()
             return await self._ask_professional()
         return self.async_show_form(
             step_id="meter",
             data_schema=_meter_schema(
                 self._data[CONF_SUPPLIER], self._data[CONF_CONTRACT], self._data
             ),
+        )
+
+    async def async_step_analog_replaced(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """The day Fluvius put a digital meter in place of the analog one.
+
+        Asked when Edit settings unticks the box. The answer is one per entry,
+        so without the day every month of the year was billed on the digital
+        meter, the months before it without their analog kWh rate and on the
+        new meter's short mean. Every day before it bills as analog
+        (``analog_meter``); one in the future is refused.
+        """
+        today = dt_util.now().date()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            replaced = analog_replaced_on(user_input)
+            if replaced is not None and replaced <= today:
+                self._data[CONF_ANALOG_REPLACED] = replaced.isoformat()
+                return await self._ask_professional()
+            errors[CONF_ANALOG_REPLACED] = "analog_replaced_in_future"
+        return self.async_show_form(
+            step_id="analog_replaced",
+            # A rejected date comes back as typed, not reset to today.
+            data_schema=self.add_suggested_values_to_schema(
+                _analog_replaced_schema(today), user_input
+            ),
+            errors=errors,
         )
 
     async def _ask_professional(self) -> ConfigFlowResult:

@@ -55,7 +55,17 @@
         },
         "data_description": {
           "day_hours": "Fluvius berechnet werktags den Tagtarif von 07:00 bis 22:00, außer in den Gemeinden auf seiner Liste, wo er von 06:00 bis 21:00 gilt. Ist eine Gemeinde auf der Liste mit einem Sternchen markiert, wurde der Umschaltzeitpunkt beim Einbau des Zählers festgelegt: prüfen Sie dann Ihren Zähler. Nur bei einem Doppeltarif- oder digitalen Zähler verwendet.",
-          "analog_meter": "Ankreuzen, wenn Ihr Zähler noch ein analoger (klassischer) Zähler ist, den Fluvius noch nicht durch einen digitalen Zähler ersetzt hat. Fluvius kann seine Spitze nicht messen: Es berechnet den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh. Beim Anbieter „Expert: custom formula“ werden die eingegebenen Netztarife so abgerechnet, wie sie eingegeben sind, und beim Sozialtarif die der CREG so, wie sie veröffentlicht sind: Das Kästchen berechnet den Kapazitätstarif auf 2,5 kW und bepreist die verglichenen Tarifkarten zu den analogen Tarifen."
+          "analog_meter": "Ankreuzen, wenn Ihr Zähler noch ein analoger (klassischer) Zähler ist, den Fluvius noch nicht durch einen digitalen Zähler ersetzt hat. Fluvius kann seine Spitze nicht messen: Es berechnet den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh. Beim Anbieter „Expert: custom formula“ werden die eingegebenen Netztarife so abgerechnet, wie sie eingegeben sind, und beim Sozialtarif die der CREG so, wie sie veröffentlicht sind: Das Kästchen berechnet den Kapazitätstarif auf 2,5 kW und bepreist die verglichenen Tarifkarten zu den analogen Tarifen. Wird es unter „Einstellungen bearbeiten“ abgewählt, nachdem Fluvius den Zähler ersetzt hat, wird der Tag des Wechsels abgefragt, damit die Tage davor analog bleiben."
+        }
+      },
+      "analog_replaced": {
+        "title": "Analoger Zähler ersetzt",
+        "description": "Sie haben Analoger Zähler abgewählt. Fluvius hat die Tage vor dem Einbau des digitalen Zählers über den analogen Zähler abgerechnet: den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh. Geben Sie den Tag des Einbaus ein: Die Kosten dieses Jahres rechnen dann die Tage davor als analog und die Tage ab diesem Tag über den digitalen Zähler ab. Wird Analoger Zähler erneut angekreuzt, entfällt das Datum.",
+        "data": {
+          "analog_meter_replaced": "Tag des Einbaus des digitalen Zählers"
+        },
+        "data_description": {
+          "analog_meter_replaced": "Wie im Schreiben von Fluvius oder im Einbauprotokoll des Zählers. Nicht in der Zukunft. Ab diesem Tag wird der Kapazitätstarif auf die Spitze des digitalen Zählers berechnet."
         }
       },
       "professional": {
@@ -279,7 +289,8 @@
       "whatif_volumes_required": "Ein anderes Regime zu berechnen erfordert Ihre Jahreswerte für Bezug und Einspeisung in kWh: diesem Eintrag ist kein Einspeisezähler zugeordnet, sie können also nicht ausgelesen werden.",
       "switch_date_outside_year": "Das Wechseldatum muss zwischen dem 2. Januar und heute liegen.",
       "switch_date_before_last": "Das Wechseldatum muss nach dem zuletzt erfassten Wechsel dieses Jahres liegen.",
-      "switch_date_before_start": "Das Wechseldatum muss nach dem Beginn des Vertrags liegen, den Sie verlassen."
+      "switch_date_before_start": "Das Wechseldatum muss nach dem Beginn des Vertrags liegen, den Sie verlassen.",
+      "analog_replaced_in_future": "Der Tag des Zählerwechsels darf nicht in der Zukunft liegen."
     },
     "step": {
       "init": {
@@ -411,7 +422,17 @@
         },
         "data_description": {
           "day_hours": "Fluvius berechnet werktags den Tagtarif von 07:00 bis 22:00, außer in den Gemeinden auf seiner Liste, wo er von 06:00 bis 21:00 gilt. Ist eine Gemeinde auf der Liste mit einem Sternchen markiert, wurde der Umschaltzeitpunkt beim Einbau des Zählers festgelegt: prüfen Sie dann Ihren Zähler. Nur bei einem Doppeltarif- oder digitalen Zähler verwendet.",
-          "analog_meter": "Ankreuzen, wenn Ihr Zähler noch ein analoger (klassischer) Zähler ist, den Fluvius noch nicht durch einen digitalen Zähler ersetzt hat. Fluvius kann seine Spitze nicht messen: Es berechnet den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh. Beim Anbieter „Expert: custom formula“ werden die eingegebenen Netztarife so abgerechnet, wie sie eingegeben sind, und beim Sozialtarif die der CREG so, wie sie veröffentlicht sind: Das Kästchen berechnet den Kapazitätstarif auf 2,5 kW und bepreist die verglichenen Tarifkarten zu den analogen Tarifen."
+          "analog_meter": "Ankreuzen, wenn Ihr Zähler noch ein analoger (klassischer) Zähler ist, den Fluvius noch nicht durch einen digitalen Zähler ersetzt hat. Fluvius kann seine Spitze nicht messen: Es berechnet den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh. Beim Anbieter „Expert: custom formula“ werden die eingegebenen Netztarife so abgerechnet, wie sie eingegeben sind, und beim Sozialtarif die der CREG so, wie sie veröffentlicht sind: Das Kästchen berechnet den Kapazitätstarif auf 2,5 kW und bepreist die verglichenen Tarifkarten zu den analogen Tarifen. Wird es unter „Einstellungen bearbeiten“ abgewählt, nachdem Fluvius den Zähler ersetzt hat, wird der Tag des Wechsels abgefragt, damit die Tage davor analog bleiben."
+        }
+      },
+      "analog_replaced": {
+        "title": "Analoger Zähler ersetzt",
+        "description": "Sie haben Analoger Zähler abgewählt. Fluvius hat die Tage vor dem Einbau des digitalen Zählers über den analogen Zähler abgerechnet: den Kapazitätstarif pauschal auf 2,5 kW und einen höheren Netztarif je kWh. Geben Sie den Tag des Einbaus ein: Die Kosten dieses Jahres rechnen dann die Tage davor als analog und die Tage ab diesem Tag über den digitalen Zähler ab. Wird Analoger Zähler erneut angekreuzt, entfällt das Datum.",
+        "data": {
+          "analog_meter_replaced": "Tag des Einbaus des digitalen Zählers"
+        },
+        "data_description": {
+          "analog_meter_replaced": "Wie im Schreiben von Fluvius oder im Einbauprotokoll des Zählers. Nicht in der Zukunft. Ab diesem Tag wird der Kapazitätstarif auf die Spitze des digitalen Zählers berechnet."
         }
       },
       "professional": {

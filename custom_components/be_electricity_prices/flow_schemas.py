@@ -38,7 +38,7 @@ blanked box has to be popped from the entry or the stored value survives.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -46,6 +46,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
+    DateSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -62,6 +63,7 @@ from homeassistant.util import dt as dt_util
 from .api import EntsoeAuthError, EntsoeClient, EntsoeError
 from .const import (
     CONF_ANALOG_METER,
+    CONF_ANALOG_REPLACED,
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_API_KEY,
     CONF_CONNECTION_KVA_TIER,
@@ -466,6 +468,14 @@ def _meter_schema(
             )
         ] = BooleanSelector()
     return vol.Schema(fields)
+
+
+def _analog_replaced_schema(today: date) -> vol.Schema:
+    """The day Fluvius replaced the analog meter, asked once its box is
+    unticked on an entry that had it ticked."""
+    return vol.Schema(
+        {vol.Required(CONF_ANALOG_REPLACED, default=today.isoformat()): DateSelector()}
+    )
 
 
 def _settlement_schema(defaults: dict[str, Any]) -> vol.Schema:
