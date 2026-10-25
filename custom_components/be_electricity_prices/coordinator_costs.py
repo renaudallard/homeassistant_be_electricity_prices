@@ -522,6 +522,7 @@ class _CostsMixin:
         )
         year_end_breakdown: dict[str, Any] = {}
         year_end_cost = None
+        failed: set[str] = set()
         memo = self._year_end_memo
         if memo is not None and memo[0] == year_end_key:
             year_end_cost, year_end_breakdown = memo[1], dict(memo[2])
@@ -530,31 +531,38 @@ class _CostsMixin:
                 "not projected: the earlier contracts this year are still being priced"
             )
         else:
-            year_end_cost = await _compute_year_end_cost(
-                self.hass,
-                self._session,
-                get_extractor(self.entry.data[CONF_SUPPLIER]),
-                self._snapshot,
-                self.entry,
-                injection_snapshot,
-                today,
-                energy_index=energy_mean,
-                previous_eur=prev_year,
-                breakdown=year_end_breakdown,
-                historical_spots=own_hours,
-                spot_quarters=own_quarters,
-                spp_weights=self._spp_weights if spp_weighted else None,
-                rlp_weights=(
-                    (self._rlp_weights or None)
-                    if (rlp_weighted or allocating)
-                    else None
-                ),
-                billed_peak_kw=billed_peak,
-                cached_only=cached_months_only,
-                window_start_override=own_start if own_start != ytd_start else None,
-                snapshot_raw=self._snapshot_raw,
-            )
-        self._year_end_memo = (year_end_key, year_end_cost, dict(year_end_breakdown))
+            with noting_failed_reads() as failed:
+                year_end_cost = await _compute_year_end_cost(
+                    self.hass,
+                    self._session,
+                    get_extractor(self.entry.data[CONF_SUPPLIER]),
+                    self._snapshot,
+                    self.entry,
+                    injection_snapshot,
+                    today,
+                    energy_index=energy_mean,
+                    previous_eur=prev_year,
+                    breakdown=year_end_breakdown,
+                    historical_spots=own_hours,
+                    spot_quarters=own_quarters,
+                    spp_weights=self._spp_weights if spp_weighted else None,
+                    rlp_weights=(
+                        (self._rlp_weights or None)
+                        if (rlp_weighted or allocating)
+                        else None
+                    ),
+                    billed_peak_kw=billed_peak,
+                    cached_only=cached_months_only,
+                    window_start_override=own_start if own_start != ytd_start else None,
+                    snapshot_raw=self._snapshot_raw,
+                )
+        # Kept only from a walk every recorder read answered. The tick throws
+        # away the costs of a read the recorder did not answer, but the memo
+        # outlived it: the next tick took the short walk back unchanged, and
+        # the held costs stored it, until the key turned the next night.
+        self._year_end_memo = (
+            None if failed else (year_end_key, year_end_cost, dict(year_end_breakdown))
+        )
         return TickCosts(
             window_now=window_now,
             periods=periods,

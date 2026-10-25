@@ -655,3 +655,51 @@ async def test_the_tick_walks_the_year_end_only_when_its_inputs_move(
         freezer.move_to("2026-09-27 02:20:00+02:00")
         assert await tick() == 812.5
         assert walk.await_count == 5
+
+
+async def test_a_year_end_walk_the_recorder_did_not_answer_is_walked_again(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A walk whose meter read failed is short of the year, and the tick
+    throws its costs away. Kept in the memo, the next tick, with the recorder
+    answering again, served the short walk until the key turned the next
+    night."""
+    from custom_components.be_electricity_prices import coordinator_costs
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+
+    freezer.move_to("2026-09-26 12:30:00+02:00")
+    entry = make_entry(consumption_kwh="sensor.cons")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(supplier="eneco", contract="power_fix")
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    busy = True
+
+    async def walk(*_args: Any, **_kwargs: Any) -> float:
+        if busy:
+            energy_meters._note_failed_read("sensor.cons")
+            return 3.0
+        return 812.5
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_costs."
+            "_compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coordinator_costs, "_compute_year_end_cost", walk),
+        patch.object(energy_meters, "_query_rows", AsyncMock(return_value=[])),
+    ):
+        await coord._async_update_data()
+        freezer.tick(timedelta(minutes=5))
+        await coord._async_update_data()
+        assert coord._year_end_memo is None
+        busy = False
+        freezer.tick(timedelta(minutes=5))
+        data = await coord._async_update_data()
+        assert data.year_end_cost_eur == 812.5
