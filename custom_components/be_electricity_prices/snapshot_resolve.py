@@ -239,14 +239,16 @@ def analog_meter(data: Mapping[str, Any], day: date | None = None) -> bool:
     would bill every day of it on the digital one once the box is unticked,
     the months before without their analog kWh rate and on the new meter's
     short mean. The day it was replaced is asked then (:func:`analog_replaced_on`)
-    and every day before it is still analog.
+    and every day before it is still analog, whatever meter the entry has
+    picked since: the day is a fact about the Flemish connection, so a dynamic
+    meter or contract taken after it does not undo it.
     """
-    if not offers_analog_meter(data):
-        return False
-    if analog_answer(data):
+    if offers_analog_meter(data) and analog_answer(data):
         return True
     replaced = analog_replaced_on(data)
-    return day is not None and replaced is not None and day < replaced
+    if day is None or replaced is None or day >= replaced:
+        return False
+    return data.get(CONF_REGION) == REGION_FLANDERS
 
 
 def replaced_meter_facts(

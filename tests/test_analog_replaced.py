@@ -499,3 +499,94 @@ async def _ytd_until(
     )
     assert total is not None
     return total
+
+
+async def _walked(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    answers: dict[str, dict[str, Any]],
+    *,
+    switch: str | None = None,
+) -> list[str]:
+    """The steps Edit settings, or a supplier switch recorded on ``switch``,
+    walks with ``answers``, the entry saved at the end."""
+    from homeassistant.data_entry_flow import FlowResultType
+
+    opts = hass.config_entries.options
+    steps: list[str] = []
+    with patch(
+        "custom_components.be_electricity_prices.async_setup_entry",
+        return_value=True,
+    ):
+        result = await opts.async_init(entry.entry_id)
+        menu = {"next_step_id": "switch" if switch else "edit"}
+        result = await opts.async_configure(result["flow_id"], menu)
+        if switch:
+            result = await opts.async_configure(
+                result["flow_id"], {"switch_date": switch}
+            )
+        while result["type"] == FlowResultType.FORM:
+            steps.append(result["step_id"])
+            result = await opts.async_configure(
+                result["flow_id"],
+                {**_shown(result), **answers.get(result["step_id"], {})},
+            )
+    return steps
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_meter_only_a_digital_one_carries_asks_the_day_too(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Picking the smart meter, or switching to a dynamic contract, drops the
+    box with nothing asked, and the year billed all digital again: 17,96 EUR
+    over the bill on the 1 July case, and a contract kept at the switch analog
+    to its last day. A move to another region asks nothing and drops the day."""
+    from custom_components.be_electricity_prices.contract_periods import (
+        previous_periods,
+    )
+
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    fluvius._analog[(2026, "fluvius_antwerpen")] = _ANTWERPEN_2026
+    day = {"analog_replaced": {"analog_meter_replaced": "2026-07-01"}}
+
+    smart = _entry(analog_meter=True)
+    smart.add_to_hass(hass)
+    steps = await _walked(hass, smart, {"meter": {"meter": "dynamic"}, **day})
+    assert "analog_replaced" in steps
+    assert smart.data["meter"] == "dynamic"
+    assert smart.data["analog_meter_replaced"] == "2026-07-01"
+    total, _ = await _ytd(hass, smart, 5.0)
+    assert total == pytest.approx(1158.70, abs=0.01)
+
+    switched = _entry(analog_meter=True)
+    switched.add_to_hass(hass)
+    steps = await _walked(
+        hass,
+        switched,
+        {
+            "contract": {
+                "contract": "engie_dynamic",
+                "contract_start_date": "2026-09-01",
+            },
+            "meter": {"meter": "dynamic"},
+            "api_key": {"keyless_spots": True},
+            **day,
+        },
+        switch="2026-09-01",
+    )
+    assert "analog_replaced" in steps
+    kept = previous_periods(switched.data, date(2026, 1, 1), date(2026, 10, 24))
+    assert kept[0].end == date(2026, 8, 31)
+    assert [
+        analog_meter(kept[0].data, d)
+        for d in (date(2026, 6, 30), date(2026, 7, 1), date(2026, 8, 31))
+    ] == [True, False, False]
+
+    moved = _entry(analog_meter=False, analog_meter_replaced="2026-07-01")
+    moved.add_to_hass(hass)
+    steps = await _walked(
+        hass, moved, {"edit": {"region": "wallonia"}, "dso": {"dso": "ores"}}
+    )
+    assert "analog_replaced" not in steps
+    assert "analog_meter_replaced" not in moved.data

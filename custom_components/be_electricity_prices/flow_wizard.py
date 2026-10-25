@@ -396,11 +396,15 @@ class _WizardStepsMixin:
             if not offers_analog_meter(self._data):
                 # Likewise, and on the digital meter a dynamic contract needs.
                 self._data.pop(CONF_ANALOG_METER, None)
-                self._data.pop(CONF_ANALOG_REPLACED, None)
-            elif self._data.get(CONF_ANALOG_METER):
-                # Analog again: no day of it is on the digital meter.
+            if self._data[CONF_REGION] != REGION_FLANDERS or self._data.get(
+                CONF_ANALOG_METER
+            ):
+                # Analog again, or another connection after a move: no day of
+                # it is on a meter Fluvius replaced.
                 self._data.pop(CONF_ANALOG_REPLACED, None)
             elif analog_meter(self._stored_data() or {}):
+                # Unticked, or a meter or contract only a digital meter carries
+                # picked: either way Fluvius has replaced the analog one.
                 return await self.async_step_analog_replaced()
             return await self._ask_professional()
         return self.async_show_form(
@@ -415,7 +419,9 @@ class _WizardStepsMixin:
     ) -> ConfigFlowResult:
         """The day Fluvius put a digital meter in place of the analog one.
 
-        Asked when Edit settings unticks the box. The answer is one per entry,
+        Asked when Edit settings unticks the box, or moves a Flemish entry
+        stored analog onto a meter or contract only a digital meter carries,
+        where the box is not offered. The answer is one per entry,
         so without the day every month of the year was billed on the digital
         meter, the months before it without their analog kWh rate and on the
         new meter's short mean. Every day before it bills as analog

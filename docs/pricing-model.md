@@ -1752,10 +1752,11 @@ the household would start from.
 The answer is one per entry, so once Fluvius replaces the meter and the box is
 unticked every day of the year would bill digital: the months before without
 their analog kWh rate, and on the new meter's short mean. Edit settings asks the
-day the meter was replaced when the box goes from ticked to unticked
+day the meter was replaced when the box goes from ticked to unticked, or when
+the entry moves onto a meter or contract only a digital meter carries
 (`CONF_ANALOG_REPLACED`, see [config-flow.md](config-flow.md)), and
 `analog_meter(data, day)` answers per delivery day: analog before it, digital
-from it. One place applies it, `meter_of_day` (`snapshot_resolve.py`), called by
+from it, whatever meter the entry has picked since. One place applies it, `meter_of_day` (`snapshot_resolve.py`), called by
 `_effective_snapshot_for_month` (`cohort.py`), which every walk billing a past
 day reads its card through: the live year to date and its hourly replay, the
 backfill, the earlier contracts, both comparison year-to-date figures, the
