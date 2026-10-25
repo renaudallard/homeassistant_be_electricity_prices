@@ -7471,7 +7471,7 @@ def test_month_indexed_side_is_labelled_as_last_months_index() -> None:
     stale = SimpleNamespace(energy=SimpleNamespace(month_indexed=True), taxes=taxes)
     notes = _card_caveats(stale, "OCTA+")
     assert len(notes) == 1
-    assert "OCTA+" in notes[0] and "last month's index" in notes[0]
+    assert "OCTA+" in notes[0] and "an earlier month's index" in notes[0]
 
     # A leg the cohort splice refreshed comes back as SpotMonthlyRates, which
     # carries no month_indexed field at all; that is what keeps the label

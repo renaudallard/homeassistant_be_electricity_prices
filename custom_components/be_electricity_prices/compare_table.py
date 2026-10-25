@@ -561,8 +561,9 @@ def _card_caveats(
             "credited at the figure the card prints"
         )
     # A card whose rate IS the delivery month's index prints one computed from
-    # the PREVIOUS month's and says so, worth 8,1% under in May and 15,4% over
-    # in February on the energy leg of the 2026 cards. Only the entry's own
+    # an EARLIER month's and says so, worth 8,1% under in May and 15,4% over
+    # in February on the energy leg of the 2026 cards. Most print the previous
+    # month's; Ecofix's Flexy prints one to three months back. Only the entry's own
     # side is ever re-resolved against the current month, and only when it has
     # an ENTSO-E key: _cohort_energy_leg returns None for any other contract,
     # by design, since an alternative has no signing history to price at. The
@@ -575,8 +576,8 @@ def _card_caveats(
     energy = getattr(snapshot, "energy", None)
     if getattr(energy, "month_indexed", False):
         out.append(
-            f"{label}'s rate is the one printed on its card, computed on last "
-            "month's index"
+            f"{label}'s rate is the one printed on its card, computed on an "
+            "earlier month's index"
         )
     elif isinstance(energy, VariableRates) and energy.quarter_indexed:
         out.append(

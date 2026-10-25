@@ -596,7 +596,7 @@ dropped rather than billed on the new card.
    which price the commodity off spot; also offered, skippable, right after
    the Solar panels step, to every
    contract whose energy is indexed on the delivery month's mean and whose
-   card prints last month's figure, on any solar regime — Aspiravi Eco Plus
+   card prints an earlier month's figure, on any solar regime — Aspiravi Eco Plus
    Flex, Cociter Variable and Trihoraire, Ecofix Flexy and Flexy Online,
    Ecopower Groene Burgerstroom,
    Elegant Flex and ComfortFlex, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex,
@@ -630,8 +630,9 @@ dropped rather than billed on the new card.
    leave them empty to skip, and a feed-in credit settled per slot stays
    unavailable until you add a key or tick the box through **Configure →
    Edit settings**,
-   while a leg indexed on the month keeps the card's printed figure, the
-   previous month's (or on Bolt and ComfyFlex the previous quarter's), until the next card
+   while a leg indexed on the month keeps the card's printed figure, an
+   earlier month's (the previous one on most cards, up to three back on
+   Ecofix's, and on Bolt and ComfyFlex the previous quarter's), until a later card
    settles the closed month or quarter where the supplier prints the index
    it closed at.
 9. **Capacity tariff peak source** *(Flanders only, not asked on an
@@ -796,8 +797,9 @@ card), and of Bolt's variable cards (Variable, Plenty, Online and Plenty
 Online, residential and pro) and Luminus ComfyFlex and ComfyFlex+ on the
 delivery quarter's, which is what those cards are indexed on. Both stay off without a key or the keyless setting rather than failing the entry: a
 feed-in credit settled per slot goes unavailable, while a monthly one and the
-re-price keep the card's printed figure, which is the previous month's, or on
-Bolt and ComfyFlex the previous quarter's, until the next card settles the closed month or
+re-price keep the card's printed figure, which is an earlier month's (the
+previous one on most cards, up to three back on Ecofix's), or on Bolt and
+ComfyFlex the previous quarter's, until a later card settles the closed month or
 quarter where the supplier prints the index it closed at. A settled month needs
 no key at all, so with a contract start date it bills on the formula you signed,
 key or not; without a key or the keyless setting, the months not settled yet keep the printed rate,
@@ -2051,7 +2053,11 @@ to the index the next card names. TotalEnergies keeps no archive of its own and
 settles the rows the daily run caught in place too, while the card after the
 month is still its live one. Bolt's variable cards are settled in place
 too, a quarter at a time: a closed quarter's months move to the indices the
-next quarter's card prints, one per meter register and Impact band. The request names the supplier, contract, region and month
+next quarter's card prints, one per meter register and Impact band. Ecofix's
+Flexy cards print the formula at an earlier month's index, one to three months
+back, and no later card names the month's own, so a closed month is billed on
+its delivery month's mean with a key or the keyless setting and on the printed
+figure without either. The request names the supplier, contract, region and month
 and nothing else, and the month lookup only asks for a month the archive can
 hold: a closed one, and for a supplier with no archive of its own not before May
 2026, the earliest month filed for one (Ecofix's May cards, filed by hand before

@@ -524,7 +524,7 @@ kind has no key step of its own (dynamic or spot-monthly energy collects one on
 `api_key`) and either:
 
 1. `_contract_is_month_indexed(supplier, contract)` is true: the contract's ENERGY
-   is indexed on the delivery month's mean and its card prints last month's figure
+   is indexed on the delivery month's mean and its card prints an earlier month's figure
    (`Contract.month_indexed_energy`; the README's
    [ENTSO-E key section](../README.md#getting-an-entso-e-api-key) lists the
    contracts). Offered on EVERY solar regime, since the key
@@ -544,7 +544,7 @@ step, this one is skippable (`flow_schemas.py` docstring): submitting blank pops
 `CONF_API_KEY` and continues to `meters`, with the keyless box stored as answered.
 With neither, a feed-in price settled per slot stays unavailable until a key is
 added or the box ticked through Edit settings, and a leg indexed on the
-month on the card's printed figure until the next card settles the closed month
+month on the card's printed figure until a later card settles the closed month
 or quarter where the supplier prints the index it closed at. A typed key is
 validated by `_validate_entsoe_key` the same way as the dynamic step (`flow_schemas.py`),
 except the one already stored, which is kept without asking ENTSO-E so an edit of

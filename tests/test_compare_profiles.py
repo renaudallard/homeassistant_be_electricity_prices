@@ -587,7 +587,7 @@ async def test_the_own_contract_against_itself_says_each_caveat_once(
         target_snapshot=card,
         meter="mono",
     )
-    assert p["card_note"].count("computed on last month's index") == 1
+    assert p["card_note"].count("computed on an earlier month's index") == 1
 
 
 async def test_the_year_to_date_of_a_quoted_card_reads_the_installation_s_curve(
