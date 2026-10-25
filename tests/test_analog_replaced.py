@@ -289,13 +289,21 @@ async def test_unticking_the_box_asks_the_day_the_meter_was_replaced(
         result["flow_id"], {**_shown(result), "analog_meter": False}
     )
     assert result["step_id"] == "analog_replaced"
-    assert _shown(result)["analog_meter_replaced"] == "2026-10-24"
+    # Nothing suggested: accepted as shown, a box ticked by mistake bills
+    # every earlier day of the year analog, 28,60 EUR under the bill here.
+    assert "analog_meter_replaced" not in _shown(result)
     result = await opts.async_configure(
         result["flow_id"], {"analog_meter_replaced": "2026-11-02"}
     )
     assert result["step_id"] == "analog_replaced"
     assert result["errors"] == {"analog_meter_replaced": "analog_replaced_in_future"}
     opts.async_abort(result["flow_id"])
+
+    mistaken = _entry(analog_meter=True, dso="fluvius_west")
+    mistaken.add_to_hass(hass)
+    await _walked(hass, mistaken, {"meter": {"analog_meter": False}})
+    assert mistaken.data["analog_meter"] is False
+    assert "analog_meter_replaced" not in mistaken.data
 
     data = await _saved(
         hass,

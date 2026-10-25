@@ -451,11 +451,11 @@ class _WizardStepsMixin:
                 self._data[CONF_ANALOG_REPLACED] = replaced.isoformat()
                 return await self._ask_professional()
             errors[CONF_ANALOG_REPLACED] = "analog_replaced_in_future"
-        # The day held, else today; a rejected one comes back as typed.
-        shown = user_input or {
-            CONF_ANALOG_REPLACED: self._data.get(CONF_ANALOG_REPLACED)
-            or today.isoformat()
-        }
+        # The day held, else none: a suggested one is billed if accepted, and
+        # today's would put every earlier day of a box ticked by mistake on
+        # the analog meter. A rejected day comes back as typed.
+        held = self._data.get(CONF_ANALOG_REPLACED)
+        shown = user_input or ({CONF_ANALOG_REPLACED: held} if held else {})
         return self.async_show_form(
             step_id="analog_replaced",
             data_schema=self.add_suggested_values_to_schema(
