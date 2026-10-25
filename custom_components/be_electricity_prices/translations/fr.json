@@ -891,7 +891,7 @@
     },
     "recorder_missing": {
       "title": "L'enregistreur de Home Assistant ne fonctionne pas",
-      "description": "Les capteurs de coût de {supplier} ({contract}) sont calculés à partir de l'historique de vos compteurs, que conserve l'enregistreur (recorder) de Home Assistant, et celui-ci n'est pas chargé. Les coûts de l'année et du mois, le coût sur douze mois glissants, le coût en fin d'année et les volumes projetés et glissants restent inconnus tant qu'il ne fonctionne pas. Les capteurs de prix ne sont pas concernés.\n\nActivez l'enregistreur (il fait partie de default_config, ou ajoutez `recorder:` à configuration.yaml) et redémarrez Home Assistant."
+      "description": "Les capteurs de coût de {supplier} ({contract}) sont calculés à partir de l'historique de vos compteurs, que conserve l'enregistreur (recorder) de Home Assistant, et celui-ci n'est pas chargé. Le coût de l'année et du mois, le coût annuel glissant, le coût projeté au 31 décembre et les consommations et injections annuelles projetées et glissantes restent inconnus tant qu'il ne fonctionne pas. Les capteurs de prix ne sont pas concernés.\n\nActivez l'enregistreur (il fait partie de default_config, ou ajoutez `recorder:` à configuration.yaml) et redémarrez Home Assistant."
     },
     "excise_law_unread": {
       "title": "{supplier} ({contract}) attend l'accise du client protégé",

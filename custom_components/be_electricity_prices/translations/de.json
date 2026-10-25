@@ -891,7 +891,7 @@
     },
     "recorder_missing": {
       "title": "Der Recorder von Home Assistant läuft nicht",
-      "description": "Die Kostensensoren von {supplier} ({contract}) werden aus dem Verlauf Ihrer Zähler berechnet, den der Recorder von Home Assistant speichert, und der Recorder ist nicht geladen. Die Kosten des Jahres und des Monats, die Kosten über ein rollierendes Jahr, die Kosten zum Jahresende sowie die erwarteten und rollierenden Mengen bleiben unbekannt, bis er läuft. Die Preissensoren sind nicht betroffen.\n\nAktivieren Sie den Recorder (er ist Teil von default_config, oder fügen Sie `recorder:` zu configuration.yaml hinzu) und starten Sie Home Assistant neu."
+      "description": "Die Kostensensoren von {supplier} ({contract}) werden aus dem Verlauf Ihrer Zähler berechnet, den der Recorder von Home Assistant speichert, und der Recorder ist nicht geladen. Die Kosten dieses Jahres und dieses Monats, die rollierenden Jahreskosten, die voraussichtlichen Kosten zum 31. Dezember sowie der voraussichtliche und der rollierende Jahresverbrauch und die Jahreseinspeisung bleiben unbekannt, bis er läuft. Die Preissensoren sind nicht betroffen.\n\nAktivieren Sie den Recorder (er ist Teil von default_config, oder fügen Sie `recorder:` zu configuration.yaml hinzu) und starten Sie Home Assistant neu."
     },
     "excise_law_unread": {
       "title": "{supplier} ({contract}) wartet auf die Verbrauchsteuer des geschützten Kunden",
