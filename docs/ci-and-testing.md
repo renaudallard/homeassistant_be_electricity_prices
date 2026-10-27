@@ -594,9 +594,11 @@ comma and one prints its fee ex-VAT. TotalEnergies corrected the three addresses
 October and their entries were removed; the other two stay allowed. The French card is the one
 billed. The French myEssential card in Flanders, whose green contribution is left blank and
 whose Dutch edition has stood in for it since 1 October, is allowed until the November card.
-So is the French myComfort card in Wallonia, re-uploaded on 8 October (issue #124): its title is
-printed from a form field the readers do not see, and its REGIE DE WAVRE and ORES (Verviers)
-distribution rows are swapped, so the Dutch edition standing in for it is the right one to bill.
+So is the French myComfort card in Wallonia. Its 8 October upload (issue #124) printed its
+title from a form field the readers do not see and swapped its REGIE DE WAVRE and ORES
+(Verviers) distribution rows; the 26 October upload (issue #140) draws its figures in fonts that
+carry no Unicode map. The Dutch edition standing in for it prints the same figures and is the
+one billed.
 The Dutch Électricité Fixe card in Wallonia (issue #129) leaves out the notice that its day/night
 rate does not apply under Tarif Impact, which its French edition and every other Walloon card
 print; the French card is billed. The French myComfort card in Brussels was re-uploaded on 26
