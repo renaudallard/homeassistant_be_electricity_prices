@@ -599,7 +599,11 @@ printed from a form field the readers do not see, and its REGIE DE WAVRE and ORE
 distribution rows are swapped, so the Dutch edition standing in for it is the right one to bill.
 The Dutch Électricité Fixe card in Wallonia (issue #129) leaves out the notice that its day/night
 rate does not apply under Tarif Impact, which its French edition and every other Walloon card
-print; the French card is billed. The report gives these rows their own section.
+print; the French card is billed. The French myComfort card in Brussels was re-uploaded on 26
+October (issue #139) with its figures drawn in fonts that carry no Unicode map, so no reader
+sees them, and its Dutch edition still has the stray comma, so neither reads; the upload
+repeats the figures of the card it replaced, which entries keep pricing on until the November
+card. The report gives these rows their own section.
 
 An unreadable label is reported but does not fail: unknown is not evidence of staleness. The label
 parser is unicode-aware on purpose - a character class that forgets the `u` in `août` silently

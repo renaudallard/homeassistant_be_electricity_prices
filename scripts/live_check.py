@@ -828,6 +828,16 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "the October 2026 French card leaves its green contribution blank; the "
         "Dutch card is billed",
     ),
+    (
+        "totalenergies/totalenergies_mycomfort/brussels: fetch",
+        "ExtractorError: TotalEnergies: yearly fee + renewables row not found",
+    ): (
+        date(2026, 11, 1),
+        "the French card re-uploaded on 2026-10-26 draws its figures in fonts "
+        "with no Unicode map, so no reader sees them, and the Dutch card prints "
+        "its formula with a stray comma; the upload repeats the figures of the "
+        "card it replaced, which entries keep pricing on",
+    ),
 }
 
 
