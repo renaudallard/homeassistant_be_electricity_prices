@@ -242,9 +242,9 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     return out or _extract_wallonia_2025_dsos(text)
 
 
-# One whole figure of the table printed before the Impact tariff: a digit
-# first, after the blank that ends the previous cell.
-_FIGURE_2025 = r"[^\S\n]+(\d{1,3},\d{2})"
+# One whole figure of a network table: a digit first, after the blank that
+# ends the previous cell.
+_FIGURE = r"[^\S\n]+(\d{1,3},\d{2})"
 
 
 def _extract_wallonia_2025_dsos(text: str) -> dict[str, DsoOverlay]:
@@ -269,7 +269,7 @@ def _extract_wallonia_2025_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for pattern, key in _WALLONIA_LABELS:
         match = re.search(
-            rf"^[^\d\n]*?(?:{pattern})[^\d\n]*?{_FIGURE_2025 * 7}[^\S\n]*$",
+            rf"^[^\d\n]*?(?:{pattern})[^\d\n]*?{_FIGURE * 7}[^\S\n]*$",
             text,
             re.MULTILINE | re.IGNORECASE,
         )
@@ -306,16 +306,21 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     cell separators (``-------- --------``).
     """
     prosumer_by_key: dict[str, float] = {}
-    # Second row: 'Fluvius X 8,09 7,55 18,92 - - 130,92 54,63'
+    # Second row: 'Fluvius X 8,09 7,55 18,92 - - 130,92 54,63', read only
+    # when it is whole figures to its end and the last has two or three
+    # digits before the comma. The aligned text of some Dynamic cards smears
+    # the column's leading digits into the first row ('566665768,43') and
+    # drops them from the others ('5,46'): such a row stores nothing. A dash
+    # cell is smeared the same way, so a row may print one dash.
     for m in re.finditer(
-        r"^(Fluvius [^\n]+?)\s+"
-        + r"[\d.,]+\s+[\d.,]+\s+[\d.,]+\s+-+\s+-+\s+[\d.,]+\s+([\d.,]+)\s*$",
+        rf"^(Fluvius [^\n]+?){_FIGURE * 3}[^\S\n]+-+(?:[^\S\n]+-+)?{_FIGURE}"
+        + r"[^\S\n]+(?P<prosumer>\d{2,3},\d{2})[^\S\n]*$",
         text,
         re.MULTILINE,
     ):
         label = m.group(1).strip()
         if label in _FLANDERS_LABELS:
-            prosumer_by_key[_FLANDERS_LABELS[label]] = to_float(m.group(2))
+            prosumer_by_key[_FLANDERS_LABELS[label]] = to_float(m["prosumer"])
 
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():

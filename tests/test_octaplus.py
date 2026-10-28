@@ -818,6 +818,50 @@ def test_flanders_dsos_extract_full_set() -> None:
     assert antwerpen.prosumer_eur_per_kva_year == pytest.approx(54.63)
 
 
+def test_a_smeared_analog_prosumer_column_stores_nothing() -> None:
+    """The aligned text of the Dynamic cards of February to April 2025 runs
+    the leading digits of the analog meter's prosumer column into its first
+    row, "566665768,43" for Antwerpen's 58,43, and leaves the other rows
+    short, "5,46" for Halle-Vilvoorde's 65,46. Both were stored as the rate.
+    A rate is read only as a whole figure with two or three digits before
+    the comma, so this card stores none, and its digital rows read as
+    before."""
+    text = _text("octaplus_dynamic_v_feb2025.pdf")
+    assert "133,15 566665768,43" in text, "the fixture stopped smearing the column"
+    snap = parse_snapshot("octaplus_dynamic", text, "flanders")
+    assert set(snap.dsos) == set(FLUVIUS_KEYS)
+    assert {dso.prosumer_eur_per_kva_year for dso in snap.dsos.values()} == {None}
+    antwerpen = snap.dsos["fluvius_antwerpen"]
+    assert antwerpen.distribution_single == pytest.approx(0.0599)
+    assert antwerpen.data_management_per_year == pytest.approx(18.56)
+    assert antwerpen.capacity_eur_per_kw_year == pytest.approx(53.26)
+
+
+def test_an_analog_row_printing_one_dash_cell_is_read() -> None:
+    """The aligned text of some cards, Eco Dynamic and Eco Fixed above all,
+    runs a dash cell of the analog rows into the first one ("- --------"),
+    so every other row prints one dash where the reader wanted two, and
+    seven of the eight areas stored no prosumer rate. February 2025, as the
+    card prints the rates."""
+    text = _text("octaplus_ecodynamic_v_feb2025.pdf")
+    row = "Fluvius Imewo 9,40 8,36 18,56 - 141,10 63,48"
+    assert row in text, "the fixture stopped printing one dash cell"
+    snap = parse_snapshot("octaplus_ecodynamic", text, "flanders")
+    prosumer = {key: dso.prosumer_eur_per_kva_year for key, dso in snap.dsos.items()}
+    assert prosumer == pytest.approx(
+        {
+            "fluvius_antwerpen": 58.43,
+            "fluvius_halle_vilvoorde": 65.46,
+            "fluvius_imewo": 63.48,
+            "fluvius_iveka": 65.61,
+            "fluvius_limburg": 68.18,
+            "fluvius_intergem": 59.75,
+            "fluvius_west": 72.92,
+            "fluvius_zenne_dijle": 67.08,
+        }
+    )
+
+
 @pytest.mark.parametrize(
     ("fixture", "region", "label"),
     [

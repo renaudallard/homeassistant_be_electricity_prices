@@ -468,6 +468,25 @@ the full label, and tolerates multi-glyph cell separators (`-------- --------`),
 because some cards (Dynamic Flanders) prepend header glyphs to one digital row
 and strip the leading `F` from the rest (e.g. `luvius Halle-Vilvoorde`).
 
+The prosumer rate is read only from an analog row of whole figures whose last
+one has two or three digits before the comma; a row that is not stores none.
+The aligned text of the Dynamic cards of July and October 2024 and February to
+April 2025 runs the leading digits of the column into the first row
+(`566665768,43` for Antwerpen's 58,43 in February 2025) and leaves the other
+rows a digit short (`5,46` for Halle-Vilvoorde's 65,46), and both were stored as
+the rate. Those rows store none now, like the Dynamic cards of July to December
+2025 but November, whose labels the same smear damages. Cards of 2023 to 2025,
+Eco Dynamic and Eco Fixed above all, run a dash cell into the first row instead
+(`- --------`), so the other rows print one dash where two were asked for and
+stored no rate: one dash is read now
+(`test_a_smeared_analog_prosumer_column_stores_nothing`,
+`test_an_analog_row_printing_one_dash_cell_is_read`). Over the archive's 204
+Flemish rows from October 2023 to October 2026 that drops 26 smeared figures and
+reads 52 rates left out, each the one the month's other OCTA+ cards print, and
+moves no other field. No bill moved: nothing bills a Flemish prosumer rate, since
+`_compensation_kva` (`fees.py`) gates every reader to the Walloon compensation
+regime.
+
 Gotcha: group 3 is the card's `quart-horaire` data-management column (~61 EUR),
 deliberately NOT used. Fluvius has billed every low-voltage metering regime one
 data-management fee since 2025, 17,85 EUR a year excluding VAT in 2026; billing
@@ -568,6 +587,10 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
 - **Flanders glyph corruption**: digital rows can lose the leading `F` and gain
   header glyphs; the suffix-anchored regex and multi-glyph separator tolerance
   work around it (`_octaplus_overlays.py`).
+- **Flanders analog prosumer smear**: some cards run the leading digits of the
+  analog prosumer column into its first row, or a dash cell; the rate is read
+  only as a whole figure of two or three digits, on a row of one or two dash
+  cells.
 - **Flanders quart-horaire data-management trap**: use group 4 (~18,92), not the
   ~61 EUR group 3, or the dynamic over-charges ~42 EUR/yr.
 - **Tax glyph explosion**: page 2 renders each character as its own word;
@@ -595,6 +618,8 @@ cards unless the row names another month):
 | `octaplus_dynamic_w.pdf` | OCTA+ Dynamic, Wallonia. `Epex 15'` consumption + injection formulas, spaced DSO labels. |
 | `octaplus_dynamic_v_jan.pdf` | OCTA+ Dynamic, Flanders, **January 2026**. Both formulas name the index `Belpex 15'`, followed by the AMR clause the open injection search used to run into. |
 | `octaplus_dynamic_v_dec2025.pdf` | OCTA+ Dynamic, Flanders, **December 2025**, from the archive endpoint. Both formulas name `Belpex Hourly`, the index every dynamic card printed from 2023 to 2025. |
+| `octaplus_dynamic_v_feb2025.pdf` | OCTA+ Dynamic, Flanders, **February 2025**, from the archive endpoint. The aligned text smears the analog prosumer column (`566665768,43`, `5,46`), so no rate is stored. |
+| `octaplus_ecodynamic_v_feb2025.pdf` | OCTA+ Eco Dynamic, Flanders, **February 2025**, from the archive endpoint. The analog rows print one dash cell where the first prints two, and every rate reads. |
 | `octaplus_fixed_w_nov2025.pdf` | OCTA+ Fixed, Wallonia, **November 2025**, from the archive endpoint. The seven-column network table before the Impact tariff, damaged in the aligned text so that no row of it reads: the archive path reads it from pypdf's render of the same bytes, the live fetch refuses the card. With its AIESH row relabelled it is the past card short of an area that keeps its energy, and the running month's that is refused. |
 | `octaplus_ecofixed_w_dec2025.pdf` | OCTA+ Eco Fixed, Wallonia, **December 2025**, from the archive endpoint. The same seven-column table, whole in the aligned text, so every row reads. |
 | `octaplus_fixed_v_mar.pdf` | OCTA+ Fixed, Flanders, **March 2026**, the card the archive lists as `FIXEDD`. Fetched from the archive endpoint. |
