@@ -598,11 +598,12 @@ contract kind and by the card's indexation sentence:
   their own formulas (`factor_peak` / `base_peak`, `factor_offpeak` /
   `base_offpeak`), the shape the social tariff's cards are read in, and a card
   pricing them apart whose block lacks a register's formula raises
-  (`test_a_2025_card_credits_each_register_on_its_own_formula`). A signing cohort
-  freezes only the single register's formula of such a card
-  (`cohort_legs._cohort_injection_from_archived` carries a time-of-use triplet but
-  not a two-register pair), so a bi-hourly meter signed on one is credited that
-  formula on both registers.
+  (`test_a_2025_card_credits_each_register_on_its_own_formula`). A contract signed
+  on such a card keeps the three formulas (`_cohort_injection_from_archived`,
+  `cohort_legs.py`), so a bi-hourly meter is credited each register on its own at
+  the month's index, and without one at the figure the month's card prints, as
+  the single register is; the live price, the year to date and the backfill agree
+  (`test_a_bi_hourly_meter_signed_in_2025_is_credited_each_register`).
 - **dynamic -> hourly `factor*spot + base`.** `_DYNAMIC_INJECTION_BLOCK_RE`
   (`_luminus_cards.py`) scopes the feed-in block, headed "pour la compensation
   de", "pour" or "de l'énergie injectée" as the cards went, and

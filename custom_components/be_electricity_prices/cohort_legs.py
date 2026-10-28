@@ -49,7 +49,7 @@ from .const import (
     CONF_MANUAL_ENERGY_SINGLE,
     CONF_MANUAL_YEARLY_FEE,
 )
-from .injection import _slot_coefficients
+from .injection import _register_coefficients, _slot_coefficients
 from .providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -561,7 +561,10 @@ def _cohort_injection_from_archived(
     formula per band (Engie Empower Flextime), the six slot coefficients: the
     card fixes those per signing month just like the energy formulas beside
     them, and freezing the pair alone billed an August signer on August's
-    energy and September's feed-in.
+    energy and September's feed-in. A card printing one per register of a
+    two-register meter (Luminus's until June 2025) gives the day and night
+    pairs, and the leg credits each register on its own (``bi_hourly``);
+    frozen as the single pair, a bi-hourly meter was credited it on both.
 
     The formula also brings what it is a formula OF: the index it reads and
     any floor it promises. Trevion LifePowr moved its feed-in from the
@@ -609,6 +612,9 @@ def _cohort_injection_from_archived(
         (None, None),
         (None, None),
     )
+    registers = _register_coefficients(old)
+    if registers is not None:
+        (f_peak, b_peak), (f_off, b_off) = registers
     frozen = replace(
         leg,
         factor=old.factor,
@@ -632,6 +638,10 @@ def _cohort_injection_from_archived(
         # figure (Mega's, the next card's formula at the index).
         settled_as_stated=False,
     )
+    if registers is not None and not leg.bi_hourly:
+        # The month's card prints one figure for every register, the one
+        # each is credited without an index to resolve its formula on.
+        frozen = replace(frozen, bi_hourly=True, peak=leg.current, offpeak=leg.current)
     return None if frozen == leg else frozen
 
 

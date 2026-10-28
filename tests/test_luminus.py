@@ -725,6 +725,108 @@ async def test_a_walloon_contract_signed_in_2025_is_billed_its_own_card(
     assert legs.energy.base == pytest.approx(2.094 / 100.0 * 1.06)
 
 
+async def test_a_bi_hourly_meter_signed_in_2025_is_credited_each_register(
+    hass: Any, freezer: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A card of January to June 2025 prints a feed-in formula per register,
+    and a contract signed on one keeps them: 0,0794 x Belpex - 1,5900 for the
+    day register and 0,0414 x Belpex - 1,5900 for the night one. The cohort
+    froze the single register's 0,0644 x Belpex - 1,5900 alone and credited a
+    bi-hourly meter that on both. The live price, the year to date and the
+    backfill now credit each register on its own formula, and alike."""
+    from datetime import UTC, datetime, timedelta
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.be_electricity_prices.day_night import is_offpeak
+    from custom_components.be_electricity_prices.injection import (
+        _bake_monthly_injection,
+        _compute_injection_price,
+    )
+    from tests import make_entry
+    from tests.test_backfill import _live_and_backfill
+
+    _serve_the_archive(
+        monkeypatch,
+        "Luminus MaxxFix Electricité",
+        "2025-03",
+        "luminus_maxxfix_v_2025-03.pdf",
+    )
+    today = parse_snapshot(
+        "luminus_maxxfix", fixture_text("luminus_maxxfix_v_oct.pdf"), "flanders"
+    )
+    mean = 0.10
+    day, night = 0.794 * mean - 0.0159, 0.414 * mean - 0.0159
+
+    def entry(title: str) -> Any:
+        return make_entry(
+            supplier="luminus",
+            contract="luminus_maxxfix",
+            region="flanders",
+            dso="fluvius_antwerpen",
+            meter="bi",
+            title=title,
+            solar_regime="injection",
+            api_key="k",
+            contract_start_date="2025-03-15",
+            consumption_kwh="sensor.cons",
+            injection_kwh="sensor.inj",
+        )
+
+    # The live price, on the formula of the register counting now: a Wednesday
+    # and a Saturday afternoon of January 2026.
+    for when, rate in (
+        ("2026-01-14 13:00:00+01:00", day),
+        ("2026-01-17 13:00:00+01:00", night),
+    ):
+        freezer.move_to(when)
+        legs = await _signed_legs(
+            hass,
+            "luminus_maxxfix",
+            "flanders",
+            "fluvius_antwerpen",
+            "2025-03-15",
+            today,
+        )
+        baked = _bake_monthly_injection(legs.splice(today), mean)
+        assert _compute_injection_price(baked, entry("live"), {}) == pytest.approx(rate)
+
+    # The year to date and the backfill over January 2026, 0,5 kWh fed in
+    # each hour from 10:00 to 15:00, against the same days with none.
+    freezer.move_to("2026-01-31 23:59:00+01:00")
+    start = datetime(2025, 12, 31, 23, tzinfo=UTC)
+    spots = {start + timedelta(hours=i): mean for i in range(24 * 31)}
+    middays = [h for h in spots if 10 <= dt_util.as_local(h).hour <= 15]
+
+    def fed_in(entity_id: str, hour: datetime) -> float | None:
+        if entity_id == "sensor.inj":
+            return 0.5 if hour in middays else 0.0
+        return 0.0 if entity_id == "sensor.cons" else None
+
+    def nothing(entity_id: str, hour: datetime) -> float | None:
+        return 0.0 if entity_id in ("sensor.cons", "sensor.inj") else None
+
+    walks = {}
+    for name, per_hour in (("fed in", fed_in), ("nothing", nothing)):
+        walks[name] = await _live_and_backfill(
+            hass,
+            entry(name),
+            today,
+            date(2026, 1, 31),
+            per_hour,
+            spots=spots,
+            extractor=EXTRACTORS["luminus"],
+        )
+    for back, live in walks.values():
+        assert back == pytest.approx(live, abs=0.01)
+    credited = walks["nothing"][1] - walks["fed in"][1]
+    per_register = sum(
+        0.5 * (night if is_offpeak(dt_util.as_local(h), "flanders") else day)
+        for h in middays
+    )
+    assert credited == pytest.approx(per_register, abs=0.01)
+
+
 def test_missing_injection_row_fails_loud() -> None:
     # Every Luminus card publishes an injection rate; a non-dynamic card
     # whose injection row went missing is a layout drift, not a fee-free
