@@ -376,7 +376,10 @@ that scheme bands the excise by annual volume and is a genuinely different
 rate. And **the correction covers the months the law's current text sets**: the
 same measure steps the excise down each January, to 43, 40 and then 38 € per
 MWh excluding VAT from 2027 to 2029, and each step is billed from its own month
-because the law states it. Your card's own excise is used for the months
+because the law states it. The figures that look ahead, the rolling year cost
+and the comparison page, price the coming twelve months once at today's
+tariffs, today's excise included, so they take a step only once its month
+has come. Your card's own excise is used for the months
 before August 2026, which the correction leaves alone, except where a later
 card stands in for a month whose own card no archive kept (TotalEnergies
 before September 2026, Ecofix before August 2026 but for May): that month is billed the excise table and the
