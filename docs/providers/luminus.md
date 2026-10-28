@@ -166,6 +166,12 @@ The app's own picker goes back to September 2021. Measured on 11 September 2026,
 the June 2026 Comfy Flanders card parsed whole (`avril`-style label, validity
 date 30 June 2026, all eight DSO rows), and the validity date is the authoritative
 cross-check in `archive_validity_check`, the month name in the title the fallback.
+No card of 2025 parsed until the feed-in row those cards print was read (see
+Injection), so a contract signed in 2025 was billed today's card whatever its start
+date. Measured on 28 October 2026, every Flemish card of the eight products sold in
+2025 (Comfy, Comfy+, ComfyFlex, ComfyFlex+, MaxxFix, MaxxFlex, BasicFix and
+BasicFlex, January to December, 96 cards) reads whole, each field equal to the
+card's text.
 
 The running month is not asked for, and `fetch_for_month` answers `None` for it.
 The archive keeps serving a month's first edition after the live card is
@@ -292,6 +298,16 @@ creuses `0.1771`, exclusive-night `0.1771` from `luminus_comfy_w.pdf`.
 
 Both carry two yearly fees: `yearly_fixed_fee` (the standard `Redevance fixe`)
 and `yearly_fixed_fee_exclusive_night` from `_extract_excl_night_fee`.
+
+The formula rows of the indexed variable cards are read by `_ENERGY_BANDS`
+(`_luminus_cards.py`) in both spellings: `Compteur mono-horaire`, `Heures pleines
+(Compteur bi-horaire)`, `Heures creuses` and `Exclusif nuit` since August 2025, and
+until July 2025 rows named after the meter, `Jour (compteur de jour)`, `Jour
+(compteur de jour et de nuit)`, `et nuit` (`Nuit` on ComfyFlex) and `Exclusif nuit`
+(`test_a_2025_variable_card_reads_its_formulas_by_meter`). The energy block ends at
+the feed-in block's heading, `Formule tarifaire de` since January 2026 and `Formule
+tarifaire pour la compensation de` before, so a feed-in row is never read as an
+energy one.
 
 ### tou (SmartFlex)
 
@@ -510,10 +526,12 @@ injection shapes in the project taxonomy (`docs/pricing-model.md`), selected by
 contract kind and by the card's indexation sentence:
 
 - **fixed / variable / tou -> month-indexed formula.** The extractor reads the
-  applicable `Tarif de l'énergie injectée` row and stores it as
-  `InjectionRates.current` (`_luminus_cards.py`). Where the card also prints
-  `Formule tarifaire de l'énergie injectée = <factor> x Belpex <sign> <base>`
-  followed by `Votre tarif sera indexé tous les mois` (or `chaque mois`),
+  applicable `Tarif de l'énergie injectée` row, `Compensation pour l'énergie
+  injectée` on the cards until December 2025 (`_INJECTION_ROW_RE`), and stores its
+  first figure as `InjectionRates.current` (`_luminus_cards.py`). Where the card
+  also prints `Formule tarifaire de l'énergie injectée = <factor> x Belpex <sign>
+  <base>` (`Formule tarifaire pour la compensation de l'énergie injectée` until
+  December 2025) followed by `Votre tarif sera indexé tous les mois` (or `chaque mois`),
   `_INJECTION_INDEXED_RE` reads the formula: `factor = factor_pdf * 10.0`,
   `base = base_pdf_cents / 100.0`, no VAT (the block is HTVA at 0%), and
   `month_indexed = True`. The credit then settles on the delivery month's Belpex
@@ -530,6 +548,22 @@ contract kind and by the card's indexation sentence:
   states it bills a period on whose quarter is not known at settlement, and one
   without on the printed figure. Read as printed before, every closed quarter was
   credited on the one before it, for good.
+- **Per meter register.** The fixed and variable cards print one feed-in figure
+  per register, single, then a bi-hourly meter's day and night, and the formula
+  block one row each. Every card since July 2025 prints the three alike, and the
+  leg is the one rate. The cards of January to June 2025 price them apart:
+  `Jour (compteur de jour) = 0,0644 x Belpex - 1,5900; Jour (compteur de jour et
+  de nuit)) = 0,0794 x Belpex - 1,5900; Nuit = 0,0414 x Belpex - 1,5900`, 6,71,
+  8,64 and 3,75 c/kWh in March 2025. `_with_registers` then carries the day and
+  night figures as the two registers' rates (`bi_hourly`, `peak`, `offpeak`) with
+  their own formulas (`factor_peak` / `base_peak`, `factor_offpeak` /
+  `base_offpeak`), the shape the social tariff's cards are read in, and a card
+  pricing them apart whose block lacks a register's formula raises
+  (`test_a_2025_card_credits_each_register_on_its_own_formula`). A signing cohort
+  freezes only the single register's formula of such a card
+  (`cohort_legs._cohort_injection_from_archived` carries a time-of-use triplet but
+  not a two-register pair), so a bi-hourly meter signed on one is credited that
+  formula on both registers.
 - **dynamic -> hourly `factor*spot + base`.** `_DYNAMIC_INJECTION_BLOCK_RE`
   (`_luminus_cards.py`) scopes the feed-in block, headed "pour la compensation
   de", "pour" or "de l'énergie injectée" as the cards went, and
@@ -660,10 +694,14 @@ Under `tests/fixtures/`, exercised by `tests/test_luminus.py`:
 | `luminus_maxxflex_w_oct.pdf` | MaxxFlex (variable), Wallonia, October 2026 | cashback valued at the annual estimate |
 | `luminus_comfyflex_plus_w_oct.pdf` | ComfyFlex+ (variable), Wallonia, October 2026 | cashback valued at the annual estimate |
 | `luminus_maxxfix_w_oct.pdf` | MaxxFix (fixed), Wallonia, October 2026 | cashback valued at the printed rate |
+| `luminus_basicflex_w_oct.pdf` | BasicFlex (variable), Wallonia, October 2026 | formulas on the delivery month's Belpex RLP M |
+| `luminus_maxxfix_v_oct.pdf` | MaxxFix (fixed), Flanders, October 2026 | today's card beside a 2025 signing card; the feed-in registers alike |
+| `luminus_maxxfix_v_2025-03.pdf` | MaxxFix (fixed), March 2025, one card for both regions | "Compensation pour l'énergie injectée" row, registers priced apart, a signing month of 2025 |
+| `luminus_maxxflex_v_2025-03.pdf` | MaxxFlex (variable), March 2025, one card for both regions | energy formulas named after the meter, "Jour (compteur de jour)" |
 
-Note: fixtures for `luminus_comfy_plus`, `luminus_maxxfix`, `luminus_basicfix`
-and `luminus_basicflex` are not present; those contracts share the fixed /
-variable parse paths already covered by the fixtures above.
+Note: fixtures for `luminus_comfy_plus` and `luminus_basicfix` are not present;
+those contracts share the fixed / variable parse paths already covered by the
+fixtures above.
 
 ## When the card changes, look here
 

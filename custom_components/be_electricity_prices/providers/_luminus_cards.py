@@ -387,10 +387,10 @@ def _monthly_tou_coefficients(text: str) -> dict[str, tuple[float, float]]:
     if _MONTHLY_INDEX_ATTRIBUTION_RE.search(block.group(0)) is None:
         return {}
     out = _formula_pairs(
-        text,
         block.group(0),
         (*_TOU_BANDS, ("sunday", _HAPPY_SUNDAY_LABEL)),
         _band_formula_re,
+        _vat_multiplier(text),
     )
     return out if all(key in out for key, _ in _TOU_BANDS) else {}
 
@@ -419,7 +419,7 @@ def _monthly_energy_coefficients(
     block = _ENERGY_FORMULA_BLOCK_RE.search(text)
     if block is None:
         return {}, False
-    out = _formula_pairs(text, block.group(0), _ENERGY_BANDS, row)
+    out = _formula_pairs(block.group(0), _ENERGY_BANDS, row, _vat_multiplier(text))
     return (out, rlp) if "single" in out else ({}, False)
 
 
@@ -446,25 +446,27 @@ def _quarterly_energy_coefficients(text: str) -> dict[str, tuple[float, float]]:
     if block is None or _QUARTER_ATTRIBUTION_RE.search(block.group(0)) is None:
         return {}
     out = _formula_pairs(
-        text, block.group(0), _ENERGY_BANDS, _quarterly_band_formula_re
+        block.group(0),
+        _ENERGY_BANDS,
+        _quarterly_band_formula_re,
+        _vat_multiplier(text),
     )
     return out if "single" in out else {}
 
 
 def _formula_pairs(
-    text: str,
     block: str,
     bands: Iterable[tuple[str, str]],
     row: Callable[[str], re.Pattern[str]],
+    vat: float,
 ) -> dict[str, tuple[float, float]]:
     """``(factor, base)`` per band whose ``row`` reads in ``block``.
 
     The rows print c/kWh HTVA against an index in EUR/MWh, while the energy
     rows are TVAC, so both coefficients take the x10 / 100 conversion and the
-    card's VAT multiplier. MaxxFlex round-trips to its printed 14,41 at its
-    own 92,61 index.
+    card's VAT multiplier, ``vat``: 1 for the feed-in, which is exempt.
+    MaxxFlex round-trips to its printed 14,41 at its own 92,61 index.
     """
-    vat = _vat_multiplier(text)
     out: dict[str, tuple[float, float]] = {}
     for key, label in bands:
         match = row(label).search(block)
@@ -518,19 +520,16 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     # Some cards print a footnote digit right after the unit
     # ("(c€/kWh)2 3,81"); skip an optional digit-then-whitespace before
     # the value. Use \s+ between every word: the row wraps mid-phrase
-    # ("Tarif de l'énergie \ninjectée").
-    indicative = re.search(
-        rf"Tarif\s+de\s+l[\"'’©]énergie\s+injectée"
-        rf"[^0-9-]*(?:\d+\s+)?({_NUM})",
-        text,
-        re.S,
-    )
+    # ("Tarif de l'énergie \ninjectée"). The cards until December 2025
+    # call the row "Compensation pour l'énergie injectée".
+    indicative = _INJECTION_ROW_RE.search(text)
     current = to_float(indicative.group(1)) / 100.0 if indicative else None
 
     factor: float | None = None
     base: float | None = None
     formula: str | None = None
     month_indexed = False
+    monthly: re.Match[str] | None = None
     if kind == "dynamic":
         pair = _belpex_h_pair(text, _DYNAMIC_INJECTION_BLOCK_RE)
         if pair is not None:
@@ -570,12 +569,53 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # contract; fail loud rather than silently crediting an injection
         # user nothing, mirroring the consumption helpers that raise.
         raise ExtractorError("Luminus: could not parse injection rate")
-    return InjectionRates(
+    leg = InjectionRates(
         current=current,
         factor=factor,
         base=base,
         formula=formula,
         month_indexed=month_indexed,
+    )
+    if kind not in ("fixed", "variable") or indicative is None:
+        return leg
+    return _with_registers(leg, indicative, monthly)
+
+
+def _with_registers(
+    leg: InjectionRates, row: re.Match[str], block: re.Match[str] | None
+) -> InjectionRates:
+    """``leg`` with a bi-hourly meter's day and night credit, where the card
+    prices them apart from the single register.
+
+    The feed-in row prints one figure per register, single, then day and
+    night, and the formula block one row each. Every card since July 2025
+    prints the three alike, and the leg is the one rate. The cards until June
+    2025 do not: "Jour (compteur de jour) = 0,0644 x Belpex - 1,5900; Jour
+    (compteur de jour et de nuit)) = 0,0794 x Belpex - 1,5900; Nuit = 0,0414 x
+    Belpex - 1,5900", 6,71, 8,64 and 3,75 c/kWh in March 2025. Their day and
+    night figures are the two registers' rates (``bi_hourly``), each on its
+    own formula where the card indexes the credit, as the social tariff's
+    cards are read; taken as one rate, a bi-hourly meter would be credited
+    the single register's figure at every hour.
+    """
+    if row.group(2) is None:
+        return leg
+    day = to_float(row.group(2)) / 100.0
+    night = to_float(row.group(3)) / 100.0
+    if day == leg.current and night == leg.current:
+        return leg
+    leg = replace(leg, peak=day, offpeak=night, bi_hourly=True)
+    if block is None:
+        return leg
+    pairs = _formula_pairs(block.group(0), _ENERGY_BANDS, _band_formula_re, 1.0)
+    if "peak" not in pairs or "offpeak" not in pairs:
+        raise ExtractorError("Luminus: a feed-in register's formula is missing")
+    return replace(
+        leg,
+        factor_peak=pairs["peak"][0],
+        base_peak=pairs["peak"][1],
+        factor_offpeak=pairs["offpeak"][0],
+        base_offpeak=pairs["offpeak"][1],
     )
 
 
@@ -678,6 +718,12 @@ _DYNAMIC_INJECTION_BLOCK_RE = re.compile(
     r"(?:(?!Formule\s+tarifaire|Les\s+montants).)*",
     re.S,
 )
+# The feed-in row, one figure per meter register: single, then a bi-hourly
+# meter's day and night, all on the one line ("(c€/kWh)2 6,71 8,64 3,75 -").
+_INJECTION_ROW_RE = re.compile(
+    rf"(?:Tarif\s+de|Compensation\s+pour)\s+l[\"'’©]énergie\s+injectée"
+    rf"[^0-9-]*(?:\d+\s+)?({_NUM})(?:[ \t]+({_NUM})[ \t]+({_NUM}))?"
+)
 # One register's row with its label, which runs back to the block's colon or
 # to the row before it: "Injection (Compteur mono-horaire et bi-horaire) =
 # 0,1019 x Belpex H - 1,2737".
@@ -698,9 +744,11 @@ _BELPEX_H_ROW_RE = re.compile(
 # before's for good, 1,79 c/kWh under in the third quarter of 2026.
 #
 # The leading guard keeps the scan inside the injection block: the SmartFlex
-# card carries a second, MaxxFlex-identical block for a non-SMR3 meter.
+# card carries a second, MaxxFlex-identical block for a non-SMR3 meter. The
+# cards until December 2025 head the block "pour la compensation de".
 _INJECTION_INDEXED_RE = re.compile(
-    r"Formule\s+tarifaire\s+de\s+l['\u2019\u00a9]énergie\s+injectée"
+    r"Formule\s+tarifaire\s+(?:pour\s+la\s+compensation\s+)?de\s+"
+    r"l['\u2019\u00a9]énergie\s+injectée"
     r"(?:(?!Formule\s+tarifaire).)*?"
     rf"=\s*((?P<factor>{_NUM})\s*x\s*Belpex\s*"
     rf"(?P<sign>[{SIGN_CHARS}])\s*(?P<base>{_NUM}))"
@@ -733,18 +781,27 @@ _MONTHLY_RLP_RE = re.compile(
 )
 # The ENERGY block only. Scoping matters: searched over the whole document the
 # mono pattern also finds the INJECTION formula ("0,0481 x Belpex - 0,6392"),
-# and a fixed card would gain an energy formula it does not have.
+# and a fixed card would gain an energy formula it does not have. The feed-in
+# block that ends it is headed "pour la compensation de" until December 2025.
 _ENERGY_FORMULA_BLOCK_RE = re.compile(
     r"Formules\s+tarifaires\s+pour\s+le\s+co[uû]t\s+de\s+l['\u2019\u00a9]\s*[ée]nergie"
-    r"(?:(?!Formule\s+tarifaire\s+de).)*",
+    r"(?:(?!Formule\s+tarifaire\s+(?:pour\s+la\s+compensation\s+)?de).)*",
     re.S,
 )
+# The rows of the feed-in block too, which prints no exclusive night.
 _ENERGY_BANDS: tuple[tuple[str, str], ...] = (
     # The label wraps after its hyphen on the April to June 2026 ComfyFlex
-    # cards: "Compteur mono-\nhoraire".
-    ("single", r"Compteur\s+mono-\s*horaire"),
-    ("peak", r"Heures\s+pleines(?:\s*\([^)]*\))?"),
-    ("offpeak", r"Heures\s+creuses"),
+    # cards: "Compteur mono-\nhoraire". The cards until July 2025 name each
+    # row after its meter instead, "Jour (compteur de jour)", "Jour (compteur
+    # de jour et de nuit)" and "et nuit" or "Nuit", the feed-in block closing
+    # the day row's parenthesis twice.
+    ("single", r"(?:Compteur\s+mono-\s*horaire|Jour\s*\(compteur\s+de\s+jour\))"),
+    (
+        "peak",
+        r"(?:Heures\s+pleines(?:\s*\([^)]*\))?"
+        r"|Jour\s*\(compteur\s+de\s+jour\s+et\s+de\s+nuit\)+)",
+    ),
+    ("offpeak", r"(?:Heures\s+creuses|(?<!Exclusif\s)\b[Nn]uit)"),
     ("exclusive_night", r"Exclusif\s+nuit"),
 )
 

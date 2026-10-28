@@ -320,6 +320,185 @@ async def test_the_archive_serves_a_dynamic_month_before_september_2025(
     assert snap.injection.factor == pytest.approx(0.825)
 
 
+def test_a_2025_card_credits_each_register_on_its_own_formula() -> None:
+    """The cards of 2025 call the feed-in row "Compensation pour l'energie
+    injectee", which the reader did not know, so no Luminus card of 2025
+    parsed and a contract signed on one was billed today's card. Until June
+    2025 they price the registers apart: "Jour (compteur de jour) = 0,0644 x
+    Belpex - 1,5900; Jour (compteur de jour et de nuit)) = 0,0794 x Belpex -
+    1,5900; Nuit = 0,0414 x Belpex - 1,5900", printed at February's 128,75 as
+    6,71, 8,64 and 3,75 c/kWh. A card pricing them alike is the one rate."""
+    snap = parse_snapshot(
+        "luminus_maxxfix", fixture_text("luminus_maxxfix_v_2025-03.pdf"), "flanders"
+    )
+    assert snap.publication_label == "mars 2025"
+    energy = snap.energy
+    assert isinstance(energy, FixedRates)
+    assert (
+        energy.single,
+        energy.peak,
+        energy.offpeak,
+        energy.exclusive_night,
+    ) == pytest.approx((0.1781, 0.1937, 0.1596, 0.1596))
+    inj = snap.injection
+    assert inj is not None and inj.bi_hourly and inj.month_indexed
+    assert (inj.current, inj.peak, inj.offpeak) == pytest.approx(
+        (0.0671, 0.0864, 0.0375)
+    )
+    for factor, base, card_factor, printed in (
+        (inj.factor, inj.base, 0.0644, inj.current),
+        (inj.factor_peak, inj.base_peak, 0.0794, inj.peak),
+        (inj.factor_offpeak, inj.base_offpeak, 0.0414, inj.offpeak),
+    ):
+        assert factor is not None and base is not None
+        assert factor == pytest.approx(card_factor * 10.0)
+        assert base == pytest.approx(-0.0159)
+        assert factor * 0.12875 + base == pytest.approx(printed, abs=1e-4)
+    # The Flemish half of a card printed for both regions reads as before.
+    assert len(snap.dsos) == 8
+    antwerpen = snap.dsos["fluvius_antwerpen"]
+    assert antwerpen.data_management_per_year == pytest.approx(18.56)
+    assert antwerpen.capacity_eur_per_kw_year == pytest.approx(53.26)
+    assert antwerpen.distribution_single == pytest.approx(0.0599)
+    assert snap.taxes.federal_excise == pytest.approx(0.050329)
+    assert snap.taxes.flanders_renewables == pytest.approx(0.016)
+    # Since July 2025 the registers are alike, and the leg is the one rate.
+    today = parse_snapshot(
+        "luminus_maxxfix", fixture_text("luminus_maxxfix_v_oct.pdf"), "flanders"
+    ).injection
+    assert today is not None and not today.bi_hourly and today.peak is None
+    # Registers priced apart with one of their formulas unread is a drift.
+    text = fixture_text("luminus_maxxfix_v_2025-03.pdf")
+    unread = text.replace("0,0414 x Belpex", "0,0414 x Endex")
+    assert unread != text
+    with pytest.raises(ExtractorError, match="register"):
+        parse_snapshot("luminus_maxxfix", unread, "flanders")
+
+
+def test_a_2025_variable_card_reads_its_formulas_by_meter() -> None:
+    """Until July 2025 the energy rows are named after the meter, "Jour
+    (compteur de jour) = 0,1086 x Belpex + 3,6500", "Jour (compteur de jour et
+    de nuit)", "et nuit" and "Exclusif nuit", where the later cards print
+    "Compteur mono-horaire" and "Heures pleines". Unread, a MaxxFlex contract
+    signed then would keep no formula and be billed each month's card."""
+    snap = parse_snapshot(
+        "luminus_maxxflex", fixture_text("luminus_maxxflex_v_2025-03.pdf"), "flanders"
+    )
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed and not energy.quarter_indexed
+    assert not energy.rlp_indexed
+    printed = (energy.current, energy.peak, energy.offpeak, energy.exclusive_night)
+    assert printed == pytest.approx((0.1869, 0.2116, 0.1625, 0.1625))
+    for factor, base, card, rate in zip(
+        (
+            energy.formula_factor,
+            energy.formula_factor_peak,
+            energy.formula_factor_offpeak,
+            energy.formula_factor_exclusive_night,
+        ),
+        (
+            energy.formula_base,
+            energy.formula_base_peak,
+            energy.formula_base_offpeak,
+            energy.formula_base_exclusive_night,
+        ),
+        ((0.1086, 3.65), (0.1274, 3.557), (0.0942, 3.209), (0.0942, 3.209)),
+        printed,
+        strict=True,
+    ):
+        assert factor is not None and base is not None
+        assert factor == pytest.approx(card[0] * 10.0 * 1.06)
+        assert base == pytest.approx(card[1] / 100.0 * 1.06)
+        # The printed rate is the formula at February's 128,75.
+        assert factor * 0.12875 + base == pytest.approx(rate, abs=1e-4)
+    inj = snap.injection
+    assert inj is not None and inj.bi_hourly and inj.month_indexed
+    # The energy block stops at the feed-in block, headed "pour la
+    # compensation de" on these cards, so no feed-in row is read as energy.
+    from custom_components.be_electricity_prices.providers._luminus_cards import (
+        _ENERGY_FORMULA_BLOCK_RE,
+    )
+
+    block = _ENERGY_FORMULA_BLOCK_RE.search(
+        fixture_text("luminus_maxxflex_v_2025-03.pdf")
+    )
+    assert block is not None and "0,0644" not in block.group(0)
+
+
+def _serve_the_archive(
+    monkeypatch: pytest.MonkeyPatch, product: str, month: str, fixture: str
+) -> None:
+    """Luminus's archive listing ``product`` and serving ``fixture`` as its
+    card of ``month``, and no card for another month."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    async def _products(session: object, url: str, **kwargs: object) -> str:
+        return _archive_products((product, "id-product"))
+
+    async def _card(session: object, url: str, **kwargs: object) -> str:
+        if f"date={month}&" not in url:
+            raise ExtractorError(f"Luminus archive: no card for {url}")
+        return fixture_text(fixture)
+
+    monkeypatch.setattr(luminus, "fetch_text", _products)
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _card)
+
+
+async def _signed_legs(
+    hass: Any, contract: str, region: str, dso: str, start: str, today: Any
+) -> Any:
+    """The cohort legs of an entry on ``contract`` that started on ``start``."""
+    from unittest.mock import MagicMock
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+    from custom_components.be_electricity_prices.const import DOMAIN
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "luminus",
+            "contract": contract,
+            "region": region,
+            "dso": dso,
+            "meter": "mono",
+            "contract_start_date": start,
+        },
+    )
+    return await _cohort_legs(
+        hass, MagicMock(), EXTRACTORS["luminus"], contract, region, entry, today
+    )
+
+
+async def test_a_contract_signed_in_2025_is_billed_its_own_card(
+    hass: Any, freezer: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MaxxFix runs two years on the card it was signed on. With no card of
+    2025 read, the signing cohort found none and billed today's: 22,12 c/kWh
+    for a contract signed in March 2025 at 17,81, 150,85 EUR a year more at
+    3.500 kWh, on the live price, the rolling year and the projections."""
+    freezer.move_to("2026-10-28 12:00:00+01:00")
+    _serve_the_archive(
+        monkeypatch,
+        "Luminus MaxxFix Electricité",
+        "2025-03",
+        "luminus_maxxfix_v_2025-03.pdf",
+    )
+    today = parse_snapshot(
+        "luminus_maxxfix", fixture_text("luminus_maxxfix_v_oct.pdf"), "flanders"
+    )
+    legs = await _signed_legs(
+        hass, "luminus_maxxfix", "flanders", "fluvius_antwerpen", "2025-03-15", today
+    )
+    assert legs.card == "mars 2025"
+    billed = legs.splice(today).energy
+    assert isinstance(billed, FixedRates) and isinstance(today.energy, FixedRates)
+    assert billed.single == pytest.approx(0.1781)
+    assert today.energy.single == pytest.approx(0.2212)
+
+
 def test_missing_injection_row_fails_loud() -> None:
     # Every Luminus card publishes an injection rate; a non-dynamic card
     # whose injection row went missing is a layout drift, not a fee-free
