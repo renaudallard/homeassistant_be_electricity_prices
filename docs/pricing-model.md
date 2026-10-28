@@ -1171,8 +1171,8 @@ mean. DATS 24's BE_spotRLP is the column-weighted mean too, at quarter-hour
 resolution: 0,04 EUR/MWh off its six published 2026 values on average, 0,15 on
 the hourly weighting the engine uses. Each blend was settled against the supplier's own published table rather
 than against the wording, which is identical on two of the three cards.
-Mega, Ecopower, Luminus BasicFlex and TotalEnergies carry the column-weighted
-blend as well. TotalEnergies prints no index at all, so its cards were solved
+Mega, Ecopower, Ecofix Flexy, Luminus BasicFlex and TotalEnergies carry the
+column-weighted blend as well. TotalEnergies prints no index at all, so its cards were solved
 for the one their monthly rates are printed at, which lands on the
 column-weighted mean every month from September 2025 to September 2026 where
 the distinct one runs up to 2,2 EUR/MWh low (see
