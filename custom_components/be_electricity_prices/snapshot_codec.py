@@ -484,7 +484,15 @@ class _MigratingStore(Store[dict[str, Any]]):
 # Luminus Dynamic's cards before September 2025 parse; a card splitting
 # ORES's sub-areas leaves ORES out at Eneco too, and Aspiravi's 2024 cards
 # no longer read PBE's row as Kempen.
-_SNAPSHOT_SCHEMA_VERSION = 84
+# v85: Luminus's 2025 cards parse, their feed-in row and formulas and the
+# variable cards' register formulas, and its cards printed for both regions
+# up to 2025 read their Walloon side, the 2025 Dynamic card taking its
+# Walloon network from a sibling card; OCTA+ reads its Walloon tables before
+# 2026 from the plain render where the aligned one smears them, and its
+# Flemish prosumer rate only as a whole figure; Eneco's cards and Engie's
+# Walloon cards, its social one included, carry day_night_under_impact, the
+# social card on its feed-in leg too.
+_SNAPSHOT_SCHEMA_VERSION = 85
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
