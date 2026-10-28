@@ -206,9 +206,10 @@ def _contract_has_spot_injection(
     the README, where a test derives it from this same flag.
 
     Two shapes carry it, and ``_injection_needs_spot`` is what tells them
-    apart: a card with no printed indicative (``current is None``), which
-    loses its whole credit without a key, and one whose indicative the card
-    labels an illustration (``slot_indexed``), which falls back to it.
+    apart: a card with no printed indicative (``current is None``), and one
+    whose indicative the card labels an illustration (``slot_indexed``).
+    Without a key neither is credited: the first prints nothing to fall back
+    on, and the second's figure is an illustration, not what the card bills.
     """
     if not supplier_id or not contract_id:
         return False
