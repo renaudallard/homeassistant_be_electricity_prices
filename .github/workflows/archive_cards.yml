@@ -27,14 +27,13 @@ on:
         required: false
         type: boolean
 
-# The run pushes to the cards repository, and nothing else does; issues so
-# a failed run is filed rather than left on the Actions tab.
-# Read only on this repository: every write, the push and the releases,
-# goes through the cards repository's own token; github.token is used by the
-# issue steps alone.
+# The run pushes to the cards repository, and nothing else does. Read only
+# on this repository, unless a job says otherwise: every write, the push and
+# the releases, goes through the cards repository's own token, and only the
+# jobs that file issues, so a failed run is filed rather than left on the
+# Actions tab, get a github.token that writes them.
 permissions:
   contents: read
-  issues: write
 
 # A manual run overlapping the schedule would push the same day's cards
 # twice and the second push would be rejected as non-fast-forward. Queue
@@ -49,7 +48,9 @@ concurrency:
 # later step on their runner; neither is given the token. The three jobs
 # that hold it, keep, push and token, run only gh, git, jq and the issue
 # script, and take nothing from the other jobs but artifacts: plain files,
-# never a .git directory. ocr and report file issues with github.token alone.
+# never a .git directory. ocr and report file issues with github.token alone,
+# and with token they are the only jobs whose github.token may write one:
+# every job's runner holds its token, the walk's and the index's included.
 jobs:
   walk:
     runs-on: ubuntu-latest
@@ -208,6 +209,9 @@ jobs:
     if: ${{ !cancelled() && needs.walk.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -597,6 +601,9 @@ jobs:
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -648,6 +655,9 @@ jobs:
     if: ${{ failure() }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v7
         with:

@@ -1707,15 +1707,17 @@ failure does not count. The first run, on 2026-09-11, stored all 61 Mega cards, 
 not permanent; either way Mega has its own archive and the month cache rarely needs the
 repository's copy for it.
 
-A failed run files an issue (`File the failure as an issue`, `.github/workflows/archive_cards.yml`),
-which is why the workflow also has `issues: write`: nobody watches the Actions tab, and a walk that
-stored nothing, a refused push or an expired upload token (fine-grained tokens live a year at
-most) would otherwise end the archive quietly. The same `scripts/file_ci_issue.sh` the live check
-uses, label `archive-cards`: one open issue per problem, the failed step's name as the fingerprint
-so the same step failing again within the week adds nothing and a different one is posted at once,
-and a body that names the job that failed so the token case is told from the others. A walk
-cancelled by its timeout leaves nothing for the jobs after it, which is what the give-up rule
-above is for.
+A failed run files an issue (`File the failure as an issue`, `.github/workflows/archive_cards.yml`):
+nobody watches the Actions tab, and a walk that stored nothing, a refused push or an expired upload
+token (fine-grained tokens live a year at most) would otherwise end the archive quietly. Only the
+jobs that file issues, `ocr`, `token` and `report`, are given `issues: write`. The workflow's own
+permissions are read only, so the `github.token` the walk's and the index's runners hold beside
+third-party code writes nothing (`test_only_the_jobs_that_file_issues_may_write_them`). The same
+`scripts/file_ci_issue.sh` the live check uses, label `archive-cards`: one open issue per problem,
+the failed step's name as the fingerprint so the same step failing again within the week adds
+nothing and a different one is posted at once, and a body that names the job that failed so the
+token case is told from the others. A walk cancelled by its timeout leaves nothing for the jobs
+after it, which is what the give-up rule above is for.
 
 ### autorelease.yml - Autorelease
 

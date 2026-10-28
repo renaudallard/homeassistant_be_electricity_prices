@@ -4092,6 +4092,31 @@ def test_a_token_never_shares_a_job_with_third_party_code(token: str) -> None:
     )
 
 
+def test_only_the_jobs_that_file_issues_may_write_them() -> None:
+    """The workflow gave every job a github.token that writes issues, the
+    walk's and the index's included. Neither files one and no step of theirs
+    is handed it, but their runner holds it while the PDF readers and the OCR
+    engine run on what the suppliers serve. Only a job that files an issue
+    may write one, and no job writes this repository."""
+    import yaml  # type: ignore[import-untyped]
+
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
+        ).read_text()
+    )
+    assert workflow["permissions"] == {"contents": "read"}
+    filers = {
+        name
+        for name, job in workflow["jobs"].items()
+        if any("github.token" in json.dumps(s.get("env", {})) for s in job["steps"])
+    }
+    assert filers == {"ocr", "token", "report"}
+    for name, job in workflow["jobs"].items():
+        wanted = {"contents": "read", "issues": "write"} if name in filers else None
+        assert job.get("permissions") == wanted, name
+
+
 def test_a_render_that_never_returns_does_not_hold_the_exit() -> None:
     """The per-card timeout abandons the render; its thread must not keep
     the event loop, or the process, from ending. Under asyncio.to_thread
