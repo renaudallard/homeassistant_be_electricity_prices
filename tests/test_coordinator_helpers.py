@@ -14337,6 +14337,58 @@ def test_every_windowed_caller_credits_on_a_year_not_its_window() -> None:
     assert "first_year_net_kwh(" not in ahead
 
 
+def test_every_caller_credits_a_closed_first_year_on_what_it_metered() -> None:
+    """Once the first contract year has closed, a per-kWh half, a feed-in
+    bonus and a percentage credit ride what that year metered
+    (``first_year.first_year_volume``). Each caller pricing the credit has to
+    read it and hand it on, or the leaf goes on estimating a year that is
+    over: the year to date and the month's share of it, the backfill, the
+    compare page's year-to-date column and the year ahead of the contract
+    held, on the page and on the projection. Held on the source, since a
+    caller left on the estimate agrees with the others until the first year
+    of an entry that has one closes."""
+    import inspect
+
+    from custom_components.be_electricity_prices import (
+        backfill_cost,
+        backfill_window,
+        compare_quote,
+        coordinator_costs,
+        fees,
+        projected_cost,
+        ytd_cost,
+    )
+    from tests import compare_page_calls
+
+    forwarders: tuple[tuple[Any, str], ...] = (
+        (ytd_cost.window_welcome_credit, "metered=metered"),
+        (compare_quote._ytd_welcome_credit, "metered=metered"),
+        (compare_quote._annual_welcome_credit, "metered=metered"),
+        (fees._year_ahead_welcome_credit, "metered=metered"),
+        (backfill_cost._accrue_cost, "metered=ctx.first_year"),
+    )
+    for forwarder, hands_on in forwarders:
+        assert hands_on in inspect.getsource(forwarder), forwarder.__name__
+    readers: tuple[Any, ...] = (
+        ytd_cost._compute_current_year_cost,
+        coordinator_costs._CostsMixin._tick_costs,
+        backfill_window._build_context,
+        compare_quote._own_welcome_credit,
+    )
+    for reader in readers:
+        assert "first_year_volume(" in inspect.getsource(reader), reader.__name__
+    # The year ahead of the contract held goes through the one helper that
+    # reads it; only the two quoting helpers call the generic one.
+    for name, call in compare_page_calls("_annual_welcome_credit"):
+        assert name == "compare_quote.py", f"{name}:{call.lineno}"
+    assert compare_page_calls("_own_welcome_credit")
+    assert "_own_welcome_credit(" in inspect.getsource(
+        projected_cost._compute_projected_year_cost
+    )
+    for name, call in compare_page_calls("_ytd_welcome_credit"):
+        assert "metered" in {kw.arg for kw in call.keywords}, f"{name}:{call.lineno}"
+
+
 def test_the_feed_in_bonus_rides_the_first_years_export_outside_the_cap() -> None:
     """Mega adds a bonus on the first year's FEED-IN beside its ristourne:
     "Si vous injectez de l'energie ... un bonus de 1,06 c EUR/kWh ... pour
@@ -15099,6 +15151,460 @@ async def test_a_first_year_walk_the_recorder_did_not_answer_is_not_kept(
         assert await charges() == 171.0
         assert await charges() == 171.0
     assert walks == [None, 120.0, None, 171.0]
+
+
+@pytest.mark.parametrize(
+    ("start", "wait", "paid"),
+    [
+        (date(2025, 10, 5), 12, date(2026, 10, 5)),
+        (date(2025, 10, 15), 14, date(2026, 12, 15)),
+    ],
+    ids=["twelve_months", "fourteen_months"],
+)
+async def test_a_paid_lump_rides_what_its_first_year_drew(
+    hass: HomeAssistant, freezer: Any, start: date, wait: int, paid: date
+) -> None:
+    """Mega's per-kWh half is a reduction "pour votre premiere annee de
+    consommation nette", paid in one lump after the card's wait. Priced on
+    the trailing year the coordinator measures every day, it kept moving once
+    paid: signed on 5 October 2025 on 37,10 EUR plus 2,862 c/kWh, a first
+    year of 2.442,6 kWh is granted 107,01, and the year to date credited
+    106,99 on the day and 117,04 by 31 December once a car added half again
+    to the draw. A card paying after fourteen months was off on the day it
+    paid. Once the first year has closed, the lump is what that year drew."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    entry = _entry(
+        region="wallonia",
+        solar_regime="none",
+        meter="mono",
+        contract="test",
+        contract_start_date=start.isoformat(),
+        consumption_kwh="sensor.cons_total",
+    )
+    snap = replace(
+        _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=FixedRates(single=0.10, yearly_fixed_fee=36.5),
+        ),
+        welcome_credit_eur=37.10,
+        welcome_credit_eur_per_kwh=0.02862,
+        welcome_credit_cap_eur=848.0,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        welcome_credit_after_months=wait,
+    )
+    second_year = start.replace(year=start.year + 1)
+
+    def drawn(day: date) -> float:
+        # Six kWh a day through the first year, nine after it: a car.
+        return 6.0 if day < second_year else 9.0
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, first: date, last: date
+    ) -> dict[date, float]:
+        if entity_id != "sensor.cons_total":
+            return {}
+        days = (first + timedelta(days=n) for n in range((last - first).days + 1))
+        return {day: drawn(day) for day in days}
+
+    coordinator = SimpleNamespace(
+        _first_year_memo={}, _first_year_volumes={}, _annual_kwh_full_year=True
+    )
+    entry.runtime_data = coordinator
+
+    async def credited(today: date) -> float:
+        freezer.move_to(f"{today.isoformat()} 12:00:00+01:00")
+        # The trailing year, as the coordinator measures it once a day.
+        coordinator._annual_kwh = sum(
+            drawn(today - timedelta(days=n)) for n in range(365)
+        )
+        stats: dict[str, float] = {}
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+            await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                snap,
+                entry,
+                breakdown=stats,
+            )
+        return stats["welcome_credit_eur"]
+
+    granted = 37.10 + 0.02862 * 6.0 * 365
+    assert await credited(paid) == pytest.approx(granted)
+    assert await credited(date(2026, 12, 31)) == pytest.approx(granted)
+
+
+async def test_a_closed_first_year_is_read_once_for_what_it_metered(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Its draw, net of its export where the meter nets it, and its export
+    where it is sold, over a full year of meter. Nothing while the year runs
+    or for a window past every day the credit reaches, and no draw where the
+    recorder does not hold the year of it. Kept on the coordinator from the
+    first read the recorder answered after the year's last hour is in, as the
+    first year's charges are, and read every time for a proxy carrying no
+    coordinator."""
+    from custom_components.be_electricity_prices import first_year
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import FirstYearVolume
+
+    card = make_snapshot(
+        welcome_credit_eur_per_kwh=0.05,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    )
+    held_from = [date(2025, 1, 1)]
+    reads: list[str] = []
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, first: date, last: date
+    ) -> dict[date, float]:
+        reads.append(entity_id)
+        rate = {"sensor.cons": 10.0, "sensor.inj": 4.0}.get(entity_id)
+        days = (first + timedelta(days=n) for n in range((last - first).days + 1))
+        return {day: rate for day in days if rate and day >= held_from[0]}
+
+    def entry_for(regime: str) -> MockConfigEntry:
+        entry = _entry(
+            solar_regime=regime,
+            contract_start_date="2025-10-05",
+            consumption_kwh="sensor.cons",
+            injection_kwh="sensor.inj",
+        )
+        entry.runtime_data = SimpleNamespace(_first_year_volumes={})
+        return entry
+
+    async def volume(
+        entry: Any, window_start: date = date(2026, 1, 1)
+    ) -> FirstYearVolume | None:
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+            return await first_year.first_year_volume(hass, entry, card, window_start)
+
+    freezer.move_to("2026-10-04 23:30:00+02:00")
+    assert await volume(entry_for("none")) is None
+    assert reads == []
+    freezer.move_to("2026-10-28 12:00:00+01:00")
+    netted = entry_for("compensation")
+    assert await volume(netted) == FirstYearVolume(6.0 * 365, 0.0)
+    assert await volume(entry_for("injection")) == FirstYearVolume(3650.0, 1460.0)
+    assert await volume(entry_for("none")) == FirstYearVolume(3650.0, 0.0)
+    # Read once, then kept.
+    reads.clear()
+    assert await volume(netted) == FirstYearVolume(6.0 * 365, 0.0)
+    assert reads == []
+    # A window opening after the lump was paid gets no credit to price.
+    assert await volume(entry_for("none"), date(2027, 1, 1)) is None
+    assert reads == []
+    # A history starting part-way through the year is not that year.
+    held_from[0] = date(2026, 1, 1)
+    assert await volume(entry_for("none")) == FirstYearVolume(None, 0.0)
+
+
+async def test_a_first_year_read_is_kept_only_once_closed_and_answered(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Before 01:00 on the day after it, the year's last hour may not be in
+    the recorder, and a busy recorder answers each read with nothing: either
+    read serves its own tick and the next one reads again."""
+    from custom_components.be_electricity_prices import first_year
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import FirstYearVolume
+
+    card = make_snapshot(
+        welcome_credit_eur_per_kwh=0.05,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    )
+    entry = _entry(
+        solar_regime="none",
+        contract_start_date="2025-10-05",
+        consumption_kwh="sensor.cons",
+    )
+    entry.runtime_data = SimpleNamespace(_first_year_volumes={})
+    busy = [False]
+    reads: list[date] = []
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, first: date, last: date
+    ) -> dict[date, float]:
+        reads.append(first)
+        if busy[0]:
+            energy_meters._note_failed_read(entity_id)
+            return {}
+        days = (first + timedelta(days=n) for n in range((last - first).days + 1))
+        return {day: 10.0 for day in days}
+
+    async def volume() -> FirstYearVolume | None:
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+            return await first_year.first_year_volume(
+                hass, entry, card, date(2026, 1, 1)
+            )
+
+    freezer.move_to("2026-10-05 00:30:00+02:00")
+    assert await volume() == FirstYearVolume(3650.0, 0.0)
+    freezer.move_to("2026-10-05 01:30:00+02:00")
+    busy[0] = True
+    assert await volume() == FirstYearVolume(None, 0.0)
+    busy[0] = False
+    assert await volume() == FirstYearVolume(3650.0, 0.0)
+    assert await volume() == FirstYearVolume(3650.0, 0.0)
+    assert len(reads) == 3
+    # A proxy carries no coordinator and reads every time.
+    entry.runtime_data = None
+    await volume()
+    await volume()
+    assert len(reads) == 5
+
+
+async def test_each_side_of_a_closed_first_year_stands_on_its_own(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """An export meter that recorded the whole first year with nothing on it
+    says the year exported nothing. Read as a meter short of the year, it sent
+    the draw half back to the trailing year too, and so did an export meter
+    whose history starts inside the year. Each side keeps its own estimate
+    instead, but under compensation, where the export comes off the draw."""
+    from custom_components.be_electricity_prices import first_year
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+    from custom_components.be_electricity_prices.fees import FirstYearVolume
+
+    card = make_snapshot(
+        welcome_credit_eur_per_kwh=0.05,
+        welcome_credit_injection_eur_per_kwh=0.0106,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    )
+    # The panels after the first year, from the anniversary on.
+    held_from = {"sensor.cons": date(2025, 1, 1), "sensor.inj": date(2025, 1, 1)}
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, first: date, last: date
+    ) -> dict[date, float]:
+        days = (first + timedelta(days=n) for n in range((last - first).days + 1))
+        held = (day for day in days if day >= held_from.get(entity_id, last))
+        if entity_id == "sensor.cons":
+            return {day: 10.0 for day in held}
+        return {day: 4.0 if day >= date(2026, 10, 5) else 0.0 for day in held}
+
+    async def volume(regime: str, wired: bool = True) -> FirstYearVolume | None:
+        entry = _entry(
+            solar_regime=regime,
+            contract_start_date="2025-10-05",
+            consumption_kwh="sensor.cons",
+            **({"injection_kwh": "sensor.inj"} if wired else {}),
+        )
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+            return await first_year.first_year_volume(
+                hass, entry, card, date(2026, 1, 1)
+            )
+
+    freezer.move_to("2026-12-31 12:00:00+01:00")
+    assert await volume("injection") == FirstYearVolume(3650.0, 0.0)
+    assert await volume("compensation") == FirstYearVolume(3650.0, 0.0)
+    # The export meter added on 1 March: only the bonus keeps its estimate,
+    # and under compensation the net does.
+    held_from["sensor.inj"] = date(2026, 3, 1)
+    assert await volume("injection") == FirstYearVolume(3650.0, None)
+    assert await volume("compensation") == FirstYearVolume(None, 0.0)
+    # And the draw meter added on 1 March: the draw half keeps its estimate.
+    held_from.update({"sensor.cons": date(2026, 3, 1), "sensor.inj": date(2025, 1, 1)})
+    assert await volume("injection") == FirstYearVolume(None, 0.0)
+    # No export meter at all: nothing to net, and the bonus keeps its
+    # estimate, which is what a measured year of export would be read from.
+    held_from["sensor.cons"] = date(2025, 1, 1)
+    assert await volume("injection", wired=False) == FirstYearVolume(3650.0, None)
+    assert await volume("compensation", wired=False) == FirstYearVolume(3650.0, 0.0)
+
+
+@pytest.mark.parametrize("export", ["none_in_the_first_year", "metered_from_march"])
+async def test_a_short_or_empty_export_side_keeps_the_draw_half_metered(
+    hass: HomeAssistant, freezer: Any, export: str
+) -> None:
+    """Mega Online Flex signed on 5 October 2025, on the injection regime,
+    with 37,10 EUR, 2,862 c/kWh on the first year's draw and 1,06 c/kWh on
+    its export. The return register read zero until panels went up on 6
+    October 2026, or was only added on 1 March 2026, and the draw rose by half
+    after the anniversary. Both halves went back to the trailing year:
+    106,99, then 111,36 and 120,87 where the card grants 107,01, or 109,59
+    and 117,04 with the late register."""
+    from custom_components.be_electricity_prices.const import (
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    entry = _entry(
+        region="wallonia",
+        solar_regime="injection",
+        meter="mono",
+        contract="test",
+        contract_start_date="2025-10-05",
+        consumption_kwh="sensor.cons_total",
+        injection_kwh="sensor.inj_total",
+    )
+    snap = replace(
+        _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=FixedRates(single=0.10, yearly_fixed_fee=36.5),
+        ),
+        welcome_credit_eur=37.10,
+        welcome_credit_eur_per_kwh=0.02862,
+        welcome_credit_injection_eur_per_kwh=0.0106,
+        welcome_credit_cap_eur=848.0,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+    )
+    anniversary = date(2026, 10, 5)
+    recorded_from = (
+        date(2026, 3, 1) if export == "metered_from_march" else date(2024, 1, 1)
+    )
+
+    def meter(entity_id: str, day: date) -> float | None:
+        if entity_id == "sensor.cons_total":
+            return 6.0 if day < anniversary else 9.0
+        if day < recorded_from:
+            return None
+        return 5.0 if day >= anniversary or export == "metered_from_march" else 0.0
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, first: date, last: date
+    ) -> dict[date, float]:
+        days = (first + timedelta(days=n) for n in range((last - first).days + 1))
+        read = {day: meter(entity_id, day) for day in days}
+        return {day: kwh for day, kwh in read.items() if kwh is not None}
+
+    coordinator = SimpleNamespace(
+        _first_year_memo={}, _first_year_volumes={}, _annual_kwh_full_year=True
+    )
+    entry.runtime_data = coordinator
+
+    async def credited(today: date) -> float:
+        freezer.move_to(f"{today.isoformat()} 12:00:00+01:00")
+        # The trailing years the coordinator measures once a day.
+        year = [today - timedelta(days=n) for n in range(365)]
+        coordinator._annual_kwh = sum(
+            meter("sensor.cons_total", d) or 0.0 for d in year
+        )
+        exported = [meter("sensor.inj_total", d) for d in year]
+        held = [kwh for kwh in exported if kwh is not None]
+        coordinator._annual_injection_kwh = (
+            sum(held) if len(held) == 365 and sum(held) > 0.0 else None
+        )
+        stats: dict[str, float] = {}
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+            await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                snap,
+                entry,
+                breakdown=stats,
+            )
+        return stats["welcome_credit_eur"]
+
+    # The first year's draw and no bonus: none was exported in it, or the
+    # register holds no year of it to credit one on.
+    granted = 37.10 + 0.02862 * 6.0 * 365
+    assert await credited(anniversary) == pytest.approx(granted)
+    assert await credited(date(2026, 12, 31)) == pytest.approx(granted)
+
+
+def test_the_months_share_rides_the_same_first_year_as_the_year() -> None:
+    """The month's credit is the year's less the year's to the day before
+    the month. Priced on the metered first year on one side and on the
+    trailing estimate on the other, a pro-rata credit whose year had closed
+    in November showed December a credit of its own."""
+    from custom_components.be_electricity_prices.coordinator_costs import (
+        credit_before_month,
+    )
+    from custom_components.be_electricity_prices.fees import FirstYearVolume
+    from custom_components.be_electricity_prices.ytd_cost import (
+        window_welcome_credit,
+    )
+
+    entry = _entry(solar_regime="none", contract_start_date="2025-11-10")
+    card = make_snapshot(welcome_credit_eur=20.0, welcome_credit_eur_per_kwh=0.05)
+    metered = FirstYearVolume(2000.0, 0.0)
+    year = {
+        "welcome_credit_eligible_eur": 5000.0,
+        "consumption_ytd_kwh": 3000.0,
+        "energy_component_ytd_eur": 300.0,
+    }
+    month = {
+        "welcome_credit_eligible_eur": 400.0,
+        "consumption_ytd_kwh": 250.0,
+        "energy_component_ytd_eur": 25.0,
+    }
+    year_from, month_from = date(2026, 1, 1), date(2026, 12, 1)
+    whole = window_welcome_credit(
+        card, entry, year_from, date(2026, 12, 15), 5000.0, year, metered
+    )
+    assert whole == pytest.approx((20.0 + 0.05 * 2000.0) * 313 / 365)
+    before = credit_before_month(
+        card, entry, year_from, month_from, year, month, metered
+    )
+    assert whole - before == pytest.approx(0.0)
+
+
+async def test_the_own_contracts_year_ahead_takes_the_first_year_it_metered(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A card paying after fourteen months has its lump still ahead once the
+    first year has closed, and the projection and the compare page's own row
+    quote it: on what that year drew, not on the coming year's volume."""
+    from custom_components.be_electricity_prices.compare_quote import (
+        _own_welcome_credit,
+    )
+    from custom_components.be_electricity_prices.const import (
+        DSO_MODE_BI_HORAIRE,
+        WELCOME_CREDIT_ANNIVERSARY,
+    )
+
+    freezer.move_to("2026-11-02 12:00:00+01:00")
+    entry = _entry(
+        region="wallonia",
+        solar_regime="none",
+        meter="mono",
+        contract_start_date="2025-10-15",
+        consumption_kwh="sensor.cons",
+    )
+    card = replace(
+        _snapshot(prosumer=None, capacity=None),
+        welcome_credit_eur=15.90,
+        welcome_credit_eur_per_kwh=0.03816,
+        welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        welcome_credit_after_months=14,
+    )
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, first: date, last: date
+    ) -> dict[date, float]:
+        days = (first + timedelta(days=n) for n in range((last - first).days + 1))
+        return {day: 6.0 for day in days} if entity_id == "sensor.cons" else {}
+
+    with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+        quoted = await _own_welcome_credit(
+            hass,
+            entry,
+            card,
+            card,
+            dt_util.now(),
+            "ores",
+            "wallonia",
+            None,
+            "mono",
+            DSO_MODE_BI_HORAIRE,
+            None,
+            # The coming year's volume, half again the first year's.
+            3285.0,
+            regime="none",
+        )
+    assert quoted == pytest.approx(15.90 + 0.03816 * 6.0 * 365)
 
 
 def test_a_failed_read_reaches_every_enclosing_collector() -> None:

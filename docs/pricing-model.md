@@ -788,6 +788,32 @@ it quotes is already an annual one. Passing the window's own volume billed the p
 on whatever share of a year had elapsed: at the March anniversary of a 3500 kWh Mega Smart
 Flex entry the engine credited 114,03 EUR against the card's 291,50, and a 20.000 kWh one
 took 326,78 against its own 848,00 ceiling.
+
+The entry's yearly figure estimates a first year still running. Once that year has closed
+its volume is fixed, and the cards say which one it is: *"Elle s'applique sur votre
+consommation lors des 12 premiers mois de contrat, telle que determinee par votre
+gestionnaire de reseau"*. `first_year_volume` (`first_year.py`) reads it then: the first
+twelve months' metered draw, net of their export under compensation, and their export on
+the injection regime, each over a full year of meter (`_full_year_kwh`), read once and kept
+on the coordinator from a read the recorder answered, as the first year's charges are. An
+export meter that recorded the year with nothing on it is a year without export, not a
+meter short of one. `_welcome_credit_eur` takes it (`metered`) in place of the estimates,
+for the per-kWh half, a percentage credit and the feed-in bonus alike. Priced on the
+trailing year still, a lump already paid moved with every later day: a Mega Online Flex
+contract signed on 5 October 2025, whose first year drew 2.442,6 kWh, is granted 107,01
+EUR, and the year to date credited 106,99 on the day, 109,59 at the end of October and
+117,04 on 31 December once an electric car added half again to the draw; a Smart Flex
+contract paying after fourteen months was credited 118,50 on the day it was paid, where
+its card grants 109,11. Every caller reads it: the year to date and the month's share of
+it, the backfill, the compare page's year-to-date column, and the year ahead of the
+contract held, on the compare page and on the projection (`_own_welcome_credit`), where a
+fourteen-month lump is still ahead when the first year closes. Each side stands on its
+own: a draw history that does not cover the year keeps the draw half on the estimate and
+an export one the bonus, the other side still priced on the meter, except under
+compensation, where the export comes off the draw and the draw half needs both. Reading
+either gap as the whole year's sent both halves back to the trailing year: a return
+register reading zero until panels went up after the anniversary moved the 107,01 above
+to 120,87 by 31 December, 3,83 of it a bonus on export the first year never had.
 The flat half may also depend on how the household pays: *"une reduction de base de 37.1 EUR
 + 5.3 EUR supplementaires en cas de paiement par domiciliation bancaire"*, which
 `welcome_credit_direct_debit_eur` holds and `resolve_direct_debit` settles once onto the
@@ -948,9 +974,10 @@ candidate what a customer signing it today is granted over the coming year
 (`_year_ahead_welcome_credit`: 365 days plus the day a lump paid *"na een jaar"* lands on),
 and nothing where the card names another signing month (`_candidate_welcome_credit`):
 Bolt serves the previous month's card on the 1st while the new one is unpublished.
-The household's own row carries whatever is left of its first year. `_annual_welcome_credit`
-re-walks the energy leg on its `energy` component for the cap, and `_annual_bill` takes
-the credit off last. A Frank Korting tier therefore ranks on the year it would cost,
+The household's own row carries whatever is left of its first year (`_own_welcome_credit`,
+on what that year metered once it has closed). `_annual_welcome_credit` re-walks the
+energy leg on its `energy` component for the cap, and `_annual_bill` takes the credit off
+last. A Frank Korting tier therefore ranks on the year it would cost,
 cashback included, instead of as JN's loser. `projected_year_cost` takes the same
 remaining first-year share off its full year, read off the signing month's card the way
 the running bill reads it, and reports it as `welcome_credit_eur`; before that the two

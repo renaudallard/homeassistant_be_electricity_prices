@@ -46,7 +46,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .cohort import _signed_in
+from .cohort import _parse_iso_date, _signed_in
 from .compare_weighting import (
     _register_network_rates,
     _register_weights,
@@ -54,6 +54,7 @@ from .compare_weighting import (
 )
 from .const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_REGION,
@@ -72,6 +73,7 @@ from .const import (
 )
 from .day_night import day_start_for
 from .fees import (
+    FirstYearVolume,
     _annual_static_fees,
     _compensation_kva,
     _compute_capacity,
@@ -85,6 +87,7 @@ from .fees import (
     gross_network_rebate,
     window_energy_rate,
 )
+from .first_year import first_year_volume
 from .meter_daily import (
     MeasuredKwh,
     _measured_kwh,
@@ -410,6 +413,7 @@ def _ytd_welcome_credit(
     fee_proration: float,
     annual_injection_kwh: float = 0.0,
     day_start: int = DAY_START,
+    metered: FirstYearVolume | None = None,
 ) -> float:
     """The welcome credit the year-to-date window has already accrued.
 
@@ -427,7 +431,8 @@ def _ytd_welcome_credit(
     card measures it over the first contract YEAR whatever window is being
     shown. Passing the window's own volume here made this column disagree
     with the annual one beside it by most of the credit. A first-year
-    feed-in bonus rides ``annual_injection_kwh`` for the same reason.
+    feed-in bonus rides ``annual_injection_kwh`` for the same reason, and
+    ``metered``, the first year's own volume once it has closed, replaces both.
     """
     if not _grants_a_welcome_credit(credited):
         return 0.0
@@ -469,6 +474,7 @@ def _ytd_welcome_credit(
         first_year_injection_kwh=(
             annual_injection_kwh if regime == SOLAR_REGIME_INJECTION else 0.0
         ),
+        metered=metered,
     )
 
 
@@ -488,6 +494,7 @@ def _annual_welcome_credit(
     *,
     regime: str,
     day_start: int = DAY_START,
+    metered: FirstYearVolume | None = None,
 ) -> float:
     """The welcome credit the coming year takes off ``snapshot``'s annual quote.
 
@@ -549,6 +556,53 @@ def _annual_welcome_credit(
         first_year_injection_kwh=(
             injection_kwh if regime == SOLAR_REGIME_INJECTION else 0.0
         ),
+        metered=metered,
+    )
+
+
+async def _own_welcome_credit(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    snapshot: Any,
+    credited: Any,
+    when_now: datetime,
+    dso: str,
+    region: str,
+    spot: float | None,
+    meter: Any,
+    dso_mode: Any,
+    hour_weights: dict[int, float] | None,
+    consumption_kwh: float,
+    injection_kwh: float = 0.0,
+    *,
+    regime: str,
+    day_start: int = DAY_START,
+) -> float:
+    """What is left of the household's own first-year credit over the coming
+    year, by :func:`_annual_welcome_credit` from ``entry``'s start date.
+
+    On the first contract year's volume as metered once that year has closed,
+    which a card paying after fourteen months has still to pay out then:
+    priced on the coming year's volume instead, the projection and the page's
+    own row quoted a lump other than the one the card had measured. ``entry``
+    carries the regime the quote is priced under.
+    """
+    return _annual_welcome_credit(
+        snapshot,
+        credited,
+        _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),
+        when_now,
+        dso,
+        region,
+        spot,
+        meter,
+        dso_mode,
+        hour_weights,
+        consumption_kwh,
+        injection_kwh,
+        regime=regime,
+        day_start=day_start,
+        metered=await first_year_volume(hass, entry, credited, when_now.date()),
     )
 
 
@@ -626,8 +680,10 @@ def _covers_a_year(days_with_data: int) -> bool:
     return days_with_data >= MEASURED_FULL_YEAR_DAYS - MEASURED_YEAR_GAP_DAYS
 
 
-def _full_year_kwh(measured: MeasuredKwh) -> float | None:
-    """A measured window as a year, or ``None`` short of one.
+def _full_year_kwh(
+    measured: MeasuredKwh, year_days: int = MEASURED_FULL_YEAR_DAYS
+) -> float | None:
+    """A measured window as a year of ``year_days``, or ``None`` short of one.
 
     Scaled across the few days the recorder missed, which at a full year's
     coverage is a correction under 5% with no seasonal bias worth the name.
@@ -635,10 +691,11 @@ def _full_year_kwh(measured: MeasuredKwh) -> float | None:
     rolling-year cost sensor and the yearly export a feed-in bonus rides on.
     Below a full year it answers nothing, because a partial window of export
     cannot be scaled by a day count (PV is far too seasonal for that).
+    ``year_days`` is for a year of twelve months that spans a 29 February.
     """
     days = measured.days_with_data
     if measured.kwh > 0 and _covers_a_year(days):
-        return measured.kwh * MEASURED_FULL_YEAR_DAYS / days
+        return measured.kwh * year_days / days
     return None
 
 

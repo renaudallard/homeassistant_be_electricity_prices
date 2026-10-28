@@ -685,6 +685,19 @@ payout together:
 `ristourne_kind` turns that footnote into `welcome_credit_kind` pro rata; a card without
 it keeps the anniversary. The professional cards kept the old wording and the old payout.
 
+The per-kWh half is measured over the first twelve months of the contract, *"Elle
+s'applique sur votre consommation lors des 12 premiers mois de contrat, telle que
+determinee par votre gestionnaire de reseau"*, and the October 2026 cards compute it *"sur
+la base de la consommation indiquee lors de la souscription et ... ajustee ... en fonction
+de la consommation reelle"*. While those months run it is priced on an estimate of them,
+the entry's yearly volume; once they have closed, on what they metered
+(`first_year_volume`, `first_year.py`) where the draw meter recorded all of them. The
+feed-in bonus below is priced the same way on the export meter, and each side stands on
+its own: an export meter that recorded those months with nothing on it is a year without
+export, one added inside them leaves the bonus on its estimate while the draw half stays
+on the meter, and only under compensation, where the export nets the draw, does the draw
+half need both.
+
 ### First-year feed-in bonus
 
 Every card with a feed-in formula prints a bonus on the first year's export beside the
@@ -700,7 +713,7 @@ Smart cards write "visant votre injection"; the pattern takes both.
 "Commercialisation" is the export being SOLD to the supplier, which is the injection
 regime: under compensation the meter nets it and the card prints no feed-in price to add
 a bonus to. So it is credited on the injection regime only, on a full measured year of
-export, when and how the ristourne is paid (at the anniversary, the two footnotes stating
+export, the first year's own once it has closed, when and how the ristourne is paid (at the anniversary, the two footnotes stating
 the same wait on every card that has one, or pro rata from the first advance invoice on the
 October 2026 residential cards) and outside the ristourne's ceiling. The Smart cards' "puissance de
 raccordement inferieure ou egale a 10 kVA" is not checked: the flow asks no connection

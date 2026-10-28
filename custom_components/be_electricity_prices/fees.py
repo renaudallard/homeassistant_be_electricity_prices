@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from calendar import monthrange
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -532,6 +532,25 @@ def _months_after(start: date, months: int) -> date:
     return date(year, month, day)
 
 
+def first_year_last_day(start: date) -> date:
+    """The last day of the first twelve months from ``start``, which a card
+    measures a welcome credit's per-kWh half over: "Elle s'applique sur votre
+    consommation lors des 12 premiers mois de contrat"."""
+    return _months_after(start, 12) - timedelta(days=1)
+
+
+@dataclass(frozen=True)
+class FirstYearVolume:
+    """What the first contract year metered once it has closed: the volume a
+    per-kWh welcome credit multiplies, net where the meter nets it
+    (:func:`first_year_net_kwh`), and the export a first-year feed-in bonus
+    multiplies, zero where it is not sold. ``None`` for a side the recorder
+    holds no full year of, which keeps that side on the estimate."""
+
+    net_kwh: float | None
+    sold_kwh: float | None
+
+
 def first_year_net_kwh(
     annual_kwh: float,
     window_consumption_kwh: float,
@@ -563,7 +582,9 @@ def first_year_net_kwh(
     on the card, then the household default. That cascade already answers
     "how much does this household use in a year" for the excise band, the
     volume tier and the compare page, and annualising the window instead
-    would multiply up whatever season it happened to cover.
+    would multiply up whatever season it happened to cover. It is the
+    estimate of a first year still running: once that year has closed, what
+    it metered replaces it (:class:`FirstYearVolume`).
 
     "Nette" is about the volume the energy price was actually charged on,
     which is what a reduction "sur le prix de l'energie" can come off, and
@@ -717,6 +738,8 @@ def _welcome_credit_eur(
     first_year_kwh: float = 0.0,
     energy_eur_per_kwh: float = 0.0,
     first_year_injection_kwh: float = 0.0,
+    *,
+    metered: FirstYearVolume | None = None,
 ) -> float:
     """The one-off welcome credit accrued over ``[window_start, today]``, in EUR.
 
@@ -768,6 +791,16 @@ def _welcome_credit_eur(
     window's, and the accrual below is what places the result in the window.
     ``welcome_credit_cap_eur`` is the card's own ceiling on the total.
 
+    That volume is an estimate while the first year runs, the trailing year's,
+    and fixed once it has closed. ``metered`` is then what the year metered
+    (:func:`first_year.first_year_volume`), and replaces each volume this is
+    handed that it holds a full year of meter for. Priced on the trailing year
+    still, a lump already paid moved with every later day: a Mega Online Flex
+    contract signed on 5 October 2025, whose first year drew 2.442,6 kWh, was
+    granted 107,01 EUR by its card and credited 117,04 by 31 December once an
+    electric car added half again to its draw, and a card paying after
+    fourteen months was off on the day it paid.
+
     A card may state the credit as a PERCENTAGE of the energy cost instead
     (Luminus Comfy: *"- 33,00 % De remise sur votre consommation annuel en
     heures pleines et creuses pendant 12 mois"*), or as a VOLUME of free
@@ -790,6 +823,10 @@ def _welcome_credit_eur(
 
     Returns a POSITIVE number; the caller subtracts it.
     """
+    if metered is not None and metered.net_kwh is not None:
+        first_year_kwh = metered.net_kwh
+    if metered is not None and metered.sold_kwh is not None:
+        first_year_injection_kwh = metered.sold_kwh
     amount = snapshot.welcome_credit_eur or 0.0
     per_kwh = snapshot.welcome_credit_eur_per_kwh or 0.0
     # A percentage of the energy cost is a per-kWh credit once it meets a
@@ -892,6 +929,8 @@ def _year_ahead_welcome_credit(
     first_year_kwh: float = 0.0,
     energy_eur_per_kwh: float = 0.0,
     first_year_injection_kwh: float = 0.0,
+    *,
+    metered: FirstYearVolume | None = None,
 ) -> float:
     """The welcome credit the coming year takes off a bill quoted today, in EUR.
 
@@ -918,7 +957,9 @@ def _year_ahead_welcome_credit(
     what a quote is, and the entry's own start date for the contract it holds.
     ``first_year_kwh`` already IS a year here, because the bill being quoted
     is an annual one, which is why this one never needed
-    :func:`first_year_net_kwh`.
+    :func:`first_year_net_kwh`. ``metered`` is the first year's own volume
+    once it has closed, which a lump paid after fourteen months is still
+    ahead of then (see :func:`_welcome_credit_eur`).
     """
     ends = today + timedelta(days=_WELCOME_YEAR_DAYS)
     wait = snapshot.welcome_credit_after_months
@@ -938,4 +979,5 @@ def _year_ahead_welcome_credit(
         first_year_kwh,
         energy_eur_per_kwh,
         first_year_injection_kwh,
+        metered=metered,
     )

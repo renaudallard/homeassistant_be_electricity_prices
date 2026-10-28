@@ -517,7 +517,8 @@ credit to date less the year's to the day before the month instead
 (`credit_before_month`, `coordinator_costs.py`). Those earlier days are not
 walked again: the year's walk and the month's both leave sums over their own
 days, so the year's figures less the month's are the earlier days', and the
-credit is priced on them (`window_welcome_credit`, `ytd_cost.py`). A lump paid
+credit is priced on them (`window_welcome_credit`, `ytd_cost.py`), on the first
+contract year's volume the year's walk read (`first_year_volume`). A lump paid
 in those days is the year's own. A third walk over them cost about a year's
 walk on every tick. Under compensation the month keeps the credit of its own
 netted window: a per-kWh credit is valued on the window's net share, which a

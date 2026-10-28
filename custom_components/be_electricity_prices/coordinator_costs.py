@@ -86,7 +86,13 @@ from .coordinator_data import (
 )
 from .coordinator_persist import settings_digest
 from .energy_meters import noting_failed_reads
-from .fees import billed_peak_for, grants_a_welcome_credit, last_credited_day
+from .fees import (
+    FirstYearVolume,
+    billed_peak_for,
+    grants_a_welcome_credit,
+    last_credited_day,
+)
+from .first_year import first_year_volume
 from .projected_cost import _compute_projected_year_cost
 from .projected_volume import _compute_projected_year_kwh, _compute_rolling_year_kwh
 from .providers import (
@@ -185,9 +191,11 @@ def credit_before_month(
     month_from: date,
     year: Mapping[str, float],
     month: Mapping[str, float],
+    metered: FirstYearVolume | None = None,
 ) -> float:
     """The welcome credit the year to date had reached by the day before the
-    month, off the two windows the tick has walked.
+    month, off the two windows the tick has walked, and on the first contract
+    year's own volume once it has closed, as the year's walk priced it.
 
     Nothing where the credit cannot have reached those days. A lump paid in
     them is the year's own, which keeps one value once paid. A pro-rata credit
@@ -210,6 +218,7 @@ def credit_before_month(
         month_from - timedelta(days=1),
         earlier["welcome_credit_eligible_eur"],
         earlier,
+        metered,
     )
 
 
@@ -395,6 +404,7 @@ class _CostsMixin:
                 month_from,
                 ytd_breakdown,
                 month_breakdown,
+                await first_year_volume(self.hass, self.entry, signing, own_start),
             )
             month_cost += month_breakdown.get("welcome_credit_eur", 0.0) - credit
             # The credit the published figure carries, not the one the month's

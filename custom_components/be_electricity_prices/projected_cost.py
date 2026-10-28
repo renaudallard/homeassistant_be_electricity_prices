@@ -71,7 +71,6 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_CONTRACT_END_DATE,
-    CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_METER,
@@ -461,14 +460,15 @@ async def _compute_projected_year_cost(
     # What is left of the household's first-year welcome credit over the
     # coming year, off the card it signed and capped on the same three
     # components as the running bill. Zero without a start date, and zero
-    # once the first year is over.
-    from .cohort import _parse_iso_date
-    from .compare_quote import _annual_welcome_credit
+    # once it has been credited: a lump paid after fourteen months is still
+    # ahead when the first year closes, on what that year metered.
+    from .compare_quote import _own_welcome_credit
 
-    welcome_credit = _annual_welcome_credit(
+    welcome_credit = await _own_welcome_credit(
+        hass,
+        entry,
         priced,
         signing if signing is not None else priced,
-        _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE)),
         dt_util.now(),
         dso,
         region,

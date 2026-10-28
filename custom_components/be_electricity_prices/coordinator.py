@@ -73,6 +73,7 @@ from .coordinator_snapshot import _SnapshotMixin
 from .coordinator_spots import _SpotsMixin
 from .coordinator_tick import _TickMixin
 from .energy_meters import memoise_meter_reads
+from .fees import FirstYearVolume
 from .meter_warm import KeptRows
 from .providers import (
     ExtractorError,
@@ -222,6 +223,9 @@ class BePricesCoordinator(
             tuple[str, str | None, date, date],
             tuple[tuple[Any, ...], float | None],
         ] = {}
+        # And what that year metered, per solar regime and start date, for a
+        # credit measured over it (first_year.first_year_volume).
+        self._first_year_volumes: dict[tuple[str, date], FirstYearVolume] = {}
         self._snapshot_raw: SupplierSnapshot | None = None
         # The household's measured yearly consumption, and the day it was
         # measured on. ``None`` until the recorder holds enough of it to be

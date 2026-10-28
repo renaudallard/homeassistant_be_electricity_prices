@@ -23,12 +23,14 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""What the first contract year charged, for a welcome lump held to it.
+"""What the first contract year charged and metered, for a welcome credit
+measured over it.
 
 EnergyVision's April to June 2026 cards cap the credit they pay at the
 anniversary at what that first year charged for the components it may come
-off (``fees.lump_held_to_first_year``). That year straddles 1 January, so it
-is walked on its own by the year-to-date bill, and kept once it is over.
+off (``fees.lump_held_to_first_year``), and Mega's per-kWh half rides what it
+drew. That year straddles 1 January, so it is walked or read on its own by
+the year-to-date bill, and kept once it is over.
 """
 
 from __future__ import annotations
@@ -41,8 +43,25 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_CONTRACT, CONF_REGION
-from .energy_meters import noting_failed_reads
+from .cohort import _parse_iso_date
+from .const import (
+    CONF_CONTRACT,
+    CONF_CONTRACT_START_DATE,
+    CONF_REGION,
+    CONF_SOLAR_REGIME,
+    SOLAR_REGIME_COMPENSATION,
+    SOLAR_REGIME_INJECTION,
+    SOLAR_REGIME_NONE,
+)
+from .energy_meters import _bills_injection, _kwh_sensor_ids, noting_failed_reads
+from .fees import (
+    FirstYearVolume,
+    first_year_last_day,
+    first_year_net_kwh,
+    grants_a_welcome_credit,
+    last_credited_day,
+)
+from .meter_daily import _measured_kwh
 from .providers.base import SupplierExtractor, SupplierSnapshot
 from .snapshot_store import cached_month_card
 
@@ -160,3 +179,82 @@ async def _walked_charges(
         "green_component_ytd_eur", 0.0
     )
     return eligible + metered * (elapsed / priced - 1.0)
+
+
+async def first_year_volume(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    snapshot: SupplierSnapshot,
+    window_start: date,
+) -> FirstYearVolume | None:
+    """What the first contract year metered, for the welcome credit
+    ``snapshot`` grants a window from ``window_start``, once that year has
+    closed; ``None`` while it runs, which leaves the credit on the trailing
+    year's estimate (``fees.first_year_net_kwh``).
+
+    The card measures the credit's per-kWh half over that year, "pour votre
+    premiere annee de consommation nette", so once it has closed what is
+    credited is what it drew, not what the year to the day does: its
+    consumption, net of its export where the meter nets it, and its export
+    where it is sold, each over a full year of meter
+    (``compare_quote._full_year_kwh``). An export meter that recorded the
+    year and nothing on it is a year without export. Each side stands on its
+    own: one whose history does not cover the year, or with no meter wired,
+    is ``None`` and keeps the estimate, the other is still the meter's. Under
+    compensation the net takes the export off the draw, so it needs both, or
+    no export meter at all, where the bill nets nothing either.
+
+    Not read for a window past every day the credit reaches, and kept on the
+    coordinator once the year's last day is in the recorder, from a read the
+    recorder answered in full, the rule :func:`first_year_charges` keeps its
+    walk by. A compare-page proxy carries no coordinator and reads every time.
+    """
+    # Late: the compare quote, which this reads the yearly rule from, asks
+    # for this volume too.
+    from .compare_quote import _covers_a_year, _full_year_kwh
+
+    start = _parse_iso_date(entry.data.get(CONF_CONTRACT_START_DATE))
+    if (
+        start is None
+        or not grants_a_welcome_credit(snapshot)
+        or window_start > last_credited_day(snapshot, start)
+    ):
+        return None
+    last = first_year_last_day(start)
+    now = dt_util.now()
+    if now.date() <= last:
+        return None
+    regime = entry.data.get(CONF_SOLAR_REGIME, SOLAR_REGIME_NONE)
+    memo: dict[tuple[str, date], FirstYearVolume] | None = getattr(
+        getattr(entry, "runtime_data", None), "_first_year_volumes", None
+    )
+    if memo is not None and (regime, start) in memo:
+        return memo[(regime, start)]
+    with noting_failed_reads() as failed:
+        consumption = await _measured_kwh(hass, entry, start, last)
+        injection = (
+            await _measured_kwh(hass, entry, start, last, side="injection")
+            if _bills_injection(entry) and any(_kwh_sensor_ids(entry, "injection"))
+            else None
+        )
+    days = (last - start).days + 1
+    drawn = _full_year_kwh(consumption, days)
+    # What the export meter says the year put back, or None where no meter
+    # recorded the whole of it. Coverage, not the figure: a meter that
+    # recorded the year and nothing on it says the year exported nothing.
+    exported = None
+    if injection is not None and _covers_a_year(injection.days_with_data):
+        exported = _full_year_kwh(injection, days) or 0.0
+    # The draw, netted where the meter nets it, which then needs that year of
+    # export; with no export meter wired the bill nets nothing either.
+    net = None
+    if drawn is not None:
+        if regime != SOLAR_REGIME_COMPENSATION or injection is None:
+            net = drawn
+        elif exported is not None:
+            net = first_year_net_kwh(drawn, drawn, exported, compensation=True)
+    volume = FirstYearVolume(net, exported if regime == SOLAR_REGIME_INJECTION else 0.0)
+    closed = now.date() > last + timedelta(days=1) or now.hour >= 1
+    if memo is not None and closed and not failed:
+        memo[(regime, start)] = volume
+    return volume

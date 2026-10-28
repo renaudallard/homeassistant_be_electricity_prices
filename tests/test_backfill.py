@@ -2829,7 +2829,8 @@ async def test_backfill_if_missing_skips_when_there_is_no_snapshot(
     ids=["fixed", "dynamic"],
 )
 @pytest.mark.parametrize(
-    "credit", ["pro_rata", "feed_in_bonus", "percentage", "capped_lump"]
+    "credit",
+    ["pro_rata", "feed_in_bonus", "percentage", "capped_lump", "metered_year"],
 )
 async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     hass: HomeAssistant, energy: Any, credit: str
@@ -2848,7 +2849,10 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     own first-year hours, on cards that change price at the start date.
 
     And a lump capped at what the first contract year charged, held to that
-    year's own charges on both sides rather than to a stretch of the window."""
+    year's own charges on both sides rather than to a stretch of the window.
+
+    And a per-kWh half paid once the first contract year has closed, on what
+    that year metered on both sides rather than on an estimate of a year."""
     from dataclasses import replace
 
     from custom_components.be_electricity_prices import (
@@ -2865,8 +2869,15 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
     bonus = credit == "feed_in_bonus"
     percentage = credit == "percentage"
     lump = credit == "capped_lump"
+    metered = credit == "metered_year"
     snap = (
         make_snapshot(
+            energy=energy,
+            welcome_credit_eur_per_kwh=0.03,
+            welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
+        )
+        if metered
+        else make_snapshot(
             energy=energy,
             welcome_credit_injection_eur_per_kwh=0.0106,
             welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
@@ -2911,7 +2922,7 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         # the window.
         contract_start_date=(
             "2025-02-01"
-            if bonus or lump
+            if bonus or lump or metered
             else "2026-03-10"
             if percentage
             else "2026-01-01"
@@ -2958,9 +2969,16 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         return dict(per_hour) if entity_id == "sensor.cons_total" else {}
 
     async def fake_daily(
-        _h: Any, entity_id: str, _s: Any, _e: Any
+        _h: Any, entity_id: str, first: date, last: date
     ) -> dict[date, float]:
-        return dict(per_day) if entity_id == "sensor.cons_total" else {}
+        if entity_id != "sensor.cons_total":
+            return {}
+        if not metered:
+            return dict(per_day)
+        # Five kWh a day before the window, so the first contract year reads
+        # as what it drew and not as the household default.
+        days = (first + timedelta(days=n) for n in range((last - first).days + 1))
+        return {day: per_day.get(day, 5.0) for day in days}
 
     async def noop(*_a: Any, **_k: Any) -> None:
         return None
@@ -3028,6 +3046,11 @@ async def test_cost_backfill_meets_the_live_walk_with_a_welcome_credit(
         assert stats["welcome_credit_eur"] > 0.0
     elif lump:
         assert 0.0 < stats["welcome_credit_eur"] < 5000.0
+    elif metered:
+        # 1 February 2025 to 31 January 2026: 334 days at five, January at
+        # the window's 9,6.
+        drawn = 334 * 5.0 + 31 * 9.6
+        assert stats["welcome_credit_eur"] == pytest.approx(0.03 * drawn)
     else:
         expected = 0.0106 * 3000.0 if bonus else 200.0 * 90 / 365
         assert stats["welcome_credit_eur"] == pytest.approx(expected)

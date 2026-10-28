@@ -79,6 +79,8 @@ from .contract_periods import (
 )
 from .coordinator import BePricesCoordinator
 from .day_night import day_start_for
+from .fees import FirstYearVolume
+from .first_year import first_year_volume
 from .fluvius import ensure_analog_surcharge, ensure_tariff_sheet
 from .injection import _injection_hourly_on_cohort
 from .pricing import DsoTariffMode, MeterType
@@ -316,6 +318,9 @@ class _BackfillContext:
     # A year of the export the household SELLS, for a first-year feed-in
     # bonus; zero off the injection regime, like the live walk's.
     annual_injection_kwh: float = 0.0
+    # What the first contract year metered once it has closed, which then
+    # stands for both volumes above, as on the live walk.
+    first_year: FirstYearVolume | None = None
 
 
 def _recorder_models() -> tuple[Any, Any, Any, Any]:
@@ -407,6 +412,14 @@ async def _build_context(
     signing = await signing_month_snapshot(
         hass, coordinator._session, extractor, contract, region, entry, snap
     )
+    # What the first contract year metered once it has closed, for a window
+    # opening on its first hour's day, which is where the cost walk credits
+    # from.
+    first_year = (
+        await first_year_volume(hass, entry, signing, dt_util.as_local(hours[0]).date())
+        if hours
+        else None
+    )
     # Sibelga's power term for every year this run prices, not just the
     # current one. _resolve_snapshot asks the cache for the DELIVERY month's
     # year, so a run reaching back into a finished year found nothing there
@@ -470,6 +483,7 @@ async def _build_context(
         signing=signing,
         annual_kwh=entry_annual_kwh(entry, coordinator),
         annual_injection_kwh=entry_annual_injection_kwh(entry, coordinator),
+        first_year=first_year,
     )
 
 

@@ -659,10 +659,9 @@ async def _accrue_cost(
     running_energy_component = 0.0
     running_supplier_fee = 0.0
     running_green = 0.0
-    # What the window drew, and what it drew less what it put back. The
-    # welcome credit's per-kWh term rides a YEAR rather than this window, so
-    # the two together give the export share to apply to the entry's yearly
-    # volume (first_year_net_kwh).
+    # What the window drew, and that less what it put back: the export share
+    # a per-kWh credit nets its YEAR by while the first year runs
+    # (first_year_net_kwh). Once that year has closed, ctx.first_year is it.
     running_consumption_kwh = 0.0
     running_net_kwh = 0.0
     # The energy component and volume of the contract's own first-year hours,
@@ -912,6 +911,7 @@ async def _accrue_cost(
                 )
             ),
             first_year_injection_kwh=ctx.annual_injection_kwh,
+            metered=ctx.first_year,
         )
         rebate = (
             gross_network_rebate(

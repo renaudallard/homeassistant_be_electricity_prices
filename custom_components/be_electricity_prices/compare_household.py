@@ -44,7 +44,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
-from .cohort import _parse_iso_date, signing_month_snapshot, ytd_window_start
+from .cohort import signing_month_snapshot, ytd_window_start
 from .compare_inputs import (
     _credit_index_for,
     _credit_year,
@@ -61,9 +61,9 @@ from .compare_inputs import (
 )
 from .compare_quote import (
     _annual_volume,
-    _annual_welcome_credit,
     _covers_a_year,
     _full_year_kwh,
+    _own_welcome_credit,
     _read_total_kwh,
 )
 from .compare_table import IndexGaps, _solar_note
@@ -75,7 +75,6 @@ from .compare_weighting import (
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
-    CONF_CONTRACT_START_DATE,
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
     CONF_KEYLESS_SPOTS,
@@ -884,10 +883,11 @@ class _HouseholdMixin:
                 quote_entry,
                 current_snapshot,
             )
-            own_welcome_credit = _annual_welcome_credit(
+            own_welcome_credit = await _own_welcome_credit(
+                self.hass,
+                quote_entry,
                 current_snapshot,
                 signing_snapshot,
-                _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
                 dt_util.as_local(now_utc),
                 dso,
                 region,

@@ -71,6 +71,7 @@ from .const import (
 )
 from .day_night import day_start_for
 from .fees import (
+    FirstYearVolume,
     _welcome_credit_eur,
     first_year_net_kwh,
     grants_a_welcome_credit,
@@ -78,7 +79,7 @@ from .fees import (
     lump_held_to_first_year,
     window_energy_rate,
 )
-from .first_year import first_year_charges
+from .first_year import first_year_charges, first_year_volume
 from .injection import (
     _historical_injection_rate,
 )
@@ -146,10 +147,12 @@ def window_welcome_credit(
     end: date,
     eligible: float,
     stats: Mapping[str, float],
+    metered: FirstYearVolume | None = None,
 ) -> float:
     """The welcome credit ``signing`` grants over ``[window_start, end]``, for
     a window that charged ``eligible`` for the components it may come off and
-    whose walk left ``stats``.
+    whose walk left ``stats``, and on ``metered``, the first contract year's
+    own volume, once that year has closed (``first_year.first_year_volume``).
 
     The one place the leaf's arguments are read off a walk, for the bill and
     for the month's share of the year's credit (``coordinator_costs``).
@@ -190,6 +193,9 @@ def window_welcome_credit(
         # A year of SOLD export for a first-year feed-in bonus, zero off the
         # injection regime or without a measured year of it.
         first_year_injection_kwh=entry_annual_injection_kwh(entry),
+        # Both volumes above estimate a first year still running; once it has
+        # closed, what it metered is the volume and stays it.
+        metered=metered,
     )
 
 
@@ -430,6 +436,9 @@ async def _compute_current_year_cost(
             snapshot_raw=snapshot_raw,
         ),
     )
+    # And a credit measured over that year rides what it metered once it has
+    # closed, read once and kept like its charges.
+    metered = await first_year_volume(hass, entry, signing_snapshot, window_start)
 
     static_fees = await _ytd_static_fees(
         hass,
@@ -549,7 +558,7 @@ async def _compute_current_year_cost(
             # (coordinator_costs.credit_before_month).
             stats["welcome_credit_eligible_eur"] = eligible
             credit = window_welcome_credit(
-                signing_snapshot, entry, window_start, end, eligible, stats
+                signing_snapshot, entry, window_start, end, eligible, stats, metered
             )
         stats["welcome_credit_eur"] = credit
         # On a double-flow meter the network bills the gross draws when that

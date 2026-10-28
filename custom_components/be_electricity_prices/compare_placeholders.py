@@ -58,8 +58,8 @@ from .compare_inputs import (
 )
 from .compare_quote import (
     _annual_bill,
-    _annual_welcome_credit,
     _candidate_welcome_credit,
+    _own_welcome_credit,
     _ytd_welcome_credit,
 )
 from .compare_table import (
@@ -84,6 +84,7 @@ from .const import (
     SOLAR_REGIME_INJECTION,
     SPOT_PRICED_CONTRACT_KINDS,
 )
+from .first_year import first_year_volume
 from .flow_contracts import _contract_kind
 from .providers import get as get_extractor
 from .providers import settlement_answer
@@ -333,10 +334,11 @@ class _PlaceholdersMixin(OptionsFlow):
                     # A contract already held grants no new welcome credit:
                     # only what is left of the household's own first year,
                     # read off the card it signed, on the meter quoted.
-                    other_welcome_credit = _annual_welcome_credit(
+                    other_welcome_credit = await _own_welcome_credit(
+                        self.hass,
+                        target_entry,
                         other_snap,
                         hh.signing_snapshot,
-                        _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
                         dt_util.as_local(now_utc),
                         dso,
                         region,
@@ -504,10 +506,11 @@ class _PlaceholdersMixin(OptionsFlow):
                 # and the regime decides whether the ristourne is netted and
                 # whether a feed-in bonus applies, so the what-if regime here
                 # moved the credit the note says the change is worth.
-                welcome_credit_eur=_annual_welcome_credit(
+                welcome_credit_eur=await _own_welcome_credit(
+                    self.hass,
+                    self.config_entry,
                     baseline_snapshot,
                     hh.signing_snapshot,
-                    _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
                     dt_util.as_local(now_utc),
                     dso,
                     region,
@@ -845,6 +848,7 @@ class _PlaceholdersMixin(OptionsFlow):
                 current_ytd = await _own_year()
             except Exception:  # degrade to '-'
                 current_ytd = None
+            credited = _signed_in(other_snap, _tariff_card_month(target_entry))
             compare_ytd = _annual_bill(
                 other_snap,
                 target_entry,
@@ -866,7 +870,7 @@ class _PlaceholdersMixin(OptionsFlow):
                 # the window while the own row beside it had all of them.
                 welcome_credit_eur=_ytd_welcome_credit(
                     other_snap,
-                    _signed_in(other_snap, _tariff_card_month(target_entry)),
+                    credited,
                     _parse_iso_date(current.get(CONF_CONTRACT_START_DATE)),
                     dt_util.as_local(now_utc),
                     dso,
@@ -887,6 +891,11 @@ class _PlaceholdersMixin(OptionsFlow):
                     # regime, a bonus the engine beside it refuses.
                     annual_injection_kwh=entry_annual_injection_kwh(target_entry),
                     day_start=day_start,
+                    # Both volumes give way to the household's first year as
+                    # it metered once that year has closed, as in the engine.
+                    metered=await first_year_volume(
+                        self.hass, target_entry, credited, ytd_from
+                    ),
                 ),
             )
             placeholders["compare_ytd"] = f"{compare_ytd:.2f}"
