@@ -338,12 +338,10 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
 
     The Dynamic card Luminus printed for both regions from May to December
     2025 gives each Walloon row four figures, the distribution alone, with
-    no transport and no fixed term. No row is read off it, since those would
-    be figures the card never printed, so a month billed on it is dropped
-    as on any card short of the entry's area, and the walk names it. A card
-    with no row read searches no other month for one
-    (``snapshot_areas._short_of``), and no card of its year prints the
-    table whole.
+    no transport and no fixed term. No row is read off it here, since those
+    would be figures the card never printed: ``luminus._with_sibling_network``
+    takes the rows from a sibling card of the month that prints the same
+    distribution (:func:`_wallonia_distribution`).
     """
     out: dict[str, DsoOverlay] = {}
     order: tuple[str, ...] | None = None
@@ -385,6 +383,21 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
             data_management_per_year=data_mgmt,
             prosumer_eur_per_kva_year=prosumer,
         )
+    return out
+
+
+def _wallonia_distribution(text: str) -> dict[str, tuple[float, ...]]:
+    """The Walloon rows a card prints with the distribution alone, by area:
+    mono | pleines | creuses | excl_nuit, in EUR/kWh, or ``{}``.
+
+    The Dynamic card of May to December 2025 prints its Walloon table so,
+    four figures a row where every other card prints seven or nine.
+    """
+    out: dict[str, tuple[float, ...]] = {}
+    for label, key in _WALLONIA_LABELS.items():
+        row = numeric_row(text, label, 4)
+        if row:
+            out[key] = tuple(to_float(n) / 100.0 for n in row)
     return out
 
 

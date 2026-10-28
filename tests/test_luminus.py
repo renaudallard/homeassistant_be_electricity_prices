@@ -541,9 +541,9 @@ def test_the_dynamic_card_for_both_regions_reads_without_its_walloon_network() -
     May its card served both regions, its Walloon renewables and taxes
     printed as on the other cards. Its Walloon network table prints the
     distribution alone, four figures a row, with no transport and no fixed
-    term, so no row is read off it: a month billed on it is dropped as on
-    any card short of the area, where a signing cohort needs only its
-    formulas. A card of the Flemish months stays unread as a Walloon one."""
+    term, so the card reads no row of it on its own: the rows come from a
+    sibling card of the month (below). A card of the Flemish months stays
+    unread as a Walloon one."""
     snap = parse_snapshot(
         "luminus_dynamic", fixture_text("luminus_dynamic_v_2025-06.pdf"), "wallonia"
     )
@@ -560,6 +560,124 @@ def test_the_dynamic_card_for_both_regions_reads_without_its_walloon_network() -
         parse_snapshot(
             "luminus_dynamic", fixture_text("luminus_dynamic_v_2024-06.pdf"), "wallonia"
         )
+
+
+def _serve_june_2025(monkeypatch: pytest.MonkeyPatch, sibling: str) -> dict[str, str]:
+    """Luminus's archive serving June 2025's Dynamic card and ``sibling``
+    as its ComfyFlex card, both on the Wallonia tab, and no card of another
+    month. The cards it serves, by product id, for a test to change."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    cards = {
+        "id-dynamic": fixture_text("luminus_dynamic_v_2025-06.pdf"),
+        "id-comfyflex": sibling,
+    }
+
+    async def _products(session: object, url: str, **kwargs: object) -> str:
+        return _archive_products(
+            ("Luminus Dynamic Online Electricité", "id-dynamic"),
+            ("Luminus ComfyFlex Electricité", "id-comfyflex"),
+        )
+
+    async def _card(session: object, url: str, **kwargs: object) -> str:
+        if "date=2025-06&" not in url:
+            raise ExtractorError(f"Luminus archive: no card for {url}")
+        assert "region=Wallonia" in url
+        return next(card for pid, card in cards.items() if f"={pid}&" in url)
+
+    monkeypatch.setattr(luminus, "fetch_text", _products)
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _card)
+    return cards
+
+
+async def test_the_dynamic_card_takes_its_walloon_network_from_a_sibling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Dynamic card printed for both regions gives each Walloon row its
+    distribution alone, "ORES (Brabant Wallon) 10,79 11,46 6,63 5,41",
+    where ComfyFlex's card of the month prints the whole row, "... 2,98
+    13,84 86,96". The rows are the DSO's, so they are taken from that card,
+    and only while it prints the same distribution: a sibling printing other
+    figures lends nothing. Without them a Walloon Dynamic month of 2025 had
+    no network to bill and was dropped."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    sibling = fixture_text("luminus_comfyflex_w_2025-06.pdf")
+    cards = _serve_june_2025(monkeypatch, sibling)
+    snap = await luminus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "luminus_dynamic",
+        "wallonia",
+        date(2025, 6, 1),
+    )
+    assert snap is not None
+    assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    ores = snap.dsos["ores"]
+    assert (
+        ores.distribution_single,
+        ores.distribution_peak,
+        ores.distribution_offpeak,
+        ores.distribution_exclusive_night,
+        ores.transport,
+    ) == pytest.approx((0.1079, 0.1146, 0.0663, 0.0541, 0.0298))
+    assert ores.data_management_per_year == pytest.approx(13.84)
+    # No Dynamic card names the prosumer tariff.
+    assert ores.prosumer_eur_per_kva_year is None
+
+    cards["id-comfyflex"] = sibling.replace(
+        "ORES (Brabant Wallon) 10,79", "ORES (Brabant Wallon) 10,80"
+    )
+    assert cards["id-comfyflex"] != sibling
+    snap = await luminus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "luminus_dynamic",
+        "wallonia",
+        date(2025, 6, 1),
+    )
+    assert snap is not None and snap.dsos == {}
+
+
+async def test_a_walloon_dynamic_month_of_2025_is_backfilled_on_its_own_card(
+    hass: Any, monkeypatch: pytest.MonkeyPatch, caplog: Any
+) -> None:
+    """June 2025 of a Walloon Dynamic entry is billed on its own card, the
+    network borrowed, by the backfill and the year to date alike, where
+    both left it out for want of a network row."""
+    import logging
+    from datetime import UTC, datetime, timedelta
+
+    from tests import make_entry
+    from tests.test_backfill import _live_and_backfill
+
+    _serve_june_2025(monkeypatch, fixture_text("luminus_comfyflex_w_2025-06.pdf"))
+    entry = make_entry(
+        supplier="luminus",
+        contract="luminus_dynamic",
+        meter="dynamic",
+        solar_regime="none",
+        api_key="k",
+        consumption_kwh="sensor.cons",
+    )
+    start = datetime(2024, 12, 31, 23, tzinfo=UTC)
+    with caplog.at_level(logging.WARNING):
+        back, live = await _live_and_backfill(
+            hass,
+            entry,
+            parse_snapshot(
+                "luminus_dynamic", fixture_text("luminus_dynamic_w_oct.pdf"), "wallonia"
+            ),
+            date(2025, 7, 31),
+            lambda entity_id, _hour: 0.5 if entity_id == "sensor.cons" else None,
+            spots={start + timedelta(hours=i): 0.08 for i in range(24 * 213)},
+            extractor=EXTRACTORS["luminus"],
+        )
+    assert back == pytest.approx(live, abs=0.01)
+    left_out = [
+        r.getMessage()
+        for r in caplog.records
+        if "unpriced" in r.getMessage() or "dropped" in r.getMessage()
+    ]
+    assert not left_out
 
 
 async def test_a_walloon_contract_signed_in_2025_is_billed_its_own_card(

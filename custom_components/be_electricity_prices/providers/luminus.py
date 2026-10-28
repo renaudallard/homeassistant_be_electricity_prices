@@ -74,6 +74,7 @@ from ._luminus_overlays import (
     _extract_per_kwh_taxes,
     _extract_wallonia_dsos,
     _extract_wallonia_renewables,
+    _wallonia_distribution,
 )
 from ._parse import (
     require_contract,
@@ -97,6 +98,7 @@ from ._validity import (
     parse_valid_until,
 )
 from .base import (
+    DsoOverlay,
     ExtractorError,
     SupplierExtractor,
     SupplierSnapshot,
@@ -237,15 +239,16 @@ async def fetch(
     async def _current(sibling: _ContractDef) -> str | None:
         return await fetch_pdf_text(session, _document_url(sibling.slug, region))
 
-    return await _with_sibling_prosumer(
+    snap = await _with_sibling_network(
         parse_snapshot(contract_id, text, region, url), text, region, _current
     )
+    return await _with_sibling_prosumer(snap, text, region, _current)
 
 
-# Cards asked, in order, for the Walloon prosumer rate a card names but does
-# not print. Each prints the static seven-column table with the rate in its
-# last column, and the rate is the DSO's, not the product's.
-_PROSUMER_SIBLINGS: tuple[str, ...] = (
+# Cards asked, in order, for the Walloon figures a card bills but does not
+# print. Each prints the static seven-column table, transport, fixed term and
+# prosumer rate included, and those figures are the DSO's, not the product's.
+_SIBLINGS: tuple[str, ...] = (
     "luminus_comfyflex",
     "luminus_maxxflex",
     "luminus_basicflex",
@@ -271,9 +274,8 @@ async def _with_sibling_prosumer(
     so it is taken from a sibling card of the same region and month. Dynamic's
     card names no prosumer tariff at all and is left as it is.
 
-    A transient failure on a sibling propagates, so the fetch is retried; a
-    sibling that is missing or unreadable passes to the next, and the card
-    fails to parse when none of them carries the rate.
+    The card fails to parse when no sibling carries the rate
+    (``_sibling_rows``).
     """
     if (
         region != REGION_WALLONIA
@@ -282,30 +284,98 @@ async def _with_sibling_prosumer(
         or _PROSUMER_NAMED_RE.search(text) is None
     ):
         return snap
-    for sibling_id in _PROSUMER_SIBLINGS:
+    rows = await _sibling_rows(
+        load,
+        lambda rows: all(
+            key in rows and rows[key].prosumer_eur_per_kva_year is not None
+            for key in snap.dsos
+        ),
+    )
+    if rows is None:
+        raise ExtractorError(
+            "Luminus: no sibling card prints the Walloon prosumer rate this card bills"
+        )
+    return replace(
+        snap,
+        dsos={
+            key: replace(
+                overlay, prosumer_eur_per_kva_year=rows[key].prosumer_eur_per_kva_year
+            )
+            for key, overlay in snap.dsos.items()
+        },
+    )
+
+
+async def _with_sibling_network(
+    snap: SupplierSnapshot,
+    text: str,
+    region: str,
+    load: Callable[[_ContractDef], Awaitable[str | None]],
+) -> SupplierSnapshot:
+    """Fill the Walloon network rows a card prints the distribution of alone.
+
+    The Dynamic card Luminus printed for both regions from May to December
+    2025 gives each Walloon row its four distribution figures, with no
+    transport and no fixed term, where the other cards of the month print
+    all seven: "AIEG 9,46 9,56 7,65 7,00" against "AIEG 9,46 9,56 7,65 7,00
+    2,98 19,08 78,99". Those figures are the DSO's, so the rows are taken
+    from a sibling card of the same region and month, and only from one
+    printing the very distribution figures this card prints, area by area.
+    Where none does, the card keeps no network table, and a month billed on
+    it is dropped as on any card short of the entry's area. The prosumer
+    rate stays out, as on every Dynamic card: none names the tariff.
+    """
+    if region != REGION_WALLONIA or snap.dsos:
+        return snap
+    printed = _wallonia_distribution(text)
+    if not printed:
+        return snap
+    rows = await _sibling_rows(
+        load,
+        lambda rows: all(
+            key in rows
+            and (
+                rows[key].distribution_single,
+                rows[key].distribution_peak,
+                rows[key].distribution_offpeak,
+                rows[key].distribution_exclusive_night,
+            )
+            == figures
+            for key, figures in printed.items()
+        ),
+    )
+    if rows is None:
+        return snap
+    return replace(
+        snap,
+        dsos={
+            key: replace(rows[key], prosumer_eur_per_kva_year=None) for key in printed
+        },
+    )
+
+
+async def _sibling_rows(
+    load: Callable[[_ContractDef], Awaitable[str | None]],
+    take: Callable[[dict[str, DsoOverlay]], bool],
+) -> dict[str, DsoOverlay] | None:
+    """The Walloon rows of the first sibling card ``take`` accepts, or None.
+
+    A transient failure on a sibling propagates, so the fetch is retried; a
+    sibling that is missing or unreadable passes to the next.
+    """
+    for sibling_id in _SIBLINGS:
         try:
-            sibling_text = await load(_CONTRACTS_BY_ID[sibling_id])
-            if sibling_text is None:
+            text = await load(_CONTRACTS_BY_ID[sibling_id])
+            if text is None:
                 continue
-            rates = {
-                key: overlay.prosumer_eur_per_kva_year
-                for key, overlay in _extract_wallonia_dsos(sibling_text).items()
-            }
+            rows = _extract_wallonia_dsos(text)
         except ExtractorError as err:
             if is_transient_fetch_error(str(err)):
                 raise
             continue
-        if all(rates.get(key) is not None for key in snap.dsos):
-            return replace(
-                snap,
-                dsos={
-                    key: replace(overlay, prosumer_eur_per_kva_year=rates[key])
-                    for key, overlay in snap.dsos.items()
-                },
-            )
-    raise ExtractorError(
-        "Luminus: no sibling card prints the Walloon prosumer rate this card bills"
-    )
+        if take(rows):
+            return rows
+    return None
 
 
 def _archive_product_name(name: str) -> str:
@@ -426,9 +496,10 @@ async def fetch_for_month(
                 session, _archive_pdf_url(sibling_id, first, region)
             )
 
-        snap = await _with_sibling_prosumer(
+        snap = await _with_sibling_network(
             parse_snapshot(contract_id, text, region, url), text, region, _archived
         )
+        snap = await _with_sibling_prosumer(snap, text, region, _archived)
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
         # so the month cache retries it instead of caching it as absent.

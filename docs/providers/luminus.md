@@ -174,7 +174,8 @@ BasicFlex, January to December, 96 cards) reads whole, each field equal to the
 card's text. Those cards served both regions, and their Walloon side reads whole
 too, as does every card of those products the archive serves for 2024 on the
 Wallonia tab: 184 cards. The Dynamic card reads there from May 2025, when it was
-first sold in Wallonia, without its network table (see Wallonia below).
+first sold in Wallonia, its network rows taken from a sibling card (see Wallonia
+below).
 
 The running month is not asked for, and `fetch_for_month` answers `None` for it.
 The archive keeps serving a month's first edition after the live card is
@@ -365,8 +366,8 @@ product was sold in Flanders alone until April 2025 (*"le point de fourniture se
 trouve en Région flamande"*), and the archive serves that Flemish card on the
 Wallonia tab, which rightly stays unread there; from May to December 2025 the
 card served both regions, and its Walloon side reads since the renewables and
-tax readers find the Walloon column (see Tax overlay), with no network table
-(see Wallonia below). The sign
+tax readers find the Walloon column (see Tax overlay), its network rows taken
+from a sibling card of the month (see Wallonia below). The sign
 character is matched from the shared `SIGN_CHARS` class and resolved with
 `parse_sign` (`_parse.py`), so a card that flips to a Unicode minus does not
 silently break polarity.
@@ -475,14 +476,20 @@ Two column layouts (`_luminus_overlays.py`):
   prints no rate, and the card fails to parse when no sibling carries it.
 - **The Dynamic card of May to December 2025 prints 4 numbers**: mono,
   pleines, creuses, excl_nuit, the distribution alone, with no transport and no
-  fixed term. No row is read off it, since those would be figures the card never
-  printed, so its Walloon snapshot carries no DSO overlay: a month billed on it
-  is dropped as on any card short of the entry's area, and the walk names it,
-  while a cohort signed on it bills its formulas, the legs a cohort takes off its
-  signing card. The short-table borrowing does not reach it: a card with no row
+  fixed term. `_extract_wallonia_dsos` reads no row off it, since those would be
+  figures the card never printed. The figures are the DSO's, so
+  `_with_sibling_network` (`luminus.py`) takes the whole rows from a sibling card
+  of the same month and region (ComfyFlex, then MaxxFlex, then BasicFlex), and
+  only from one printing the very distribution figures the Dynamic card prints,
+  area by area (`_wallonia_distribution`), leaving out the prosumer rate, which
+  no Dynamic card names. Measured on 28 October 2026, all eight months match
+  ComfyFlex's card of the month field for field. Where no sibling matches, the
+  card keeps no network table and a month billed on it is dropped as on any card
+  short of the entry's area; a cohort signed on it bills its formulas either
+  way. The short-table borrowing could not have served it: a card with no row
   read searches no other month (`snapshot_areas._short_of`), and no Dynamic card
   of 2025 prints the Walloon table whole
-  (`test_the_dynamic_card_for_both_regions_reads_without_its_walloon_network`).
+  (`test_the_dynamic_card_takes_its_walloon_network_from_a_sibling`).
 
 Band-ordering gotcha: the triplet's order is read from the column headings
 (`_impact_order`, `_luminus_overlays.py`), never assumed. Cards up to September
@@ -730,6 +737,7 @@ Under `tests/fixtures/`, exercised by `tests/test_luminus.py`:
 | `luminus_maxxfix_v_oct.pdf` | MaxxFix (fixed), Flanders, October 2026 | today's card beside a 2025 signing card; the feed-in registers alike |
 | `luminus_maxxfix_v_2025-03.pdf` | MaxxFix (fixed), March 2025, one card for both regions | "Compensation pour l'énergie injectée" row, registers priced apart, a signing month of 2025 |
 | `luminus_maxxflex_v_2025-03.pdf` | MaxxFlex (variable), March 2025, one card for both regions | energy formulas named after the meter, "Jour (compteur de jour)" |
+| `luminus_comfyflex_w_2025-06.pdf` | ComfyFlex (variable), June 2025, one card for both regions | the Walloon network rows the June 2025 Dynamic card borrows |
 
 Note: fixtures for `luminus_comfy_plus` and `luminus_basicfix` are not present;
 those contracts share the fixed / variable parse paths already covered by the
