@@ -1330,8 +1330,12 @@ sheet read is held for the life of the process; a failure is held for six
 hours, and an analog meter whose area sheet is not
 read is billed the peak-metered kWh rate, its capacity charge still the flat
 one, and logged: as a warning for this year's, which heals once the sheet is
-read, and quietly for a closed year that has none. Without the
-year's figure `resolve_vreg_network_ceiling` leaves the card exactly as
+read, and quietly for a closed year that has none.
+`cached_network_ceiling` answers the ceiling of the year's sheet, else of the
+latest earlier sheet held, never a later one: the 2025 and 2026 sheets print
+the same figure, so the year before stands in from 1 January until the new
+sheet is read, and for a year whose sheet no longer reads. Only before any
+sheet is held does `resolve_vreg_network_ceiling` leave the card exactly as
 printed, which is what the integration did before the sheet was read.
 `capacity_floor_kw` answers the floor of the year's sheet, else of the latest
 earlier sheet held, else `VREG_CAPACITY_FLOOR_KW` (`const.py`), for the billed

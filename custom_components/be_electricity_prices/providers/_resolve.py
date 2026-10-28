@@ -653,16 +653,16 @@ def resolve_vreg_network_ceiling(
     as the regulator publishes it. Same treatment, and for the same reason, as
     :func:`resolve_brussels_power_term`.
 
-    ``ceiling`` is the delivery year's figure off Fluvius's tariff sheet,
-    EUR/kWh excluding VAT, from :mod:`..fluvius`. ``None`` leaves the card
-    exactly as it was, which is what happens before the sheet has been read
-    and if it cannot be read at all. Identity too on a card already stating
-    the figure, which four suppliers do (energie.be, EnergyVision, Frank and
-    Luminus); it fills the figure for the ten that print none. Counted over
-    the September 2026 Flanders cards. The two that print a DIFFERENT figure,
-    Mega and Bolt, are a third case and are overwritten rather than filled:
-    they print the ceiling of 2023 and 2024 (0,1920264, or 0,2035480 with
-    VAT).
+    ``ceiling`` is the delivery year's figure off Fluvius's tariff sheet, or
+    the latest earlier year's until that sheet is read, EUR/kWh excluding VAT,
+    from :mod:`..fluvius`. ``None`` leaves the card exactly as it was, which
+    is what happens before any sheet has been read and if none can be read at
+    all. Identity too on a card already stating the figure, which four
+    suppliers do (energie.be, EnergyVision, Frank and Luminus); it fills the
+    figure for the ten that print none. Counted over the September 2026
+    Flanders cards. The two that print a DIFFERENT figure, Mega and Bolt, are
+    a third case and are overwritten rather than filled: they print the
+    ceiling of 2023 and 2024 (0,1920264, or 0,2035480 with VAT).
 
     It moves a bill only where the cap binds, which is a low-volume connection
     on a high peak, and never at the 2,5 kW floor: see

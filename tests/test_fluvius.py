@@ -446,6 +446,89 @@ async def test_a_restart_puts_the_ceiling_on_the_stored_card(hass: Any) -> None:
     assert overlay.network_ceiling_eur_per_kwh == pytest.approx(0.3276168 * 1.06)
 
 
+def test_the_ceiling_is_the_years_or_the_last_sheet_before_it() -> None:
+    """The rule the floor and the analog rate follow: a year Fluvius has not
+    published yet, or whose sheet no longer reads, stands on the latest
+    earlier sheet held, never on a later one. Nothing before any is read."""
+    assert fluvius.cached_network_ceiling(2027) is None
+    fluvius._cache[2023] = fluvius.SheetTerms(0.1920264, 2.5)
+    fluvius._cache[2025] = fluvius.SheetTerms(0.3276168, 2.5)
+    assert fluvius.cached_network_ceiling(2027) == 0.3276168
+    assert fluvius.cached_network_ceiling(2025) == 0.3276168
+    assert fluvius.cached_network_ceiling(2024) == 0.1920264
+    assert fluvius.cached_network_ceiling(2022) is None
+
+
+def test_a_card_printing_no_ceiling_stays_capped_into_the_next_year() -> None:
+    """On 1 January the resolver asks for the new year's ceiling, which Fluvius
+    lists only once it publishes that sheet. Answered for the year alone, a
+    card printing no ceiling, as twelve suppliers' Flemish cards do, billed a
+    low-volume connection on a high peak its capacity uncapped until then."""
+    from datetime import date
+
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.be_electricity_prices.const import (
+        DOMAIN,
+        DSO_FLUVIUS_ANTWERPEN,
+    )
+    from custom_components.be_electricity_prices.fees import _compute_capacity
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        TaxOverlay,
+    )
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+    from tests import FLUVIUS_CEILINGS, make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "engie",
+            "contract": "engie_easy_fixed",
+            "region": "flanders",
+            "dso": DSO_FLUVIUS_ANTWERPEN,
+            "meter": "mono",
+            "annual_consumption_kwh": 600.0,
+        },
+    )
+    card = make_snapshot(
+        taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.0, vat_rate=0.06),
+        dsos={
+            DSO_FLUVIUS_ANTWERPEN: DsoOverlay(
+                distribution_single=0.0535,
+                transport=0.0,
+                capacity_eur_per_kw_year=52.37,
+            )
+        },
+    )
+    fluvius._cache.update(
+        {
+            year: fluvius.SheetTerms(ceiling, 2.5)
+            for year, ceiling in FLUVIUS_CEILINGS.items()
+        }
+    )
+
+    def billed(month: date) -> tuple[float | None, float]:
+        resolved = _resolve_snapshot(
+            entry, card, annual_kwh=600.0, delivery_month=month
+        )
+        overlay = resolved.dsos[DSO_FLUVIUS_ANTWERPEN]
+        return (
+            overlay.network_ceiling_eur_per_kwh,
+            12.0 * _compute_capacity(resolved, entry, 8.0),
+        )
+
+    ceiling, december = billed(date(2026, 12, 1))
+    assert ceiling is not None
+    # The cap binds: eight kW of capacity is far more than the ceiling allows
+    # 600 kWh, and the 2,5 kW minimum is what it cannot cut below.
+    assert december < 0.9 * 8.0 * 52.37
+    january = billed(date(2027, 1, 1))
+    assert january == (pytest.approx(ceiling), pytest.approx(december))
+
+
 def test_the_floor_is_the_years_or_the_last_sheet_before_it() -> None:
     """Never a later year's: the rule is billed for the months it was set for.
     Before any sheet is read, the figure every sheet from 2023 to 2026 gives."""

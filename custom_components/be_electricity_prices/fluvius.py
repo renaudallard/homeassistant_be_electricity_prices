@@ -54,9 +54,10 @@ it, on the normal and the exclusive-night kWh alike.
 
 Never raises, for the reason ``brugel.py`` gives: the fetch runs inside the
 coordinator tick, whose only handler is for ``UpdateFailed``. A download or
-parse failure logs and leaves the year unknown. The card is then billed with
-the ceiling it prints and the floor falls back to ``VREG_CAPACITY_FLOOR_KW``,
-as they were before the sheet was read, and an analog meter is billed the
+parse failure logs and leaves the year unknown, and each figure then stands
+on the latest earlier sheet held. With none held, the card is billed with the
+ceiling it prints and the floor falls back to ``VREG_CAPACITY_FLOOR_KW``, as
+they were before the sheet was read, and an analog meter is billed the
 peak-metered kWh rate.
 """
 
@@ -195,13 +196,22 @@ def _lock(key: Hashable) -> asyncio.Lock:
 
 
 def cached_network_ceiling(year: int) -> float | None:
-    """The year's ceiling if it has been read, EUR/kWh excl. VAT, else ``None``.
+    """The ceiling for ``year``, EUR/kWh excl. VAT, or ``None`` before any
+    sheet is read.
+
+    The year's sheet, else the latest earlier one held, never a later one, the
+    rule :func:`capacity_floor_kw` follows. Answering only the year's own left
+    the cards that print no ceiling uncapped from 1 January until the new
+    sheet was read, and for a whole year whose sheet stopped reading: 418,94
+    EUR a year of capacity at 600 kWh on an 8 kW peak, where the 2026 ceiling
+    caps it at 176,24. The 2025 and 2026 sheets print the same figure, as the
+    2023 and 2024 ones did, so the year before is the best stand-in there is.
 
     Synchronous on purpose: the snapshot resolver runs in the pricing path and
     cannot await. :func:`ensure_tariff_sheet` is what puts a value here.
     """
-    terms = _cache.get(year)
-    return None if terms is None else terms.ceiling
+    held = [held_year for held_year in _cache if held_year <= year]
+    return _cache[max(held)].ceiling if held else None
 
 
 def capacity_floor_kw(year: int | None = None) -> float:

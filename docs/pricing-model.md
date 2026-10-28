@@ -343,7 +343,11 @@ off Fluvius's tariff sheet of the delivery year (see
 and `resolve_vreg_network_ceiling` (`providers/_resolve.py`) puts it on every
 Fluvius overlay, except on the social tariff, whose CREG network component
 replaces the operator's tariffs and has no capacity term to cap. A year whose
-sheet has not been read keeps the figure the card prints.
+sheet has not been read stands on the latest earlier sheet held, never a later
+one, as the capacity floor and the analog kWh rate do: from 1 January until
+Fluvius lists the new year's sheet, and for a year whose sheet no longer
+reads, the cards that print no ceiling would otherwise bill capacity uncapped.
+Only before any sheet has been read does the card keep the figure it prints.
 
 Five suppliers read it correctly and are unaffected: Luminus, Frank and
 energie.be print 0,3472738 including the 6%, and energie.be's professional

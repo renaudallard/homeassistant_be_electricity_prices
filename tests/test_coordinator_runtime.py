@@ -9582,13 +9582,13 @@ def test_a_solar_weighted_formula_is_never_priced_at_one_slot() -> None:
 async def test_a_card_held_into_a_new_month_is_resolved_for_it(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """The resolver dates the VREG ceiling by the month it runs in, and the
-    ceiling is only known until the end of 2026. A December card still held in
-    January was not resolved again, because none of the other stamped inputs
-    moved, so it kept the 2026 ceiling into a year that has none yet. The
-    excise law steps on the same day, which re-resolved the card by chance
-    when the law had been read; without it nothing did."""
-    from custom_components.be_electricity_prices import excise_law
+    """The resolver dates the VREG ceiling by the month it runs in. A
+    December card still held in January stands on the 2026 sheet until the
+    2027 one is read, and takes the 2027 figure once it is: the card is
+    resolved again for the new year, though none of the other stamped inputs
+    moved. The excise law steps on the same day, which re-resolved the card by
+    chance when the law had been read; without it nothing did."""
+    from custom_components.be_electricity_prices import excise_law, fluvius
     from custom_components.be_electricity_prices.providers.base import DsoOverlay
 
     excise_law._HELD.clear()
@@ -9599,14 +9599,18 @@ async def test_a_card_held_into_a_new_month_is_resolved_for_it(
     overlay = DsoOverlay(distribution_single=0.10, transport=0.0145)
     coord._set_snapshot(make_snapshot(dsos={"fluvius_antwerpen": overlay}))
     assert coord._snapshot is not None
-    dso = coord._snapshot.dsos["fluvius_antwerpen"]
-    assert dso.network_ceiling_eur_per_kwh is not None
+    december = coord._snapshot.dsos["fluvius_antwerpen"].network_ceiling_eur_per_kwh
+    assert december is not None
 
     freezer.move_to("2027-01-02 09:00:00+01:00")
     coord._reresolve_snapshot()
-
     dso = coord._snapshot.dsos["fluvius_antwerpen"]
-    assert dso.network_ceiling_eur_per_kwh is None
+    assert dso.network_ceiling_eur_per_kwh == pytest.approx(december)
+
+    fluvius._cache[2027] = fluvius.SheetTerms(0.4, 2.5)
+    coord._reresolve_snapshot()
+    dso = coord._snapshot.dsos["fluvius_antwerpen"]
+    assert dso.network_ceiling_eur_per_kwh == pytest.approx(december * 0.4 / 0.3276168)
 
 
 async def test_the_first_tick_splits_a_tiered_card_on_the_measured_volume(
