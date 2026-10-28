@@ -501,8 +501,8 @@ On every other regime they do add up.
 
 The second pass fills a breakdown of its own, which the sensor publishes
 (`CoordinatorData.month_diagnostics`) under the keys `current_year_cost` uses,
-`_ytd` included, so a template written for one reads the other; the recorder
-leaves them out of history on both sensors. Two keys are set after the pass:
+with `_ytd` in a key published as `_mtd`, and the recorder leaves them out of
+history on both sensors. Two keys are set after the pass:
 `welcome_credit_eur` is the credit the published figure carries, the year's
 less the year's before the month off the compensation regime, not the one the
 month's own window capped, and `previous_contracts_eur` is the earlier

@@ -533,8 +533,8 @@ def test_current_price_bulk_attributes_are_unrecorded() -> None:
 
 def test_month_cost_carries_its_own_breakdown() -> None:
     """Discussion #141: current_month_cost publishes the breakdown of its own
-    window under the yearly sensor's keys, and neither sensor shows the
-    other's."""
+    window, its year-to-date keys named month-to-date, and neither sensor
+    shows the other's."""
     from types import SimpleNamespace
 
     from custom_components.be_electricity_prices.sensor import (
@@ -558,18 +558,36 @@ def test_month_cost_carries_its_own_breakdown() -> None:
         month_diagnostics={
             "consumption_ytd_kwh": 472.51234,
             "capacity_ytd_eur": 29.95,
+            "days_seen": 27.0,
         },
     )
     assert _attrs("current_month_cost", data) == {
-        "consumption_ytd_kwh": 472.5123,
-        "capacity_ytd_eur": 29.95,
+        "consumption_mtd_kwh": 472.5123,
+        "capacity_mtd_eur": 29.95,
+        "days_seen": 27.0,
     }
     assert _attrs("current_year_cost", data)["consumption_ytd_kwh"] == 3000.0
     assert _attrs("current_month_cost", CoordinatorData()) == {}
-    # The same keys, so the recorder leaves them out of history on this
-    # sensor too.
-    for key in data.month_diagnostics or {}:
-        assert key in BePriceSensor._unrecorded_attributes
+
+
+def test_every_month_breakdown_key_is_unrecorded() -> None:
+    """Each year-to-date key the bill writes is kept out of history under its
+    month-to-date name too, or current_month_cost records a states row every
+    tick. Read off the writers, so a key added to the bill cannot slip by."""
+    import re
+    from pathlib import Path
+
+    from custom_components.be_electricity_prices import sensor
+
+    root = Path(sensor.__file__).parent
+    keys: set[str] = set()
+    for path in [*root.glob("ytd_*.py"), root / "coordinator_costs.py"]:
+        keys |= set(re.findall(r'"([a-z_]*_ytd_[a-z_]*)"', path.read_text()))
+    assert "capacity_ytd_eur" in keys
+    for key in keys:
+        assert (
+            key.replace("_ytd", "_mtd") in sensor.BePriceSensor._unrecorded_attributes
+        )
 
 
 # --- today/tomorrow injection array (issue #40) -------------------------

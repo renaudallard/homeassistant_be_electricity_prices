@@ -553,6 +553,18 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
             "consumption_kwh",
             "injection_kwh",
             "fees_eur",
+            # The month's breakdown, as current_month_cost names it.
+            "consumption_mtd_kwh",
+            "injection_mtd_kwh",
+            "energy_mtd_raw_eur",
+            "fees_mtd_eur",
+            "energy_component_mtd_eur",
+            "green_component_mtd_eur",
+            "capacity_mtd_eur",
+            "prosumer_mtd_eur",
+            "net_network_mtd_eur",
+            "gross_network_mtd_eur",
+            "standing_charges_mtd_eur",
         }
     )
     entity_description: BePriceSensorDescription
@@ -672,10 +684,12 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
                 "months_counted": data.capacity_peak_months,
             }
         if self.entity_description.key == "current_month_cost":
-            # The yearly breakdown below over the month's own window, under
-            # the same keys so one template reads either sensor.
+            # The yearly breakdown below over the month's own window, with
+            # each year-to-date key named month-to-date.
             diag = data.month_diagnostics
-            return {k: round(v, 4) for k, v in diag.items()} if diag else {}
+            if not diag:
+                return {}
+            return {k.replace("_ytd", "_mtd"): round(v, 4) for k, v in diag.items()}
         if self.entity_description.key == "current_year_cost":
             # Diagnostic breakdown: lets a flat or low sensor be told apart.
             # A negative energy_ytd_raw_eur (every static entry, and an hourly
