@@ -324,8 +324,11 @@ jobs:
           CARDS_REPO: renaudallard/be_price_cards
         run: |
           # A release needs a commit to tag, and a repository created empty
-          # has none: give it a first one, once.
-          cards_url="https://x-access-token:${GH_TOKEN}@github.com/${CARDS_REPO}.git"
+          # has none: give it a first one, once. The repository is public,
+          # so asking needs no token, and the push takes it from gh's
+          # credential helper, which reads GH_TOKEN: it is on no command
+          # line and in no file.
+          cards_url="https://github.com/${CARDS_REPO}.git"
           if [ -z "$(git ls-remote --heads "$cards_url" 2>/dev/null)" ]; then
             seed=$(mktemp -d)
             printf '%s\n' \
@@ -340,7 +343,8 @@ jobs:
             git -C "$seed" -c user.name="github-actions[bot]" \
               -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
               commit -q -m "Start the card store"
-            git -C "$seed" push -q "$cards_url" main
+            git -C "$seed" -c credential.helper= -c 'credential.helper=!gh auth git-credential' \
+              push -q "$cards_url" main
           fi
           manifest=tmp/cards/electricity/pdfs.json
           [ -s "$manifest" ] || echo '{}' > "$manifest"
@@ -535,7 +539,8 @@ jobs:
   push:
     # Holds the cards token and runs no code of this repository or its
     # dependencies: a fresh clone, the indexed files laid over it as plain
-    # files, git.
+    # files, git. The token reaches git through gh's credential helper,
+    # which reads GH_TOKEN, so it is on no command line and in no file.
     needs: index
     if: ${{ !cancelled() && needs.index.result == 'success' }}
     runs-on: ubuntu-latest
@@ -562,12 +567,9 @@ jobs:
       - name: Commit and push what changed
         id: push
         env:
-          CARDS_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
+          GH_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
         run: |
           cd tmp/cards
-          # The token as an authorization header on each call that needs it,
-          # as actions/checkout passes its own, never written to .git/config.
-          auth="http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "${CARDS_TOKEN:-}" | base64 -w0)"
           git add -A
           if git diff --cached --quiet; then
             echo "no card changed today"
@@ -575,6 +577,10 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Only the helper's name goes into .git/config; it hands git the
+          # token from GH_TOKEN when the push or the pull asks for one.
+          git config credential.helper ''
+          git config --add credential.helper '!gh auth git-credential'
           git commit -q -m "Cards seen on $(date -u +%Y-%m-%d)"
           # The gas and water archives push to the same main, and the
           # concurrency group only queues runs of this repository, so their
@@ -587,10 +593,10 @@ jobs:
           # A pull that fails, a network blip or a rebase that stops, is left
           # to the next attempt rather than ending the step.
           for attempt in 1 2 3 4 5; do
-            git -c "$auth" push -q origin HEAD:main && exit 0
+            git push -q origin HEAD:main && exit 0
             [ "$attempt" -lt 5 ] || break
             sleep $((attempt * 3))
-            git -c "$auth" pull -q --rebase -X theirs origin main \
+            git pull -q --rebase -X theirs origin main \
               || git rebase --abort 2>/dev/null || true
           done
           exit 1

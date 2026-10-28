@@ -1631,7 +1631,7 @@ never a `.git` directory
 | `walk` | no | clones `be_price_cards` shallow and without credentials under `tmp/cards`, runs `scripts/archive_cards.py --out tmp/cards/electricity`, hands the tree and `tmp/pdfs` over |
 | `keep` | yes | uploads the PDFs to the releases and hands the updated `pdfs.json` over |
 | `index` | no | rewrites the sheets with that manifest (`--index-only`), writes the two READMEs, hands the lot over |
-| `push` | yes | clones the repository afresh, lays the handed-over files over it and commits and pushes when the tree changed, the push and its rebase getting the token as an authorization header on their own command line |
+| `push` | yes | clones the repository afresh, lays the handed-over files over it and commits and pushes when the tree changed, the push and its rebase getting the token from gh's credential helper (`gh auth git-credential`), which reads `GH_TOKEN`, so it is on no command line and in no file (`test_the_cards_token_is_on_no_command_line`) |
 | `token` | yes | asks GitHub when the token expires and files the expiry warning below, after the push so a failure here cannot hold the day's rows back |
 
 The OCR issues and the failure issue run in two small jobs after these, `ocr` and `report`.
@@ -1676,7 +1676,8 @@ issue still covers a token that has already expired. They cannot live in the car
 of `main` also pulls; and a release on this repository would be offered to HACS users as an update.
 The step needs a fine-grained personal access token with contents read and write on the cards
 repository in the `BE_ELECTRICITY_CARDS` secret. A release needs a commit to tag, so a repository created
-empty is given a first commit by the step itself, once. Without the secret the `keep` job fails at
+empty is given a first commit by the step itself, once, asked for without a token and pushed through
+the same credential helper as the `push` job. Without the secret the `keep` job fails at
 its first step (`Check the cards token is set`), and the push, which writes with the same secret,
 lands nothing either: the run is filed as a failure, and the next run that has the token fetches
 that day's cards again, since the archive holds none of them. Releases older than the retention are deleted on the same cutoff the

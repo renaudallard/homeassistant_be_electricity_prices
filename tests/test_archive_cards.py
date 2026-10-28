@@ -4037,6 +4037,93 @@ def test_a_release_the_manifest_still_lists_is_not_deleted(tmp_path: Path) -> No
     assert (tmp_path / "deleted.txt").read_text() == "electricity-2020-02\n"
 
 
+def test_the_cards_token_is_on_no_command_line(tmp_path: Path) -> None:
+    """The keep job seeded an empty cards repository through a URL carrying
+    the token, and the push job handed it to every push and pull as an
+    extraheader argument, base64 hiding nothing: either way it sat in git's
+    command line for as long as git ran. The two steps, run with a git that
+    logs its arguments, leave it to gh's credential helper, which reads
+    GH_TOKEN, and keep it out of the clone's config."""
+    import base64
+
+    token = "t0ken"
+    hidden = (token, base64.b64encode(f"x-access-token:{token}".encode()).decode())
+    origin = tmp_path / "origin.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True
+    )
+    log = tmp_path / "argv.log"
+    stubs = tmp_path / "bin"
+    stubs.mkdir()
+    (stubs / "git").write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{log}"\nexec "{shutil.which("git")}" "$@"\n'
+    )
+    (stubs / "gh").write_text(
+        '#!/bin/sh\ncase "$1 $2" in "release view") exit 1 ;; esac\nexit 0\n'
+    )
+    for stub in stubs.iterdir():
+        stub.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{stubs}:{os.environ['PATH']}",
+        # The GitHub URL is the local repository here, and git reaches
+        # nothing else.
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": f"url.file://{origin}.insteadOf",
+        "GIT_CONFIG_VALUE_0": "https://github.com/renaudallard/be_price_cards.git",
+        "GIT_ALLOW_PROTOCOL": "file",
+    }
+
+    def run(job: str, step_id: str, cwd: Path) -> None:
+        step = next(s for s in _archive_jobs()[job]["steps"] if s.get("id") == step_id)
+        # The step's own env, the cards secret standing in as the token.
+        given = {
+            name: token if "secrets." in str(value) else str(value)
+            for name, value in step.get("env", {}).items()
+        }
+        done = subprocess.run(
+            ["bash", "-e", "-c", step["run"]],
+            cwd=cwd,
+            env={**env, **given},
+            capture_output=True,
+            text=True,
+        )
+        assert done.returncode == 0, done.stderr
+
+    def subjects() -> list[str]:
+        return subprocess.run(
+            ["git", "log", "--format=%s", "main"],
+            cwd=origin,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+
+    keep = tmp_path / "keep"
+    (keep / "tmp" / "cards" / "electricity").mkdir(parents=True)
+    run("keep", "keep", keep)
+    assert subjects() == ["Start the card store"]
+
+    work = tmp_path / "push"
+    (work / "tmp").mkdir(parents=True)
+    cards_url = "https://github.com/renaudallard/be_price_cards.git"
+    subprocess.run(
+        ["git", "clone", "-q", cards_url, "tmp/cards"], cwd=work, env=env, check=True
+    )
+    (work / "tmp" / "cards" / "electricity").mkdir()
+    (work / "tmp" / "cards" / "electricity" / "row.json").write_text("{}\n")
+    run("push", "push", work)
+    assert subjects()[0].startswith("Cards seen on ")
+
+    argv = log.read_text()
+    assert "push -q" in argv
+    for secret in hidden:
+        assert secret not in argv
+    config = (work / "tmp" / "cards" / ".git" / "config").read_text()
+    assert token not in config
+    assert "helper = !gh auth git-credential" in config
+
+
 @pytest.mark.parametrize("token", ["secrets.BE_ELECTRICITY_CARDS", "github.token"])
 def test_a_token_never_shares_a_job_with_third_party_code(token: str) -> None:
     """The walk runs the integration, its PDF readers and the OCR package,
