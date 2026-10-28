@@ -62,6 +62,7 @@ class PriceBreakdown:      # pricing.py
 | `taxes_eur_per_kwh(taxes, region)` | `pricing.py` | `float` | Per-kWh federal + regional levies that VAT applies to. |
 | `taxes_vat_exempt_eur_per_kwh(taxes, region)` | `pricing.py` | `float` | Per-kWh levies billed at face value whatever the card's VAT basis (the Walloon connection fee). |
 | `_routed_rate(base, energy, when, meter, region, *, bi_capable, dso_tariff_mode)` | `pricing.py` | `float` | Shared Fixed/Variable meter routing. |
+| `_bills_pair(energy, meter, dso_tariff_mode, bi_capable)` | `pricing.py` | `bool` | Whether the day/night pair applies: the meter's answer, or under Impact the card's own statement. |
 | `tou_slot(when, weekend_rule="weekend_offpeak")` | `pricing.py` | `"peak"|"transition"|"offpeak"` | TOU band for a datetime. |
 | `dso_impact_band(when)` | `pricing.py` | `"pic"|"medium"|"eco"` | Wallonia Tarif Impact band for a datetime. |
 | `is_offpeak(when, region, *, day_start)` | `day_night.py` | `bool` | Classic bi-horaire off-peak test, per region; `day_start` is the hour the entry's day register starts (`day_start_for`). |
@@ -1019,18 +1020,35 @@ Fixed and Variable share the meter-routing helper `_routed_rate`
    bills the band `dso_impact_band` picks. An exclusive-night circuit
    never takes these bands: it bills its own rate whatever the main
    connection's opt-in, the same rule the network leg applies.
-3. `bi_capable` (meter is `bi` or `dynamic`) and both `peak` and `offpeak` are
-   published: pick one by schedule (`pricing.py`):
+3. The pair applies (`_bills_pair`) and both `peak` and `offpeak` are
+   published: pick one by schedule (`pricing.py`). The pair applies to a
+   `bi_capable` meter (`bi` or `dynamic`), except under Impact, where a card
+   that says how it bills an Impact connection decides whatever the meter
+   answer:
    - Under `dso_tariff_mode == "impact"`: ECO band bills off-peak, MEDIUM/PIC bill
      peak (`pricing.py`). This aligns the energy side with the Impact-banded
      distribution when an SMR3 meter registers in CWaPE bands. A card whose
-     `single_under_impact` is set bills its single rate in every band instead:
-     TotalEnergies' Walloon cards say "Le tarif bihoraire n'est pas compatible
-     avec la structure tarifaire incitative (Tarif IMPACT)". The monthly leg a
-     variable card re-prices through (`SpotMonthlyRates`) carries the flag and
-     follows the same rule.
-   - Otherwise: `is_offpeak(when, region)` picks off-peak vs peak
-     (`pricing.py`).
+     `day_night_under_impact` is set bills it so on every meter but a night
+     circuit, the mono answer included: Eneco footnotes its consumption prices
+     with "zullen de “ECO”-uren overeenkomen met de nachturen. De “MEDIUM”- en
+     “PIC”-uren worden beschouwd als daguren" on every card since January 2026,
+     and Engie's Walloon cards head the pair "Bihoraire / IMPACT" over "Heures
+     pleines / PIC-MEDIUM" and "Heures creuses / ECO" since April 2026. A card
+     whose `single_under_impact` is set bills its single rate in every band
+     instead: TotalEnergies' Walloon cards say "Le tarif bihoraire n'est pas
+     compatible avec la structure tarifaire incitative (Tarif IMPACT)". A card
+     stating neither keeps the meter's routing, the pair by band on a `bi` or
+     `dynamic` meter and the single rate on a mono one. The monthly leg a
+     variable card re-prices through (`SpotMonthlyRates`) carries both flags
+     and follows the same rule. Both are rules of the month billed rather than
+     prices locked at signing, so a signing cohort is bound by its signing
+     card's statement or by the one on the card of the month billed, the
+     current card on the live tick and the month's own on the year-to-date and
+     backfill walks (`_with_billed_impact_rule`, `cohort_legs.py`, applied in
+     `_CohortLegs.energy_on`): a contract signed before its card printed the
+     rule is banded from the first month whose card does.
+   - Otherwise: `is_offpeak(when, region)` picks off-peak vs peak on a
+     `bi_capable` meter (`pricing.py`).
 4. Fall back to the single/current `base` rate (`pricing.py`).
 
 `FixedRates` fields: `single`, optional `peak`/`offpeak`/`exclusive_night`, plus

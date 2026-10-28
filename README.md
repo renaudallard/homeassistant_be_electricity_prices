@@ -606,9 +606,12 @@ dropped rather than billed on the new card.
    (Bolt's variable cards, OCTA+ Boost Flex, Eco Boost Flex and Basic Online
    in Wallonia) bills its energy on them under Tarif Impact. Otherwise a
    day/night meter under Tarif Impact pays the night rate in the ECO band and
-   the day rate in PIC and MEDIUM, except on TotalEnergies' Walloon cards,
-   which say their day/night split does not apply under Impact and bill the
-   single rate in every band.
+   the day rate in PIC and MEDIUM, and a single-rate one its single rate,
+   unless the card says how an Impact connection is billed. Eneco's cards
+   since January 2026 and Engie's Walloon cards since April 2026 say it is
+   that day/night rule, so there it holds whatever meter you picked, a
+   single-rate one included. TotalEnergies' Walloon cards say their day/night
+   split does not apply under Impact and bill the single rate in every band.
 8. **ENTSO-E API key or keyless day-ahead prices** *(dynamic and monthly-indexed contracts, both of
    which price the commodity off spot; also offered, skippable, right after
    the Solar panels step, to every

@@ -176,7 +176,8 @@ candidate:
 3. `parse_snapshot` parses; an `ExtractorError` skips the volume
    (`eneco.py`).
 4. `archive_validity_check` (`_validity.py`) confirms the snapshot actually
-   covers `year_month`, passing `month_names=_NL_MONTHS` (`eneco.py`). This
+   covers `year_month`, passing the Dutch month names (`month_names=NL_MONTHS`,
+   `_pdf.py`). This
    guards against the CDN silently substituting the current card at a historical
    URL: when `valid_until` parses, it must fall in the requested month; when it is
    missing, a textual mention of the month is required.
@@ -310,6 +311,27 @@ falls inside a month, and each closed month on the value the next card publishes
 (see `fetch_for_month` above). The injection leg stays on the plain mean:
 Belpex-injectie is the arithmetic one. `test_flex_is_month_indexed_on_the_rlp_weighted_mean`
 pins the flags and the re-price.
+
+Every card but Dynamic footnotes its consumption prices since January 2026:
+"(*) In het geval u kiest voor het tarief IMPACT (MEDIUM, PIC, ECO) in
+Wallonië, wat betreft de prijs van energie, zullen de “ECO”-uren overeenkomen
+met de nachturen. De “MEDIUM”- en “PIC”-uren worden beschouwd als daguren."
+The rule names no meter, so `parse_snapshot` reads it (`_IMPACT_PAIR_RE`,
+`eneco.py`) into `day_night_under_impact` on the Fix and Flex legs, and a
+Walloon entry on Tarif Impact is billed the night rate in ECO and the day rate
+in PIC and MEDIUM whatever its meter answer, the mono one included
+(`_bills_pair`, `pricing.py`). The mono answer used to keep the single rate in
+every band: on the October 2026 Fix card, 22,10 against 25,10 and 19,49 c/kWh,
+that billed an evening-weighted 3500 kWh 35,88 EUR a year short (from 91,35
+over with every kWh in ECO to 105,00 short with none). Flex and Flex One print
+one price in every column, so the flag moves nothing there, and a card from
+before 2026 says nothing and keeps the meter's routing
+(`test_the_impact_footnote_bands_the_pair_whatever_the_meter`,
+`tests/test_eneco.py`). A contract signed on such a card is still banded from
+January 2026, because the rule is the billed month's card's as much as the
+signing card's (`_with_billed_impact_rule`, `cohort_legs.py`): left on the
+signing card's silence, a Zon & Wind Vast signed in October 2025 was billed
+27,20 EUR a year short at 3500 kWh with a third of it in ECO.
 
 Dynamic (`_extract_dynamic`) captures the full PDF formula including the VAT
 multiplier the card actually prints (`eneco.py`): `(f X BELPEX-H +- base)
@@ -635,6 +657,7 @@ Fixtures live under `tests/fixtures/` and are loaded via `fixture_text(...)`.
 | dynamic factor / base wrong | `_extract_dynamic` formula regex or VAT multiplier | `eneco.py` |
 | a DSO row missing | its label string in `_WALLONIA_LABELS` / `_FLUVIUS_LABELS`, or the row column count | `eneco.py` |
 | Impact bands swapped | column-order mapping in `_find_wallonia_row` | `eneco.py` |
+| a mono Walloon entry on Tarif Impact billed the single rate in every band | `_IMPACT_PAIR_RE` (the Impact footnote reworded) | `eneco.py` |
 | tax value wrong or fatal error | `_extract_taxes` anchors (tier label, `(€cent/kWh)`, `Aansluitingsvergoeding`) | `eneco.py` |
 | injection credit zeroed | `_extract_injection` heading anchor / section cutoff | `eneco.py` |
 | four-digit fee truncated | `_NUM` token | `eneco.py` |

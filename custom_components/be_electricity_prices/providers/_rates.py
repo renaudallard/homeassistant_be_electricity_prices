@@ -182,9 +182,18 @@ class FixedRates:
     # CWaPE incitative tariff, so an Impact connection is billed the single
     # rate in every band. TotalEnergies' Walloon cards say it: "Le tarif
     # bihoraire n'est pas compatible avec la structure tarifaire incitative
-    # (Tarif IMPACT)". Every other card prints the opposite rule (ECO at the
-    # night rate, PIC and MEDIUM at the day rate), which is the default.
+    # (Tarif IMPACT)". Without it a day/night meter is billed the opposite
+    # rule (ECO at the night rate, PIC and MEDIUM at the day rate) and a mono
+    # one its single rate.
     single_under_impact: bool = False
+    # The converse: True when the card says an Impact connection is billed
+    # that day/night rule whatever its meter, a mono one included. Eneco
+    # footnotes its consumption prices with it since January 2026 ("zullen de
+    # “ECO”-uren overeenkomen met de nachturen. De “MEDIUM”- en “PIC”-uren
+    # worden beschouwd als daguren"), and Engie's Walloon cards head the pair
+    # "Bihoraire / IMPACT" over "Heures pleines / PIC-MEDIUM" and "Heures
+    # creuses / ECO", beside the "Normal" column.
+    day_night_under_impact: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -327,8 +336,9 @@ class VariableRates:
     formula_base_medium: float | None = None
     formula_factor_eco: float | None = None
     formula_base_eco: float | None = None
-    # See :class:`FixedRates`.
+    # Both: see :class:`FixedRates`.
     single_under_impact: bool = False
+    day_night_under_impact: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -483,9 +493,10 @@ class SpotMonthlyRates:
     # cohort (EBEM Groen Variabel / B@sic+ print one). None -> the standard fee
     # applies to every meter type.
     yearly_fixed_fee_exclusive_night: float | None = None
-    # See :class:`FixedRates`, carried from the variable card this leg
+    # Both: see :class:`FixedRates`, carried from the variable card this leg
     # re-prices.
     single_under_impact: bool = False
+    day_night_under_impact: bool = False
 
 
 WeekendRule = Literal["weekend_offpeak", "weekend_no_peak", "smartflex_seasonal"]

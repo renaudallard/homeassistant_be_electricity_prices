@@ -556,6 +556,10 @@ _ENERGY_OPTIONAL_KEYS = (
     # And TotalEnergies' statement that its day/night split does not apply
     # under Impact, which only its Walloon cards carry.
     "single_under_impact",
+    # And the converse, Eneco's footnote since January 2026 and Engie's
+    # Walloon column head, so a row written before either reads back on the
+    # routing it was billed on.
+    "day_night_under_impact",
     # And Mega's settled months, billed at the figures its next card states.
     "settled_as_stated",
     # Set by resolve_volume_tier on a resolved leg, never on a card as parsed.

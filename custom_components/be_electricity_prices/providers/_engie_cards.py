@@ -257,6 +257,8 @@ def _extract_energy(
         exclusive_night=excl_night,
         yearly_fixed_fee=yearly_fee,
     )
+    if _IMPACT_PAIR_RE.search(text):
+        rates = replace(rates, day_night_under_impact=True)
     if not isinstance(rates, VariableRates) or mono is None:
         return rates
     # Empower Variable and Empty House index consumption on the DELIVERY
@@ -482,6 +484,17 @@ _EPEXDAM_BAND: dict[str, str] = {
     "flextime heures super-creuses": "flex_offpeak",
 }
 _FLEXTIME_BANDS: tuple[str, ...] = ("flex_peak", "flex_transition", "flex_offpeak")
+# The Walloon cards head the day/night pair, beside "Normal", "Bihoraire /
+# IMPACT (19) Heures pleines / PIC-MEDIUM | Heures creuses / ECO", and the
+# Empower card "Bihoraire(17) / Impact(19)" over the same two: an Impact
+# connection pays the pair by band whatever its meter (see
+# FixedRates.day_night_under_impact). The slash is required, since the
+# Dynamic and Empty House cards print "(Normal, Bihoraire ou IMPACT)" over
+# their one formula.
+_IMPACT_PAIR_RE = re.compile(
+    r"Bihoraire\s*(?:\(\d+\)\s*)?/\s*IMPACT\b.{0,120}?creuses\s*/\s*ECO\b",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _card_index(text: str, index: str) -> float | None:

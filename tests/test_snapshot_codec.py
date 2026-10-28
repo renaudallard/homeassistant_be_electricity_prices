@@ -332,6 +332,25 @@ def test_the_forward_index_flag_is_written_only_where_a_card_sets_it() -> None:
     assert back.injection == flagged.injection
 
 
+def test_the_impact_pair_statement_is_written_only_where_a_card_sets_it() -> None:
+    """Eneco's footnote and Engie's Walloon column head set it; every other
+    row keeps the shape an earlier version wrote and reads back unflagged, and
+    a flagged leg of each kind that carries it reads back as written."""
+    legs: tuple[FixedRates | VariableRates | SpotMonthlyRates, ...] = (
+        FixedRates(single=0.221, peak=0.251, offpeak=0.1949),
+        VariableRates(current=0.2149, peak=0.2395, offpeak=0.17528),
+        SpotMonthlyRates(factor=1.24, base=0.02, factor_peak=1.34, factor_offpeak=1.05),
+    )
+    for leg in legs:
+        row = _snapshot_to_dict(make_snapshot(energy=leg), NOW)
+        assert "day_night_under_impact" not in row["energy"]
+        assert _snapshot_from_dict(row).energy == leg
+        flagged = replace(leg, day_night_under_impact=True)
+        row = _snapshot_to_dict(make_snapshot(energy=flagged), NOW)
+        assert row["energy"]["day_night_under_impact"] is True
+        assert _snapshot_from_dict(row).energy == flagged
+
+
 def test_the_codec_writes_every_snapshot_field() -> None:
     """The encoder names the top-level fields by hand, and nothing held the
     list to the dataclass: a field added to SupplierSnapshot without a line

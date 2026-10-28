@@ -107,11 +107,6 @@ from .base import (
 _BASE_URL = "https://cdn.eneco.be/downloads/nl/general/tk"
 _LISTING_URL = "https://eneco.be/nl/elektriciteit-gas/tariefkaarten"
 
-# Dutch month names Eneco prints in the validity header. Used by
-# fetch_for_month to confirm a CDN-served PDF actually mentions the
-# requested month when parse_valid_until missed.
-_NL_MONTHS = NL_MONTHS
-
 
 # Contract id -> the POWER_<NAME> token Eneco uses in its filenames.
 _CONTRACT_SLUGS: dict[str, str] = {
@@ -278,7 +273,7 @@ async def _archived_card(
             snap = parse_snapshot(text, contract_id, url, region)
         except ExtractorError:
             continue
-        result = archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
+        result = archive_validity_check(snap, text, year_month, month_names=NL_MONTHS)
         if result is not None:
             return result, text
     return None
@@ -469,6 +464,9 @@ def _resolve_url(listing_html: str, contract_id: str) -> str | None:
 # "(3) inclusief 21% btw", is written without "zijn" and reads the same, so
 # the first match is taken, which is the residential footer on every card.
 _VAT_RE = re.compile(r"inclusief\s*(\d+)\s*%\s*btw", re.IGNORECASE)
+# "In het geval u kiest voor het tarief IMPACT ... zullen de “ECO”-uren
+# overeenkomen met de nachturen": see FixedRates.day_night_under_impact.
+_IMPACT_PAIR_RE = re.compile(r"ECO\W+uren\s+overeenkomen\s+met\s+de\s+nachturen")
 
 
 def parse_snapshot(
@@ -483,6 +481,8 @@ def parse_snapshot(
     if contract_id not in _CONTRACT_SLUGS:
         raise ExtractorError(f"unknown Eneco contract {contract_id!r}")
     energy = _extract_energy(text, contract_id)
+    if _IMPACT_PAIR_RE.search(text) and isinstance(energy, (FixedRates, VariableRates)):
+        energy = replace(energy, day_night_under_impact=True)
     # The dynamic formula prints its own multiplier ("x 1,06") and is grossed
     # by that, so only the variable one is grossed by the footer's rate.
     card_vat, assumed_vat = vat_basis(

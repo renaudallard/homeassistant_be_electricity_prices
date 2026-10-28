@@ -357,7 +357,10 @@ def _dso_tariff_mode_schema(defaults: dict[str, Any]) -> vol.Schema:
     configuration and the mode the DSO's. TotalEnergies Impact is exactly that
     pair, and is the reason the pre-selection below exists: the product
     registers as ``variable``, so ``_meter_schema`` offers all four meters and
-    defaults to mono, while its card prints only the CWaPE bands.
+    defaults to mono, while its card prints only the CWaPE bands. A card that
+    says how it bills an Impact connection decides the energy side whatever
+    the meter answer (``pricing._bills_pair``): Eneco's and Engie's band their
+    day/night pair, TotalEnergies' bill their single rate.
 
     Filtering Impact out for a mono meter was tried and reverted. It removed
     the mode from the one product the pre-selection is for, landing a TE

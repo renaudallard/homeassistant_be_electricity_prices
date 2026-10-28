@@ -180,6 +180,28 @@ def tou_slot(when: datetime, weekend_rule: str = "weekend_offpeak") -> TouSlot:
     return "transition"  # 11-17 + 22-1
 
 
+def _bills_pair(
+    energy: FixedRates | VariableRates | SpotMonthlyRates,
+    meter: MeterType,
+    dso_tariff_mode: DsoTariffMode,
+    bi_capable: bool,
+) -> bool:
+    """Whether ``energy``'s day/night pair applies to this meter and DSO mode.
+
+    A bi-hourly or digital meter (``bi_capable``) registers the pair and a
+    mono one the single rate. Under Impact comptage a card that says how it
+    bills an Impact connection decides instead, whatever the meter answer:
+    its pair by band (``day_night_under_impact``, Eneco and Engie) or its
+    single rate in every band (``single_under_impact``, TotalEnergies). A
+    night circuit is never banded.
+    """
+    if dso_tariff_mode != "impact":
+        return bi_capable
+    if energy.single_under_impact:
+        return False
+    return bi_capable or (energy.day_night_under_impact and meter != "exclusive_night")
+
+
 def _routed_rate(
     base: float,
     energy: FixedRates | VariableRates,
@@ -194,23 +216,24 @@ def _routed_rate(
     """Meter-routing shared by the Fixed and Variable energy branches.
 
     Exclusive-night meters take the dedicated rate when published; a
-    bi-hourly-capable meter takes the peak/off-peak split when published;
-    otherwise the single/current ``base`` rate applies.
+    meter the day/night pair applies to (``_bills_pair``) takes the
+    peak/off-peak split when published; otherwise the single/current
+    ``base`` rate applies.
 
     Under Impact comptage the SMR3 meter registers consumption in the CWaPE
     bands, so a bi-hourly energy rate follows those bands rather than the
     plain bi-horaire schedule: the ECO band bills the off-peak rate and the
     MEDIUM/PIC bands the peak rate (per the supplier cards' Impact footnote).
     This keeps the energy side aligned with the Impact-banded distribution.
-    A card that says its day/night split does not apply under Impact
-    (``single_under_impact``) bills the single rate in every band instead.
     """
     if meter == "exclusive_night" and energy.exclusive_night is not None:
         return energy.exclusive_night
-    if bi_capable and energy.peak is not None and energy.offpeak is not None:
+    if (
+        _bills_pair(energy, meter, dso_tariff_mode, bi_capable)
+        and energy.peak is not None
+        and energy.offpeak is not None
+    ):
         if dso_tariff_mode == "impact":
-            if energy.single_under_impact:
-                return base
             return energy.offpeak if dso_impact_band(when) == "eco" else energy.peak
         return (
             energy.offpeak
@@ -238,7 +261,8 @@ def energy_eur_per_kwh(
     supplier's ``exclusive_night`` rate when published; the meter
     physically only registers during DSO off-peak hours, so we don't
     need to gate by ``is_offpeak(when)`` here. ``dso_tariff_mode`` lets a
-    bi-hourly rate follow the CWaPE Impact bands under Impact comptage.
+    bi-hourly rate follow the CWaPE Impact bands under Impact comptage, and
+    the card's own word on Impact holds whatever the meter (``_bills_pair``).
     """
     bi_capable = meter in ("bi", "dynamic")
     if isinstance(energy, FixedRates):
@@ -296,6 +320,7 @@ def energy_eur_per_kwh(
             offpeak=energy.ceiling_offpeak,
             exclusive_night=energy.ceiling_exclusive_night,
             single_under_impact=energy.single_under_impact,
+            day_night_under_impact=energy.day_night_under_impact,
         )
         return min(
             rate,
@@ -390,10 +415,9 @@ def energy_eur_per_kwh(
             factor = energy.factor_exclusive_night
             base = energy.base_exclusive_night or 0.0
         elif (
-            bi_capable
+            _bills_pair(energy, meter, dso_tariff_mode, bi_capable)
             and energy.factor_peak is not None
             and energy.factor_offpeak is not None
-            and not (dso_tariff_mode == "impact" and energy.single_under_impact)
         ):
             # A card that prints one formula per meter is billed per meter.
             # Mega's bands differ by a fifth (1,3275 peak against 1,1095 mono),
@@ -423,6 +447,7 @@ def energy_eur_per_kwh(
             offpeak=energy.ceiling_offpeak,
             exclusive_night=energy.ceiling_exclusive_night,
             single_under_impact=energy.single_under_impact,
+            day_night_under_impact=energy.day_night_under_impact,
         )
         return min(
             rate,

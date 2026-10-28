@@ -137,7 +137,11 @@ Notes on the kind mapping:
   day/night meter on Tarif Impact the single rate in every band rather than the
   ECO/night, PIC-MEDIUM/day mapping other suppliers print. Measured on the
   October 2026 cards with the residential load profile, the mapping over-billed
-  11 to 29 EUR a year at 3500 kWh.
+  11 to 29 EUR a year at 3500 kWh. A signing cohort is bound by the statement
+  of the card of the month billed as well as its signing card's
+  (`_with_billed_impact_rule`, `cohort_legs.py`), the same rule as Eneco's and
+  Engie's converse; every Walloon card the archive holds, from September 2026,
+  prints it, so no cohort moves today.
 - **myDynamic bills per clock hour, not per quarter hour.** `DynamicRates.quarter_hourly`
   defaults `False` (`providers/_rates.py`) and TotalEnergies never overrides it,
   so the integration aggregates the ENTSO-E 15 minute curve to hourly for this

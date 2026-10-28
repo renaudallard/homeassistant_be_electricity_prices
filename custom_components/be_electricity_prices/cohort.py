@@ -53,6 +53,7 @@ from .cohort_legs import (
     _manual_energy_leg,
     _month_indexed_leg,
     _on_settled_quarter,
+    _with_billed_impact_rule,
     _with_standing_charge,
 )
 from .const import (
@@ -212,11 +213,16 @@ class _CohortLegs(NamedTuple):
         hour until September 2025 and per quarter-hour since, and every
         signing month before the switch reads the January 2025 card, so a
         dynamic leg carried its grid across and priced today on the hour.
+
+        And how a Tarif Impact connection pays the day/night pair is a rule
+        of the month billed as much as of the signing card: either card
+        stating it binds (``_with_billed_impact_rule``).
         """
         energy = self.energy
         if energy is None:
             return None
         card = snapshot.energy
+        energy = _with_billed_impact_rule(energy, card)
         if (
             isinstance(energy, DynamicRates)
             and isinstance(card, DynamicRates)

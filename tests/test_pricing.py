@@ -335,11 +335,87 @@ def test_bihourly_energy_follows_impact_bands_under_impact_mode() -> None:
         == 0.1699
     )
     assert energy_eur_per_kwh(e, eco_midday, None, "bi", "wallonia", "impact") == 0.1699
-    # A mono meter can't register bands, so Impact mode leaves it on the
-    # single rate.
+    # A card that says nothing about Impact leaves a mono meter on the single
+    # rate.
     assert energy_eur_per_kwh(e, night_medium, None, "mono", "wallonia", "impact") == (
         0.2055
     )
+
+
+def test_a_card_stating_the_impact_pair_bands_it_whatever_the_meter() -> None:
+    """Eneco's and Engie's Walloon cards say an Impact connection pays the
+    night rate in ECO and the day rate in PIC and MEDIUM, naming no meter, so
+    the mono answer is banded too. A night circuit keeps its own rate, and off
+    Impact, or before it took effect, the meter decides as before."""
+    from dataclasses import replace
+
+    e = FixedRates(
+        single=0.221,
+        peak=0.251,
+        offpeak=0.1949,
+        exclusive_night=0.18,
+        day_night_under_impact=True,
+    )
+    eco = datetime(2026, 11, 10, 13, 0)
+    medium = datetime(2026, 11, 10, 8, 0)
+    pic = datetime(2026, 11, 10, 19, 0)
+    for meter in ("mono", "bi", "dynamic"):
+        assert energy_eur_per_kwh(e, eco, None, meter, "wallonia", "impact") == 0.1949
+        assert energy_eur_per_kwh(e, medium, None, meter, "wallonia", "impact") == 0.251
+        assert energy_eur_per_kwh(e, pic, None, meter, "wallonia", "impact") == 0.251
+    excl: MeterType = "exclusive_night"
+    assert energy_eur_per_kwh(e, medium, None, excl, "wallonia", "impact") == 0.18
+    no_night_rate = replace(e, exclusive_night=None)
+    assert (
+        energy_eur_per_kwh(no_night_rate, medium, None, excl, "wallonia", "impact")
+        == 0.221
+    )
+    for mode in ("simple", "bi_horaire"):
+        assert energy_eur_per_kwh(e, eco, None, "mono", "wallonia", mode) == 0.221
+    snap = make_snapshot(
+        energy=e,
+        dsos={"ores": DsoOverlay(distribution_single=0.10, transport=0.02)},
+    )
+    brussels = ZoneInfo("Europe/Brussels")
+    for when, rate in (
+        (datetime(2025, 11, 10, 13, 0, tzinfo=brussels), 0.221),
+        (datetime(2026, 11, 10, 13, 0, tzinfo=brussels), 0.1949),
+    ):
+        bd = compute_breakdown(snap, "ores", "wallonia", when, None, "mono", "impact")
+        assert bd.energy == pytest.approx(rate), when
+
+    # The monthly leg a variable card is re-priced on, and the ceiling, route
+    # the same way.
+    leg = SpotMonthlyRates(
+        factor=1.2,
+        base=0.02,
+        factor_peak=1.4,
+        base_peak=0.03,
+        factor_offpeak=1.0,
+        base_offpeak=0.01,
+        day_night_under_impact=True,
+    )
+    mean = 0.1
+    assert energy_eur_per_kwh(
+        leg, eco, mean, "mono", "wallonia", "impact"
+    ) == pytest.approx(0.11)
+    assert energy_eur_per_kwh(
+        leg, pic, mean, "mono", "wallonia", "impact"
+    ) == pytest.approx(0.17)
+    assert energy_eur_per_kwh(
+        leg, pic, mean, "mono", "wallonia", "bi_horaire"
+    ) == pytest.approx(0.14)
+    capped = VariableRates(
+        current=0.20,
+        peak=0.24,
+        offpeak=0.17,
+        ceiling_single=0.19,
+        ceiling_peak=0.22,
+        ceiling_offpeak=0.15,
+        day_night_under_impact=True,
+    )
+    assert energy_eur_per_kwh(capped, eco, None, "mono", "wallonia", "impact") == 0.15
+    assert energy_eur_per_kwh(capped, pic, None, "mono", "wallonia", "impact") == 0.22
 
 
 def test_an_impact_entry_bills_2025_on_the_bi_hourly_configuration() -> None:

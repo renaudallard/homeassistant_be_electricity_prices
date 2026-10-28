@@ -96,6 +96,55 @@ def test_fix_extracts_energy_block() -> None:
     assert snap.energy.yearly_fixed_fee == pytest.approx(65.0)
 
 
+def test_the_impact_footnote_bands_the_pair_whatever_the_meter() -> None:
+    """Every card since January 2026 footnotes its consumption prices "(*) In
+    het geval u kiest voor het tarief IMPACT (MEDIUM, PIC, ECO) in Wallonië,
+    wat betreft de prijs van energie, zullen de “ECO”-uren overeenkomen met de
+    nachturen. De “MEDIUM”- en “PIC”-uren worden beschouwd als daguren",
+    naming no meter. A Walloon Fix entry on Tarif Impact that answered mono
+    was billed the single rate in every band, 35,88 EUR a year short on the
+    October 2026 card at an evening-weighted 3500 kWh."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _manual_energy_leg,
+    )
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from tests import make_entry
+
+    for name, contract, stated in (
+        ("eneco_fix.pdf", "power_fix", True),
+        ("eneco_fix_one.pdf", "power_fix_one", True),
+        ("eneco_flex.pdf", "power_flex", True),
+        ("eneco_flex_one.pdf", "power_flex_one", True),
+        ("eneco_flex_dec25.pdf", "power_flex", False),
+        ("eneco_flex_jun25.pdf", "power_flex", False),
+    ):
+        snap = parse_snapshot(fixture_text(name), contract, "test://", REGION_WALLONIA)
+        assert isinstance(snap.energy, (FixedRates, VariableRates)), name
+        assert snap.energy.day_night_under_impact is stated, name
+
+    snap = parse_snapshot(
+        fixture_text("eneco_fix.pdf"), "power_fix", "test://fix", REGION_WALLONIA
+    )
+    brussels = ZoneInfo("Europe/Brussels")
+    eco = datetime(2026, 4, 15, 13, tzinfo=brussels)
+    pic = datetime(2026, 4, 15, 19, tzinfo=brussels)
+    medium = datetime(2026, 4, 15, 23, tzinfo=brussels)
+    signed = _manual_energy_leg(make_entry(manual_energy_single=0.2), snap.energy)
+    assert signed is not None
+    for leg in (snap.energy, signed):
+        for when, rate in ((eco, 0.1699), (pic, 0.2055), (medium, 0.2055)):
+            assert energy_eur_per_kwh(
+                leg, when, None, "mono", REGION_WALLONIA, "impact"
+            ) == pytest.approx(rate), when
+    # Off Impact the mono meter keeps the single rate.
+    assert energy_eur_per_kwh(
+        snap.energy, eco, None, "mono", REGION_WALLONIA, "bi_horaire"
+    ) == pytest.approx(0.1865)
+
+
 def test_fix_extracts_dso_overlay() -> None:
     snap = parse_snapshot(
         fixture_text("eneco_fix.pdf"), "power_fix", "test://fix", REGION_FLANDERS

@@ -205,6 +205,7 @@ def _manual_energy_leg(
                 None if fee_raw is not None else energy.yearly_fixed_fee_exclusive_night
             ),
             single_under_impact=energy.single_under_impact,
+            day_night_under_impact=energy.day_night_under_impact,
         )
     return None
 
@@ -339,9 +340,10 @@ def _cohort_energy_from_archived(
             # exclusive-night meter keeps its own fee instead of falling back to
             # the standard abonnement (yearly_fixed_fee_for_meter reads it).
             yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
-            # And whether the card bills its day/night split under Impact at
-            # all, or an Impact entry holding a key is banded again.
+            # And how the card bills its day/night split under Impact, or an
+            # Impact entry holding a key is routed by its meter again.
             single_under_impact=energy.single_under_impact,
+            day_night_under_impact=energy.day_night_under_impact,
         )
     return None
 
@@ -408,6 +410,30 @@ def _with_standing_charge(energy: EnergyRates, signed: EnergyRates) -> EnergyRat
         name: getattr(signed, name, None) for name in names if hasattr(energy, name)
     }
     return replace(energy, **fees)
+
+
+def _with_billed_impact_rule(leg: EnergyRates, card: EnergyRates) -> EnergyRates:
+    """``leg`` bound by what ``card``, the card of the month billed, says of
+    Tarif Impact as well as by what its own signing card said.
+
+    How an Impact connection's day/night pair is billed is a rule of the
+    delivery month, not a price the contract locked at signing: Impact took
+    effect on 1 January 2026, and Eneco printed its rule from that month's
+    cards and Engie's Walloon cards from April's. A contract signed on an
+    earlier card carried none of it, so its mono answer kept the single rate
+    in every band where the same contract signed a month later was banded,
+    27,20 EUR a year on an Eneco Zon & Wind Vast signed in October 2025 at
+    3500 kWh with a third of it in ECO. Either card stating the rule binds
+    (``day_night_under_impact``), and TotalEnergies' converse
+    (``single_under_impact``) the same way.
+    """
+    if not isinstance(leg, (FixedRates, VariableRates, SpotMonthlyRates)):
+        return leg
+    pair = leg.day_night_under_impact or getattr(card, "day_night_under_impact", False)
+    single = leg.single_under_impact or getattr(card, "single_under_impact", False)
+    if (pair, single) == (leg.day_night_under_impact, leg.single_under_impact):
+        return leg
+    return replace(leg, day_night_under_impact=pair, single_under_impact=single)
 
 
 def _quarter_leg(energy: VariableRates, factor: float) -> SpotMonthlyRates:
@@ -479,6 +505,7 @@ def _quarter_leg(energy: VariableRates, factor: float) -> SpotMonthlyRates:
         yearly_fixed_fee=energy.yearly_fixed_fee,
         yearly_fixed_fee_exclusive_night=energy.yearly_fixed_fee_exclusive_night,
         single_under_impact=energy.single_under_impact,
+        day_night_under_impact=energy.day_night_under_impact,
     )
 
 

@@ -9749,6 +9749,85 @@ async def test_a_dynamic_cohort_settles_on_the_grid_of_the_month_billed(
     assert isinstance(old, DynamicRates) and old.quarter_hourly is False
 
 
+async def test_a_cohort_follows_the_impact_rule_of_the_month_billed(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """How a Tarif Impact connection pays the day/night pair is a rule of the
+    month billed. Eneco printed it from January 2026 and Engie's Walloon cards
+    from April, so a contract signed on an earlier card carried none of it,
+    and its mono answer kept the single rate in every band where the same
+    contract signed later was banded: 27,20 EUR a year on an Eneco Zon & Wind
+    Vast signed in October 2025. Either card stating the rule binds, on the
+    live tick and on the month walks of the year to date and the backfill
+    alike, and TotalEnergies' converse the same way."""
+    from custom_components.be_electricity_prices.cohort import _cohort_legs
+    from custom_components.be_electricity_prices.pricing import compute_breakdown
+
+    freezer.move_to("2026-10-28 12:00:00+01:00")
+    signed = make_snapshot(energy=FixedRates(single=0.1573, peak=0.179, offpeak=0.1392))
+    october = make_snapshot(
+        energy=FixedRates(
+            single=0.221, peak=0.251, offpeak=0.1949, day_night_under_impact=True
+        )
+    )
+    silent = make_snapshot(energy=FixedRates(single=0.2, peak=0.23, offpeak=0.18))
+
+    async def _ffm(*_a: object, **_k: object) -> SupplierSnapshot:
+        return signed
+
+    async def _for_month(*_a: object, **_k: object) -> SupplierSnapshot:
+        return signed if _a[5] == date(2025, 10, 1) else october
+
+    _monthly_snapshots(hass).clear()
+    entry = _entry(
+        contract="test",
+        contract_start_date="2025-10-20",
+        meter="mono",
+        dso_tariff_mode="impact",
+    )
+    extractor = _fixed_extractor(_ffm)
+    legs = await _cohort_legs(
+        hass, MagicMock(), extractor, "test", "wallonia", entry, october
+    )
+    with patch(
+        "custom_components.be_electricity_prices.cohort._snapshot_for_month",
+        _for_month,
+    ):
+        walked = await _effective_snapshot_for_month(
+            hass,
+            MagicMock(),
+            extractor,
+            "test",
+            "wallonia",
+            date(2026, 10, 1),
+            october,
+            entry,
+        )
+    brussels = ZoneInfo("Europe/Brussels")
+    eco = datetime(2026, 10, 28, 13, tzinfo=brussels)
+    pic = datetime(2026, 10, 28, 19, tzinfo=brussels)
+    for snap in (legs.splice(october), walked):
+        assert isinstance(snap.energy, FixedRates)
+        assert snap.energy.single == pytest.approx(0.1573)
+        for when, rate in ((eco, 0.1392), (pic, 0.179)):
+            assert compute_breakdown(
+                snap, "ores", "wallonia", when, None, "mono", "impact"
+            ).energy == pytest.approx(rate), when
+    # A month whose card says nothing keeps the meter's routing.
+    quiet = legs.energy_on(silent, date(2026, 3, 1))
+    assert isinstance(quiet, FixedRates)
+    assert not quiet.day_night_under_impact
+    # TotalEnergies' converse binds the same way, whichever card states it.
+    te = make_snapshot(
+        energy=FixedRates(
+            single=0.1841, peak=0.1966, offpeak=0.1732, single_under_impact=True
+        )
+    )
+    single = legs.energy_on(te, date(2026, 10, 1))
+    assert isinstance(single, FixedRates)
+    assert single.single_under_impact
+
+
 async def test_cohort_freezes_the_feed_in_coefficients(
     hass: HomeAssistant, freezer: Any
 ) -> None:

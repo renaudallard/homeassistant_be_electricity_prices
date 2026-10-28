@@ -357,6 +357,30 @@ public holiday bills on the weekday bands: footnote 18 of the card defines the
 slots only "du lundi au vendredi" and "du samedi au dimanche", and neither the
 card nor the product page names a holiday.
 
+The Walloon cards head the day/night pair, beside "Normal", "Bihoraire / IMPACT
+(19) Heures pleines / PIC-MEDIUM | Heures creuses / ECO", and the Empower card
+"Bihoraire(17) / Impact(19)" over the same two: an Impact connection pays that
+pair by band. Every card with a day/night pair prints it from April 2026, the
+professional twins alike; an archived March row of a month-indexed product
+reads April's card too, but only to settle March on its index. `_extract_energy`
+reads the head (`_IMPACT_PAIR_RE`, `_engie_cards.py`) into
+`day_night_under_impact` on the fixed or variable leg,
+so a Walloon entry on Tarif Impact is billed the night rate in ECO and the day
+rate in PIC and MEDIUM whatever its meter answer, the mono one included
+(`_bills_pair`, `pricing.py`). The mono answer used to keep "Normal" in every
+band: on the October 2026 cards that billed an evening-weighted 3500 kWh 7 to
+11 EUR a year short (Easy Fixed 8,54, Easy Variable 7,92, Direct Online 8,19,
+Flow 11,25). The pattern needs the slash, since the Dynamic and Empty House
+cards print "(Normal, Bihoraire ou IMPACT)" over their one formula. The cards
+before the head, and every Flemish and Brussels one, say nothing and keep the
+meter's routing (`test_the_walloon_column_head_bands_the_pair_whatever_the_meter`,
+`tests/test_engie.py`). A contract signed on one of those Walloon cards is
+banded from April 2026 all the same, because the rule is the billed month's
+card's as much as the signing card's (`_with_billed_impact_rule`,
+`cohort_legs.py`); left on the signing card's silence, an Easy Fixed signed in
+March 2026 was billed 10,84 EUR a year short and an Easy Variable 8,71, at
+3500 kWh with a third of it in ECO.
+
 ## DSO overlay coverage
 
 ### Flanders (`_extract_flanders_dsos`, `_engie_overlays.py`)
@@ -618,6 +642,8 @@ likely-to-break order:
    `Consommation(2)` column-count branches (4 / 7 / 1), and the c€/kWh division.
    Most layout drift surfaces here first (`yearly fee row not found`,
    `unexpected price column count`, `could not parse ... consumption block`).
+   A Walloon mono entry on Tarif Impact billed "Normal" in every band means
+   `_IMPACT_PAIR_RE` no longer reads the pair's head.
 2. `_FORMULA_RE` and `_vat_multiplier` (`_engie_cards.py`): dynamic
    formula punctuation (sign chars, `eSpot_15` / `eSpot` token) and the mandatory VAT
    phrase.

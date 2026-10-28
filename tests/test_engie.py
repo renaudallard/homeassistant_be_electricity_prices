@@ -135,6 +135,77 @@ def test_empower_variable_injection_is_single_band_but_month_indexed() -> None:
     assert inj.factor * 0.09257 + inj.base == pytest.approx(0.04918, abs=1e-5)
 
 
+def test_the_walloon_column_head_bands_the_pair_whatever_the_meter() -> None:
+    """The Walloon cards head the day/night pair "Bihoraire / IMPACT (19)
+    Heures pleines / PIC-MEDIUM | Heures creuses / ECO" beside "Normal", and
+    the Empower card "Bihoraire(17) / Impact(19)" over the same two: an Impact
+    connection pays the pair by band, whatever meter the entry answered. The
+    mono answer was billed "Normal" in every band, 8 to 11 EUR a year short on
+    the October 2026 cards at an evening-weighted 3500 kWh. A card printed
+    before that head, and every Flemish and Brussels one, says nothing."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _cohort_energy_from_archived,
+    )
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+
+    for name, contract, region, stated in (
+        (
+            "engie_empower_flextime_w.pdf",
+            "engie_empower_variable",
+            REGION_WALLONIA,
+            True,
+        ),
+        (
+            "engie_pro_easy_indexed_w.pdf",
+            "engie_pro_easy_variable",
+            REGION_WALLONIA,
+            True,
+        ),
+        ("engie_easy_fixed_w_2025-11.pdf", "engie_easy_fixed", REGION_WALLONIA, False),
+        ("engie_easy_fixed_v.pdf", "engie_easy_fixed", REGION_FLANDERS, False),
+        (
+            "engie_pro_easy_indexed_b.pdf",
+            "engie_pro_easy_variable",
+            REGION_BRUSSELS,
+            False,
+        ),
+    ):
+        snap = parse_snapshot(contract, {region: fixture_text(name)})
+        assert isinstance(snap.energy, (FixedRates, VariableRates)), name
+        assert snap.energy.day_night_under_impact is stated, name
+
+    snap = parse_snapshot(
+        "engie_empower_variable",
+        {REGION_WALLONIA: fixture_text("engie_empower_flextime_w.pdf")},
+    )
+    brussels = ZoneInfo("Europe/Brussels")
+    eco = datetime(2026, 4, 15, 13, tzinfo=brussels)
+    pic = datetime(2026, 4, 15, 19, tzinfo=brussels)
+    for when, rate in ((eco, 0.11625), (pic, 0.15058)):
+        assert energy_eur_per_kwh(
+            snap.energy, when, None, "mono", REGION_WALLONIA, "impact"
+        ) == pytest.approx(rate), when
+    assert energy_eur_per_kwh(
+        snap.energy, eco, None, "mono", REGION_WALLONIA, "bi_horaire"
+    ) == pytest.approx(0.13775)
+    # An entry holding a key bills the card on the delivery month's index
+    # through the monthly leg, which carries the same statement.
+    # At the index the card printed on (March 2026, 92,57 EUR/MWh) the leg
+    # gives back the printed night rate in ECO.
+    leg = _cohort_energy_from_archived(snap)
+    assert isinstance(leg, SpotMonthlyRates)
+    assert leg.day_night_under_impact
+    assert energy_eur_per_kwh(
+        leg, eco, 0.09257, "mono", REGION_WALLONIA, "impact"
+    ) == pytest.approx(0.11625, abs=1e-5)
+
+
 def test_flextime_injection_is_a_month_indexed_triplet() -> None:
     """Flextime's card carries the same EPEXDAM sentence and prints THREE
     injection coefficient pairs, one per slot: "Flextime Heures pleines =
