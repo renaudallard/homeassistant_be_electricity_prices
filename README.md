@@ -1472,11 +1472,13 @@ hours:
 
 On the last day a monthly card covers, the table already holds tomorrow's
 hours (a dynamic contract's from ENTSO-E's curve, any other's forward-filled),
-and a window reaching past midnight is priced on the current card, although
-`tomorrow_prices_available` is off and the `tomorrow_*` sensors are empty. On
-a spot-priced contract a new positive factor or base on the energy leg moves
-every hour alike, so the window it picks holds; the prices it returns may not,
-once next month's card is out.
+and a window reaching past midnight is priced on the current card, with the
+federal levies of the month those hours fall in (on 31 December the excise
+the law sets for the new year), although `tomorrow_prices_available` is off
+and the `tomorrow_*` sensors are empty. On a spot-priced contract a new
+positive factor or base on the energy leg moves every hour alike, so the
+window it picks holds; the prices it returns may not, once next month's card
+is out.
 
 Example automation that starts EV charging at the cheapest 4 h block of the
 night. Its condition is off on the last day of a card that stops at

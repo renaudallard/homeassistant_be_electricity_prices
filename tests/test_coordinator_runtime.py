@@ -865,6 +865,48 @@ async def test_ensure_historical_spots_records_and_skips_complete_days(
         assert len(calls) == 1
 
 
+@pytest.mark.parametrize(
+    "energy",
+    [FixedRates(single=0.18), DynamicRates(factor=1.0, base=0.01)],
+    ids=["fixed", "dynamic"],
+)
+async def test_build_hourly_prices_tomorrow_on_its_own_month_s_levies(
+    hass: HomeAssistant, freezer: Any, energy: FixedRates | DynamicRates
+) -> None:
+    """On 31 December the table holds 1 January's slots, and the law steps
+    the excise down on 1 January 2027 (46 to 43 EUR/MWh). They were priced on
+    the card resolved for December, so the window services, which read the
+    table, and an undated card's tomorrow figures carried December's excise
+    on every hour of the new year."""
+    from custom_components.be_electricity_prices.day_night import day_start_for
+    from custom_components.be_electricity_prices.pricing import compute_breakdown
+
+    freezer.move_to("2026-12-31 15:00:00+01:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    raw = make_snapshot(energy=energy)
+    coord._set_snapshot(raw)
+    assert coord._snapshot is not None
+    start = dt_util.start_of_local_day().astimezone(UTC)
+    spots = {start + timedelta(hours=h): 0.1 for h in range(48)}
+    hourly = coord._build_hourly(coord._snapshot, spots)
+    december = _resolve_snapshot(entry, raw, delivery_month=date(2026, 12, 1))
+    january = _resolve_snapshot(entry, raw, delivery_month=date(2027, 1, 1))
+    assert january.taxes.federal_excise < december.taxes.federal_excise
+    assert len(hourly) == 48
+    for utc, breakdown in hourly.items():
+        local = dt_util.as_local(utc)
+        assert breakdown == compute_breakdown(
+            january if local.year == 2027 else december,
+            "ores",
+            "wallonia",
+            local,
+            spots[utc] if isinstance(energy, DynamicRates) else None,
+            day_start=day_start_for(entry.data),
+        )
+
+
 async def test_build_hourly_covers_both_days_across_dst_seams(
     hass: HomeAssistant, freezer: Any
 ) -> None:

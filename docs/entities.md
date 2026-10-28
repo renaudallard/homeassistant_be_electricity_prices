@@ -661,9 +661,9 @@ Both call `_resolve_window_inputs` (`__init__.py`) then `_find_window`
 - No validity gate: on the last day a monthly card covers, the window can rank
   tomorrow's rows, which `tomorrow_prices_available` and the `tomorrow_*`
   sensors withhold (`_card_covers_tomorrow`). They are priced on the current
-  card, so the figures may move with next month's card; on a spot-priced
-  energy leg the ranking does not, a new positive factor or base moving every
-  hour alike.
+  card with the federal levies of their own month (`_build_hourly`), so the
+  figures may move with next month's card; on a spot-priced energy leg the
+  ranking does not, a new positive factor or base moving every hour alike.
 
 Return value (`ServiceResponse`, `__init__.py`):
 

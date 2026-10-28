@@ -82,6 +82,7 @@ from .providers import (
     SupplierSnapshot,
 )
 from .providers._rates import EnergyRates
+from .snapshot_months import _proxy_for_month
 from .spot_stats import (
     _energy_is_rlp_indexed,
     _injection_is_spp_indexed,
@@ -118,6 +119,7 @@ class _PricesMixin:
     _rlp_blend: str
     _rlp_fetched_at: datetime | None
     _snapshot: SupplierSnapshot | None
+    _snapshot_raw: SupplierSnapshot | None
     _spp_fetched_at: datetime | None
     entry: ConfigEntry
     _profiles_deferred: bool
@@ -559,13 +561,30 @@ class _PricesMixin:
         day_start = day_start_for(self.entry.data)
         meter = self.entry.data.get(CONF_METER, METER_MONO)
         dso_mode = self.entry.data.get(CONF_DSO_TARIFF_MODE, DSO_MODE_BI_HORAIRE)
+        # ``snap`` is resolved for the running month, and on its last day
+        # tomorrow's slots are the next one's, which owes its own federal
+        # levies (``_proxy_for_month``): on 31 December every 1 January slot
+        # carried December's excise. Its card is not out yet, so the rest of
+        # this one stands.
+        months = {dt_util.now().date().replace(day=1): snap}
+        raw = self._snapshot_raw
+
+        def snap_for(local: datetime) -> SupplierSnapshot:
+            month = local.date().replace(day=1)
+            if month not in months:
+                months[month] = (
+                    snap
+                    if raw is None
+                    else _proxy_for_month(self.entry, snap, raw, month)
+                )
+            return months[month]
 
         hourly: dict[datetime, PriceBreakdown] = {}
         if isinstance(snap.energy, DynamicRates):
             for utc_hour, spot in spot_prices.items():
                 local = dt_util.as_local(utc_hour)
                 hourly[utc_hour] = compute_breakdown(
-                    snap,
+                    snap_for(local),
                     dso,
                     region,
                     local,
@@ -615,7 +634,7 @@ class _PricesMixin:
         while utc < end_utc:
             local = dt_util.as_local(utc)
             hourly[utc] = compute_breakdown(
-                snap,
+                snap_for(local),
                 dso,
                 region,
                 local,
