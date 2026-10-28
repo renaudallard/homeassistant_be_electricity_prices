@@ -1919,10 +1919,10 @@ def test_the_drift_issue_is_fingerprinted_on_the_budget_not_the_measurement() ->
     )
     drift = next(
         s["run"]
-        for s in workflow["jobs"]["check"]["steps"]
+        for s in workflow["jobs"]["file"]["steps"]
         if "drift" in s.get("name", "").lower() and "issue" in s.get("name", "").lower()
     )
-    assert "--fingerprint drift_fingerprint.txt" in drift
+    assert "--fingerprint tmp/report/drift_fingerprint.txt" in drift
 
 
 def _sync_no_op(*_args: Any) -> None:
@@ -2030,13 +2030,16 @@ def test_the_products_and_tax_issues_are_fingerprinted_on_what_failed(
         ).read_text()
     )
     runs = {
-        s.get("name", ""): s.get("run", "") for s in workflow["jobs"]["check"]["steps"]
+        s.get("name", ""): s.get("run", "") for s in workflow["jobs"]["file"]["steps"]
     }
     assert (
-        "--fingerprint catalog_failures.txt"
+        "--fingerprint tmp/report/catalog_failures.txt"
         in runs["Open or update new-products issue"]
     )
-    assert "--fingerprint tax_failures.txt" in runs["Open or update tax-block issue"]
+    assert (
+        "--fingerprint tmp/report/tax_failures.txt"
+        in runs["Open or update tax-block issue"]
+    )
 
 
 def _crash(*_args: Any) -> None:
@@ -2138,8 +2141,8 @@ def _file_catalog_issue(
     kind: str = "catalog",
 ) -> str:
     """Run an issue step's shell out of live_check.yml over a ``kind`` report
-    carrying ``failures``, with file_ci_issue.sh stubbed, and return the
-    title it would file under."""
+    carrying ``failures``, handed over where the check job leaves it, with
+    file_ci_issue.sh stubbed, and return the title it would file under."""
     import yaml  # type: ignore[import-untyped]
 
     workflow = yaml.safe_load(
@@ -2148,7 +2151,7 @@ def _file_catalog_issue(
         ).read_text()
     )
     script = next(
-        s["run"] for s in workflow["jobs"]["check"]["steps"] if s.get("name") == step
+        s["run"] for s in workflow["jobs"]["file"]["steps"] if s.get("name") == step
     )
     script = re.sub(r"\$\{\{[^}]*\}\}", "x", script)
     (tmp_path / "scripts").mkdir()
@@ -2157,8 +2160,10 @@ def _file_catalog_issue(
         '[ "$1" = --label ] && printf %s "$2" > label; '
         "shift; done\n"
     )
-    (tmp_path / f"{kind}_report.md").write_text("## Failures\n")
-    (tmp_path / f"{kind}_failures.txt").write_text(failures)
+    report = tmp_path / "tmp" / "report"
+    report.mkdir(parents=True)
+    (report / f"{kind}_report.md").write_text("## Failures\n")
+    (report / f"{kind}_failures.txt").write_text(failures)
     subprocess.run(["bash", "-c", script], cwd=tmp_path, check=True)
     return (tmp_path / "title").read_text()
 
@@ -2203,14 +2208,16 @@ def test_the_extractor_issue_names_the_rows_an_earlier_attempt_passed(
     )
     script = next(
         s["run"]
-        for s in workflow["jobs"]["check"]["steps"]
+        for s in workflow["jobs"]["file"]["steps"]
         if s.get("name") == "Open or update extractor-broken issue"
     )
     script = re.sub(r"\$\{\{[^}]*\}\}", "x", script)
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts" / "file_ci_issue.sh").write_text("exit 0\n")
-    (tmp_path / "persistent_failures.txt").write_text("eneco/power_fix: fetch\n")
-    (tmp_path / "report.md").write_text(
+    report = tmp_path / "tmp" / "report"
+    report.mkdir(parents=True)
+    (report / "persistent_failures.txt").write_text("eneco/power_fix: fetch\n")
+    (report / "report.md").write_text(
         "# Live extractor check: 1 pass, 2 fail\n\n## Failures\n\n"
         "| Check | Detail |\n| --- | --- |\n"
         "| `eneco/power_fix: fetch` | HTTP 404 |\n"
@@ -2318,6 +2325,49 @@ def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
     # OCR library has not learnt, and a card the OCR could not read.
     assert len(pairs) == 4, pairs
     assert len({label for label, _ in pairs}) == 4, pairs
+
+
+def test_the_issues_are_filed_by_a_job_that_runs_no_check() -> None:
+    """The check job held a github.token that writes issues while the card
+    readers ran on what the suppliers serve, and handed it to six later
+    steps in their environment, where a process the check left behind could
+    read it. The check's token is read only now. A job of its own files the
+    issues, runs no Python, and reads only the reports the check hands
+    over, every one of which it is given."""
+    import yaml  # type: ignore[import-untyped]
+
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[1] / ".github/workflows/live_check.yml"
+        ).read_text()
+    )
+    assert workflow["permissions"] == {"contents": "read"}
+    check = workflow["jobs"]["check"]
+    filer = workflow["jobs"]["file"]
+    assert "permissions" not in check
+    assert "github.token" not in json.dumps(check)
+    assert filer["permissions"] == {"contents": "read", "issues": "write"}
+    assert filer["needs"] == "check"
+    assert not any(s.get("name", "").startswith("Open or") for s in check["steps"])
+    assert sum(s.get("name", "").startswith("Open or") for s in filer["steps"]) == 6
+    for step in filer["steps"]:
+        assert "setup-python" not in step.get("uses", "")
+        assert not re.search(r"\b(python|pip)\b", step.get("run", ""))
+        if step.get("uses", "").startswith("actions/checkout"):
+            assert step["with"]["persist-credentials"] is False
+    upload = next(
+        s for s in check["steps"] if s.get("uses", "").startswith("actions/upload")
+    )
+    download = next(
+        s for s in filer["steps"] if s.get("uses", "").startswith("actions/download")
+    )
+    assert download["with"] == {"name": upload["with"]["name"], "path": "tmp/report"}
+    runs = "\n".join(s.get("run", "") for s in filer["steps"])
+    read = set(re.findall(r"tmp/report/([\w.]*\w)", runs))
+    assert read, runs
+    assert read <= set(upload["with"]["path"].split()), read
+    # The reports are handed over whenever the issue job runs.
+    assert upload["if"] == filer["if"].replace("needs.check.", "steps.check.")
 
 
 def _failures(run: Callable[[], None]) -> list[str]:
@@ -3398,9 +3448,9 @@ def test_a_network_disagreement_files_apart_from_the_tax_block(
             Path(__file__).resolve().parents[1] / ".github/workflows/live_check.yml"
         ).read_text()
     )
-    steps = {s.get("name", ""): s for s in workflow["jobs"]["check"]["steps"]}
+    steps = {s.get("name", ""): s for s in workflow["jobs"]["file"]["steps"]}
     run = steps["Open or update network-figure issue"]["run"]
-    assert "--fingerprint network_failures.txt" in run
+    assert "--fingerprint tmp/report/network_failures.txt" in run
     assert "--label 'live-check-network'" in run
 
 
@@ -3427,9 +3477,9 @@ def test_a_card_edition_disagreement_files_apart(
             Path(__file__).resolve().parents[1] / ".github/workflows/live_check.yml"
         ).read_text()
     )
-    steps = {s.get("name", ""): s for s in workflow["jobs"]["check"]["steps"]}
+    steps = {s.get("name", ""): s for s in workflow["jobs"]["file"]["steps"]}
     run = steps["Open or update card-editions issue"]["run"]
-    assert "--fingerprint edition_failures.txt" in run
+    assert "--fingerprint tmp/report/edition_failures.txt" in run
     assert "--label 'live-check-editions'" in run
 
 

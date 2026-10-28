@@ -1390,9 +1390,13 @@ Runs on the daily `cron: "17 6 * * *"` (06:17 UTC, after suppliers' overnight pu
 manual dispatch, and on pull requests that touch `providers/**`, the package modules it loads
 beside them or the providers import (`const.py`, `api.py`, `excise_law.py`, `vat_rates.py`),
 `scripts/live_check.py`, `scripts/card_texts.py` (which it imports), or the workflow itself
-(`.github/workflows/live_check.yml`). It needs `issues: write` to file drift/catalog/extractor
-issues (`.github/workflows/live_check.yml`), and checks out with `persist-credentials: false` so
-that token is not left on disk where the card readers, third-party code, run.
+(`.github/workflows/live_check.yml`). It runs as two jobs. `check` runs the extractors and the
+card readers, third-party code, on what the suppliers serve, with a read-only `github.token` and
+`persist-credentials: false`. `file` holds the `issues: write` token, runs no Python and files the
+extractor, drift, catalog, tax, network and card-edition issues from the reports `check` hands
+over as an artifact, downloaded under `tmp/report` so nothing in it lands on the issue script
+(`test_the_issues_are_filed_by_a_job_that_runs_no_check`). A process the check leaves behind ends
+with its runner and never shares one with the token that writes issues.
 
 The odd minute is deliberate. GitHub documents the start of every hour as a high-load slot for the
 `schedule` event and says queued runs may be dropped when the load is high enough, which is exactly
@@ -1410,7 +1414,7 @@ order so far; when it does not, this check renders more cards and runs longer, w
 cost. That is why neither workflow is chained to the other with `workflow_run`: an archive run
 GitHub sheds would otherwise take the day's supplier check down with it.
 
-The single `check` job installs the pinned HA version (needed because `providers/_pdf.py` imports
+The `check` job installs the pinned HA version (needed because `providers/_pdf.py` imports
 `homeassistant.util.dt`), clones `be_price_cards` shallow under `tmp/cards` so the harness can
 take its renders from the archive's texts (`Rendering only what changed` above; the clone is
 public, so it needs no token and works on a fork's pull request, and a clone that fails just means
@@ -1419,7 +1423,7 @@ runs `scripts/live_check.py` inside a two-tier retry loop
 (`.github/workflows/live_check.yml`). The retry exists so an issue is filed only when a supplier
 is still broken roughly an hour after first detection, not for a transient CDN blip (issue #30):
 seven attempts with delays `10 30 60 120 300 3000` seconds, bounded by a 5400s wall-clock deadline
-so the job always reaches the issue-creation steps before the 120-minute job timeout. Only a bit-0
+so the job always hands its reports over before the 120-minute job timeout. Only a bit-0
 (extractor) failure is retried; catalog and drift signals are stable and break out immediately.
 
 Breaking out on a green attempt is not enough on its own. On a slow runner every attempt times out
@@ -1454,7 +1458,7 @@ on that one sighting.
 The extractor issue body leads with those persistent failures, because the report under them is the
 last attempt's and on a slow runner also lists checks that failed only that once.
 
-The job then branches on the captured `rc` to open or update six distinct issues through
+The `file` job then branches on the `rc` the check hands it to open or update six distinct issues through
 `scripts/file_ci_issue.sh`, which finds the one open issue by its label (never by a title substring,
 so a manually opened issue cannot catch these comments) and posts a comment only when the failure
 changed or the last post is older than a week. Each body ends in a hidden fingerprint marker: for
@@ -1576,7 +1580,7 @@ which made `gh issue create` fail and file nothing (`.github/workflows/live_chec
 defensive cap truncates the body at a line boundary near 60,000 bytes in case a mass failure
 inflates the failures table itself. The full report is always in the run log.
 
-On `pull_request` events the issue-creation steps are skipped; instead a final step fails the PR
+On `pull_request` events the `file` job is skipped; instead a final step of `check` fails the PR
 check if any bit other than the catalog-only bit is set (`rc & ~2`), since a new-product signal is
 informational, not a regression (`.github/workflows/live_check.yml`). A separate step fails the
 run on `rc=8` (harness crash) so a top-level traceback shows red on the Actions tab instead of

@@ -33,9 +33,10 @@ on:
       - "scripts/card_texts.py"
       - ".github/workflows/live_check.yml"
 
+# Read only, unless a job says otherwise: only the job that files the
+# issues writes them.
 permissions:
   contents: read
-  issues: write
 
 # A new schedule fires while the previous one is still attempting
 # retries, or two PRs touching providers/ overlap, would otherwise
@@ -47,19 +48,25 @@ concurrency:
 
 jobs:
   check:
+    # Runs the extractors and the card readers on whatever the suppliers
+    # serve, so it holds no token that writes anything: a process it
+    # leaves behind dies with its runner. The issues are filed by the job
+    # below, from the reports this one hands over.
     runs-on: ubuntu-latest
     # Must comfortably exceed the retry loop's wall-clock budget below
-    # (capped at ~90 min) plus one final sweep and the issue-creation
-    # steps. The previous 75 min was shorter than the ~59 min of sleeps
-    # plus seven network sweeps, so a persistently broken extractor timed
-    # the job out mid-retry and filed nothing. Still well under the 6 h
-    # default so a hung run can't idle for hours.
+    # (capped at ~90 min) plus one final sweep and the hand-over. The
+    # previous 75 min was shorter than the ~59 min of sleeps plus seven
+    # network sweeps, so a persistently broken extractor timed the job
+    # out mid-retry and filed nothing. Still well under the 6 h default so
+    # a hung run can't idle for hours.
     timeout-minutes: 120
+    outputs:
+      rc: ${{ steps.check.outputs.rc }}
     steps:
       - uses: actions/checkout@v7
         with:
-          # github.token can write issues; the card readers run third-party
-          # code, which must not find it on disk.
+          # Nothing here needs the token, the repository being public, and
+          # the card readers run third-party code.
           persist-credentials: false
       - uses: actions/setup-python@v7
         with:
@@ -143,10 +150,10 @@ jobs:
           # Wall-clock budget for the whole retry loop. A persistently
           # broken extractor keeps retrying, and the ~59 min of sleeps plus
           # seven network sweeps used to overrun the job timeout and cancel
-          # the job BEFORE the issue-creation steps below, filing nothing.
+          # the job BEFORE it handed its reports over, filing nothing.
           # Stop retrying once the next sleep would cross this deadline so
           # the issue always gets filed; the job timeout only needs to
-          # cover this plus one final sweep and the gh steps.
+          # cover this plus one final sweep and the hand-over.
           retry_deadline=$((SECONDS + 5400))
           # A check is worth filing only if it fails in EVERY attempt.
           # Breaking out on the first all-green attempt was not enough: on a
@@ -178,10 +185,10 @@ jobs:
             # rc bit 2 (4) = drift signal, stable — don't retry.
             # rc 0 = all green.
             # rc 8 = harness crash (top-level Python exception); the
-            #        traceback is in the run's stdout. None of the
-            #        issue-creation steps below fire for rc=8: the
-            #        "Fail run on harness crash" step fails a push run
-            #        and the PR-fail step a pull request.
+            #        traceback is in the run's stdout. The issue job
+            #        does not run for rc=8: the "Fail run on harness
+            #        crash" step fails a push run and the PR-fail step
+            #        a pull request.
             # A harness that died before _run wrote no failure list: a
             # module-level ImportError exits 1, an OOM kill 137, a runner
             # SIGTERM 143. An odd code took the extractor branch with an
@@ -270,21 +277,91 @@ jobs:
             rc=$((rc & ~1))
           fi
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
-          # Exit 0 here so subsequent issue-creation steps run regardless
+          # Exit 0 here so the hand-over and the issue job run regardless
           # of which kind of failure was detected; they branch on rc.
           exit 0
 
+      - name: Hand the reports over
+        # What the issue job reads: the last attempt's reports, the
+        # failures every attempt shared and the fingerprints.
+        if: github.event_name != 'pull_request' && steps.check.outputs.rc != '0' && steps.check.outputs.rc != '8'
+        uses: actions/upload-artifact@v7
+        with:
+          name: live-check-reports
+          path: |
+            report.md
+            persistent_failures.txt
+            drift_report.md
+            drift_fingerprint.txt
+            catalog_report.md
+            catalog_failures.txt
+            tax_report.md
+            tax_failures.txt
+            network_report.md
+            network_failures.txt
+            edition_report.md
+            edition_failures.txt
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Fail PR job on extractor or drift signal
+        # Surface live-check failures on the PR check status without
+        # opening issues against the parent repo (which a fork-pushed
+        # PR can't do anyway). Catalog signal alone (rc==2) is
+        # informational, not a regression: don't fail the PR for it.
+        if: github.event_name == 'pull_request'
+        run: |
+          rc='${{ steps.check.outputs.rc }}'
+          # Mask away the catalog-only bit; fail if anything else is set.
+          if [ $((rc & ~2)) -ne 0 ]; then
+            echo "live-check rc=$rc; failing PR check" >&2
+            exit 1
+          fi
+
+      - name: Fail run on harness crash
+        # rc=8 means scripts/live_check.py raised at the top level
+        # (uncaught exception, e.g. unhandled aiohttp / SSL error in
+        # the harness itself, not a supplier signal). The issue job
+        # does not run for rc=8, so without this the run would end
+        # green with the traceback buried in the logs. Fail the run on
+        # push so it shows red on the Actions tab; the PR-fail step
+        # above already covers PR runs.
+        if: always() && github.event_name != 'pull_request' && steps.check.outputs.rc == '8'
+        run: |
+          echo "live-check harness crashed (rc=8); see traceback above" >&2
+          exit 1
+
+  file:
+    # Holds github.token, which writes issues, and runs only the issue
+    # script, on the reports the check handed over. Not on a pull
+    # request: its failing check is the signal there, and a fork's run
+    # could not open an issue anyway.
+    needs: check
+    if: github.event_name != 'pull_request' && needs.check.outputs.rc != '0' && needs.check.outputs.rc != '8'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # A folder of its own, so nothing handed over lands on the script
+      # that files the issues.
+      - uses: actions/download-artifact@v8
+        with:
+          name: live-check-reports
+          path: tmp/report
+
       - name: Open or update extractor-broken issue
-        # rc bit 0 set: extractor failure. Skipped on pull_request so
-        # PR-time runs fail the job (next step) instead of opening an
-        # issue against the parent repo.
+        # rc bit 0 set: extractor failure.
         if: |
-          github.event_name != 'pull_request' && (
-            steps.check.outputs.rc == '1'
-            || steps.check.outputs.rc == '3'
-            || steps.check.outputs.rc == '5'
-            || steps.check.outputs.rc == '7'
-          )
+          needs.check.outputs.rc == '1'
+          || needs.check.outputs.rc == '3'
+          || needs.check.outputs.rc == '5'
+          || needs.check.outputs.rc == '7'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -305,11 +382,11 @@ jobs:
             echo
             echo "Failed on every attempt of the retry loop:"
             echo
-            sed 's/^/- `/; s/$/`/' persistent_failures.txt
+            sed 's/^/- `/; s/$/`/' tmp/report/persistent_failures.txt
             echo
             echo "## Last report"
             echo
-            if [ -s report.md ]; then
+            if [ -s tmp/report/report.md ]; then
               # Two edits to the last attempt's report.
               #
               # Drop the "## All checks" checklist: the full report outgrew
@@ -340,7 +417,7 @@ jobs:
                    END{
                      if (dropped)
                        printf "\n_%d transient failure(s) that an earlier attempt passed are omitted from the table above; the run log has them._\n", dropped
-                   }' persistent_failures.txt report.md
+                   }' tmp/report/persistent_failures.txt tmp/report/report.md
             else
               # No report at all means the harness died before printing
               # (see the CancelledError note in live_check.py). Filing the
@@ -368,19 +445,18 @@ jobs:
             --label "$label" \
             --title "$title_prefix" \
             --body issue_body.md \
-            --fingerprint persistent_failures.txt \
+            --fingerprint tmp/report/persistent_failures.txt \
             --workflow .github/workflows/live_check.yml
 
       - name: Open or update drift issue
         # rc bit 2 (4): per-supplier latency or byte budget blown.
         # Independent issue from the extractor / catalog ones so the
-        # three failure modes don't conflate in one thread. Skipped
-        # on pull_request -- the failing job is the signal there.
-        if: always() && github.event_name != 'pull_request' && (
-            steps.check.outputs.rc == '4'
-            || steps.check.outputs.rc == '5'
-            || steps.check.outputs.rc == '6'
-            || steps.check.outputs.rc == '7'
+        # three failure modes don't conflate in one thread.
+        if: always() && (
+            needs.check.outputs.rc == '4'
+            || needs.check.outputs.rc == '5'
+            || needs.check.outputs.rc == '6'
+            || needs.check.outputs.rc == '7'
           )
         env:
           GH_TOKEN: ${{ github.token }}
@@ -395,14 +471,14 @@ jobs:
             echo
             echo "## Drift report"
             echo
-            cat drift_report.md
+            cat tmp/report/drift_report.md
           } > drift_issue_body.md
 
           bash scripts/file_ci_issue.sh \
             --label "$label" \
             --title "$title_prefix" \
             --body drift_issue_body.md \
-            --fingerprint drift_fingerprint.txt \
+            --fingerprint tmp/report/drift_fingerprint.txt \
             --workflow .github/workflows/live_check.yml
 
       - name: Open or update new-products issue
@@ -413,12 +489,11 @@ jobs:
         # under the other's title.
         # Independent issue from the extractor one so the failure modes
         # don't conflate in one thread.
-        # Skipped on pull_request -- failing job is the signal.
-        if: always() && github.event_name != 'pull_request' && (
-            steps.check.outputs.rc == '2'
-            || steps.check.outputs.rc == '3'
-            || steps.check.outputs.rc == '6'
-            || steps.check.outputs.rc == '7'
+        if: always() && (
+            needs.check.outputs.rc == '2'
+            || needs.check.outputs.rc == '3'
+            || needs.check.outputs.rc == '6'
+            || needs.check.outputs.rc == '7'
           )
         env:
           GH_TOKEN: ${{ github.token }}
@@ -427,7 +502,7 @@ jobs:
           # nothing when the products half is clean: a run that opened an
           # issue titled "new supplier products detected" with fifteen
           # green discovery rows in it is what this guard exists for.
-          if ! grep -q '^## Failures' catalog_report.md; then
+          if ! grep -q '^## Failures' tmp/report/catalog_report.md; then
             echo "no new product; nothing to file" >&2
             exit 0
           fi
@@ -440,10 +515,10 @@ jobs:
           # issue by label and only reads the title when it opens one, so a
           # shared label posted a failed discovery under an open "new
           # products" issue and the other way round.
-          if grep -q '/catalog: no new products at supplier$' catalog_failures.txt; then
+          if grep -q '/catalog: no new products at supplier$' tmp/report/catalog_failures.txt; then
             title_prefix='[live-check] new supplier products detected'
             label='live-check-catalog'
-          elif grep -q '/catalog: no products gone from supplier$' catalog_failures.txt; then
+          elif grep -q '/catalog: no products gone from supplier$' tmp/report/catalog_failures.txt; then
             title_prefix='[live-check] a registered product left the supplier listing'
             label='live-check-product-gone'
           else
@@ -458,7 +533,7 @@ jobs:
             echo
             echo "## Catalog diff"
             echo
-            cat catalog_report.md
+            cat tmp/report/catalog_report.md
           } > catalog_issue_body.md
 
           # Fingerprinted on the failing labels, not the report: the report
@@ -468,7 +543,7 @@ jobs:
             --label "$label" \
             --title "$title_prefix" \
             --body catalog_issue_body.md \
-            --fingerprint catalog_failures.txt \
+            --fingerprint tmp/report/catalog_failures.txt \
             --workflow .github/workflows/live_check.yml
 
       - name: Open or update tax-block issue
@@ -476,16 +551,16 @@ jobs:
         # block the month's other cards do not. Supplier-side and not
         # fixable here, so it files its own thread rather than failing a
         # run or riding under the new-products title.
-        if: always() && github.event_name != 'pull_request' && (
-            steps.check.outputs.rc == '2'
-            || steps.check.outputs.rc == '3'
-            || steps.check.outputs.rc == '6'
-            || steps.check.outputs.rc == '7'
+        if: always() && (
+            needs.check.outputs.rc == '2'
+            || needs.check.outputs.rc == '3'
+            || needs.check.outputs.rc == '6'
+            || needs.check.outputs.rc == '7'
           )
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! grep -q '^## Failures' tax_report.md; then
+          if ! grep -q '^## Failures' tmp/report/tax_report.md; then
             echo "every card agrees on the month's tax block" >&2
             exit 0
           fi
@@ -497,7 +572,7 @@ jobs:
             echo
             echo "## Federal tax block"
             echo
-            cat tax_report.md
+            cat tmp/report/tax_report.md
           } > tax_issue_body.md
 
           # Titled after what failed, as the products issue is. Two kinds of
@@ -508,12 +583,12 @@ jobs:
           # for a card printing a wrong levy.
           # Each title has its own label, for the reason the products step
           # gives.
-          if [ -s tax_failures.txt ] \
-            && ! grep -qvE '(tariff sheet|analog kWh rate) unreadable$' tax_failures.txt; then
+          if [ -s tmp/report/tax_failures.txt ] \
+            && ! grep -qvE '(tariff sheet|analog kWh rate) unreadable$' tmp/report/tax_failures.txt; then
             title='[live-check] the Fluvius tariff sheet can no longer be read'
             label='live-check-tax-fluvius'
-          elif [ -s tax_failures.txt ] \
-            && ! grep -qv 'hours no longer match$' tax_failures.txt; then
+          elif [ -s tmp/report/tax_failures.txt ] \
+            && ! grep -qv 'hours no longer match$' tmp/report/tax_failures.txt; then
             title="[live-check] an operator's published hours no longer match"
             label='live-check-tax-schedule'
           else
@@ -527,7 +602,7 @@ jobs:
             --label "$label" \
             --title "$title" \
             --body tax_issue_body.md \
-            --fingerprint tax_failures.txt \
+            --fingerprint tmp/report/tax_failures.txt \
             --workflow .github/workflows/live_check.yml
 
       - name: Open or update network-figure issue
@@ -535,16 +610,16 @@ jobs:
         # figure the other cards for the same DSO do not. Its own thread,
         # because the integration bills network figures as printed, so a
         # household on that card pays it, which a tax row never says.
-        if: always() && github.event_name != 'pull_request' && (
-            steps.check.outputs.rc == '2'
-            || steps.check.outputs.rc == '3'
-            || steps.check.outputs.rc == '6'
-            || steps.check.outputs.rc == '7'
+        if: always() && (
+            needs.check.outputs.rc == '2'
+            || needs.check.outputs.rc == '3'
+            || needs.check.outputs.rc == '6'
+            || needs.check.outputs.rc == '7'
           )
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! grep -q '^## Failures' network_report.md; then
+          if ! grep -q '^## Failures' tmp/report/network_report.md; then
             echo "every card agrees on the month's network figures" >&2
             exit 0
           fi
@@ -556,14 +631,14 @@ jobs:
             echo
             echo "## Network figures"
             echo
-            cat network_report.md
+            cat tmp/report/network_report.md
           } > network_issue_body.md
 
           bash scripts/file_ci_issue.sh \
             --label 'live-check-network' \
             --title "[live-check] a supplier's network figure disagrees" \
             --body network_issue_body.md \
-            --fingerprint network_failures.txt \
+            --fingerprint tmp/report/network_failures.txt \
             --workflow .github/workflows/live_check.yml
 
       - name: Open or update card-editions issue
@@ -572,16 +647,16 @@ jobs:
         # French card is billed and the Dutch one stands in only when the
         # French one breaks, so this is a supplier's own inconsistency and a
         # fallback to watch, never a regression here.
-        if: always() && github.event_name != 'pull_request' && (
-            steps.check.outputs.rc == '2'
-            || steps.check.outputs.rc == '3'
-            || steps.check.outputs.rc == '6'
-            || steps.check.outputs.rc == '7'
+        if: always() && (
+            needs.check.outputs.rc == '2'
+            || needs.check.outputs.rc == '3'
+            || needs.check.outputs.rc == '6'
+            || needs.check.outputs.rc == '7'
           )
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! grep -q '^## Failures' edition_report.md; then
+          if ! grep -q '^## Failures' tmp/report/edition_report.md; then
             echo "every card reads the same in both languages" >&2
             exit 0
           fi
@@ -593,39 +668,12 @@ jobs:
             echo
             echo "## Card editions"
             echo
-            cat edition_report.md
+            cat tmp/report/edition_report.md
           } > edition_issue_body.md
 
           bash scripts/file_ci_issue.sh \
             --label 'live-check-editions' \
             --title "[live-check] a supplier's French and Dutch cards disagree" \
             --body edition_issue_body.md \
-            --fingerprint edition_failures.txt \
+            --fingerprint tmp/report/edition_failures.txt \
             --workflow .github/workflows/live_check.yml
-
-      - name: Fail PR job on extractor or drift signal
-        # Surface live-check failures on the PR check status without
-        # opening issues against the parent repo (which a fork-pushed
-        # PR can't do anyway). Catalog signal alone (rc==2) is
-        # informational, not a regression -- don't fail the PR for it.
-        if: github.event_name == 'pull_request'
-        run: |
-          rc='${{ steps.check.outputs.rc }}'
-          # Mask away the catalog-only bit; fail if anything else is set.
-          if [ $((rc & ~2)) -ne 0 ]; then
-            echo "live-check rc=$rc; failing PR check" >&2
-            exit 1
-          fi
-
-      - name: Fail run on harness crash
-        # rc=8 means scripts/live_check.py raised at the top level
-        # (uncaught exception, e.g. unhandled aiohttp / SSL error in
-        # the harness itself, not a supplier signal). None of the
-        # issue-creation steps above fire for rc=8, so without this
-        # the run would end green with the traceback buried in the
-        # logs. Fail the run on push so it shows red on the Actions
-        # tab; the PR-fail step above already covers PR runs.
-        if: always() && github.event_name != 'pull_request' && steps.check.outputs.rc == '8'
-        run: |
-          echo "live-check harness crashed (rc=8); see traceback above" >&2
-          exit 1
