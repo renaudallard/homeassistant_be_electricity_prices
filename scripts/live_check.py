@@ -1057,13 +1057,15 @@ _NETWORK_RATE_BOUNDS = (0.02, 0.50)
 # spot-monthly leg keeps its own tighter pair below, which predates these.
 _COEFFICIENT_FACTOR_BOUNDS = (0.25, 4.0)
 _COEFFICIENT_BASE_BOUNDS = (-0.10, 0.20)
-# A feed-in formula on a per-slot shape (every Bolt and Cociter card, every
-# dynamic card): the archive runs 0,21 to 1,02 on the factor and -0,04 to
-# 0,0003 on the base, so a factor read in c/kWh (0,094 for 0,94) falls below
-# the floor and a base read in c/kWh (-1,13 for Bolt's -0,0113) below it too.
-# The base floor sits five times below the largest real constant, so a card
-# with a bigger one does not file.
-_INJECTION_FACTOR_BOUNDS = (0.1, 2.0)
+# A feed-in formula, on a per-slot shape (every Bolt and Cociter card, every
+# dynamic card) or on a month, SPP or forward index. The cards state the factor
+# in c/kWh per EUR/MWh, so a missing conversion lands it ten times low: the
+# archive runs 0,21 (TotalEnergies) to 1,02 on it, and the floor sits under the
+# smallest and over a tenfold slip of the largest (0,102). The per-slot base
+# runs -0,04 to 0,0003, so one read in c/kWh (-1,13 for Bolt's -0,0113) falls
+# below its floor, which sits five times below the largest real constant so a
+# card with a bigger one does not file.
+_INJECTION_FACTOR_BOUNDS = (0.15, 2.0)
 _INJECTION_BASE_BOUNDS = (-0.2, 0.05)
 # The printed feed-in rates: the indicative, a register pair, a slot triplet.
 # A producer can pay to inject at a very low spot, hence the negative floor.
@@ -1626,6 +1628,15 @@ async def _check_social(
                     and -0.05 < inj.current < 0.5,
                     f"{inj}",
                 )
+                # Engie's card bills a month formula per register, whose
+                # factor a missing x10 would cut to a tenth.
+                for slot in ("peak", "offpeak"):
+                    _expect_rate(
+                        prefix,
+                        f"{slot} injection factor",
+                        getattr(inj, f"factor_{slot}", None),
+                        _INJECTION_FACTOR_BOUNDS,
+                    )
             if region == "wallonia":
                 fee = snap.taxes.region_connection_fee
                 _expect(
@@ -4119,19 +4130,15 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
         )
         # Presence alone would ship a coefficient drift green. The old
         # "monthly" pin at least guaranteed structurally that no coefficient
-        # could reach the bake; now that one does, bound it. The ceiling
-        # catches a UNIT slip, not an economic one: the cards state their
-        # coefficient in c/kWh per EUR/MWh, so a missing conversion lands an
-        # order of magnitude out. Paying back the whole index is a tariff a
-        # supplier is free to publish - Engie's September 2026 Flextime card
-        # does exactly that on its peak slot - so a 1.0 ceiling only cries
+        # could reach the bake; now that one does, bound it. The bounds catch
+        # a UNIT slip, not an economic one: a missing conversion puts the
+        # factor ten times low, under the floor. Paying back the whole index
+        # is a tariff a supplier is free to publish, as Engie's September 2026
+        # Flextime card does on its peak slot, so a 1.0 ceiling only cries
         # wolf. The offset stays a small deduction in EUR/kWh.
-        if factor is not None:
-            _expect(
-                f"{prefix}: {index} injection factor in (0, 2]",
-                0.0 < factor <= 2.0,
-                detail=f"factor={factor}",
-            )
+        _expect_rate(
+            prefix, f"{index} injection factor", factor, _INJECTION_FACTOR_BOUNDS
+        )
         if base is not None:
             _expect(
                 f"{prefix}: {index} injection base in [-0.05, 0.05] EUR/kWh",
@@ -4204,7 +4211,16 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
             f"{getattr(injection, 'month_indexed', None)}",
         )
         for slot, (slot_factor, slot_base) in pairs.items():
-            if slot_factor is not None:
+            if slot != "offpeak":
+                _expect_rate(
+                    prefix,
+                    f"{slot} injection factor",
+                    slot_factor,
+                    _INJECTION_FACTOR_BOUNDS,
+                )
+            elif slot_factor is not None:
+                # Flextime's off-peak slot pays next to nothing on the index
+                # (0,001 on the September 2026 card), so no floor holds there.
                 _expect(
                     f"{prefix}: {slot} injection factor in (0, 2]",
                     0.0 < slot_factor <= 2.0,

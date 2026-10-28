@@ -1728,6 +1728,66 @@ def test_a_card_paying_back_the_whole_index_passes_a_unit_slip_does_not() -> Non
     assert rows and not rows[0].ok
 
 
+def test_a_feed_in_factor_missing_its_x10_fails() -> None:
+    """The parser owes a x10 to turn the card's c/kWh per EUR/MWh into a
+    factor; missing it puts the factor ten times LOW. The month-shaped bound
+    had no floor and the per-slot one was inclusive at 0,1, the slip of a
+    1,0 factor, so a card crediting a tenth of its feed-in passed green.
+    Flextime's off-peak slot is real at 0,001 and keeps no floor."""
+    scalar = SimpleNamespace(
+        current=0.0476,
+        factor=0.0481,
+        base=-0.006392,
+        spp_indexed=False,
+        month_indexed=True,
+        peak=None,
+        transition=None,
+        offpeak=None,
+    )
+    lc._validate_injection("x", SimpleNamespace(injection=scalar), "month")
+    assert [c.label for c in lc.CHECKS if not c.ok] == [
+        "x: month injection factor in [0.15, 2]"
+    ]
+
+    lc.CHECKS.clear()
+    spot = SimpleNamespace(
+        current=None,
+        factor=0.1,
+        base=-0.0115,
+        spp_indexed=False,
+        month_indexed=False,
+        peak=None,
+        transition=None,
+        offpeak=None,
+    )
+    lc._validate_injection("x", SimpleNamespace(injection=spot), "present")
+    assert [c.label for c in lc.CHECKS if not c.ok] == [
+        "x: injection factor in [0.15, 2]"
+    ]
+
+    lc.CHECKS.clear()
+    triplet = SimpleNamespace(
+        current=0.05836,
+        factor=None,
+        base=None,
+        spp_indexed=False,
+        month_indexed=True,
+        peak=0.12975,
+        transition=0.05836,
+        offpeak=0.00043,
+        factor_peak=0.1001,
+        base_peak=0.0003,
+        factor_transition=0.449,
+        base_transition=0.0003,
+        factor_offpeak=0.001,
+        base_offpeak=0.0003,
+    )
+    lc._validate_injection("x", SimpleNamespace(injection=triplet), "triplet")
+    assert [c.label for c in lc.CHECKS if not c.ok] == [
+        "x: peak injection factor in [0.15, 2]"
+    ]
+
+
 @pytest.fixture
 def _bound_rate_types() -> Iterator[None]:
     """Bind the rate classes _validate_energy dispatches on.
@@ -2511,7 +2571,7 @@ def test_every_populated_rate_is_bounded_against_a_unit_slip(
         lambda: lc._validate_injection(
             "x", snap(replace(spot_inj, factor=94.0)), "spot"
         )
-    ) == ["injection factor in [0.1, 2]"]
+    ) == ["injection factor in [0.15, 2]"]
     assert _failures(
         lambda: lc._validate_injection(
             "x", snap(replace(spot_inj, base=-1.133)), "spot"
@@ -5132,6 +5192,19 @@ async def test_the_social_tariff_is_checked_on_its_own_bounds(
         "social/social_engie/wallonia: the running quarter's card",
         "social/social_engie/wallonia: feed-in",
         "social/social_engie/wallonia: connection fee",
+    }
+
+    # The register pair's factor read without its x10.
+    lc.CHECKS.clear()
+    inj = good.injection
+    assert inj is not None and inj.factor_offpeak is not None
+    cards["wallonia"] = replace(
+        good, injection=replace(inj, factor_offpeak=inj.factor_offpeak / 10)
+    )
+    await lc._check_social(None, module)  # type: ignore[arg-type]
+    failed = {check.label for check in lc.CHECKS if not check.ok}
+    assert failed == {
+        "social/social_engie/wallonia: offpeak injection factor in [0.15, 2]"
     }
 
 
