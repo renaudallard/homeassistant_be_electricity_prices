@@ -458,7 +458,10 @@ def _compare_injection_credit(
     which answers the register the clock is in, so the credit for a whole
     year's export moved by a third between a weekday afternoon and a Sunday.
     A figure per CWaPE band, which a Walloon Bolt variable card credits an
-    entry on the Impact tariff, is averaged over the three bands the same way. A
+    entry on the Impact tariff, is averaged over the three bands the same way,
+    and so is a register pair a card credits per band on that tariff (Engie's
+    Walloon social card), its night figure in ECO and its day one in PIC and
+    MEDIUM, on every meter but a night circuit. A
     spot-indexed injection is priced per slot over the window and averaged by
     the household's export shape, the same basis as the TOU branch and the
     same one ``current_year_cost`` bills on. It deliberately does NOT follow
@@ -505,6 +508,7 @@ def _compare_injection_credit(
         _compute_injection_price,
         _floor_injection,
         _impact_band_rates,
+        _impact_pair_bands,
         _injection_bakes_to_month_mean,
         _tou_weekend_rule,
     )
@@ -527,7 +531,9 @@ def _compare_injection_credit(
     inj: InjectionRates | None = getattr(snapshot, "injection", None)
     energy = getattr(snapshot, "energy", None)
     weekend_rule = _tou_weekend_rule(energy)
-    bands = None if inj is None else _impact_band_rates(inj)
+    bands = (
+        None if inj is None else (_impact_band_rates(inj) or _impact_pair_bands(inj))
+    )
     if meter is None:
         meter = entry.data.get(CONF_METER, METER_MONO)
     if inj is not None and bands is not None and meter != METER_EXCLUSIVE_NIGHT:

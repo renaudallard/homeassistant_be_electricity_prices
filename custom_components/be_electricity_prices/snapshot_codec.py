@@ -512,8 +512,9 @@ _DEGRADED_MIN_SCHEMA_VERSION = 16
 # and every one of them would have been rewritten with the field at null.
 # ``settled_as_stated`` joined both lists for Mega's stated settlements,
 # ``spp_redistributed``, ``spp_settled`` and the Impact band figures for
-# Bolt's variable cards, and ``forward_indexed`` both for Engie's Easy
-# Variable.
+# Bolt's variable cards, ``forward_indexed`` both for Engie's Easy Variable,
+# and ``day_night_under_impact`` both for the head Eneco and Engie print over
+# their day/night pair, on the injection leg for Engie's Walloon social card.
 _INJECTION_OPTIONAL_KEYS = (
     "bi_hourly",
     "index_realised",
@@ -524,6 +525,7 @@ _INJECTION_OPTIONAL_KEYS = (
     "impact_pic",
     "impact_medium",
     "impact_eco",
+    "day_night_under_impact",
 )
 _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
 # The same rule for the tax overlay, from v73.

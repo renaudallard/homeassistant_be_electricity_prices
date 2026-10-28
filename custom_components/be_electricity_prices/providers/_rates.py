@@ -874,6 +874,17 @@ class InjectionRates:
     impact_pic: float | None = None
     impact_medium: float | None = None
     impact_eco: float | None = None
+    # True when the card heads the ``bi_hourly`` pair the way its consumption
+    # pair is (see FixedRates.day_night_under_impact), so an Impact connection
+    # is credited the night figure in ECO and the day figure in PIC and
+    # MEDIUM whatever its meter. Engie's Walloon social card prints its feed-in
+    # row under that head ("Injection 9,935 11,687 4,836" in October 2026);
+    # every commercial Eneco and Engie card prints one figure in all three
+    # columns, which is no pair. Kept on the leg for an entry on the Impact
+    # tariff alone (``_resolve.resolve_impact_feed_in``), like the band figures
+    # above, since the paths that credit a feed-in know the meter and not the
+    # entry's DSO mode.
+    day_night_under_impact: bool = False
     # An explicit guaranteed minimum in EUR/kWh, for a card that promises more
     # than "never negative". EnergyVision guarantees 1 c/kWh: *"Als de
     # berekening van onze formule lager zou uitkomen dan 1 EURcent/kWh, dan

@@ -351,6 +351,22 @@ def test_the_impact_pair_statement_is_written_only_where_a_card_sets_it() -> Non
         assert _snapshot_from_dict(row).energy == flagged
 
 
+def test_the_feed_in_impact_statement_is_written_only_where_a_card_sets_it() -> None:
+    """Engie's Walloon social card sets it on its feed-in pair; every other
+    feed-in row keeps the shape an earlier version wrote and reads back
+    unflagged, and a flagged one reads back as written."""
+    pair = InjectionRates(
+        current=0.09935, peak=0.11687, offpeak=0.04836, bi_hourly=True
+    )
+    row = _snapshot_to_dict(make_snapshot(injection=pair), NOW)
+    assert "day_night_under_impact" not in row["injection"]
+    assert _snapshot_from_dict(row).injection == pair
+    flagged = replace(pair, day_night_under_impact=True)
+    row = _snapshot_to_dict(make_snapshot(injection=flagged), NOW)
+    assert row["injection"]["day_night_under_impact"] is True
+    assert _snapshot_from_dict(row).injection == flagged
+
+
 def test_the_codec_writes_every_snapshot_field() -> None:
     """The encoder names the top-level fields by hand, and nothing held the
     list to the dataclass: a field added to SupplierSnapshot without a line

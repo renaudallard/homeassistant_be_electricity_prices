@@ -543,6 +543,25 @@ def resolve_direct_debit(
     )
 
 
+def resolve_impact_feed_in(
+    snapshot: SupplierSnapshot, *, impact: bool
+) -> SupplierSnapshot:
+    """Drop a feed-in pair's Impact head for an entry not on that tariff.
+
+    A card heading its feed-in pair the way its consumption pair is credits an
+    Impact connection the night figure in ECO and the day one in PIC and
+    MEDIUM, whatever its meter (``InjectionRates.day_night_under_impact``).
+    The paths that credit a feed-in know the meter and the hour, not the DSO
+    mode, so whether the entry is on Impact is settled once here, as Bolt's
+    band figures are (``resolve_settlement_grid``): any other entry credits
+    the pair on its meter's day/night registers as before.
+    """
+    inj = snapshot.injection
+    if impact or inj is None or not inj.day_night_under_impact:
+        return snapshot
+    return replace(snapshot, injection=replace(inj, day_night_under_impact=False))
+
+
 def resolve_welcome_credit_meter(
     snapshot: SupplierSnapshot, meter: str
 ) -> SupplierSnapshot:

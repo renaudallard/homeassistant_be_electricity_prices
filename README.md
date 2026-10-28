@@ -133,10 +133,11 @@ no capacity term, data management fee or prosumer tariff. On top of it you
 pay the special excise at the protected customer's rate, which the law sets
 (1 € per MWh before VAT since August 2026, read from Justel like the household
 rate), and in Wallonia the connection fee; you are exempt from the energy
-contribution and the Flemish energy fund. Under Wallonia's Impact tariff the
-day price bills the PIC and MEDIUM bands and the night price the ECO band, as
-Engie's social card states. Past months back to October 2022 bill on their own
-quarter's card.
+contribution and the Flemish energy fund. Under Wallonia's Impact tariff a
+day/night meter pays the day price in the PIC and MEDIUM bands and the night
+price in ECO. Engie's Walloon social card states that mapping since April 2026,
+so with Engie it holds on a single-rate meter too. Past months back to October
+2022 bill on their own quarter's card.
 
 Feed-in is the part no rule sets: each supplier pays its own or none. Engie and
 Luminus print it on their social card and those two contracts credit it;
@@ -145,7 +146,9 @@ network operator publishes a rate, so the third contract credits nothing
 rather than a guess. Engie's rates, single and day/night alike, follow the
 delivery month's EPEXDAM where you have an ENTSO-E key, as its card's formulas
 say; Luminus's are credited as its card prints them, which is the previous
-quarter's index.
+quarter's index. In Wallonia Engie's feed-in row sits under the same head as its
+prices, so under the Impact tariff its night figure is credited in ECO and its
+day figure in PIC and MEDIUM, on a single-rate meter too.
 
 Until the law has been read once (Justel unreachable on the very first start),
 a social tariff entry publishes nothing and a Repairs card says why, since

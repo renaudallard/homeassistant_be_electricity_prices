@@ -63,6 +63,7 @@ from ..const import (
     WALLONIA_DSO_KEYS,
 )
 from ..excise_law import protected_excise
+from ._engie_cards import _IMPACT_PAIR_RE
 from ._parse import to_float
 from ._pdf import FR_MONTHS, fetch_pdf_text, fetch_text, is_transient_fetch_error
 from ._rates import Contract, InjectionRates, VariableRates
@@ -411,6 +412,7 @@ def build_snapshot(
     injection: InjectionRates | None,
     connection_fee: float | None,
     source_url: str,
+    day_night_under_impact: bool = False,
 ) -> SupplierSnapshot:
     """The snapshot a protected household in ``region`` is billed on for
     ``month``, from the quarter's CREG card.
@@ -420,6 +422,10 @@ def build_snapshot(
     under-bill every kWh, and billing the old rate would over-bill, so the
     resolver fills it once the law is held and the coordinator publishes
     nothing until then.
+
+    ``day_night_under_impact`` is the supplier's card saying an Impact
+    connection pays the day price in PIC and MEDIUM and the night price in
+    ECO whatever its meter (see ``FixedRates.day_night_under_impact``).
     """
     excise = protected_excise(month)
     vat = card.vat
@@ -464,6 +470,7 @@ def build_snapshot(
                 offpeak=_eur(card.night.total) - night_net,
                 exclusive_night=_eur(card.excl_night.total)
                 - _eur(card.excl_night.network),
+                day_night_under_impact=day_night_under_impact,
             ),
             dsos=dict.fromkeys(_DSO_KEYS[region], overlay),
             taxes=taxes,
@@ -493,9 +500,18 @@ async def _for_month(
     card = await _creg_card(session, month)
     injection: InjectionRates | None = None
     fee: float | None = None
+    pair = False
     if contract_id == CONTRACT_ENGIE:
         text, _ = await _engie_card(session, region, month, archived=archived)
         injection, fee = parse_engie(text, card)
+        # The Walloon card heads its day and night prices the way Engie's own
+        # Walloon cards do, "Bihoraire / IMPACT (19) Heures pleines /
+        # PIC-MEDIUM | Heures creuses / ECO", since April 2026, and its feed-in
+        # row sits under the same head as a pair of its own. The CREG card
+        # and Luminus's social card say nothing about Impact.
+        pair = _IMPACT_PAIR_RE.search(text) is not None
+        if pair:
+            injection = replace(injection, day_night_under_impact=True)
     elif contract_id == CONTRACT_LUMINUS or region == REGION_WALLONIA:
         # Luminus prints the Walloon connection fee too, which is the same for
         # every supplier, so a household on another supplier reads it there.
@@ -519,6 +535,7 @@ async def _for_month(
         injection=injection,
         connection_fee=fee,
         source_url=_creg_url(card.quarter),
+        day_night_under_impact=pair,
     )
 
 

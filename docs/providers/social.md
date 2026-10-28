@@ -77,10 +77,20 @@ The quarter's own card is fetched for every month, and `valid_until` is the
 month's last day: the excise and the supplier's card both change monthly, so
 the snapshot is the month's, not the quarter's.
 
-Under Wallonia's Impact tariff the day price bills the PIC and MEDIUM bands and
-the night price the ECO band, which is the mapping Engie's social card prints
-("Bihoraire / IMPACT: Heures pleines / PIC-MEDIUM, Heures creuses / ECO") and
-the one `_routed_rate` already applies.
+Under Wallonia's Impact tariff a day/night meter pays the day price in the PIC
+and MEDIUM bands and the night price in ECO, the mapping `_routed_rate`
+applies to every card. Engie's Walloon social card heads its prices that way
+since April 2026 ("Bihoraire / IMPACT (19) Heures pleines / PIC-MEDIUM |
+Heures creuses / ECO", the head of Engie's own cards), so `_for_month` reads it
+with the same pattern (`_IMPACT_PAIR_RE`, `_engie_cards.py`) into
+`day_night_under_impact`, and a `social_engie` entry on Impact is banded
+whatever its meter answer, the mono one included. That moves a mono answer
+either way with the quarter: the Q2 2026 card prices the single register below
+both others (23,767 against 25,468 and 24,257 c/kWh), the Q4 2026 one at the
+day price, so a 3500 kWh evening-weighted year comes out 44,58 EUR dearer on
+April's prices and 14,67 cheaper on October's. The CREG card and Luminus's
+social card say nothing about Impact, so `social_luminus` and `social_other`
+keep the meter's routing, the single price in every band on a mono meter.
 
 ## Excise
 
@@ -158,6 +168,21 @@ in `injection.py`), so every register resolves on the delivery month's mean
 where the entry has an ENTSO-E key, and the printed rates stand in until it is
 known. The card limits its feed-in to a
 digital or bidirectional meter.
+
+The Walloon card's feed-in row sits under the same "Bihoraire / IMPACT" head as
+its prices since April 2026 ("Injection 9,935 11,687 4,836" in October 2026),
+so the leg carries `day_night_under_impact` too. `resolve_impact_feed_in`
+(`_resolve.py`) keeps it for an entry on the Impact tariff alone, since the
+paths that credit a feed-in know the meter and not the DSO mode, and such an
+entry is credited the night figure in ECO and the day one in PIC and MEDIUM on
+every meter but a night circuit (`_tou_injection_rate`, `injection.py`), on its
+register's month formula where one resolves. A mono meter was credited the
+Normal figure every hour: 298,05 EUR where the head gives 200,57, on 3000 kWh
+of solar export over 2026. The compare estimate and the projection average the
+pair over the three bands by the household's export shape
+(`_impact_pair_bands`), and the two band sensors, which price a meter register,
+carry the credit of the current slot rather than a constant. An entry on the
+bi-hourly tariff keeps its registers.
 
 Engie's document service counts its month offset back from the newest card it
 serves, which on the 1st, before the new month's card is out, is still last

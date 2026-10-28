@@ -135,6 +135,22 @@ def _impact_band_rates(inj: InjectionRates) -> dict[str, float] | None:
     return {"pic": inj.impact_pic, "medium": inj.impact_medium, "eco": inj.impact_eco}
 
 
+def _impact_pair_bands(inj: InjectionRates) -> dict[str, float] | None:
+    """A ``bi_hourly`` pair credited per Impact band, as the figure of each
+    band, or ``None``: the night figure in ECO and the day one in PIC and
+    MEDIUM, the mapping :func:`_tou_injection_rate` applies hour by hour.
+    Only on an entry on that tariff, the one the resolver keeps
+    ``day_night_under_impact`` for."""
+    if (
+        not inj.day_night_under_impact
+        or not inj.bi_hourly
+        or inj.peak is None
+        or inj.offpeak is None
+    ):
+        return None
+    return {"pic": inj.peak, "medium": inj.peak, "eco": inj.offpeak}
+
+
 def _tou_weekend_rule(energy: EnergyRates | None) -> str | None:
     """The weekend rule of a time-of-use ENERGY leg, or ``None`` when the leg
     is not banded by TOU slot.
@@ -381,7 +397,11 @@ def _tou_injection_rate(
     for a meter with two registers, on the same regional day/night schedule
     the consumption side bills by; a single-register meter is credited at
     ``current``, which is the rate its card prints for it. A pair without
-    the flag is not read at all, so no other supplier's credit changes.
+    the flag is not read at all, so no other supplier's credit changes. A
+    pair the card heads under the Impact bands, on an entry on that tariff
+    (``day_night_under_impact``, which the resolver keeps for it alone), is
+    credited by band instead: the night figure in ECO and the day one in PIC
+    and MEDIUM, on every meter but a night circuit.
 
     ``month_mean`` is the delivery month's mean for a triplet or a register
     pair indexed on one,
@@ -409,9 +429,18 @@ def _tou_injection_rate(
     if inj.peak is None:
         return None
     if rule is None:
-        if not inj.bi_hourly or meter not in ("bi", "dynamic"):
+        banded = (
+            inj.day_night_under_impact
+            and meter != "exclusive_night"
+            and impact_in_force(when.date())
+        )
+        if not inj.bi_hourly or not (banded or meter in ("bi", "dynamic")):
             return None
-        night = is_offpeak(when, region, day_start=day_start)
+        night = (
+            dso_impact_band(when) == "eco"
+            if banded
+            else is_offpeak(when, region, day_start=day_start)
+        )
         registers = _register_coefficients(inj)
         if (
             registers is not None
@@ -469,8 +498,19 @@ def _static_injection_bands(
     broken sensor rather than as a card that does not carry the split. Floored
     like every other credit the entry is paid, or the pair would stand negative
     beside a floored injection_price.
+
+    A pair credited per Impact band (``day_night_under_impact``) has no rate
+    per register, so neither is published and both sensors carry the credit
+    of the current slot, the injection_price one, which is what whichever
+    register is counting now is paid.
     """
-    if inj is None or not inj.bi_hourly or inj.peak is None or inj.offpeak is None:
+    if (
+        inj is None
+        or not inj.bi_hourly
+        or inj.day_night_under_impact
+        or inj.peak is None
+        or inj.offpeak is None
+    ):
         return None, None
     return _floor_injection(inj.peak, inj), _floor_injection(inj.offpeak, inj)
 

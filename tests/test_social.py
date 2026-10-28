@@ -25,7 +25,7 @@ from custom_components.be_electricity_prices.injection import (
     _injection_price_for_slot,
     _tou_injection_rate,
 )
-from custom_components.be_electricity_prices.pricing import compute_breakdown
+from custom_components.be_electricity_prices.pricing import MeterType, compute_breakdown
 from custom_components.be_electricity_prices.providers import social
 from custom_components.be_electricity_prices.providers._rates import (
     InjectionRates,
@@ -140,6 +140,168 @@ def test_impact_bills_the_day_and_night_prices_by_band() -> None:
             snap, "ores", REGION_WALLONIA, when, meter="bi", dso_tariff_mode="impact"
         )
         assert price.energy + price.network == pytest.approx(total)
+
+
+async def _engie_month(creg: str, engie: str, first: date) -> SupplierSnapshot | None:
+    """Engie's Walloon social snapshot for ``first``, the CREG card and
+    Engie's served from the fixtures."""
+    creg_text, engie_text = fixture_text(creg), fixture_text(engie)
+
+    async def pdf(_session: object, url: str, **_kw: object) -> str:
+        return creg_text if "creg.be" in url else engie_text
+
+    with (
+        patch.object(social, "fetch_pdf_text", side_effect=pdf),
+        patch.object(
+            social.dt_util, "now", return_value=datetime(2026, 10, 9, tzinfo=BRUSSELS)
+        ),
+    ):
+        return await social.fetch_for_month(
+            AsyncMock(), social.CONTRACT_ENGIE, REGION_WALLONIA, first
+        )
+
+
+async def test_engie_s_walloon_card_bands_both_prices_whatever_the_meter() -> None:
+    """Since April 2026 Engie's Walloon social card heads its day and night
+    prices "Bihoraire / IMPACT (19) Heures pleines / PIC-MEDIUM | Heures
+    creuses / ECO", as Engie's own cards do: a protected household on Tarif
+    Impact pays the night price in ECO and the day price in PIC and MEDIUM
+    whatever meter it answered, where the mono answer was billed the single
+    price in every band. The September 2023 card prints no such head."""
+    october = await _engie_month(
+        "creg_social_2026_q4.pdf", "engie_social_w_2026-10.pdf", OCT
+    )
+    assert october is not None
+    assert isinstance(october.energy, VariableRates)
+    assert october.energy.day_night_under_impact
+    eco = datetime(2026, 10, 14, 12, tzinfo=BRUSSELS)
+    pic = datetime(2026, 10, 14, 18, tzinfo=BRUSSELS)
+    for when, total in ((eco, 0.25660), (pic, 0.26851)):
+        price = compute_breakdown(
+            october,
+            "ores",
+            REGION_WALLONIA,
+            when,
+            meter="mono",
+            dso_tariff_mode="impact",
+        )
+        assert price.energy + price.network == pytest.approx(total), when
+    older = await _engie_month(
+        "creg_social_2023_q3.pdf", "engie_social_w_2023-09.pdf", date(2023, 9, 1)
+    )
+    assert older is not None
+    assert isinstance(older.energy, VariableRates)
+    assert not older.energy.day_night_under_impact
+    assert older.injection is not None
+    assert not older.injection.day_night_under_impact
+
+
+async def test_engie_s_walloon_feed_in_pair_is_credited_by_band_on_impact() -> None:
+    """The card's feed-in row sits under the same head as its prices,
+    "Injection 9,935 11,687 4,836" in October 2026, so an Impact connection
+    is credited the night figure in ECO and the day one in PIC and MEDIUM
+    whatever its meter, a night circuit excepted. A mono meter was credited
+    the Normal figure every hour: 298,05 EUR where the head gives 200,57, on
+    3000 kWh of solar export over 2026. An entry on the bi-hourly tariff
+    keeps its registers, and the two band sensors, which price a register,
+    carry the credit of the slot instead of a constant on Impact."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.be_electricity_prices.compare_weighting import (
+        _compare_injection_credit,
+    )
+    from custom_components.be_electricity_prices.const import DOMAIN
+    from custom_components.be_electricity_prices.injection import (
+        _static_injection_bands,
+    )
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+
+    raw = await _engie_month(
+        "creg_social_2026_q4.pdf", "engie_social_w_2026-10.pdf", OCT
+    )
+    assert raw is not None and raw.injection is not None
+    assert raw.injection.day_night_under_impact
+
+    def entry(mode: str, meter: str) -> MockConfigEntry:
+        return MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                "supplier": "social",
+                "contract": social.CONTRACT_ENGIE,
+                "region": REGION_WALLONIA,
+                "dso": "ores",
+                "meter": meter,
+                "dso_tariff_mode": mode,
+                "solar_regime": "injection",
+            },
+        )
+
+    impact = _resolve_snapshot(entry("impact", "mono"), raw, delivery_month=OCT)
+    plain = _resolve_snapshot(entry("bi_horaire", "bi"), raw, delivery_month=OCT)
+    assert impact.injection is not None and plain.injection is not None
+    assert impact.injection.day_night_under_impact
+    assert not plain.injection.day_night_under_impact
+    eco = datetime(2026, 10, 14, 13, tzinfo=BRUSSELS)
+    # 23:00 is MEDIUM on Impact and a night hour on the day/night schedule.
+    medium = datetime(2026, 10, 14, 23, tzinfo=BRUSSELS)
+    meters: tuple[MeterType, ...] = ("mono", "bi")
+    for meter in meters:
+        for when, rate, month_rate in (
+            (eco, 0.04836, 0.03722),
+            (medium, 0.11687, 0.08978),
+        ):
+            live = _injection_price_for_slot(
+                impact.injection,
+                impact.energy,
+                None,
+                when,
+                meter=meter,
+                region=REGION_WALLONIA,
+            )
+            assert live == pytest.approx(rate), (meter, when)
+            # On the month walks, the register's formula at the month's mean.
+            walked = _historical_injection_rate(
+                impact.injection,
+                0.120,
+                energy=impact.energy,
+                when=when,
+                meter=meter,
+                region=REGION_WALLONIA,
+            )
+            assert walked == pytest.approx(month_rate), (meter, when)
+    night_circuit = _injection_price_for_slot(
+        impact.injection,
+        impact.energy,
+        None,
+        eco,
+        meter="exclusive_night",
+        region=REGION_WALLONIA,
+    )
+    assert night_circuit == pytest.approx(0.09935)
+    registers: tuple[tuple[MeterType, float], ...] = (
+        ("mono", 0.09935),
+        ("bi", 0.04836),
+    )
+    for meter, rate in registers:
+        assert _injection_price_for_slot(
+            plain.injection,
+            plain.energy,
+            None,
+            medium,
+            meter=meter,
+            region=REGION_WALLONIA,
+        ) == pytest.approx(rate)
+    assert _static_injection_bands(impact.injection) == (None, None)
+    assert _static_injection_bands(plain.injection) == pytest.approx((0.11687, 0.04836))
+    # The compare estimate averages the pair over the bands by the household's
+    # export shape: all of it midday, so all of it ECO.
+    midday = dict.fromkeys(range(11, 17), 1.0)
+    credit = _compare_injection_credit(
+        impact, entry("impact", "mono"), {}, None, inj_hour_weights=midday
+    )
+    assert credit == pytest.approx(0.04836)
 
 
 def test_a_card_built_before_the_law_is_read_carries_the_gap(

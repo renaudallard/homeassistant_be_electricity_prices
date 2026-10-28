@@ -89,6 +89,7 @@ from .providers._resolve import (
     resolve_excise_band,
     resolve_federal_contribution,
     resolve_federal_excise,
+    resolve_impact_feed_in,
     resolve_vat_rate,
     resolve_volume_tier,
     resolve_vreg_network_ceiling,
@@ -548,8 +549,11 @@ def _resolve_snapshot(
         annual_kwh,
         meter=entry.data.get(CONF_METER, METER_MONO),
     )
+    # Whether the entry is on Impact decides a feed-in pair a card credits per
+    # band, for the same reason: the paths that credit it know only the meter.
+    impact = entry.data.get(CONF_DSO_TARIFF_MODE) == DSO_MODE_IMPACT
     return resolve_settlement_grid(
-        resolved,
+        resolve_impact_feed_in(resolved, impact=impact),
         quarter_hourly=_quarter_hourly(entry, snap),
-        impact=entry.data.get(CONF_DSO_TARIFF_MODE) == DSO_MODE_IMPACT,
+        impact=impact,
     )
