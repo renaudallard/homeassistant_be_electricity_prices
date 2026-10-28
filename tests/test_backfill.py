@@ -1438,6 +1438,7 @@ async def test_cost_backfill_meets_the_live_walk_on_a_double_flow_meter(
             _ensure_historical_spots=AsyncMock(),
             _ensure_spp_weights=AsyncMock(),
             _ensure_rlp_weights=AsyncMock(),
+            rlp_weights_for_year=AsyncMock(return_value=None),
             _billed_peak_kw=lambda: 0.0,
         )
         entry.runtime_data = coordinator
@@ -1585,6 +1586,7 @@ async def _live_and_backfill(
         _ensure_historical_spots=AsyncMock(),
         _ensure_spp_weights=AsyncMock(),
         _ensure_rlp_weights=AsyncMock(),
+        rlp_weights_for_year=AsyncMock(return_value=rlp or None),
         _billed_peak_kw=lambda: 0.0,
     )
     entry.runtime_data = coordinator
@@ -4376,6 +4378,74 @@ async def test_a_register_pair_read_once_a_day_is_billed_by_register_hour_by_hou
     assert live["read daily"] == pytest.approx(live["in band"], abs=0.01)
 
 
+async def test_a_backfill_weights_each_year_on_its_own_load_profile(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The Synergrid load profile is keyed without its year, and a backfill
+    reaching into 2025 was handed the coordinator's 2026 curve for its whole
+    window: about 4 EUR over a backfilled year on Energy Knights Essentia.
+    Its hours are cut at 1 January, and each year's index is weighted on
+    that year's own curve."""
+    freezer.move_to("2026-03-10 12:00:00+01:00")
+    entry = make_entry(api_key="k", solar_regime="compensation", solar_kva=5.0)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        energy=SpotMonthlyRates(factor=1.0, base=0.0, rlp_indexed=True)
+    )
+
+    async def fetch(_session: Any, year: int, blends: Any) -> dict[str, Any]:
+        return {blend: {(12, 31, 23): float(year)} for blend in blends}
+
+    eve = datetime(2025, 12, 31, 22, tzinfo=UTC)
+    hours = [eve, eve + timedelta(hours=1), eve + timedelta(hours=2)]
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
+        new=AsyncMock(side_effect=fetch),
+    ):
+        segments = await backfill_window._contract_segments(hass, entry, coord, hours)
+        contexts = [
+            await backfill_window._build_context(hass, entry, coord, segment[3])
+            for segment in segments
+        ]
+    assert [segment[3] for segment in segments] == [hours[:1], hours[1:]]
+    assert [c.rlp_index_weights for c in contexts] == [
+        {(12, 31, 23): 2025.0},
+        {(12, 31, 23): 2026.0},
+    ]
+    assert [c.rlp_weights for c in contexts] == [c.rlp_index_weights for c in contexts]
+
+
+async def test_a_backfill_downloads_no_earlier_profile_nothing_reads(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A compensation net is spread over the load profile, but the cost series
+    never reaches into an earlier year, and the price rows read the curve only
+    as an RLP index. The 2025 hours of a fixed card on that regime fetched
+    Synergrid's 2025 workbook, 3,4 MB and about 16 s on a Raspberry Pi, every
+    month for nothing; they take the curve held."""
+    freezer.move_to("2026-10-28 12:00:00+01:00")
+    entry = make_entry(solar_regime="compensation", solar_kva=5.0)
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=FixedRates(single=0.25))
+    held = {(3, 1, 0): 1.0}
+    coord._rlp_weights = held
+    coord._rlp_weights_year = 2026
+    coord._rlp_blend = "distinct"
+    coord._rlp_blend_weights = {"distinct": held}
+    coord._rlp_fetched_at = dt_util.utcnow()
+    fetch = AsyncMock(return_value={"distinct": {(3, 1, 0): 2.0}})
+    hours = [datetime(2025, 3, 1, tzinfo=UTC) + timedelta(hours=h) for h in range(48)]
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
+        new=fetch,
+    ):
+        context = await backfill_window._build_context(hass, entry, coord, hours)
+    fetch.assert_not_awaited()
+    assert context.rlp_weights == held
+
+
 @pytest.mark.parametrize("signed_indexed", [True, False])
 async def test_the_backfill_decides_the_profiles_on_the_signed_leg(
     hass: HomeAssistant, signed_indexed: bool
@@ -4423,6 +4493,7 @@ async def test_the_backfill_decides_the_profiles_on_the_signed_leg(
         _rlp_weights={(1, 1, 0): 1.0},
         _spp_weights={(1, 1, 0): 1.0},
         _ensure_rlp_weights=AsyncMock(),
+        rlp_weights_for_year=AsyncMock(return_value={(1, 1, 0): 1.0}),
         _ensure_spp_weights=AsyncMock(),
     )
 
@@ -4489,6 +4560,7 @@ async def test_the_backfill_bills_a_contract_with_no_source_on_its_card(
             _ensure_spp_weights=AsyncMock(),
             _rlp_weights={},
             _ensure_rlp_weights=AsyncMock(),
+            rlp_weights_for_year=AsyncMock(return_value=None),
             _billed_peak_kw=lambda: 0.0,
         )
         rows: list[float] = []

@@ -961,6 +961,22 @@ profile monthly and `_energy_month_spot` picks the weighted mean over the plain
 one for an RLP-indexed leg in the live tick, the year-to-date walk, the backfill
 and the compare page.
 
+The curve is keyed without its year, and a load profile follows its own year's
+calendar: on 2026's curve the days of 2025 took the weights of other weekdays,
+and the index of a 2025 month moved by 0,3 to 7,8% by blend (0,2 to 5,2 EUR/MWh
+over May to October 2025). The coordinator holds the running year's curve, or
+the newest the store keeps while Synergrid has not published it, and that one
+stands in for a later year. A statistics backfill reaching into an earlier year
+cuts its hours at 1 January (`_contract_segments`, `backfill_window.py`) and
+weights the RLP index of each earlier year's on that year's own file
+(`rlp_weights_for_year`, `coordinator_profiles.py`), fetched as a past year's
+Brugel or Fluvius sheet is; a year whose file cannot be had falls back to the
+curve held. Nothing else reads it there: a compensation net is spread over the
+curve held, since the cost series never reaches into an earlier year, so a card
+that is not RLP-indexed fetches no earlier year. Only the year before the
+running one is kept beside it (`_kept_year`), so an older year's curve lives
+for the run that fetched it.
+
 ### Where the profiles are kept
 
 Both curves live in one store shared by the whole installation
@@ -1080,6 +1096,14 @@ An entry that adopts the shared row rather than downloading carries the row's ow
 stamp (`_shared_profile` hands it back beside the weights, as `_shared_rlp_blends`
 does per blend), so it asks again when the row is due and not thirty days after the
 adoption: stamped as fetched today, a row adopted on its 29th day was held to 59.
+
+A statistics backfill reaching into an earlier year credits it on the curve
+held, where the load profile takes that year's own, although the solar curve is
+keyed by UTC (month, day, hour) without its year as well. A solar profile
+follows the sun rather than the weekday calendar: over May to October 2025 the
+2025 and 2026 curves set the SPP-weighted mean 0,03 to 0,14 EUR/MWh apart,
+against 0,2 to 5,2 for the load profile, and the 2025 file, 59 MB, has the
+layout the reader does not read.
 
 Two things bound what a cold profile costs. **The first tick never waits on
 one**: it runs inside config-entry setup, and the RLP workbook alone is 18 s of

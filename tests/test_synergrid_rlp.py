@@ -523,6 +523,46 @@ async def test_a_restart_in_a_new_year_keeps_last_years_curve(
     assert reloaded._rlp_weights_year == 2027
 
 
+async def test_an_earlier_year_is_weighted_on_its_own_curve(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The curve is keyed by local (month, day, hour) without its year and the
+    coordinator holds the running year's, so a backfill reaching into 2025
+    weighted it on 2026's: a load profile follows its year's weekdays, and a
+    2025 month's index moved by 0,3 to 7,8% by blend. An earlier year takes
+    its own file now. The year held stands in for a later one Synergrid has
+    not published, and for an earlier one whose file cannot be had; only the
+    year before the running one is kept."""
+    from custom_components.be_electricity_prices.coordinator_profiles import (
+        _profile_cache,
+    )
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def fetch(_session: Any, year: int, blends: Any) -> dict[str, Any]:
+        return {} if year == 2024 else {b: {(9, 15, 10): float(year)} for b in blends}
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_rlp_blends",
+        new=AsyncMock(side_effect=fetch),
+    ) as mock:
+        await coord._ensure_rlp_weights("flanders")
+        held = await coord.rlp_weights_for_year(2026, "flanders")
+        later = await coord.rlp_weights_for_year(2027, "flanders")
+        earlier = await coord.rlp_weights_for_year(2025, "flanders")
+        unpublished = await coord.rlp_weights_for_year(2024, "flanders")
+        older = await coord.rlp_weights_for_year(2023, "flanders")
+    assert held == later == unpublished == {(9, 15, 10): 2026.0}
+    assert earlier == {(9, 15, 10): 2025.0}
+    assert older == {(9, 15, 10): 2023.0}
+    assert [call.args[1] for call in mock.await_args_list] == [2026, 2025, 2024, 2023]
+    kept = {year for _kind, year, _blend in _profile_cache(hass)}
+    assert kept == {2025, 2026}
+
+
 class _Page:
     def __init__(self, status: int, body: str) -> None:
         self.status = status

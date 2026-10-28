@@ -119,7 +119,8 @@ SppWeights = dict[tuple[int, int, int], float]
 # (LOCAL month, day, hour) -> the hour's share of the year's residential load.
 # Local, not UTC: Synergrid keys the RLP workbook's Year / Month / Day / h
 # columns in Belgian local time with DST, and Eneco's published Belpex-RLP-M is
-# reproduced to the cent only on that alignment.
+# reproduced to the cent only on that alignment. Keyed without the year, so a
+# curve weights the days of its own year (``rlp_weights_for_year``).
 RlpWeights = dict[tuple[int, int, int], float]
 
 # Every reduction of the sheet a shipped card names. One download yields

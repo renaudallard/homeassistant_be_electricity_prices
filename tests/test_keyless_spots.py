@@ -344,6 +344,7 @@ async def test_the_backfill_loads_the_load_profile_on_any_spot_source(
         _rlp_weights=None,
         _spp_weights=None,
         _ensure_rlp_weights=AsyncMock(),
+        rlp_weights_for_year=AsyncMock(return_value=None),
         _ensure_spp_weights=AsyncMock(),
     )
     await _build_context(hass, entry, coordinator, [])  # type: ignore[arg-type]

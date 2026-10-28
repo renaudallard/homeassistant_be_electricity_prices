@@ -2336,6 +2336,7 @@ async def test_an_earlier_card_on_another_blend_nets_on_the_entrys_profile(
         _ensure_historical_spots=AsyncMock(),
         _ensure_spp_weights=AsyncMock(),
         _ensure_rlp_weights=AsyncMock(),
+        rlp_weights_for_year=AsyncMock(return_value=curves["distinct"]),
         _billed_peak_kw=lambda: 0.0,
     )
     entry.runtime_data = coordinator

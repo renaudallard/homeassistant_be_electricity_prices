@@ -38,6 +38,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
+from itertools import groupby
 from typing import Any
 
 import aiohttp
@@ -397,15 +398,25 @@ async def _build_context(
     rlp_weights = None
     rlp_index_weights = None
     regime = entry.data.get(CONF_SOLAR_REGIME, "none")
+    indexed = _energy_is_rlp_indexed(gated.energy) and spots_available(entry.data)
     if snapshot is not None:
         rlp_index_weights = _coordinator_rlp_index_weights(coordinator.entry, snap)
         if _energy_is_rlp_indexed(snap.energy) or regime == SOLAR_REGIME_COMPENSATION:
             rlp_weights = coordinator._rlp_weights or None
-    elif (
-        _energy_is_rlp_indexed(gated.energy) and spots_available(entry.data)
-    ) or regime == SOLAR_REGIME_COMPENSATION:
-        await coordinator._ensure_rlp_weights(_rlp_blend_for(gated.energy))
+    elif indexed or regime == SOLAR_REGIME_COMPENSATION:
+        blend = _rlp_blend_for(gated.energy)
+        await coordinator._ensure_rlp_weights(blend)
         rlp_weights = coordinator._rlp_weights or None
+        if indexed:
+            # The index on the curve of the year the hours fall in, one
+            # calendar year's (_contract_segments): the running year's is
+            # held, and a backfill reaching into an earlier one fetches that
+            # year's own. A net is spread over the held one, which is all it
+            # reads: the cost series never reaches into an earlier year.
+            rlp_weights = await coordinator.rlp_weights_for_year(
+                dt_util.as_local(hours[0]).year if hours else dt_util.now().year,
+                blend,
+            )
     # A cache hit whenever the live tick has run, which resolves the same row
     # to freeze the signed energy rate; identity for an entry with no start
     # date or a supplier with no archive.
@@ -502,7 +513,8 @@ async def _contract_segments(
     *,
     billed_only: bool = False,
 ) -> list[_Segment]:
-    """``hours`` cut at each recorded supplier switch, oldest first.
+    """``hours`` cut at each recorded supplier switch and each 1 January,
+    oldest first.
 
     Each piece is priced on the contract that supplied it: the stand-in entry,
     card and the card that was resolved from of a contract held earlier in the
@@ -523,6 +535,10 @@ async def _contract_segments(
     contract billed the year from its own start date, as ``current_year_cost``
     leaves them out. The cost
     series asks for it; a price row for such a day harms nothing.
+
+    The cut at 1 January is for the Synergrid load profile, which is keyed
+    without its year: each piece's RLP index is weighted on its own year's
+    curve (``_build_context``). The cost series stays inside one year anyway.
     """
     if not hours:
         return []
@@ -530,7 +546,7 @@ async def _contract_segments(
     window_start = ytd_window_start(entry, today)
     periods = previous_periods(entry.data, window_start, today)
     if not periods:
-        return [(entry, None, None, hours)]
+        return _by_year([(entry, None, None, hours)])
     own_start = current_period_start(entry.data, window_start)
     segments: list[_Segment] = []
     owner: int | None = None
@@ -551,7 +567,18 @@ async def _contract_segments(
         segments.append(
             await _segment_for(hass, entry, coordinator, periods, owner, run)
         )
-    return segments
+    return _by_year(segments)
+
+
+def _by_year(segments: list[_Segment]) -> list[_Segment]:
+    """``segments`` cut again at each 1 January of their local hours."""
+    return [
+        (seg_entry, card, raw, list(run))
+        for seg_entry, card, raw, seg_hours in segments
+        for _year, run in groupby(
+            seg_hours, key=lambda hour: dt_util.as_local(hour).year
+        )
+    ]
 
 
 async def _segment_for(

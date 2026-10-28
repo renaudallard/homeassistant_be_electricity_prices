@@ -281,6 +281,26 @@ class _ProfilesMixin:
             held = self._rlp_weights
         return held or None
 
+    async def rlp_weights_for_year(self, year: int, blend: str) -> RlpWeights | None:
+        """The ``blend`` curve a month of ``year`` is weighted on: that year's
+        own for a year before the one held, else the one held.
+
+        The curve is keyed by local (month, day, hour) without its year, and a
+        load profile follows its year's calendar: on 2026's curve the days of
+        2025 took another weekday's weight, and their months' indices moved
+        by 0,3 to 7,8% by blend. A backfill reaching into an earlier year
+        therefore fetches that year's file, as the Brugel and Fluvius readers
+        fetch a past year's sheet. The held curve is the running year's, or
+        the newest the store keeps while Synergrid has not published that one
+        (``_stored_year``), and stands in for a later year and for an earlier
+        one whose file cannot be had.
+        """
+        held: RlpWeights | None = self._rlp_weights or None
+        if self._rlp_weights_year is None or year >= self._rlp_weights_year:
+            return held
+        curves, _stamps = await self._shared_rlp_blends(year)
+        return curves.get(blend) or held
+
     def quoted_rlp_weights(self, blend: str) -> RlpWeights | None:
         """The RLP curve a comparison weights a card's index by, or ``None``.
 

@@ -1515,7 +1515,10 @@ and the `current_year_cost` running bill. The Energy dashboard and
 the Statistics graph card then show price + cost history that
 predates the entry's first live update tick. On an entry that recorded
 a supplier switch, each hour is priced on the contract that supplied it,
-and the running bill carries on across the switch.
+and the running bill carries on across the switch. A card indexed on the
+load-profile-weighted Belpex is weighted on each year's own Synergrid load
+profile, so a window reaching into an earlier year downloads that year's
+for it.
 
 The integration runs the backfill by itself on first install
 (or after a database reset) covering the year-to-date window (Jan 1 of
