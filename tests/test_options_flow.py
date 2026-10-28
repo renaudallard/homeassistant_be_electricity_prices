@@ -1668,6 +1668,100 @@ async def test_compare_borrows_the_typed_key_over_a_keyless_stale_cache(
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
+async def test_compare_borrows_the_window_from_the_first_day_of_its_quarter(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A household billing its year from 20 May borrows the day-ahead for the
+    target from 1 April, the first day of the window's quarter, as the tick
+    fetches its own: a target indexed on the month or the quarter reads the
+    whole period the window opens in, and borrowed from the start date its
+    May was the mean of 20 to 31 May."""
+    from dataclasses import replace
+
+    freezer.move_to("2026-06-15 12:00:00+02:00")
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        VariableRates,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "mega",
+            "contract": "mega_online_fixed",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "contract_start_date": "2026-05-20",
+            "ytd_from_contract_start": True,
+        },
+        title="Mega injection, billed from 20 May",
+    )
+    entry.add_to_hass(hass)
+    coord = _real_coordinator(
+        hass, entry, _stub_snapshot("mega", "mega_online_fixed", 0.18)
+    )
+    entry.runtime_data = coord
+    other_snap = make_snapshot(
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(current=0.17),
+        injection=InjectionRates(current=None, factor=0.925, base=-0.0125),
+        source_url="test://stub",
+        publication_label="mai 2026",
+    )
+    calls: list[tuple[Any, Any]] = []
+
+    async def _fake_ensure(
+        self: Any, start: Any, end: Any, api_key: Any = None, *, keyless: bool = False
+    ) -> None:
+        calls.append((start, api_key))
+
+    fake = replace(
+        EXTRACTORS["cociter"], fetch=AsyncMock(return_value=other_snap), probe=None
+    )
+    with (
+        patch.dict(EXTRACTORS, {"cociter": fake}),
+        patch.object(type(coord), "_ensure_historical_spots", _fake_ensure),
+        patch(
+            "custom_components.be_electricity_prices.ytd_cost._compute_current_year_cost",
+            AsyncMock(return_value=123.0),
+        ),
+        # No signing card is held for May, on either side.
+        patch(
+            "custom_components.be_electricity_prices.cohort.month_card",
+            AsyncMock(return_value=None),
+        ),
+    ):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "compare"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"supplier": "cociter"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"contract": "cociter_variable"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"meter": "mono"}
+        )
+        result = await _pass_compare_solar(hass, entry, result)
+        assert result["step_id"] == "compare_api_key"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"api_key": "TESTKEY"}
+        )
+        assert result["step_id"] == "compare_result"
+
+    assert (date(2026, 4, 1), "TESTKEY") in calls
+    assert not [call for call in calls if call[0] == date(2026, 5, 20)]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
 async def test_compare_on_the_keyless_setting_asks_for_no_key(
     hass: HomeAssistant, freezer: Any
 ) -> None:

@@ -475,16 +475,35 @@ def _energy_month_spot(
     return cache[key]
 
 
-def index_window_start(start: date, energy: object) -> date:
-    """The first day the day-ahead history has to cover for a window opening
-    on ``start``: ``start`` itself, or the first day of its quarter for a leg
-    billed on the quarter's index (Bolt). Bolt bills a household that signed
-    in the quarter's second month on the whole quarter's mean, so the earlier
-    month is read although none of its hours is billed; without it
-    ``_quarter_mean`` finds that month thin and the leg falls back to its own
-    month's mean for the rest of the quarter."""
+def quarter_start(day: date) -> date:
+    """The first day of ``day``'s quarter, which a quarter index reads from."""
+    return day.replace(month=(day.month - 1) // 3 * 3 + 1, day=1)
+
+
+def index_window_start(
+    start: date, snapshot: SupplierSnapshot | None, data: Mapping[str, Any]
+) -> date:
+    """The first day the day-ahead history has to cover for a walk opening on
+    ``start`` and priced on ``snapshot`` alone, with the entry settings
+    ``data``: ``start`` itself where each hour reads its own spot (issue #84),
+    the first day of its quarter for an energy leg billed on the quarter's
+    index (Bolt), and of its month for one billed on the month's index or a
+    credited feed-in that is (``_injection_on_month_mean``). From the start
+    date alone an entry signed on 22 October 2026 was billed the month on
+    0,129 instead of 0,164 EUR/kWh. The earlier days are read for the index
+    only. The snapshot is the priced one, where a month-indexed variable,
+    time-of-use or Impact card is already the ``SpotMonthlyRates`` leg
+    ``_hour_spot`` hands the month's mean (``_month_indexed_leg``). The
+    tick's cache prices the other cards too, and reads the whole quarter.
+    """
+    energy = getattr(snapshot, "energy", None)
     if getattr(energy, "quarter_indexed", False):
-        return start.replace(month=(start.month - 1) // 3 * 3 + 1, day=1)
+        return quarter_start(start)
+    if isinstance(energy, SpotMonthlyRates) or (
+        data.get(CONF_SOLAR_REGIME) == SOLAR_REGIME_INJECTION
+        and _injection_on_month_mean(snapshot)
+    ):
+        return start.replace(day=1)
     return start
 
 

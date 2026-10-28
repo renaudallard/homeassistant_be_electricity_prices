@@ -69,6 +69,7 @@ from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
     SpotMonthlyRates,
+    VariableRates,
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
@@ -2336,6 +2337,51 @@ async def test_ensure_dynamic_spots_fetches_for_spot_indexed_injection() -> None
         date(2026, 4, 1),
     )
     assert spots == cache
+
+
+@pytest.mark.parametrize(
+    ("energy", "first"),
+    [
+        (SpotMonthlyRates(factor=1.0, base=0.0), date(2026, 10, 1)),
+        (
+            SpotMonthlyRates(factor=1.0, base=0.0, quarter_indexed=True),
+            date(2026, 10, 1),
+        ),
+        (DynamicRates(factor=1.0, base=0.0), date(2026, 10, 22)),
+        (
+            VariableRates(
+                current=0.2, month_indexed=True, formula_factor=1.1, formula_base=0.02
+            ),
+            date(2026, 10, 1),
+        ),
+    ],
+    ids=["month", "quarter", "hourly", "month_variable"],
+)
+async def test_ensure_dynamic_spots_fetches_the_month_an_index_reads(
+    energy: SpotMonthlyRates | DynamicRates | VariableRates, first: date
+) -> None:
+    """A window opening on 22 October bills a month-indexed leg on October's
+    mean, so the days before it are fetched too, as the live tick fetches
+    them; a leg whose every hour reads its own spot gets none of them. A
+    variable card indexed on the month is that leg once re-priced on it."""
+    coordinator = SimpleNamespace(
+        hass=None,
+        _session=None,
+        _snapshot=make_snapshot(energy=energy),
+        _historical_spots={},
+        _historical_spot_quarters={},
+        _ensure_historical_spots=AsyncMock(),
+    )
+    await bf._ensure_dynamic_spots(
+        coordinator,  # type: ignore[arg-type]
+        make_entry(api_key="k", title="Eneco Fix", solar_regime="none"),
+        datetime(2026, 10, 21, 22, tzinfo=UTC),
+        datetime(2026, 10, 28, 12, tzinfo=UTC),
+    )
+    assert coordinator._ensure_historical_spots.await_args.args == (
+        first,
+        date(2026, 10, 28),
+    )
 
 
 async def test_ensure_dynamic_spots_hands_back_the_quarter_cache() -> None:

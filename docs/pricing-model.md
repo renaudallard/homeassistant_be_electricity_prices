@@ -1120,7 +1120,12 @@ formula with no month arithmetic of its own.
 The rate is therefore a single flat value for the whole month, so the contract
 always bills on the hourly grid and carries no `quarter_hourly` flag. The
 current month's mean is a running estimate until the month closes
-(`providers/_rates.py`).
+(`providers/_rates.py`). It is the whole delivery month's mean even for an
+entry billing its year from a contract start date inside the month: the
+day-ahead is fetched from the first day of the month's quarter by the tick
+(`quarter_start`, `spot_stats.py`) and from the month's first day by the
+backfill (`index_window_start`), and only the days from the start date are
+billed.
 
 Used by group-purchase style products that index the commodity to the realized
 monthly average (the Mega iChoosr / Samen Overstappen groepsaankoop shape), and

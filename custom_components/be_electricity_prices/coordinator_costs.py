@@ -48,6 +48,7 @@ from homeassistant.util import dt as dt_util
 
 from . import energy_meters
 from .cohort import (
+    _cohort_legs,
     _effective_snapshot_for_month,
     _parse_iso_date,
     signing_month_snapshot,
@@ -72,6 +73,7 @@ from .contract_periods import (
     current_period_start,
     ensure_period_analog_rates,
     keep_settled,
+    period_card,
     periods_key,
     periods_need_rlp,
     periods_need_spots,
@@ -96,6 +98,7 @@ from .first_year import first_year_volume
 from .projected_cost import _compute_projected_year_cost
 from .projected_volume import _compute_projected_year_kwh, _compute_rolling_year_kwh
 from .providers import (
+    ExtractorError,
     SupplierSnapshot,
 )
 from .providers import (
@@ -103,7 +106,7 @@ from .providers import (
 )
 from .snapshot_months import archived_months_present
 from .snapshot_store import _monthly_snapshots
-from .spot_stats import own_day_ahead
+from .spot_stats import index_window_start, own_day_ahead
 from .synergrid import RlpWeights, SppWeights
 from .year_end_cost import _compute_year_end_cost
 from .ytd_cost import _compute_current_year_cost, window_welcome_credit
@@ -782,6 +785,42 @@ class _CostsMixin:
             default=0.0,
         )
 
+    async def _previous_spots_from(self, period: ContractPeriod) -> date:
+        """The first day the earlier contracts' day-ahead is fetched from:
+        ``period``'s start, or the first day of the month or quarter whose
+        mean its card bills that month on (``index_window_start`` on the card,
+        its cohort spliced), the rule the backfill applies to its own.
+
+        An entry holding a source of its own fetches the year from 1 January
+        and covers that month; one holding none fetched it from the start
+        date a contract billed its year from, and a card indexed on the month
+        averaged that month from there. The comparison pages read no other
+        card on such an entry's cache (``_keyless_stale_spots``). A start on
+        the first day of a quarter, 1 January included, is the answer either
+        way and asks for no card.
+        """
+        start = period.start
+        if start.day == 1 and start.month % 3 == 1:
+            return start
+        try:
+            proxy, extractor, card, *_rest = await period_card(
+                self.hass, self._session, self, period
+            )
+        except (ExtractorError, KeyError, ValueError):
+            return start
+        if card is None:
+            return start
+        cohort = await _cohort_legs(
+            self.hass,
+            self._session,
+            extractor,
+            str(proxy.data.get(CONF_CONTRACT, "")),
+            str(proxy.data.get(CONF_REGION, "")),
+            proxy,
+            card,
+        )
+        return index_window_start(start, cohort.splice(card), proxy.data)
+
     async def _price_previous(self, periods: list[ContractPeriod], today: date) -> None:
         """Price the earlier contracts, keep the result and ask for a refresh.
 
@@ -819,7 +858,10 @@ class _CostsMixin:
             )
             try:
                 await self._ensure_historical_spots(
-                    periods[0].start, periods[-1].end, api_key, keyless=keyless
+                    await self._previous_spots_from(periods[0]),
+                    periods[-1].end,
+                    api_key,
+                    keyless=keyless,
                 )
             except Exception as err:  # priced on what is cached
                 # An hour with no spot still bills its network and tax legs, as

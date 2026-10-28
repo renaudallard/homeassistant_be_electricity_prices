@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -108,6 +109,7 @@ from .spot_stats import (
     _bucket_by_local_month,
     _energy_needs_spot,
     _hour_spot,
+    index_window_start,
     own_day_ahead,
 )
 
@@ -214,9 +216,13 @@ async def _ensure_dynamic_spots(
     # the previous local day when the backfill runs in the 00:00-01:59
     # local window) would leave the final UTC hour _hour_iter requests
     # unfetched, re-introducing a one-hour sum step at the seam. Matches
-    # the live coordinator, which fetches through dt_util.now().date().
+    # the live coordinator, which fetches through dt_util.now().date(),
+    # from the first day of the month or quarter a leg indexes on too.
     await coordinator._ensure_historical_spots(
-        dt_util.as_local(start).date(), dt_util.as_local(end).date()
+        index_window_start(
+            dt_util.as_local(start).date(), replace(snap, energy=eff_energy), entry.data
+        ),
+        dt_util.as_local(end).date(),
     )
     return coordinator._historical_spots, coordinator._historical_spot_quarters
 

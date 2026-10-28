@@ -89,7 +89,7 @@ from .flow_contracts import _contract_kind
 from .providers import get as get_extractor
 from .providers import settlement_answer
 from .snapshot_resolve import entry_annual_injection_kwh
-from .spot_stats import own_day_ahead
+from .spot_stats import own_day_ahead, quarter_start
 
 
 class _PlaceholdersMixin(OptionsFlow):
@@ -757,10 +757,13 @@ class _PlaceholdersMixin(OptionsFlow):
                 )
                 if borrowed or keyless:
                     # Isolated: this wants the target's own year, not whatever
-                    # the entry happens to hold.
+                    # the entry happens to hold. From the first day of the
+                    # window's quarter, as the tick fetches its own: a credit
+                    # or an energy leg indexed on the month or the quarter
+                    # reads the whole period the window opens in.
                     view = _detached_spot_view(coord, isolate=True)
                     await view._ensure_historical_spots(
-                        ytd_from, today_local, borrowed, keyless=keyless
+                        quarter_start(ytd_from), today_local, borrowed, keyless=keyless
                     )
                     hist_spots = view._historical_spots
                     hist_quarters = view._historical_spot_quarters

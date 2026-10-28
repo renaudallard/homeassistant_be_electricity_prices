@@ -501,11 +501,15 @@ gated on a "tuple" match (supplier / contract / region): spots collected while
 the entry was dynamic are dropped after an options-flow swap to a static supplier
 rather than being re-saved indefinitely (`coordinator_persist.py`). Persisted keys
 are ISO strings; a naive one is treated as UTC on load (`coordinator_persist.py`).
-It is fetched from the year-to-date window's first day and kept for a trailing
-year (`_prune_historical_spots`, `coordinator_spots.py`), not cut at 1 January:
-the projection and the compare page credit a static card's per-slot feed-in on
-the past year's closed days, and the walks read each hour or month by its own
-key, so December kept beside January bills nothing extra.
+It is fetched from the first day of the year-to-date window's quarter
+(`quarter_start`, `spot_stats.py`), though no hour before the window is billed:
+a month index reads the whole month and Bolt's the whole quarter the window
+opens in, whether it is the entry's own or that of a card the comparison pages
+price on this cache. It is kept for a trailing year (`_prune_historical_spots`,
+`coordinator_spots.py`), not cut at 1 January: the projection and the compare
+page credit a static card's per-slot feed-in on the past year's closed days,
+and the walks read each hour or month by its own key, so December kept beside
+January bills nothing extra.
 
 ## Part 2: recorder backfill (`backfill.py`)
 
@@ -681,7 +685,13 @@ static-energy contract whose injection is itself spot-indexed (either Cociter
 variable card) still needs spots so its feed-in credit lands in the backfilled
 rows and no sum-chain step appears at the backfill-to-live seam.
 It feeds `_ensure_historical_spots` local dates (`dt_util.as_local(...).date()`,
-`backfill.py`) to match the live coordinator's local-day anchoring.
+`backfill.py`) to match the live coordinator's local-day anchoring, and starts
+on the first day of the window's month or quarter where the leg it asked of
+reads that period's mean (`index_window_start`, `spot_stats.py`): a window
+opening on a contract start date in mid-month otherwise averaged the month from
+that date. It prices that one contract, so it fetches no more than its index
+reads, where the live tick fetches the window's whole quarter for the
+comparison pages too.
 
 ### The `current_year_cost` cumulative-sum invariant
 

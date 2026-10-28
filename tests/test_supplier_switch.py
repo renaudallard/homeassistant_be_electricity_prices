@@ -80,6 +80,7 @@ from custom_components.be_electricity_prices.providers._rates import (
     FixedRates,
     InjectionRates,
     SpotMonthlyRates,
+    VariableRates,
 )
 from custom_components.be_electricity_prices.providers.base import (
     CardNotReadableError,
@@ -989,6 +990,71 @@ async def test_an_old_contract_the_walk_reprices_on_the_day_ahead_fills_the_spot
         )
     else:
         fill.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("energy", "first"),
+    [
+        (
+            VariableRates(
+                current=0.2, month_indexed=True, formula_factor=1.1, formula_base=0.02
+            ),
+            date(2026, 5, 1),
+        ),
+        (
+            VariableRates(
+                current=0.2, quarter_indexed=True, formula_factor=1.1, formula_base=0.02
+            ),
+            date(2026, 4, 1),
+        ),
+        (DynamicRates(factor=1.0, base=0.01), date(2026, 5, 12)),
+    ],
+    ids=["month", "quarter", "hourly"],
+)
+async def test_an_old_contract_billed_from_its_start_fetches_the_month_it_reads(
+    hass: HomeAssistant,
+    freezer: Any,
+    energy: VariableRates | DynamicRates,
+    first: date,
+) -> None:
+    """A contract that billed its year from 12 May on a card indexed on the
+    month's mean, left for a fixed one holding no key of its own: the tick no
+    longer fetched the year, and the old contract's day-ahead was fetched from
+    its start date, so May averaged from the 12th. It is fetched from the first
+    day of the month or quarter its card reads, as the tick fetches its own,
+    and from the start date itself where each hour reads its own spot."""
+    freezer.move_to("2026-09-24 12:00:00+02:00")
+    held = _held(
+        "mega",
+        "mega_online_flex",
+        api_key="OLDKEY",
+        contract_start_date="2026-05-12",
+        ytd_from_contract_start=True,
+    )
+    entry = make_entry(previous_contracts=[{"until": "2026-07-01", "data": held}])
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=FixedRates(single=0.30))
+    coord.async_request_refresh = AsyncMock()  # type: ignore[method-assign]
+    fill = AsyncMock()
+    coord._ensure_historical_spots = fill  # type: ignore[method-assign]
+    coord._ensure_rlp_weights = AsyncMock()  # type: ignore[method-assign]
+    card = make_snapshot(supplier="mega", contract="mega_online_flex", energy=energy)
+
+    async def _card(
+        hass_: Any, session: Any, coordinator: Any, period: Any, overrides: Any = None
+    ) -> Any:
+        proxy = _QuoteEntry(data=dict(period.data), runtime_data=coordinator)
+        return proxy, make_stub_extractor(), card, False, False, False, None
+
+    periods = previous_periods(entry.data, date(2026, 1, 1), date(2026, 9, 24))
+    assert periods[0].start == date(2026, 5, 12)
+    with (
+        patch(f"{_COSTS}.period_card", new=_card),
+        patch(f"{_COSTS}.price_previous_periods", AsyncMock(return_value=[])),
+    ):
+        await coord._price_previous(periods, date(2026, 9, 24))
+    fill.assert_awaited_once_with(first, date(2026, 6, 30), "OLDKEY", keyless=False)
 
 
 @pytest.mark.parametrize(

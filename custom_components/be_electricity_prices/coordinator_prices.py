@@ -88,8 +88,8 @@ from .spot_stats import (
     _injection_on_month_mean,
     _rlp_blend_for,
     _spp_weighting_enabled,
-    index_window_start,
     own_day_ahead,
+    quarter_start,
     spots_available,
 )
 
@@ -356,13 +356,15 @@ class _PricesMixin:
             or periods_need_spots(gate_periods)
         ):
             today_local = dt_util.now().date()
-            # An entry billing from its contract start date has no use for a
-            # spot before it: nothing prices those hours, so fetching them is
-            # the one thing issue #84 asked not to happen. Bar a quarter
-            # index, which reads the whole quarter it opens in.
-            spots_from = index_window_start(
-                ytd_window_start(self.entry, today_local), priced.energy
-            )
+            # From the first day of the window's quarter. An entry billing from
+            # its contract start date bills no hour before it, which is what
+            # issue #84 asked for, but a month index reads the whole month and
+            # Bolt's the whole quarter the window opens in, and this cache is
+            # what the comparison pages price every other card on: a dynamic
+            # household signed on 22 October had a month-indexed card priced
+            # on 22 to 31 October, 4 EUR of its October. At most a quarter,
+            # fetched once in the background and kept for a year.
+            spots_from = quarter_start(ytd_window_start(self.entry, today_local))
             if self._year_spots_deferred:
                 # FIRST tick only, and it is the one the user is watching:
                 # async_config_entry_first_refresh runs inside setup, which the
@@ -406,7 +408,7 @@ class _PricesMixin:
                     )
                 self.entry.async_create_background_task(
                     self.hass,
-                    self._fill_year_spots(),
+                    self._fill_year_spots(spots_from),
                     f"{DOMAIN}_year_spots_{self.entry.entry_id}",
                 )
             else:
@@ -671,14 +673,16 @@ class _PricesMixin:
                 out[utc] = rate
         return out
 
-    async def _fill_year_spots(self) -> None:
-        """Fetch the rest of the year's spots, off the setup path.
+    async def _fill_year_spots(self, start: date) -> None:
+        """Fetch the rest of the year's spots, from ``start``, off the setup
+        path.
 
         Scheduled by the first tick, which fetched only the current month so
         that setup, and with it the config flow's final step, did not wait
-        on 35 week-chunks. Runs as an entry-tied background task, so unloading
-        the entry cancels it and the user can walk away from a fresh install
-        mid-backfill without leaving a fetch running.
+        on 35 week-chunks, and which hands down the first day the year needs
+        (``quarter_start``). Runs as an entry-tied background task, so
+        unloading the entry cancels it and the user can walk away from a
+        fresh install mid-backfill without leaving a fetch running.
 
         Failures need no handling here: _ensure_historical_spots logs what it
         could not fetch and leaves those hours absent, which every reader
@@ -691,15 +695,8 @@ class _PricesMixin:
         cache already covers the year: nothing is fetched, nothing changed,
         and an extra full tick per entry per restart would buy nothing.
         """
-        today = dt_util.now().date()
         before = (len(self._historical_spots), len(self._historical_spot_quarters))
-        await self._ensure_historical_spots(
-            index_window_start(
-                ytd_window_start(self.entry, today),
-                getattr(self._snapshot, "energy", None),
-            ),
-            today,
-        )
+        await self._ensure_historical_spots(start, dt_util.now().date())
         after = (len(self._historical_spots), len(self._historical_spot_quarters))
         if self._unloaded or after == before:
             return

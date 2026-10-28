@@ -717,7 +717,7 @@
         },
         "clear_history": {
           "name": "Prijsgeschiedenis wissen",
-          "description": "Verwijdert ook de opgeslagen historische uurprijzen die de kost van dit jaar opnieuw afspeelt, en haalt ze opnieuw op. Standaard uit: het haalt elke dag sinds 1 januari (of sinds de startdatum van het contract, als de invoer daarvan uitgaat) opnieuw op bij een dienst met snelheidslimiet. De dagen daarvoor worden niet opnieuw opgehaald, dus een injectievergoeding die per tijdslot de spotprijs volgt, valt uit de voortschrijdende jaarkost en de vergelijkingen tot er weer een volledig jaar beschikbaar is. Gebruik dit wanneer de kost van dit jaar verkeerd lijkt en een gewone vernieuwing dat niet oplost."
+          "description": "Verwijdert ook de opgeslagen historische uurprijzen die de kost van dit jaar opnieuw afspeelt, en haalt ze opnieuw op. Standaard uit: het haalt elke dag sinds 1 januari (of sinds de eerste dag van het kwartaal waarin het contract begon, als de invoer van de startdatum van het contract uitgaat) opnieuw op bij een dienst met snelheidslimiet. De dagen daarvoor worden niet opnieuw opgehaald, dus een injectievergoeding die per tijdslot de spotprijs volgt, valt uit de voortschrijdende jaarkost en de vergelijkingen tot er weer een volledig jaar beschikbaar is. Gebruik dit wanneer de kost van dit jaar verkeerd lijkt en een gewone vernieuwing dat niet oplost."
         }
       }
     },

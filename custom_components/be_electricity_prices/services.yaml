@@ -23,8 +23,9 @@ refresh:
       description: >-
         Also discard the cached past hourly prices behind the year-to-date
         cost and re-fetch them. Off by default because it re-fetches every day
-        since 1 January (or the contract start, if the entry bills from it)
-        against a rate-limited endpoint. The days before that are not fetched
+        since 1 January (or since the first day of the quarter the contract
+        started in, if the entry bills from the contract start) against a
+        rate-limited endpoint. The days before that are not fetched
         again, so a feed-in credit that follows the spot price per slot drops
         out of the rolling year cost and the comparisons until a full year is
         held again. Short of a value off the scale, which a restart discards,

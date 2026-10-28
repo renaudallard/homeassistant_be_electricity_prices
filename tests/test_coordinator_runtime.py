@@ -61,6 +61,7 @@ from custom_components.be_electricity_prices.coordinator_issues import (
 )
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
+    FixedRates,
     InjectionRates,
     SpotMonthlyRates,
     VariableRates,
@@ -5852,40 +5853,116 @@ def test_a_credit_reaches_the_days_before_the_month_as_its_kind_says() -> None:
 
 
 @pytest.mark.parametrize(
-    ("quarter_indexed", "first"),
-    [(True, date(2026, 10, 1)), (False, date(2026, 11, 10))],
+    ("energy", "injection"),
+    [
+        (SpotMonthlyRates(factor=1.0, base=0.0, quarter_indexed=True), None),
+        (SpotMonthlyRates(factor=1.0, base=0.0), None),
+        (
+            FixedRates(single=0.2),
+            InjectionRates(current=0.05, factor=1.0, base=0.0, month_indexed=True),
+        ),
+        (
+            DynamicRates(factor=1.0, base=0.0),
+            InjectionRates(current=None, factor=1.0, base=0.0, spp_indexed=True),
+        ),
+        (DynamicRates(factor=1.0, base=0.0), None),
+    ],
+    ids=["quarter", "month", "month_feed_in", "spp_feed_in", "hourly"],
 )
-async def test_a_quarter_index_fetches_its_whole_quarter(
-    hass: HomeAssistant, freezer: Any, quarter_indexed: bool, first: date
+async def test_the_tick_fetches_the_quarter_its_window_opens_in(
+    hass: HomeAssistant,
+    freezer: Any,
+    energy: Any,
+    injection: InjectionRates | None,
 ) -> None:
-    """Bolt bills a household that signed in the quarter's second month on the
-    whole quarter's mean. Billing from that start date fetched the day-ahead
-    from it, so the quarter's first month was never cached, read as thin, and
-    the leg fell back to its own month's mean for the rest of the quarter. A
-    month-indexed leg still fetches nothing before the start date."""
-    from custom_components.be_electricity_prices.providers._rates import (
-        SpotMonthlyRates,
-    )
-
+    """A month-indexed card bills the start month on the delivery month's mean,
+    and Bolt a household that signed in the quarter's second month on the
+    whole quarter's. Billing from that start date fetched the day-ahead from
+    it, so a contract signed on 22 October 2026 was billed the rest of the
+    month on the mean of its last week, 0,129 instead of 0,164 EUR/kWh, and
+    the quarter's first month read as thin. A card whose every hour reads its
+    own spot bills nothing before the start date either, but the comparison
+    pages price the other cards on this cache: a dynamic household that
+    signed on 22 October had a month-indexed card priced on 22 to 31 October.
+    So the tick fetches the window's quarter whatever this card reads."""
     freezer.move_to("2026-11-20 12:00:00+01:00")
     entry = make_entry(
-        contract_start_date="2026-11-10", ytd_from_contract_start=True, api_key="k"
+        contract_start_date="2026-11-10",
+        ytd_from_contract_start=True,
+        api_key="k",
+        solar_regime="injection",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=energy, injection=injection)
+    coord._profiles_deferred = False
+    since = date(2026, 10, 1)
+    fetch = AsyncMock()
+    coord._ensure_historical_spots = fetch  # type: ignore[method-assign]
+    coord._year_spots_deferred = False
+    await coord._tick_profiles(coord._snapshot, {})
+    assert fetch.await_args is not None
+    assert fetch.await_args.args == (since, date(2026, 11, 20))
+
+    # The first tick fetches the running month and hands the rest to the fill.
+    scheduled: list[Any] = []
+
+    def _capture_task(_hass: Any, coro: Any, _name: str) -> None:
+        scheduled.append(coro)
+
+    coord._year_spots_deferred = True
+    with patch.object(entry, "async_create_background_task", _capture_task):
+        await coord._tick_profiles(coord._snapshot, {})
+    assert fetch.await_args.args == (date(2026, 11, 1), date(2026, 11, 20))
+    await scheduled[0]
+    assert fetch.await_args.args == (since, date(2026, 11, 20))
+
+
+async def test_a_month_indexed_variable_card_fetches_its_whole_start_month(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A variable card indexed on the delivery month is priced as the
+    spot-monthly leg the tick re-prices it on (``_month_indexed_leg``), and an
+    entry billing its year from 10 November fetches November from before the
+    1st: Mega Smart Flex, Luminus MaxxFlex, Engie Direct Online and the rest
+    bill the whole month's mean, not the one from the start date."""
+    freezer.move_to("2026-11-20 12:00:00+01:00")
+    entry = make_entry(
+        supplier="cociter",
+        contract="cociter_variable",
+        contract_start_date="2026-11-10",
+        ytd_from_contract_start=True,
+        api_key="k",
     )
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     coord._snapshot = make_snapshot(
-        energy=SpotMonthlyRates(factor=1.0, base=0.0, quarter_indexed=quarter_indexed)
+        supplier="cociter",
+        contract="cociter_variable",
+        energy=VariableRates(
+            current=0.17, month_indexed=True, formula_factor=1.1, formula_base=0.02
+        ),
     )
     coord._year_spots_deferred = False
+    coord._month_cards_deferred = False
+    coord._profiles_deferred = False
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(return_value={})  # type: ignore[method-assign]
     fetch = AsyncMock()
     coord._ensure_historical_spots = fetch  # type: ignore[method-assign]
-    await coord._tick_profiles(coord._snapshot, {})
+    with (
+        patch(
+            f"{_COORD}_costs._compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord._store, "async_save", AsyncMock()),
+    ):
+        await coord._update_body()
+    assert coord._priced is not None
+    assert isinstance(coord._priced.energy, SpotMonthlyRates)
     assert fetch.await_args is not None
-    assert fetch.await_args.args == (first, date(2026, 11, 20))
-    fetch.reset_mock()
-    await coord._fill_year_spots()
-    assert fetch.await_args is not None
-    assert fetch.await_args.args == (first, date(2026, 11, 20))
+    assert fetch.await_args.args == (date(2026, 10, 1), date(2026, 11, 20))
 
 
 async def test_a_reading_from_before_the_month_does_not_open_the_next_one(
@@ -8451,7 +8528,7 @@ async def test_the_first_tick_fetches_the_month_not_the_year(
         # warmed. Nothing is fetched, so nothing asks for an extra full tick.
         coord.async_request_refresh.reset_mock()
         coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
-        await coord._fill_year_spots()
+        await coord._fill_year_spots(date(2026, 1, 1))
         coord.async_request_refresh.assert_not_awaited()
 
         # And the deferral is once per coordinator, not once per tick.
