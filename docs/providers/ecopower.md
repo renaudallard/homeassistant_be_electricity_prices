@@ -418,10 +418,13 @@ VAT-exempt). Sets `current=None`, `factor`, `base`, and a diagnostic `formula` s
 | Transport | 0.0 (rolled into distribution) | 0.0 |
 | Tax overlay | federal excise + energy contribution + GSC+WKK renewables + energy fund, `vat_rate=0.06` | identical block, reused |
 | Injection shape | monthly indicative (`current`), blended with the SPP-indexed pair on the 2026-07+ cards | per quarter-hour `factor × spot + base` |
-| Prosumer / PV forfait | none (Flanders digital SMR3 has no prosumer tariff) | none |
+| Prosumer / PV forfait | printed for a turning-back meter on the May to September 2026 cards (60 EUR/kVA/yr), not read | none |
 
-There is no supplier-side PV/prosumer forfait: `supplier_prosumer_eur_per_kva_year` stays `None`.
-Flanders digital meters (post-2024 SMR3) do not carry the compensation-regime prosumer tariff
+The Groene burgerstroom cards of May to September 2026 print a supplier-side forfait for a
+turning-back meter, "Forfait terugdraaiende meter 60,0 euro/kVA/jaar". It is not read, so
+`supplier_prosumer_eur_per_kva_year` stays `None`: Flemish net metering is not modelled
+(`fees._compensation_kva` bills a prosumer fee in Wallonia only). Flanders digital meters
+(post-2024 SMR3) do not carry the compensation-regime prosumer tariff either
 (`DsoOverlay.prosumer_eur_per_kva_year` docstring, `base.py`), so the extractor never sets
 it. No Wallonia Tarif Impact or Brussels OSP applies (Flanders-only).
 
