@@ -538,6 +538,7 @@ class _TickMixin:
             current_year_cost_reset=ytd_window_reset(self.entry, costs.window_now),
             current_month_cost_reset=month_window_reset(self.entry, costs.window_now),
             ytd_diagnostics=costs.ytd_breakdown or None,
+            month_diagnostics=costs.month_breakdown or None,
             projected_year_cost_eur=costs.projected_year_cost,
             projection_diagnostics=costs.projection_breakdown or None,
             projected_year_consumption_kwh=costs.projected_consumption,

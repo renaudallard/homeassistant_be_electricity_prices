@@ -814,6 +814,9 @@ async def test_the_tick_adds_the_earlier_contract_and_reads_unknown_until_priced
     assert second.current_month_cost_eur == pytest.approx(100.0)
     assert second.ytd_diagnostics is not None
     assert second.ytd_diagnostics["previous_contracts_eur"] == pytest.approx(250.0)
+    # Nothing of the earlier contract falls in September.
+    assert second.month_diagnostics is not None
+    assert second.month_diagnostics["previous_contracts_eur"] == 0.0
     assert second.previous_contracts[0]["supplier"] == "engie"
     assert second.previous_contracts[0]["to"] == "2026-06-14"
     coord.async_request_refresh.assert_awaited()

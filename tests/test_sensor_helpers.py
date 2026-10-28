@@ -531,6 +531,47 @@ def test_current_price_bulk_attributes_are_unrecorded() -> None:
         assert key in BePriceSensor._unrecorded_attributes
 
 
+def test_month_cost_carries_its_own_breakdown() -> None:
+    """Discussion #141: current_month_cost publishes the breakdown of its own
+    window under the yearly sensor's keys, and neither sensor shows the
+    other's."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.sensor import (
+        FEE_SENSORS,
+        BePriceSensor,
+    )
+
+    def _attrs(key: str, data: CoordinatorData) -> dict[str, Any]:
+        sensor = BePriceSensor(
+            SimpleNamespace(  # type: ignore[arg-type]
+                data=data,
+                entry=SimpleNamespace(entry_id="x", data={}, title="t"),
+                last_update_success=True,
+            ),
+            next(d for d in FEE_SENSORS if d.key == key),
+        )
+        return sensor.extra_state_attributes
+
+    data = CoordinatorData(
+        ytd_diagnostics={"consumption_ytd_kwh": 3000.0, "capacity_ytd_eur": 250.0},
+        month_diagnostics={
+            "consumption_ytd_kwh": 472.51234,
+            "capacity_ytd_eur": 29.95,
+        },
+    )
+    assert _attrs("current_month_cost", data) == {
+        "consumption_ytd_kwh": 472.5123,
+        "capacity_ytd_eur": 29.95,
+    }
+    assert _attrs("current_year_cost", data)["consumption_ytd_kwh"] == 3000.0
+    assert _attrs("current_month_cost", CoordinatorData()) == {}
+    # The same keys, so the recorder leaves them out of history on this
+    # sensor too.
+    for key in data.month_diagnostics or {}:
+        assert key in BePriceSensor._unrecorded_attributes
+
+
 # --- today/tomorrow injection array (issue #40) -------------------------
 
 

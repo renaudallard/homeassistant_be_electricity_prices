@@ -499,7 +499,7 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
     # snapshot_age_hours rises ~1/hour and last_error is diagnostic, so
     # recording them would write a fresh states row every tick even for a flat
     # contract whose price never moves; keep them out of history too.
-    # The current_year_cost diagnostic breakdown (YTD/today kWh, raw energy,
+    # The current_year_cost and current_month_cost breakdown (kWh, raw energy,
     # fees, the components, the credit, the coverage counts) climbs every tick
     # as well, so keep it out of the recorder too; only the billed peak stays,
     # because the capacity sensor publishes it as history and it moves only
@@ -671,6 +671,11 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
                 "billed_peak_kw": round(data.capacity_billed_peak_kw, 3),
                 "months_counted": data.capacity_peak_months,
             }
+        if self.entity_description.key == "current_month_cost":
+            # The yearly breakdown below over the month's own window, under
+            # the same keys so one template reads either sensor.
+            diag = data.month_diagnostics
+            return {k: round(v, 4) for k, v in diag.items()} if diag else {}
         if self.entity_description.key == "current_year_cost":
             # Diagnostic breakdown: lets a flat or low sensor be told apart.
             # A negative energy_ytd_raw_eur (every static entry, and an hourly

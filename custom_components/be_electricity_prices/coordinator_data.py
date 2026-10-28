@@ -185,6 +185,8 @@ class CoordinatorData:
     # attributes so a flat sensor can be told apart (negative raw energy = the
     # compensation clamp; a today kWh that never moves = stalled meter input).
     ytd_diagnostics: dict[str, float] | None = None
+    # The same breakdown behind current_month_cost, under the same keys.
+    month_diagnostics: dict[str, float] | None = None
     # Roughly what a year on this contract costs: a full year priced at today's
     # tariffs against the entry's own metered yearly volume, computed in one
     # pass rather than as elapsed plus remainder. None for a contract whose

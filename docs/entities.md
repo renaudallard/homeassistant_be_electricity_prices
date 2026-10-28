@@ -216,7 +216,8 @@ regulator's whole series as `history`, so an automation can settle last
 quarter's kWh at last quarter's rate once the state has moved on (`sensor.py`).
 The figures that are worked out carry what they were worked out from:
 `current_year_cost` the year-to-date walk's breakdown (`ytd_diagnostics`, plus
-`previous_contracts` after a recorded switch), `capacity_cost` its
+`previous_contracts` after a recorded switch), `current_month_cost` the same
+breakdown over the month (`month_diagnostics`), `capacity_cost` its
 `billed_peak_kw` and `months_counted`, `projected_year_cost` and
 `projected_year_end_cost` their projection's basis (`projection_diagnostics`,
 `year_end_diagnostics`), and `projected_year_consumption`,
@@ -497,6 +498,15 @@ figures do not add up to `current_year_cost` on such an entry. The annual
 netting is what the supplier actually settles, so the yearly sensor stays the
 authority and the monthly one answers "what did this month cost, on its own".
 On every other regime they do add up.
+
+The second pass fills a breakdown of its own, which the sensor publishes
+(`CoordinatorData.month_diagnostics`) under the keys `current_year_cost` uses,
+`_ytd` included, so a template written for one reads the other; the recorder
+leaves them out of history on both sensors. Two keys are set after the pass:
+`welcome_credit_eur` is the credit the published figure carries, the year's
+less the year's before the month off the compensation regime, not the one the
+month's own window capped, and `previous_contracts_eur` is the earlier
+contracts' share of the month (`previous_costs`).
 
 Off the compensation regime, the welcome credit is the one part of the month
 not priced on the month's own window. Capped on what the month charged, a month

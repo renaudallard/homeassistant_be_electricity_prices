@@ -5787,6 +5787,11 @@ async def test_a_months_welcome_credit_is_the_years_less_the_year_before_it(
     assert data.current_month_cost_eur == pytest.approx(
         100.0 - (50.0 - 250.0 * 53 / 365)
     )
+    # And the month's breakdown names the credit its figure carries.
+    assert data.month_diagnostics is not None
+    assert data.month_diagnostics["welcome_credit_eur"] == pytest.approx(
+        50.0 - 250.0 * 53 / 365
+    )
 
 
 async def test_a_compensation_month_keeps_its_own_welcome_credit(
@@ -5804,6 +5809,8 @@ async def test_a_compensation_month_keeps_its_own_welcome_credit(
     )
     assert asked == [year, month]
     assert data.current_month_cost_eur == pytest.approx(100.0 - 7.0)
+    assert data.month_diagnostics is not None
+    assert data.month_diagnostics["welcome_credit_eur"] == pytest.approx(7.0)
 
 
 async def test_a_credit_starting_in_the_month_needs_no_earlier_walk(

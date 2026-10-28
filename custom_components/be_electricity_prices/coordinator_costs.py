@@ -133,6 +133,7 @@ class TickCosts:
     current_year_cost: float | None
     month_cost: float | None
     ytd_breakdown: dict[str, float]
+    month_breakdown: dict[str, float]
     signing: SupplierSnapshot
     projected_year_cost: float | None
     projection_breakdown: dict[str, Any]
@@ -387,17 +388,18 @@ class _CostsMixin:
             and current_year_cost is not None
             and self.entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_COMPENSATION
         ):
-            month_cost += month_breakdown.get("welcome_credit_eur", 0.0) - (
-                ytd_breakdown.get("welcome_credit_eur", 0.0)
-                - credit_before_month(
-                    signing,
-                    self.entry,
-                    own_start,
-                    month_from,
-                    ytd_breakdown,
-                    month_breakdown,
-                )
+            credit = ytd_breakdown.get("welcome_credit_eur", 0.0) - credit_before_month(
+                signing,
+                self.entry,
+                own_start,
+                month_from,
+                ytd_breakdown,
+                month_breakdown,
             )
+            month_cost += month_breakdown.get("welcome_credit_eur", 0.0) - credit
+            # The credit the published figure carries, not the one the month's
+            # own window capped.
+            month_breakdown["welcome_credit_eur"] = credit
         if periods:
             self._schedule_previous_pricing(periods, window_now.date())
         # Unknown rather than short while the earlier contracts are not priced
@@ -415,6 +417,8 @@ class _CostsMixin:
             month_cost = None if prev_month is None else month_cost + prev_month
         if periods and prev_year is not None:
             ytd_breakdown["previous_contracts_eur"] = prev_year
+        if periods and prev_month is not None:
+            month_breakdown["previous_contracts_eur"] = prev_month
         if cached_months_only:
             self._month_cards_deferred = False
             self.entry.async_create_background_task(
@@ -569,6 +573,7 @@ class _CostsMixin:
             current_year_cost=current_year_cost,
             month_cost=month_cost,
             ytd_breakdown=ytd_breakdown,
+            month_breakdown=month_breakdown,
             signing=signing,
             projected_year_cost=projected_year_cost,
             projection_breakdown=projection_breakdown,
@@ -641,6 +646,7 @@ class _CostsMixin:
             current_year_cost=_figure("current_year_cost", same_year),
             month_cost=_figure("month_cost", same_month),
             ytd_breakdown={},
+            month_breakdown={},
             signing=signing,
             projected_year_cost=_figure("projected_year_cost", same_year),
             projection_breakdown={},
