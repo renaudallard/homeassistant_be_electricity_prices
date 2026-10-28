@@ -60,6 +60,8 @@ def _nothing_held() -> None:
     fluvius._failed_at.clear()
     fluvius._analog.clear()
     fluvius._analog_failed_at.clear()
+    fluvius._stored.clear()
+    fluvius._stored_analog.clear()
     fluvius._listing = None
 
 
@@ -527,6 +529,121 @@ def test_a_card_printing_no_ceiling_stays_capped_into_the_next_year() -> None:
     assert december < 0.9 * 8.0 * 52.37
     january = billed(date(2027, 1, 1))
     assert january == (pytest.approx(ceiling), pytest.approx(december))
+
+
+def test_the_store_keeps_the_figures_beneath_what_is_read() -> None:
+    """The figures are module globals and the tick reads them again only while
+    fluvius.be answers. What an entry's store kept stands in after a restart
+    until a sheet is read again, which then answers its own figure."""
+    from custom_components.be_electricity_prices.const import DSO_FLUVIUS_ANTWERPEN
+
+    fluvius._cache[2026] = fluvius.SheetTerms(0.3276168, 3.0)
+    fluvius._analog[(2026, DSO_FLUVIUS_ANTWERPEN)] = 0.0257935
+    stored = fluvius.held_table()
+    fluvius._cache.clear()
+    fluvius._analog.clear()
+    fluvius.restore(stored)
+    assert fluvius.cached_network_ceiling(2027) == 0.3276168
+    assert fluvius.capacity_floor_kw(2026) == 3.0
+    assert fluvius.cached_analog_surcharge(2026, DSO_FLUVIUS_ANTWERPEN) == 0.0257935
+    # A sheet read again answers its own figure, and is what is kept next.
+    fluvius._cache[2026] = fluvius.SheetTerms(0.34, 2.5)
+    assert fluvius.cached_network_ceiling(2026) == 0.34
+    assert fluvius.held_table()["sheets"]["2026"] == {"ceiling": 0.34, "floor_kw": 2.5}
+    # A second entry's copy does not replace the one restored first.
+    fluvius._cache.clear()
+    fluvius.restore({"sheets": {"2026": {"ceiling": 0.2, "floor_kw": 2.5}}})
+    assert fluvius.cached_network_ceiling(2026) == 0.3276168
+    # A copy that does not read as the sheet's figures is skipped.
+    fluvius._stored.clear()
+    fluvius._stored_analog.clear()
+    fluvius.restore(
+        {
+            "sheets": {"2026": {"ceiling": 3.3, "floor_kw": 2.5}, "x": {}},
+            "analog": {"2026": {DSO_FLUVIUS_ANTWERPEN: 2.0, "ores": 0.02}},
+        }
+    )
+    fluvius.restore({"sheets": [0.3], "analog": "nonsense"})
+    assert fluvius.held_table() == {"sheets": {}, "analog": {}}
+
+
+async def test_a_restart_without_fluvius_bills_the_sheet_last_read(
+    hass: Any,
+) -> None:
+    """After a restart the tick reads the sheet again before the card, and
+    while fluvius.be does not answer it asks again only after six hours. The
+    stored card was resolved meanwhile with no ceiling at all, so the entry's
+    store keeps what was read, for the card to be resolved on it."""
+    from unittest.mock import AsyncMock, patch
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.be_electricity_prices.const import (
+        DOMAIN,
+        DSO_FLUVIUS_ANTWERPEN,
+    )
+    from custom_components.be_electricity_prices.coordinator import (
+        BePricesCoordinator,
+    )
+    from custom_components.be_electricity_prices.providers.base import (
+        DsoOverlay,
+        TaxOverlay,
+    )
+    from tests import make_snapshot
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "engie",
+            "contract": "engie_easy_fixed",
+            "region": "flanders",
+            "dso": DSO_FLUVIUS_ANTWERPEN,
+            "meter": "mono",
+        },
+    )
+    entry.add_to_hass(hass)
+    fluvius._cache[dt_util.now().year] = fluvius.SheetTerms(0.3276168, 2.5)
+    coord = BePricesCoordinator(hass, entry)
+    coord._set_snapshot(
+        make_snapshot(
+            supplier="engie",
+            contract="engie_easy_fixed",
+            taxes=TaxOverlay(federal_excise=0.05, energy_contribution=0.0),
+            dsos={
+                DSO_FLUVIUS_ANTWERPEN: DsoOverlay(
+                    distribution_single=0.0535,
+                    transport=0.0,
+                    capacity_eur_per_kw_year=52.37,
+                )
+            },
+        )
+    )
+    coord._snapshot_fetched_at = dt_util.utcnow()
+    saved: list[dict[str, Any]] = []
+
+    async def save(payload: dict[str, Any]) -> None:
+        saved.append(payload)
+
+    with patch.object(coord._store, "async_save", save):
+        await coord._save_persistent()
+    assert coord._snapshot is not None
+    read = coord._snapshot.dsos[DSO_FLUVIUS_ANTWERPEN].network_ceiling_eur_per_kwh
+    assert read is not None
+
+    fluvius._cache.clear()
+    restarted = BePricesCoordinator(hass, entry)
+    restarted._store.async_load = AsyncMock(return_value=saved[-1])  # type: ignore[method-assign]
+    await restarted.async_load_persistent()
+    assert restarted._snapshot is not None
+    overlay = restarted._snapshot.dsos[DSO_FLUVIUS_ANTWERPEN]
+    assert overlay.network_ceiling_eur_per_kwh == pytest.approx(read)
+    # The stamp is the figure the card was resolved on, so a sheet read since
+    # that says otherwise resolves it again.
+    fluvius._cache[dt_util.now().year] = fluvius.SheetTerms(0.4, 2.5)
+    restarted._reresolve_snapshot()
+    overlay = restarted._snapshot.dsos[DSO_FLUVIUS_ANTWERPEN]
+    assert overlay.network_ceiling_eur_per_kwh == pytest.approx(read * 0.4 / 0.3276168)
 
 
 def test_the_floor_is_the_years_or_the_last_sheet_before_it() -> None:

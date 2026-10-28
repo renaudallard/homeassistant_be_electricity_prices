@@ -58,7 +58,8 @@ parse failure logs and leaves the year unknown, and each figure then stands
 on the latest earlier sheet held. With none held, the card is billed with the
 ceiling it prints and the floor falls back to ``VREG_CAPACITY_FLOOR_KW``, as
 they were before the sheet was read, and an analog meter is billed the
-peak-metered kWh rate.
+peak-metered kWh rate. What was read is kept in each entry's store too, so a
+restart while fluvius.be does not answer bills the figures last read.
 """
 
 from __future__ import annotations
@@ -68,10 +69,10 @@ import io
 import logging
 import re
 import zipfile
-from collections.abc import Awaitable, Callable, Hashable
+from collections.abc import Awaitable, Callable, Hashable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Final
+from typing import Any, Final
 
 import aiohttp
 from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
@@ -181,6 +182,11 @@ _failed_at: dict[int, datetime] = {}
 # The analog surcharge, per year and DSO key, kept the same way.
 _analog: dict[tuple[int, str], float] = {}
 _analog_failed_at: dict[tuple[int, str], datetime] = {}
+# What an entry's store kept of the two from before the last restart, beneath
+# them: a year or an area this process has read answers its own figure, so a
+# store never stands in the way of a sheet read again (:func:`restore`).
+_stored: dict[int, SheetTerms] = {}
+_stored_analog: dict[tuple[int, str], float] = {}
 # One fetch per sheet at a time, for the reason brugel.py gives.
 _locks: dict[Hashable, asyncio.Lock] = {}
 # The listing as last fetched, or what fetching it raised, and when.
@@ -208,10 +214,12 @@ def cached_network_ceiling(year: int) -> float | None:
     2023 and 2024 ones did, so the year before is the best stand-in there is.
 
     Synchronous on purpose: the snapshot resolver runs in the pricing path and
-    cannot await. :func:`ensure_tariff_sheet` is what puts a value here.
+    cannot await. :func:`ensure_tariff_sheet` is what puts a value here, and
+    :func:`restore` what an entry's store kept of it.
     """
-    held = [held_year for held_year in _cache if held_year <= year]
-    return _cache[max(held)].ceiling if held else None
+    sheets = _sheets()
+    held = [held_year for held_year in sheets if held_year <= year]
+    return sheets[max(held)].ceiling if held else None
 
 
 def capacity_floor_kw(year: int | None = None) -> float:
@@ -224,7 +232,7 @@ def capacity_floor_kw(year: int | None = None) -> float:
     year = dt_util.now().year if year is None else year
     held = {
         held_year: terms.floor_kw
-        for held_year, terms in _cache.items()
+        for held_year, terms in _sheets().items()
         if held_year <= year and terms.floor_kw is not None
     }
     floor = held[max(held)] if held else None
@@ -243,10 +251,75 @@ def cached_analog_surcharge(year: int, dso: str) -> float | None:
     """
     held = {
         held_year: surcharge
-        for (held_year, area), surcharge in _analog.items()
+        for (held_year, area), surcharge in _analog_rates().items()
         if area == dso and held_year <= year
     }
     return held[max(held)] if held else None
+
+
+def _sheets() -> dict[int, SheetTerms]:
+    """Each year's figures held, as read since the start or else as stored."""
+    return {**_stored, **_cache}
+
+
+def _analog_rates() -> dict[tuple[int, str], float]:
+    """Each year's and area's analog surcharge held, the same way."""
+    return {**_stored_analog, **_analog}
+
+
+def restore(table: Mapping[str, Any]) -> None:
+    """Hold ``table`` from an entry's store, beneath what this process reads.
+
+    The figures are module globals, empty after a restart, and the tick reads
+    them again only while fluvius.be answers. Without them a Flemish entry was
+    billed with no ceiling and on the default minimum peak, and an analog
+    meter without its kWh rate, six hours at a time. Several entries restore
+    their own copy at start-up, so a year or area already held from one is
+    kept. A figure outside the bounds a sheet's own is held to is a damaged
+    store rather than a rate, and is skipped.
+    """
+    sheets = table.get("sheets")
+    if isinstance(sheets, Mapping):
+        for label, row in sheets.items():
+            try:
+                year, ceiling = int(label), float(row["ceiling"])
+                floor = row["floor_kw"]
+                floor_kw = None if floor is None else float(floor)
+            except (TypeError, ValueError, KeyError):
+                continue
+            if not _MIN_CEILING <= ceiling <= _MAX_CEILING:
+                continue
+            if floor_kw is not None and not _MIN_FLOOR_KW <= floor_kw <= _MAX_FLOOR_KW:
+                floor_kw = None
+            _stored.setdefault(year, SheetTerms(ceiling, floor_kw))
+    analog = table.get("analog")
+    if not isinstance(analog, Mapping):
+        return
+    for label, areas in analog.items():
+        if not isinstance(areas, Mapping):
+            continue
+        for dso, rate in areas.items():
+            try:
+                year, surcharge = int(label), float(rate)
+            except (TypeError, ValueError):
+                continue
+            if dso in _AREA_SLUGS and 0.0 < surcharge < _MAX_ANALOG_SURCHARGE:
+                _stored_analog.setdefault((year, dso), surcharge)
+
+
+def held_table() -> dict[str, Any]:
+    """What is held, read or stored, in the shape :func:`restore` reads, for
+    an entry's store."""
+    analog: dict[str, dict[str, float]] = {}
+    for (year, dso), surcharge in sorted(_analog_rates().items()):
+        analog.setdefault(str(year), {})[dso] = surcharge
+    return {
+        "sheets": {
+            str(year): {"ceiling": terms.ceiling, "floor_kw": terms.floor_kw}
+            for year, terms in sorted(_sheets().items())
+        },
+        "analog": analog,
+    }
 
 
 async def ensure_tariff_sheet(

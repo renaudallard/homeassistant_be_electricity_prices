@@ -57,6 +57,8 @@ from .coordinator_profiles import (
 from .coordinator_spots import _spot_is_sane, _spots_for_local_days
 from .excise_law import held_table as held_excise_table
 from .excise_law import restore as restore_excise_law
+from .fluvius import held_table as held_fluvius_table
+from .fluvius import restore as restore_fluvius_table
 from .providers.base import SupplierSnapshot
 from .snapshot_codec import _MigratingStore, _snapshot_from_dict, _snapshot_to_dict
 from .snapshot_feed_in import reference_rows_to_store, restore_reference_rows
@@ -178,6 +180,9 @@ class _PersistMixin:
         excise_table = stored.get("excise_law")
         if isinstance(excise_table, dict):
             restore_excise_law(excise_table)
+        fluvius_table = stored.get("fluvius_sheets")
+        if isinstance(fluvius_table, dict):
+            restore_fluvius_table(fluvius_table)
         # If the persisted blob was written under a different supplier
         # tuple (typical case: OptionsFlow swap landed while a tick was
         # still in flight, and the slow tick saved over the file after
@@ -651,6 +656,9 @@ class _PersistMixin:
         payload["vat_rates"] = held_vat_table()
         # The excise the law sets, for the same reason.
         payload["excise_law"] = held_excise_table()
+        # And the figures read off Fluvius's tariff sheets: the VREG ceiling,
+        # the minimum peak and an analog meter's kWh rate.
+        payload["fluvius_sheets"] = held_fluvius_table()
         # Nothing to write when nothing moved. The blob is rebuilt whole on
         # every tick and is mostly slow-changing: the card, the peak history,
         # the spot cache and the compare rows are identical on 23 ticks out of

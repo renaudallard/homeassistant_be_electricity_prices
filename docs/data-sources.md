@@ -1327,10 +1327,13 @@ failure to fetch it (`_fetch_listing`): the sheets one tick or one backfill
 reads are found from one download, and a Fluvius that does not answer costs
 one timeout, after which nothing more is asked, the year before included. A
 sheet read is held for the life of the process; a failure is held for six
-hours, and an analog meter whose area sheet is not
-read is billed the peak-metered kWh rate, its capacity charge still the flat
-one, and logged: as a warning for this year's, which heals once the sheet is
-read, and quietly for a closed year that has none.
+hours. What was read is also kept in each entry's store (the `fluvius_sheets`
+key, `held_table`) and restored before the stored card is resolved, beneath
+what the process reads again (`restore`), so a restart while fluvius.be does
+not answer bills the figures last read rather than none. An analog meter whose
+area sheet is not read is billed the peak-metered kWh rate, its capacity
+charge still the flat one, and logged: as a warning for this year's, which
+heals once the sheet is read, and quietly for a closed year that has none.
 `cached_network_ceiling` answers the ceiling of the year's sheet, else of the
 latest earlier sheet held, never a later one: the 2025 and 2026 sheets print
 the same figure, so the year before stands in from 1 January until the new

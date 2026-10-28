@@ -214,6 +214,8 @@ def _fluvius_sheets_as_published() -> Iterator[None]:
         fluvius._failed_at.clear()
         fluvius._analog.clear()
         fluvius._analog_failed_at.clear()
+        fluvius._stored.clear()
+        fluvius._stored_analog.clear()
         fluvius._listing = None
 
     _forget()
