@@ -620,9 +620,8 @@ network before 2025 and its backfill leaves those months out, and an entry in a
 municipality that changed operator is billed those months on the row of its
 area's namesake rather than of the operator it was on.
 A card with no network table at all is not searched for and its month is dropped
-as before: an OCTA+ Walloon card from before 2026 whose aligned text damaged the
-table reads no row of it, and the search would ask the supplier's archive for every
-earlier month of its year, up to eleven downloads, to bill a network never read.
+as before: the search would ask the supplier's archive for every earlier month of
+its year, up to eleven downloads, to bill a network never read.
 The running month takes part both ways. Its own card, where the walk reads it
 short, receives the area from a closed card of its year, so that month to date is
 billed at the full-card figure rather than dropped (the suppliers on

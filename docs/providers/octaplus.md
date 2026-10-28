@@ -158,7 +158,10 @@ which `fetch_for_month` reads:
 - `getTariffSheet?Canal=website&RequestedPDF=<NomPdf>` answers
   `{"Response": {"Ok": "True", "TariffSheet": "data:application/pdf;base64,..."}}`,
   which `_fetch_archive_pdf` unwraps and magic-checks. The text is extracted with
-  the same word-coordinate alignment `fetch` uses, in a worker thread.
+  the same word-coordinate alignment `fetch` uses, in a worker thread. A Walloon
+  card whose aligned text reads no network row is rendered a second time by
+  pypdf (`extract_pdf_text`), and its table is read from that (see Wallonia
+  below).
 
 Measured on 11 September 2026, the June 2026 Dynamic Flanders card parsed whole
 (label `06/2026`, validity date 30 June 2026, all eight DSO rows). The dynamic
@@ -416,27 +419,38 @@ cards up to December 2025, before the Impact tariff, print a seven-column table
 layout reads. On most of them the aligned text damages it: the first digit of a
 column lost (`,00` for the 7,00 of AIEG's exclusive night), a figure smeared into
 `22222222222,98`, the first letters of the labels. A row is read only when it ends
-in seven whole figures, so a damaged one is left out rather than read short; of
+in seven whole figures, so a damaged one is left out rather than read short. Of
 the archive's 103 Walloon cards from October 2023 to December 2025, 44 read whole
-and 59 come back with an empty table. Every row read is what the card prints,
-which is not always what Engie's and Eneco's cards of the same month print: a
-cent of rounding, what OCTA+ printed behind the regulator or on its own
-(January 2025's whole table, 2024's; transport 2,61 into March 2024; AIESH's
-January 2024 tariff kept through 2024; in 2023 a transport of 2,71 and a Régie
-de Wavre row of its own), and the months the other two disagree themselves
+from the aligned text and 59 read no row of it, so `fetch_for_month` reads those
+59 from pypdf's render of the same bytes (`extract_pdf_text`), which prints the
+table whole. That second render, about 0,8 s on a Raspberry Pi against 2 s for
+the aligned one, is asked for only where the aligned text read no row, so the 44
+read as they did (`test_a_smeared_walloon_table_is_read_from_the_plain_render`),
+and a card pypdf cannot read keeps the empty table and its energy
+(`test_a_card_pypdf_cannot_read_keeps_what_the_aligned_text_gave`).
+On the 59, every figure the aligned text kept whole is the plain render's, and
+every damaged one is its tail, the digits it lost printed elsewhere as one run;
+each table equals the one the month's other OCTA+ cards print. Every row read is
+what the card prints, which is not always what Engie's and Eneco's cards of the
+same month print: a cent of rounding, what OCTA+ printed behind the regulator or
+on its own (January 2025's whole table, 2024's; transport 2,61 into March 2024
+and 3,20 into March 2025; AIESH's January 2024 tariff kept through 2024; in
+2023 a transport of 2,71 and a Régie de Wavre row of its own), and the months
+the other two disagree themselves
 (Engie's AIEG and AIESH rows of November and December 2023 and its January 2024
 table, see [engie.md](engie.md)). The cards up to January 2024 print each ORES sub-area on a distribution
 tariff of its own, which one `ores` area cannot tell apart, so those leave ORES
 out (`ores_sub_areas_split`, `_parse.py`;
-`test_wallonia_card_before_the_impact_tariff_reads_whole_rows`). A card with an
-empty table keeps its energy, which those months and a contract signed in them
+`test_wallonia_card_before_the_impact_tariff_reads_whole_rows`). A past card
+short of an area keeps its energy, which its month and a contract signed in it
 are billed on. A month whose table read no area at all is dropped, with no
 search for another card (`_short_of`, `snapshot_areas.py`); one that read some
 areas bills the missing one on the nearest card of its year that prints it
 (`_with_nearest_area`), or drops the month where none does: a card of 2026 is
 never taken, since the Impact tariff changed the Walloon network's very shape
 (`test_an_archived_card_short_of_an_area_keeps_its_energy`, on the real
-November 2025 Fixed card, which also pins the running month's refusal).
+November 2025 Fixed card with its AIESH row relabelled, which also pins the
+running month's refusal).
 
 ### Flanders (`_extract_flanders_dsos`, `_octaplus_overlays.py`)
 
@@ -581,7 +595,7 @@ cards unless the row names another month):
 | `octaplus_dynamic_w.pdf` | OCTA+ Dynamic, Wallonia. `Epex 15'` consumption + injection formulas, spaced DSO labels. |
 | `octaplus_dynamic_v_jan.pdf` | OCTA+ Dynamic, Flanders, **January 2026**. Both formulas name the index `Belpex 15'`, followed by the AMR clause the open injection search used to run into. |
 | `octaplus_dynamic_v_dec2025.pdf` | OCTA+ Dynamic, Flanders, **December 2025**, from the archive endpoint. Both formulas name `Belpex Hourly`, the index every dynamic card printed from 2023 to 2025. |
-| `octaplus_fixed_w_nov2025.pdf` | OCTA+ Fixed, Wallonia, **November 2025**, from the archive endpoint. The seven-column network table before the Impact tariff, damaged in the aligned text so that no row of it reads: the archive path keeps the card for its energy as a past month, the live fetch and the running month refuse it. |
+| `octaplus_fixed_w_nov2025.pdf` | OCTA+ Fixed, Wallonia, **November 2025**, from the archive endpoint. The seven-column network table before the Impact tariff, damaged in the aligned text so that no row of it reads: the archive path reads it from pypdf's render of the same bytes, the live fetch refuses the card. With its AIESH row relabelled it is the past card short of an area that keeps its energy, and the running month's that is refused. |
 | `octaplus_ecofixed_w_dec2025.pdf` | OCTA+ Eco Fixed, Wallonia, **December 2025**, from the archive endpoint. The same seven-column table, whole in the aligned text, so every row reads. |
 | `octaplus_fixed_v_mar.pdf` | OCTA+ Fixed, Flanders, **March 2026**, the card the archive lists as `FIXEDD`. Fetched from the archive endpoint. |
 | `octaplus_fixed_v_jan.pdf` | OCTA+ Fixed, Flanders, **January 2026**. The monthly feed-in formula reads `Belpex SPP x 0,852 - 13,39`. The same bytes as the card archive's row for the month. |

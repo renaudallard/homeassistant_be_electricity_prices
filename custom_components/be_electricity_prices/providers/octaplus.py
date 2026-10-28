@@ -42,6 +42,7 @@ on a single line.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import re
 from dataclasses import dataclass, replace
@@ -64,6 +65,7 @@ from ._octaplus_overlays import (
     _extract_flanders_renewables,
     _extract_supplier_prosumer,
     _extract_taxes,
+    _extract_wallonia_2025_dsos,
     _extract_wallonia_dsos,
     _extract_wallonia_renewables,
 )
@@ -80,6 +82,7 @@ from ._pdf import (
     FR_MONTHS,
     _is_pdf_payload,
     _strip_pdf_prefix,
+    extract_pdf_text,
     extract_pdf_text_aligned,
     fetch_pdf_text_aligned,
     fetch_text,
@@ -407,18 +410,25 @@ async def fetch_for_month(
         if name is None:
             return None
         payload = await _fetch_archive_pdf(session, name)
+        url = f"{_ARCHIVE_SHEET_URL}?RequestedPDF={name}"
         # Through the readers' render seam, not a bare thread: the card
         # archiver keeps what passes there, and this card arrived base64
         # inside JSON rather than through a reader.
         text = await render_pdf(
             "aligned",
-            f"{_ARCHIVE_SHEET_URL}?RequestedPDF={name}",
+            url,
             payload,
             lambda bytes_: extract_pdf_text_aligned(bytes_, 3, 1.0),
         )
-        snap = parse_snapshot(
-            contract_id, text, region, f"{_ARCHIVE_SHEET_URL}?RequestedPDF={name}"
-        )
+        snap = parse_snapshot(contract_id, text, region, url)
+        if region == REGION_WALLONIA and not snap.dsos:
+            # The aligned text of most Walloon cards up to December 2025
+            # smears their seven-column table, which pypdf's render prints
+            # whole. A second render, so only for a card that read no row,
+            # and one pypdf cannot read keeps what the aligned text gave.
+            with contextlib.suppress(ExtractorError):
+                plain = await render_pdf("plain", url, payload, extract_pdf_text)
+                snap = replace(snap, dsos=_extract_wallonia_2025_dsos(plain))
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
         # so the month cache retries it instead of caching it as absent.

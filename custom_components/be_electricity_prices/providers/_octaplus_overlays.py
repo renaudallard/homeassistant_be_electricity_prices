@@ -257,10 +257,11 @@ def _extract_wallonia_2025_dsos(text: str) -> dict[str, DsoOverlay]:
     column (",00" for the 7,00 of AIEG's exclusive night), a figure smeared
     into "22222222222,98", the first letters of the labels. So a row is read
     only when it ends in seven whole figures and holds nothing else, and a
-    damaged row is left out rather than read short: the November 2025 Fixed
-    card keeps its empty table. A row read is the card's own figures, which
-    differ from Engie's and Eneco's of the same month where
-    docs/providers/octaplus.md says.
+    damaged row is left out rather than read short. A card whose aligned
+    text reads no row is read again from pypdf's render of the same bytes,
+    which prints the table whole (``fetch_for_month``, ``octaplus.py``). A
+    row read is the card's own figures, which differ from Engie's and
+    Eneco's of the same month where docs/providers/octaplus.md says.
 
     The cards up to January 2024 print each ORES sub-area on a distribution
     tariff of its own, and those leave ORES out (``ores_sub_areas_split``).
@@ -355,9 +356,9 @@ def _areas(region: str) -> Iterable[str]:
     """The areas a card read for ``region`` must hold.
 
     Asked of the live card and the running month's (see ``require_every_area``):
-    the aligned text of most Walloon cards up to December 2025 damages their
-    seven-column table, which then reads no row, and as past months they
-    still give a signing cohort its energy.
+    a past month's card keeps a short table and still gives a signing cohort
+    its energy, as the Walloon cards up to January 2024 do, which leave ORES
+    out (``ores_sub_areas_split``).
     """
     if region == REGION_WALLONIA:
         return [key for _, key in _WALLONIA_LABELS]

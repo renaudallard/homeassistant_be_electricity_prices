@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from collections.abc import Callable
 from dataclasses import fields
 from datetime import date
 from typing import Any
@@ -1058,17 +1059,134 @@ async def test_archive_renders_the_base64_card_through_the_render_seam(
     assert size == len(sheet)
 
 
+@pytest.mark.parametrize(
+    ("contract", "name", "listed", "renders"),
+    [
+        # The aligned text smears the table, "Exclu77555555565sif nuit" over
+        # "Aieg 9,46 9,56 7,65 ,00 19,08 2,98 78,99", and no row of it reads.
+        (
+            "octaplus_fixed",
+            "octaplus_fixed_w_nov2025.pdf",
+            "2025-11 E OCTA+FIXED RE WL FR.pdf",
+            ["aligned", "plain"],
+        ),
+        # Whole in the aligned text, which is all that is read.
+        (
+            "octaplus_ecofixed",
+            "octaplus_ecofixed_w_dec2025.pdf",
+            "2025-12 E OCTA+ECOFIXED RE WL FR.pdf",
+            ["aligned"],
+        ),
+    ],
+)
+async def test_a_smeared_walloon_table_is_read_from_the_plain_render(
+    monkeypatch: pytest.MonkeyPatch,
+    contract: str,
+    name: str,
+    listed: str,
+    renders: list[str],
+) -> None:
+    """59 of the 103 Walloon cards from October 2023 to December 2025 came
+    back with an empty network table, so those months got no backfilled
+    statistics: their aligned text smears the seven-column table. pypdf's
+    render of the same bytes prints it whole, and is asked for only when the
+    aligned text read no row, so a card that read whole is never rendered
+    twice and reads as it did."""
+    from custom_components.be_electricity_prices.providers import _pdf, octaplus
+
+    monkeypatch.setattr(
+        octaplus,
+        "fetch_text",
+        _archive_router([{"NomPdf": listed}], (FIXTURES / name).read_bytes(), []),
+    )
+    seen: list[str] = []
+
+    async def hook(
+        variant: str, url: str, payload: bytes, renderer: Callable[[bytes], str]
+    ) -> str:
+        seen.append(variant)
+        return renderer(payload)
+
+    with _pdf.render_through(hook):
+        snap = await octaplus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            contract,
+            "wallonia",
+            date(int(listed[:4]), int(listed[5:7]), 10),
+        )
+    assert seen == renders
+    assert snap is not None
+    # Both cards print the same table: mono, jour, nuit, exclusive night,
+    # meter rental (€/an), transport, prosumer (€/kVA/an).
+    printed = {
+        "aieg": (9.46, 9.56, 7.65, 7.00, 19.08, 2.98, 78.99),
+        "aiesh": (12.79, 14.21, 7.76, 7.76, 18.21, 2.98, 97.68),
+        "ores": (10.79, 11.46, 6.64, 5.41, 13.84, 2.98, 86.96),
+        "resa": (10.62, 12.00, 5.98, 5.04, 26.50, 2.98, 85.93),
+        "rew": (11.48, 11.65, 7.21, 6.17, 28.09, 2.98, 89.91),
+    }
+    assert set(snap.dsos) == set(printed)
+    for key, (mono, day, night, excl, rental, transport, prosumer) in printed.items():
+        dso = snap.dsos[key]
+        assert dso.distribution_single == pytest.approx(mono / 100), key
+        assert dso.distribution_peak == pytest.approx(day / 100), key
+        assert dso.distribution_offpeak == pytest.approx(night / 100), key
+        assert dso.distribution_exclusive_night == pytest.approx(excl / 100), key
+        assert dso.data_management_per_year == pytest.approx(rental), key
+        assert dso.transport == pytest.approx(transport / 100), key
+        assert dso.prosumer_eur_per_kva_year == pytest.approx(prosumer), key
+
+
+async def test_a_card_pypdf_cannot_read_keeps_what_the_aligned_text_gave(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The plain render only fills in a table the aligned text could not
+    read. Where pypdf fails on the card, the card keeps its energy and its
+    empty table as before, rather than the month losing its card."""
+    from custom_components.be_electricity_prices.providers import _pdf, octaplus
+
+    monkeypatch.setattr(
+        octaplus,
+        "fetch_text",
+        _archive_router(
+            [{"NomPdf": "2025-11 E OCTA+FIXED RE WL FR.pdf"}],
+            (FIXTURES / "octaplus_fixed_w_nov2025.pdf").read_bytes(),
+            [],
+        ),
+    )
+
+    async def hook(
+        variant: str, url: str, payload: bytes, renderer: Callable[[bytes], str]
+    ) -> str:
+        if variant == "plain":
+            raise ExtractorError("PDF parse error: unreadable")
+        return renderer(payload)
+
+    with _pdf.render_through(hook):
+        snap = await octaplus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "octaplus_fixed",
+            "wallonia",
+            date(2025, 11, 10),
+        )
+    assert snap is not None
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(0.1224)
+    assert snap.dsos == {}
+
+
 async def test_an_archived_card_short_of_an_area_keeps_its_energy(
     monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:
-    """The aligned text of the Walloon Fixed card of November 2025 damages its
-    seven-column network table, so no row of it reads. The live card is
-    refused for it, but a past month's card is what a contract signed then is
-    billed on: refusing it too billed that contract's energy on today's card,
-    and the month itself on today's rates where it used to be dropped. The
-    running month's is refused as the live card is, or the month walk would
-    drop the month on the missing area where the last good card stands in."""
-    from custom_components.be_electricity_prices.providers import octaplus
+    """A past month's card is what a contract signed then is billed on, even
+    when its network table lacks an area: refusing it billed that contract's
+    energy on today's card, and the month itself on today's rates where it
+    used to be dropped. The live card is refused for it, and so is the
+    running month's, or the month walk would drop the month on the missing
+    area where the last good card stands in. The Walloon Fixed card of
+    November 2025, whose aligned text reads no row of the table, with AIESH
+    relabelled in both renders so the plain one reads all but that row."""
+    from custom_components.be_electricity_prices.providers import _pdf, octaplus
 
     name = "octaplus_fixed_w_nov2025.pdf"
     monkeypatch.setattr(
@@ -1080,16 +1198,25 @@ async def test_an_archived_card_short_of_an_area_keeps_its_energy(
             [],
         ),
     )
-    snap = await octaplus.fetch_for_month(
-        None,  # type: ignore[arg-type]
-        "octaplus_fixed",
-        "wallonia",
-        date(2025, 11, 10),
-    )
+
+    async def relabel(
+        variant: str, url: str, payload: bytes, renderer: Callable[[bytes], str]
+    ) -> str:
+        text = renderer(payload)
+        assert "Aiesh" in text, "the card stopped printing AIESH"
+        return text.replace("Aiesh", "X.")
+
+    with _pdf.render_through(relabel):
+        snap = await octaplus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "octaplus_fixed",
+            "wallonia",
+            date(2025, 11, 10),
+        )
     assert snap is not None
     assert isinstance(snap.energy, FixedRates)
     assert snap.energy.single == pytest.approx(0.1224)
-    assert len(snap.dsos) < 5, "the reader takes this table now: pick another card"
+    assert set(snap.dsos) == {"aieg", "ores", "resa", "rew"}
 
     monkeypatch.setattr(
         octaplus, "fetch_pdf_text_aligned", AsyncMock(return_value=_text(name))
@@ -1098,12 +1225,13 @@ async def test_an_archived_card_short_of_an_area_keeps_its_energy(
         await octaplus.fetch(None, "octaplus_fixed", "wallonia")  # type: ignore[arg-type]
 
     freezer.move_to("2025-11-20 12:00:00+01:00")
-    running = await octaplus.fetch_for_month(
-        None,  # type: ignore[arg-type]
-        "octaplus_fixed",
-        "wallonia",
-        date(2025, 11, 1),
-    )
+    with _pdf.render_through(relabel):
+        running = await octaplus.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            "octaplus_fixed",
+            "wallonia",
+            date(2025, 11, 1),
+        )
     assert running is None
 
 
