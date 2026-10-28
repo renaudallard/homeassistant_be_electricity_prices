@@ -420,11 +420,18 @@ class _WizardStepsMixin:
                 # Analog again, or another connection after a move: no day of
                 # it is on a meter Fluvius replaced.
                 self._data.pop(CONF_ANALOG_REPLACED, None)
-            elif analog_meter(stored) or _day_still_billed(self._data):
+            elif (
+                analog_meter(stored)
+                or _day_still_billed(self._data)
+                or CONF_ANALOG_REPLACED not in self._data
+            ):
                 # Unticked, or a meter or contract only a digital meter carries
-                # picked: either way Fluvius has replaced the analog one. And
-                # shown again while the day held is still billed, so a wrong
-                # one can be put right.
+                # picked: either way Fluvius has replaced the analog one. Shown
+                # again while the day held is still billed, so a wrong one can
+                # be put right. And once where it was never answered, at setup
+                # and on an entry stored before it was asked: a box left
+                # unticked, or never shown, says nothing of a meter Fluvius
+                # replaced this year or the last.
                 return await self.async_step_analog_replaced()
             return await self._ask_professional()
         return self.async_show_form(
@@ -439,24 +446,32 @@ class _WizardStepsMixin:
     ) -> ConfigFlowResult:
         """The day Fluvius put a digital meter in place of the analog one.
 
-        Asked when Edit settings unticks the box, or moves a Flemish entry
-        stored analog onto a meter or contract only a digital meter carries,
-        where the box is not offered, and on every edit while the day held falls
-        in this year or the last, to change it. The answer is one per entry, so without the day
-        every month of the year was billed on the digital meter, the months
-        before it without their analog kWh rate and on the new meter's short
-        mean. Every day before it bills as analog (``analog_meter``); one in
-        the future is refused. Left blank, no day is: a box ticked by mistake
-        bills the year as it did before the day was asked.
+        Asked of a Flemish entry whose box is unticked, or not offered on a
+        meter or contract only a digital meter carries: once where it was
+        never answered, at setup and on the first edit of an entry stored
+        before it was asked; when Edit settings unticks a box stored ticked,
+        or moves such an entry onto a digital-only meter or contract; and on
+        every edit while the day held falls in this year or the last, to
+        change it. The answer is one per entry, so without the day every month
+        of the year was billed on the digital meter, the months before it
+        without their analog kWh rate and on the new meter's mean. Every day
+        before it bills as analog (``analog_meter``); one in the future is
+        refused. Left blank, no day is, as for a meter digital all this year
+        and the last or a box ticked by mistake, and the blank is kept as the
+        answer, so the step is not asked again on every edit.
         """
         today = dt_util.now().date()
         errors: dict[str, str] = {}
         if user_input is not None:
             if not user_input.get(CONF_ANALOG_REPLACED):
-                self._data.pop(CONF_ANALOG_REPLACED, None)
+                self._data[CONF_ANALOG_REPLACED] = None
                 return await self._ask_professional()
             replaced = analog_replaced_on(user_input)
             if replaced is not None and replaced <= today:
+                # Not analog since, whatever meter is picked: a social entry
+                # holding no answer would take the kept contract's again
+                # (analog_answer) and ignore the day.
+                self._data[CONF_ANALOG_METER] = False
                 self._data[CONF_ANALOG_REPLACED] = replaced.isoformat()
                 return await self._ask_professional()
             errors[CONF_ANALOG_REPLACED] = "analog_replaced_in_future"

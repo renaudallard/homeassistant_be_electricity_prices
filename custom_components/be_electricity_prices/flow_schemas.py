@@ -474,9 +474,10 @@ def _meter_schema(
 
 
 def _analog_replaced_schema() -> vol.Schema:
-    """The day Fluvius replaced the analog meter, asked once its box is
-    unticked on an entry that had it ticked, and shown again to change while
-    one is held. Optional: left blank, no day of the year is analog."""
+    """The day Fluvius replaced the analog meter, asked of a Flemish entry
+    not analog: once where it was never answered, again once a box stored
+    ticked is unticked, and shown to change while one is held. Optional: left
+    blank, no day of the year is analog."""
     return vol.Schema({vol.Optional(CONF_ANALOG_REPLACED): DateSelector()})
 
 

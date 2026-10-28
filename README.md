@@ -440,8 +440,8 @@ All sensors share one device per config entry.
 
 | Sensor | Created when | Description |
 | --- | --- | --- |
-| `capacity_cost` | Region = Flanders, not on an exclusive-night circuit | Current monthly capacity cost in EUR (`billed_peak_kw × DSO_capacity_rate / 12`). It is capped at the VREG network ceiling of the year, read off Fluvius's tariff sheet: capacity plus the per-kWh network term never costs more than that ceiling times your yearly volume, though the capacity charge never drops below its 2.5 kW minimum. `billed_peak_kw` is the mean of your last twelve monthly peaks, each floored at 2.5 kW first, which is what Fluvius charges on, so this stays steady through the year rather than tracking whichever month you are in. This charge also accrues into `current_year_cost`, so the two are consistent rather than the capacity term being invisible in the running bill. Carries `billed_peak_kw` and `months_counted` attributes; `months_counted` reaches 12 after a full year of history, and until then the mean covers only the months measured so far. With a fixed peak, `billed_peak_kw` is the value you entered (at least 2.5 kW) and `months_counted` reads 0, since no mean is taken. On an analog meter it is the flat charge Fluvius bills on 2.5 kW, with no ceiling, and `months_counted` reads 0. |
-| `monthly_peak_kw` | Region = Flanders, not on an exclusive-night circuit | Running monthly peak power in kW (resets the 1st), reported as measured, so it reads 0 with a fixed peak or an analog meter, which measure nothing and add no month to the history. With a fixed peak the months measured before stay, and count again when you return to the sensor; ticking **Analog meter** drops them, so the meter Fluvius later puts in its place starts a mean of its own, measured from the day the box is unticked; the days before the replacement day asked then are billed on the flat 2,5 kW. Version 0.28.5 and earlier banked the fixed value into each month as if measured; the first start after upgrading drops the months holding exactly your fixed value. If you changed the fixed value since, the months at the older one stay: press **Reset monthly peak** once to clear them. The 2.5 kW regulated minimum is a billing rule and is applied to `capacity_cost` instead, so a quiet household now reads its true peak here rather than 2.5. State class is `MEASUREMENT` (mandated by HA for the POWER device class), so the long-term-statistics graph defaults to the **mean** aggregation. To see the true monthly peaks, switch the statistic-graph card to **Max** under Developer Tools → Statistics. The month's last day gets one more reading a minute before midnight, so a peak set in its final hour is still banked. A diagnostic **Reset monthly peak** button on the device page drops the rolling max so the next tick rebuilds it, and clears the monthly peaks banked so far, so the twelve-month mean behind `capacity_cost` starts over (use after a misconfigured sensor inflated the peak). |
+| `capacity_cost` | Region = Flanders, not on an exclusive-night circuit | Current monthly capacity cost in EUR (`billed_peak_kw × DSO_capacity_rate / 12`). It is capped at the VREG network ceiling of the year, read off Fluvius's tariff sheet: capacity plus the per-kWh network term never costs more than that ceiling times your yearly volume, though the capacity charge never drops below its 2.5 kW minimum. `billed_peak_kw` is the mean of your last twelve monthly peaks, each floored at 2.5 kW first, which is what Fluvius charges on, so this stays steady through the year rather than tracking whichever month you are in. This charge also accrues into `current_year_cost`, so the two are consistent rather than the capacity term being invisible in the running bill. Carries `billed_peak_kw` and `months_counted` attributes; `months_counted` reaches 12 after a full year of history, and until then the mean covers only the months measured so far, none before the month the analog meter was replaced in where you entered that day. With a fixed peak, `billed_peak_kw` is the value you entered (at least 2.5 kW) and `months_counted` reads 0, since no mean is taken. On an analog meter it is the flat charge Fluvius bills on 2.5 kW, with no ceiling, and `months_counted` reads 0. |
+| `monthly_peak_kw` | Region = Flanders, not on an exclusive-night circuit | Running monthly peak power in kW (resets the 1st), reported as measured, so it reads 0 with a fixed peak or an analog meter, which measure nothing and add no month to the history. With a fixed peak the months measured before stay, and count again when you return to the sensor; ticking **Analog meter** drops them, so the meter Fluvius later puts in its place starts a mean of its own. Where you entered the day it was replaced, the months before that day's month are left out of the mean but kept, since a sensor could only have measured them on the analog meter, and the days before it are billed on the flat 2,5 kW. Version 0.28.5 and earlier banked the fixed value into each month as if measured; the first start after upgrading drops the months holding exactly your fixed value. If you changed the fixed value since, the months at the older one stay: press **Reset monthly peak** once to clear them. The 2.5 kW regulated minimum is a billing rule and is applied to `capacity_cost` instead, so a quiet household now reads its true peak here rather than 2.5. State class is `MEASUREMENT` (mandated by HA for the POWER device class), so the long-term-statistics graph defaults to the **mean** aggregation. To see the true monthly peaks, switch the statistic-graph card to **Max** under Developer Tools → Statistics. The month's last day gets one more reading a minute before midnight, so a peak set in its final hour is still banked. A diagnostic **Reset monthly peak** button on the device page drops the rolling max so the next tick rebuilds it, and clears the monthly peaks banked so far, so the twelve-month mean behind `capacity_cost` starts over (use after a misconfigured sensor inflated the peak). |
 | `prosumer_cost` | Wallonia, compensation regime + `solar_kva > 0` | Monthly compensation fee in EUR (`solar_kva × (DSO_prosumer_rate + supplier_forfait) / 12`). Most suppliers bill only the regulated DSO rate; Cociter Tarif Variable and Variable Trihoraire, Mega and OCTA+ add a supplier-side PV forfait (already TVAC) on top. Only valid for Walloon installations certified before 2024-01-01; ends 2030-12-31. |
 | `price_peak` / `price_offpeak` | Bi-hourly meter, or digital (smart) meter on a fixed, variable or monthly-indexed card | The contract's **constant** day and night all-in rates, both readable at once. `current_price` follows the clock and holds whichever band applies now, which the Home Assistant energy dashboard cannot use: configuring a grid source with two tariffs asks for one price entity per tariff, permanently. These are those two. A card priced on the month's index has one rate per band for the whole month, so these show it at the month's mean. Unavailable on a contract with no constant band rate, which is every dynamic and time-of-use one. Not created on the Walloon *Tarif Impact* DSO tariff, whose distribution follows the CWaPE bands and has no day or night rate, except on an *Expert: custom formula* entry. |
 | `injection_price_peak` / `injection_price_offpeak` | Bi-hourly or dynamic (smart) meter, injection regime | The feed-in credit of each register. A card that prints a day and a night injection rate (Trevion Groene Energie Vast, the Engie and Luminus social tariff cards) gives each its own, on the delivery month's index where the card gives a formula per register; every other card credits both registers on one formula or rate, so both show the current credit, the same figure as `injection_price`, which is what lets the Energy dashboard price each return register off its own sensor. Both or neither: a card carrying only one of the pair is read as having none. |
@@ -573,14 +573,22 @@ dropped rather than billed on the new card.
    answer belongs to the meter: a contract kept at a
    [supplier switch](#switching-supplier-during-the-year) recorded before the
    question existed takes the entry's answer, one recorded since keeps its
-   own. Once Fluvius has replaced the meter, untick the box in **Edit
-   settings**, or pick the smart meter or a contract that needs one there or
-   in a supplier switch: it then asks the **Day the digital meter was placed**
-   (never in the future, and left empty if the box was ticked by mistake), and
-   the days before it stay billed as analog while the days from it are billed on the digital meter, the
-   capacity tariff on the peak it measures from then on, the contract kept at
-   a switch included. **Edit settings** shows the day again on every edit
-   while it falls in this year or the last, so a wrong one can be changed. Ticking the box again
+   own. With the box unticked, or on the smart meter or a contract that needs
+   one, the next step asks the **Day the digital meter was placed**, for a
+   meter Fluvius replaced this year or the last: the days before it stay
+   billed as analog while the days from it are billed on the digital meter,
+   the capacity tariff on the peaks it measures from then on. A contract kept
+   at a switch recorded while the box was ticked, or before it was asked, is
+   billed the same way; one recorded with the box unticked keeps that answer,
+   its days on the digital meter. It is never in the future; leave it empty if
+   the meter was digital all this year and the last, or the box was ticked by
+   mistake. It is asked once, at setup, or on the next **Edit settings** of an
+   entry set up before it was asked, and an empty answer is kept, so it does
+   not come back. Once Fluvius has replaced a meter you set as analog, untick
+   the box in **Edit settings**, or pick the smart meter or a contract that
+   needs one there or in a supplier switch, and it is asked again. **Edit
+   settings** shows a day entered again on every edit while it falls in this
+   year or the last, so a wrong one can be changed. Ticking the box again
    drops the day, and so does a move
    out of Flanders. Hours already written to the long-term statistics keep the
    meter they were priced on until the
@@ -899,6 +907,10 @@ opens a menu of four options, five once a supplier switch has been recorded this
   unavailable; its history stays.
   Turning the setting back on creates it afresh, under its default entity
   ID, name and area, so a rename or area you gave it has to be set again.
+  A Flemish entry set up before the analog meter's replacement day was
+  asked, whose meter is not set as analog, is asked it once after the meter
+  step (see step 4 above): leave it empty if the meter was digital all this
+  year and the last.
 - **Record a supplier switch** — for a household that changed supplier
   during the year. Asks for the first day of the new contract, keeps your
   current settings as the contract you held until the day before, then walks
@@ -1125,7 +1137,7 @@ those are replayed on the entry's sensors, which hold nothing for the earlier
 contract's days. They do the same when the meter went from analog to digital
 at the switch, or back: a quoted contract would bill the earlier days on
 today's meter, where your own figure bills them on the one they ran on. A
-replacement day entered when unticking **Analog meter** is no such case: the
+**Day the digital meter was placed** you entered is no such case: the
 quoted contracts bill the days before it as analog too.
 
 The meter checks run on each earlier contract's own sensors over its own days,
@@ -1143,10 +1155,11 @@ A switch recorded with the wrong date, or by mistake, is undone with
 **Configure → Remove the last supplier switch**, which puts the entry back as
 it stood before that switch was recorded: the contract you left becomes the
 current one again, with the settings it had then, and anything changed since
-is undone, except two answers that belong to the meter: the Flemish day
-hours, which every contract reads from the entry, and the answer to a
+is undone, except answers that belong to the meter: the Flemish day
+hours, which every contract reads from the entry, the answer to a
 question added after the switch was recorded (whether the meter counts draw
-and injection apart), which is kept.
+and injection apart), which is kept, and the **Day the digital meter was
+placed** given since, which is kept where the contract you left holds none.
 To correct the date, remove the switch, record it again with the
 right date and pick the new contract again. A switch recorded in an earlier
 year is not offered: it no longer prices anything, and removing it would bring

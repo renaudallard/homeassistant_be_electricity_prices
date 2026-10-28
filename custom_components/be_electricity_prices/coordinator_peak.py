@@ -53,7 +53,7 @@ from .const import (
 from .fees import billed_peak_for, bills_capacity
 from .fluvius import capacity_floor_kw
 from .providers.base import SupplierSnapshot
-from .snapshot_resolve import analog_meter
+from .snapshot_resolve import analog_meter, analog_replaced_on
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -228,10 +228,17 @@ class _PeakMixin:
         for as long as the in-progress one stayed unmeasured. None in fixed
         mode, which bills the configured kW and takes no mean, whatever
         measured months it keeps for a return to the sensor.
+
+        Nor a month before the one the analog meter was replaced in
+        (``analog_replaced_on``), kept all the same: a sensor that measured it
+        did so on the analog meter, which Fluvius bills the minimum, and only
+        the digital meter's own months go into its mean.
         """
         if not self._measures_peak():
             return []
-        peaks = list(self._peak_history.values())
+        replaced = analog_replaced_on(self.entry.data)
+        first = replaced.replace(day=1).isoformat() if replaced else ""
+        peaks = [kw for month, kw in self._peak_history.items() if month >= first]
         if self._peak_kw > 0.0:
             peaks.append(self._peak_kw)
         return peaks

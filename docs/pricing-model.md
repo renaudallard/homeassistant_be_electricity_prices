@@ -1768,10 +1768,13 @@ the household would start from.
 #### A meter replaced during the year
 
 The answer is one per entry, so once Fluvius replaces the meter and the box is
-unticked every day of the year would bill digital: the months before without
-their analog kWh rate, and on the new meter's short mean. Edit settings asks the
-day the meter was replaced when the box goes from ticked to unticked, or when
-the entry moves onto a meter or contract only a digital meter carries
+unticked, or left unticked by a household set up after it did, every day of the
+year would bill digital: the months before without their analog kWh rate, and
+on the new meter's mean. The flow asks the day the meter was replaced of a
+Flemish entry that is not analog: once where it holds no answer, at setup and on
+the first edit of an entry stored before the question existed, and again when
+the box goes from ticked to unticked, or when an analog entry moves onto a meter
+or contract only a digital meter carries
 (`CONF_ANALOG_REPLACED`, see [config-flow.md](config-flow.md)), and
 `analog_meter(data, day)` answers per delivery day: analog before it, digital
 from it, whatever meter the entry has picked since. One place applies it, `meter_of_day` (`snapshot_resolve.py`), called by
@@ -1786,17 +1789,19 @@ card on `meter_segment`, the 1st or the replacement day, and the year-to-date
 month walk (`_walk_ytd_months`, `ytd_legs.py`) yields that month in two parts.
 The capacity term of a day before it is billed on the minimum peak
 (`billed_peak_on`, `fees.py`), the days from it on the billed peak the
-coordinator holds, which is the new meter's own: the months measured before were
-dropped when the box was ticked and nothing was measured while it stayed ticked,
-so the mean counts only what the digital meter measured since it was unticked,
-as Fluvius bills a meter it has just placed on the months it has. Engie Basic
+coordinator holds, which is the new meter's own, as Fluvius bills a meter it
+has just placed on the months it has: its mean takes no month before the one the
+meter was replaced in (`_peak_terms`, `coordinator_peak.py`). A sensor could only
+have measured those on the analog meter, so they are left out but kept, and count
+again if the day is cleared; on an entry that ticked the box they were dropped
+then, and nothing was measured while it stayed ticked. Engie Basic
 Online in Antwerpen at 0,4 kWh an hour, replaced on 1 July with a 5 kW mean,
 bills 1158,70 EUR to 24 October rather than the 1176,66 of an all-digital year:
 6 months on 2,5 kW rather than 5 (65,46 less) and the analog rate on their
 1.737,2 kWh (47,50 more). Ticking the box again drops the day, and so does
 leaving it blank, which Edit settings offers on every edit while the day held falls in this year
-or the last. An entry without
-one bills as before.
+or the last; the blank is kept as the answer, so the step is not asked again. An
+entry without one bills as before.
 
 ## Prosumer term
 

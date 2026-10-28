@@ -664,6 +664,8 @@ async def test_flow_custom_dynamic_flanders(
     result = await cfg(flow, {const.CONF_DSO: const.DSO_FLUVIUS_ANTWERPEN})
     assert result["step_id"] == "meter"
     result = await cfg(flow, {const.CONF_METER: const.METER_DYNAMIC})
+    assert result["step_id"] == "analog_replaced"  # Flanders, left blank
+    result = await cfg(flow, {})
     assert result["step_id"] == "api_key"  # dynamic gates the key
     with _mock_key():
         result = await cfg(flow, {const.CONF_API_KEY: "k"})
@@ -712,6 +714,8 @@ async def test_flow_custom_monthly_injection(
     result = await cfg(flow, {const.CONF_CONTRACT: const.CUSTOM_CONTRACT_MONTHLY})
     result = await cfg(flow, {const.CONF_DSO: const.DSO_FLUVIUS_ANTWERPEN})
     result = await cfg(flow, {const.CONF_METER: const.METER_MONO})
+    assert result["step_id"] == "analog_replaced"  # Flanders, left blank
+    result = await cfg(flow, {})
     assert result["step_id"] == "api_key"  # spot_monthly gates the key too
     with _mock_key():
         result = await cfg(flow, {const.CONF_API_KEY: "k"})

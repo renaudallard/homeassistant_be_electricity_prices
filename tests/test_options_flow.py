@@ -503,6 +503,11 @@ async def test_ticking_the_settlement_box_makes_the_key_mandatory(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"meter": meters[0]}
         )
+        # Asked once of a Flemish entry that never answered it, left blank.
+        assert result["step_id"] == "analog_replaced"
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {}
+        )
         return [*meters, result["step_id"]]
 
     assert await _walk(False) == [
@@ -1016,6 +1021,9 @@ async def test_options_flow_flanders_branch_asks_capacity(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"meter": "mono"}
     )
+    # Asked once of a Flemish entry that never answered it, left blank.
+    assert result["step_id"] == "analog_replaced"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["step_id"] == "capacity"
 
     result = await hass.config_entries.options.async_configure(

@@ -46,6 +46,7 @@ from homeassistant.helpers.selector import (
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_ANALOG_REPLACED,
     CONF_CONTRACT,
     CONF_CONTRACT_END_DATE,
     CONF_CONTRACT_START_DATE,
@@ -64,6 +65,7 @@ from .const import (
     CONF_TARIFF_CARD_DATE,
     CONF_YTD_FROM_CONTRACT_START,
 )
+from .snapshot_resolve import analog_meter
 
 # The three optional dates the contract step asks.
 _CONTRACT_DATE_KEYS: tuple[str, ...] = (
@@ -329,9 +331,12 @@ def _remove_last_switch(data: Mapping[str, Any]) -> dict[str, Any]:
     last, and it would keep the contract set up since as the one left. The one
     exception is a question added after the switch was recorded: the copy holds
     no answer to it, so the entry's answer is kept rather than lost, the way
-    the earlier contract's period reads it while the switch stands. The
-    meter's day hours are the entry's whatever the copy holds, as they are
-    while the switch stands.
+    the earlier contract's period reads it while the switch stands. So is the
+    day the analog meter was replaced, or the blank given for it, where the
+    copy holds none and the contract put back is not analog, even on a copy
+    that answered the box unticked, whose period does not read it while the
+    switch stands: the day is the connection's. The meter's day hours are the
+    entry's whatever the copy holds, as they are while the switch stands.
     """
     from .contract_periods import (
         _unasked_facts,
@@ -351,4 +356,10 @@ def _remove_last_switch(data: Mapping[str, Any]) -> dict[str, Any]:
     ]
     if kept:
         held[CONF_PREVIOUS_CONTRACTS] = kept
+    if (
+        CONF_ANALOG_REPLACED in data
+        and CONF_ANALOG_REPLACED not in held
+        and not analog_meter(held)
+    ):
+        held[CONF_ANALOG_REPLACED] = data[CONF_ANALOG_REPLACED]
     return held

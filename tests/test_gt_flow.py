@@ -73,6 +73,10 @@ async def test_where_the_flow_lands(
     result = await cfg(flow, {const.CONF_DSO: dso})
     assert result["step_id"] == "meter", result
     result = await cfg(flow, {const.CONF_METER: meter})
+    if result.get("step_id") == "analog_replaced":
+        # Asked of a Flemish entry, left blank: no meter was replaced.
+        assert region == const.REGION_FLANDERS, (sid, contract.id)
+        result = await cfg(flow, {})
     if result.get("step_id") == "professional":
         result = await cfg(
             flow,

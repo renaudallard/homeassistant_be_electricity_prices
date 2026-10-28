@@ -211,7 +211,8 @@ def analog_answer(data: Mapping[str, Any]) -> bool:
 
 def analog_replaced_on(data: Mapping[str, Any]) -> date | None:
     """The day Fluvius put a digital meter in place of the analog one, on an
-    entry whose box was unticked since (``CONF_ANALOG_REPLACED``), else None."""
+    entry whose box is unticked (``CONF_ANALOG_REPLACED``), else None, as on
+    one that answered there was none, which holds None."""
     raw = data.get(CONF_ANALOG_REPLACED)
     if not raw or analog_answer(data):
         return None
@@ -239,10 +240,11 @@ def analog_meter(data: Mapping[str, Any], day: date | None = None) -> bool:
     The answer is one per entry, so a meter Fluvius replaced during the year
     would bill every day of it on the digital one once the box is unticked,
     the months before without their analog kWh rate and on the new meter's
-    short mean. The day it was replaced is asked then (:func:`analog_replaced_on`)
-    and every day before it is still analog, whatever meter the entry has
-    picked since: the day is a fact about the Flemish connection, so a dynamic
-    meter or contract taken after it does not undo it.
+    mean. The day it was replaced is asked of an entry not analog
+    (:func:`analog_replaced_on`) and every day before it is still analog,
+    whatever meter the entry has picked since: the day is a fact about the
+    Flemish connection, so a dynamic meter or contract taken after it does not
+    undo it.
     """
     if offers_analog_meter(data) and analog_answer(data):
         return True

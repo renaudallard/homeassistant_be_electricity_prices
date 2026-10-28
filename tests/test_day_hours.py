@@ -263,6 +263,7 @@ async def test_the_answer_is_dropped_outside_flanders(
         return None
 
     flow._ask_professional = _next
+    flow.async_step_analog_replaced = _next
     await flow.async_step_meter({const.CONF_METER: "bi"})
     assert (const.CONF_DAY_HOURS in flow._data) is kept
 

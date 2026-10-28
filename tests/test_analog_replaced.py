@@ -269,15 +269,11 @@ def test_an_entry_without_the_day_is_billed_as_before() -> None:
 async def test_unticking_the_box_asks_the_day_the_meter_was_replaced(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """Only on an entry stored analog or holding a day, never in the future,
-    and ticking the box again drops the day. Shown again on every edit while a
-    day is held, so a wrong one can be changed, and left blank for a box
-    ticked by mistake, which bills the year as before the day was asked."""
+    """Never in the future, and ticking the box again drops the day. Shown
+    again on every edit while a day is held, so a wrong one can be changed,
+    and left blank for a box ticked by mistake, which bills the year as before
+    the day was asked and is kept as the answer, so it is not asked again."""
     freezer.move_to("2026-10-24 12:00:00+02:00")
-    digital = _entry(analog_meter=False)
-    digital.add_to_hass(hass)
-    assert "analog_replaced" not in await _steps(hass, digital, {})
-
     analog = _entry(analog_meter=True)
     analog.add_to_hass(hass)
     opts = hass.config_entries.options
@@ -303,7 +299,7 @@ async def test_unticking_the_box_asks_the_day_the_meter_was_replaced(
     mistaken.add_to_hass(hass)
     await _walked(hass, mistaken, {"meter": {"analog_meter": False}})
     assert mistaken.data["analog_meter"] is False
-    assert "analog_meter_replaced" not in mistaken.data
+    assert mistaken.data["analog_meter_replaced"] is None
 
     data = await _saved(
         hass,
@@ -336,7 +332,8 @@ async def test_unticking_the_box_asks_the_day_the_meter_was_replaced(
         },
     )
     assert analog.data["analog_meter"] is False
-    assert "analog_meter_replaced" not in analog.data
+    assert analog.data["analog_meter_replaced"] is None
+    assert not analog_meter(analog.data, date(2026, 1, 1))
     assert "analog_replaced" not in await _steps(hass, analog, {})
 
 
@@ -404,6 +401,48 @@ async def test_the_day_survives_a_restart_and_a_supplier_switch(
         previous_contracts=[{"until": "2026-05-01", "data": digital}],
     )
     assert _meters_rewired(contradicted, date(2026, 10, 24)) is True
+
+
+def test_removing_a_switch_keeps_a_day_entered_after_it() -> None:
+    """Asked once of an entry that never answered it, the day often comes
+    after a switch recorded on an entry stored with the box unticked, whose
+    copy holds that answer and no day. Removing the switch put the copy back
+    whole, and the months before the day billed digital again until the next
+    edit. The day is the connection's, so it is kept, and so is a blank
+    answer; a copy holding an answer of its own keeps that one, and one
+    ticked analog is put back as it was."""
+    from custom_components.be_electricity_prices.flow_switch import (
+        _record_switch,
+        _remove_last_switch,
+    )
+
+    unticked = {**_entry(analog_meter=False).data}
+    data = {
+        **_record_switch(unticked, date(2026, 6, 1)),
+        "supplier": "luminus",
+        "contract": "luminus_comfy",
+        "analog_meter_replaced": "2026-03-01",
+    }
+    restored = _remove_last_switch(data)
+    assert restored == {**unticked, "analog_meter_replaced": "2026-03-01"}
+    assert analog_meter(restored, date(2026, 2, 10))
+    assert not analog_meter(restored, date(2026, 3, 1))
+    blank = _remove_last_switch({**data, "analog_meter_replaced": None})
+    assert blank == {**unticked, "analog_meter_replaced": None}
+
+    answered = {**unticked, "analog_meter_replaced": None}
+    later = {
+        **_record_switch(answered, date(2026, 6, 1)),
+        "analog_meter_replaced": "2026-03-01",
+    }
+    assert _remove_last_switch(later) == answered
+    ticked = {**_entry(analog_meter=True).data}
+    cleared = {
+        **_record_switch(ticked, date(2026, 6, 1)),
+        "analog_meter": False,
+        "analog_meter_replaced": None,
+    }
+    assert _remove_last_switch(cleared) == ticked
 
 
 async def test_the_backfill_bills_the_days_before_the_replacement_as_analog(
@@ -529,6 +568,24 @@ async def _ytd_until(
     return total
 
 
+async def _answered(
+    manager: Any, result: Any, answers: dict[str, dict[str, Any]]
+) -> tuple[Any, list[str]]:
+    """Every form from ``result`` on submitted as shown but for ``answers``,
+    and the steps walked. An answer of None leaves its field blank."""
+    from homeassistant.data_entry_flow import FlowResultType
+
+    steps: list[str] = []
+    while result["type"] == FlowResultType.FORM:
+        steps.append(result["step_id"])
+        form = {**_shown(result), **answers.get(result["step_id"], {})}
+        result = await manager.async_configure(
+            result["flow_id"],
+            {key: value for key, value in form.items() if value is not None},
+        )
+    return result, steps
+
+
 async def _walked(
     hass: HomeAssistant,
     entry: MockConfigEntry,
@@ -539,10 +596,7 @@ async def _walked(
     """The steps Edit settings, or a supplier switch recorded on ``switch``,
     walks with ``answers``, the entry saved at the end. An answer of None
     leaves its field blank."""
-    from homeassistant.data_entry_flow import FlowResultType
-
     opts = hass.config_entries.options
-    steps: list[str] = []
     with patch(
         "custom_components.be_electricity_prices.async_setup_entry",
         return_value=True,
@@ -554,15 +608,27 @@ async def _walked(
             result = await opts.async_configure(
                 result["flow_id"], {"switch_date": switch}
             )
-        while result["type"] == FlowResultType.FORM:
-            steps.append(result["step_id"])
-            form = {**_shown(result), **answers.get(result["step_id"], {})}
-            result = await opts.async_configure(
-                result["flow_id"],
-                # None leaves the field blank.
-                {key: value for key, value in form.items() if value is not None},
-            )
+        _, steps = await _answered(opts, result, answers)
     return steps
+
+
+async def _set_up(
+    hass: HomeAssistant, answers: dict[str, dict[str, Any]]
+) -> tuple[list[str], dict[str, Any]]:
+    """The steps setup walks with ``answers``, and the data it stores."""
+    from homeassistant.data_entry_flow import FlowResultType
+
+    from custom_components.be_electricity_prices.const import DOMAIN
+
+    flow = hass.config_entries.flow
+    with patch(
+        "custom_components.be_electricity_prices.async_setup_entry",
+        return_value=True,
+    ):
+        result = await flow.async_init(DOMAIN, context={"source": "user"})
+        result, steps = await _answered(flow, result, answers)
+    assert result["type"] == FlowResultType.CREATE_ENTRY, result
+    return steps, dict(result["result"].data)
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -713,6 +779,134 @@ async def test_the_day_is_shown_again_only_while_it_is_still_billed(
         assert ("analog_replaced" in steps) is shown, held
         assert entry.data["analog_meter_replaced"] == held
         await hass.config_entries.async_remove(entry.entry_id)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_setup_asks_the_day_a_meter_was_replaced(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The day was asked only once the box had been ticked and saved, so a
+    household set up after Fluvius replaced its meter on 1 July billed the
+    half year before it digital: 1176,66 EUR to 24 October at a 5 kW mean,
+    where the bill is 1158,70. Setup asks it wherever the meter is not
+    analog, the smart meter of a dynamic contract included."""
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    fluvius._analog[(2026, "fluvius_antwerpen")] = _ANTWERPEN_2026
+    flemish = {
+        "user": {"supplier": "engie", "region": "flanders"},
+        "dso": {"dso": "fluvius_antwerpen"},
+        "analog_replaced": {"analog_meter_replaced": "2026-07-01"},
+    }
+    steps, data = await _set_up(
+        hass, {**flemish, "contract": {"contract": "engie_basic_online"}}
+    )
+    assert steps[steps.index("meter") + 1] == "analog_replaced"
+    assert data["analog_meter"] is False
+    assert data["analog_meter_replaced"] == "2026-07-01"
+    total, _ = await _ytd(hass, _entry(**data), 5.0)
+    assert total == pytest.approx(1158.70, abs=0.01)
+
+    steps, data = await _set_up(
+        hass,
+        {
+            **flemish,
+            "contract": {"contract": "engie_dynamic"},
+            "api_key": {"keyless_spots": True},
+        },
+    )
+    assert data["meter"] == "dynamic"
+    assert steps[steps.index("meter") + 1] == "analog_replaced"
+    assert analog_meter(data, date(2026, 6, 30))
+    assert not analog_meter(data, date(2026, 7, 1))
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_an_entry_that_never_answered_is_asked_once(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """One stored before the question existed holds no answer at all, and
+    one set up unticked since holds the box alone; the only way to the day
+    was to tick the box, save and untick it, which drops the peaks the new
+    meter measured. Asked once on the next edit, and a blank answer is kept
+    so the step does not come back on every edit."""
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    fluvius._analog[(2026, "fluvius_antwerpen")] = _ANTWERPEN_2026
+    day = {"analog_replaced": {"analog_meter_replaced": "2026-07-01"}}
+    for answered in ({}, {"analog_meter": False}):
+        entry = _entry(**answered)
+        entry.add_to_hass(hass)
+        assert "analog_replaced" in await _walked(hass, entry, day)
+        assert entry.data["analog_meter_replaced"] == "2026-07-01"
+        total, _ = await _ytd(hass, entry, 5.0)
+        assert total == pytest.approx(1158.70, abs=0.01)
+        await hass.config_entries.async_remove(entry.entry_id)
+
+    blank = _entry()
+    blank.add_to_hass(hass)
+    assert "analog_replaced" in await _walked(hass, blank, {})
+    assert blank.data["analog_meter_replaced"] is None
+    assert "analog_replaced" not in await _walked(hass, blank, {})
+    total, _ = await _ytd(hass, blank, 5.0)
+    assert total == pytest.approx(1176.66, abs=0.01)
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_day_given_on_the_smart_meter_counts_on_a_social_entry(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The box is not offered on the smart meter, so the answer is dropped
+    there, and a social entry holding none takes the kept contract's: an
+    analog one made the day just given count for nothing."""
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    kept = {**_entry(analog_meter=True).data}
+    social = _entry(
+        supplier="social",
+        contract="social_engie",
+        meter="dynamic",
+        previous_contracts=[{"until": "2026-07-01", "data": kept}],
+    )
+    social.add_to_hass(hass)
+    steps = await _walked(
+        hass, social, {"analog_replaced": {"analog_meter_replaced": "2026-08-01"}}
+    )
+    assert "analog_replaced" in steps
+    assert social.data["analog_meter"] is False
+    assert analog_meter(social.data, date(2026, 7, 31))
+    assert not analog_meter(social.data, date(2026, 8, 1))
+
+
+async def test_the_digital_meter_is_billed_on_its_own_months(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A sensor that measured the months before the replacement measured the
+    analog meter, which Fluvius bills the minimum, and never ticking the box
+    no longer clears them: the digital meter's mean takes its own months only.
+    They are kept all the same, and count again once the day is cleared."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.coordinator_peak import _PeakMixin
+
+    freezer.move_to("2026-10-24 12:00:00+02:00")
+    history = {
+        "2026-02-01": 7.5,
+        "2026-06-01": 6.1,
+        "2026-07-01": 4.6,
+        "2026-08-01": 5.2,
+        "2026-09-01": 4.9,
+    }
+    coord: Any = SimpleNamespace(
+        hass=hass,
+        entry=_entry(analog_meter=False, analog_meter_replaced="2026-07-15"),
+        _peak_kw=3.8,
+        _peak_month=date(2026, 10, 1),
+        _peak_history=dict(history),
+    )
+    coord._measures_peak = lambda: _PeakMixin._measures_peak(coord)
+    await _PeakMixin._track_monthly_peak(coord)
+    assert coord._peak_history == history
+    assert _PeakMixin._peak_terms(coord) == [4.6, 5.2, 4.9, 3.8]
+    coord.entry = _entry(analog_meter=False, analog_meter_replaced=None)
+    assert _PeakMixin._peak_terms(coord) == [7.5, 6.1, 4.6, 5.2, 4.9, 3.8]
 
 
 def test_the_help_does_not_clear_a_day_of_last_year() -> None:

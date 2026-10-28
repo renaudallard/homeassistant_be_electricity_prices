@@ -68,8 +68,8 @@ the "Shown when" column gives the gate.
 | `settlement` | `async_step_settlement` (`flow_wizard.py`) | Which settlement this household is on | `CONF_QUARTER_HOURLY` | Only on a contract whose supplier sells both (`Contract.quarter_hourly_option`); runs directly after `contract`. In Edit settings it starts unticked after a move to another supplier or region |
 | `signed_rate` | `async_step_signed_rate` (`flow_wizard.py`) | The rate actually signed at: single / peak / offpeak / exclusive night, or spot factor / base, plus the yearly fee | The 7 `CONF_MANUAL_*` keys (`_MANUAL_RATE_KEYS`) | `_needs_manual_rate` true (`flow_wizard.py`): a start date or a tariff card month is set on a fixed, dynamic or spot-monthly contract of a non-custom supplier (the two spot-priced kinds sign a coefficient pair, so they get the factor / base boxes; fixed gets the rate boxes). Offered whether or not the supplier archives past cards, because what is typed wins over the archived card. The kind test is `takes_signing_rate` (`providers/__init__.py`), which the runtime shares: when the step is skipped the keys are dropped (`_after_settlement`), and so are they when an edit moves the entry to another supplier, contract or region (`_another_contract`, `flow_switch.py`), so the boxes start empty rather than offering the old contract's rate for the new card, and `_cohort_legs` (`cohort.py`) refuses a typed rate on any other kind, so a rate left on an entry moved to a variable card is never billed on it. In Edit settings each box also shows what the current card gives it (`_card_figures`, `config_flow.py`), per-kWh figures as the entry holds them, which is how a typed one is read, a spot-monthly pair as the card prints it rather than with a first-1.800-kWh tranche folded in (`card_formula`), and the fee including VAT; setup shows none, since the card is not fetched until the entry exists, and neither does an edit that moves the entry to another supplier, contract or region, which recording a switch always does, since the card loaded is the one being left |
 | `dso` | `async_step_dso` (`flow_wizard.py`) | Distribution operator | `CONF_DSO` | Always |
-| `meter` | `async_step_meter` (`flow_wizard.py`) | Meter type, and on a Flemish entry the day tariff hours and whether the meter is still analog | `CONF_METER`, `CONF_DAY_HOURS`, `CONF_ANALOG_METER` | Always; option list narrows by the EFFECTIVE contract kind, which the settlement step may have moved. The day hours field (07:00-22:00 or 06:00-21:00, Fluvius's municipality list) is on the schema only for Flanders, and the step drops a stored answer on any other region, so it cannot come back into force after a move back. Every earlier contract recorded by a switch reads the entry's answer, which belongs to the meter rather than the supplier, so a correction made after the switch reaches the months before it; a switch keeps none in its copy (`_ENTRY_FACTS`, `contract_periods.py`). The analog box is on the schema where `offers_analog_meter` (`snapshot_resolve.py`) holds for a meter the form can pick: a Flemish entry, and not on a contract only a digital meter carries; the step drops the answer wherever it does not hold for the meter picked, a dynamic one included, but stores it unticked on a Flemish entry that was analog or holds a replacement day. A copy kept at a switch recorded before the question was asked takes the entry's answer (`_UNASKED_FACTS`, `contract_periods.py`). Unticking the box on an entry stored ticked, or moving such a Flemish entry onto a meter or contract the box is not offered on, leads to `analog_replaced`; ticking it, or a move out of Flanders, drops a stored replacement day |
-| `analog_replaced` | `async_step_analog_replaced` (`flow_wizard.py`) | The day Fluvius put a digital meter in place of the analog one, an optional `DateSelector` suggesting the day held and nothing else, since a suggested day is billed when accepted | `CONF_ANALOG_REPLACED` | Edit settings only, right after `meter`, when the analog box goes from ticked (as stored, `analog_meter(_stored_data())`) to unticked, or to not offered on a Flemish entry: the smart meter, or a contract only a digital meter carries, which a switch to a dynamic contract picks. Also on every edit of a Flemish entry holding a day with the box unticked, while that day falls in this year or the last (`_day_still_billed`), the years whose days the year-to-date walks and a backfill still price, so a wrong day can be changed; an older day stays stored for a backfill. Left blank, the day is dropped and no day is analog, the way a box ticked by mistake bills. A day in the future is refused with `analog_replaced_in_future`; an earlier one is kept whatever the year, since a backfill can reach back into it. Every day before it bills as analog (`analog_meter` with a day, `snapshot_resolve.py`), whatever meter the entry has since; dropped when the box is ticked again or the entry moves out of Flanders, another connection. A contract kept at a switch recorded while the box was still ticked, or before it was asked, takes the day too, being the same meter (`replaced_meter_facts`, `snapshot_resolve.py`, through `_unasked_facts`); one that answered digital keeps its answer |
+| `meter` | `async_step_meter` (`flow_wizard.py`) | Meter type, and on a Flemish entry the day tariff hours and whether the meter is still analog | `CONF_METER`, `CONF_DAY_HOURS`, `CONF_ANALOG_METER` | Always; option list narrows by the EFFECTIVE contract kind, which the settlement step may have moved. The day hours field (07:00-22:00 or 06:00-21:00, Fluvius's municipality list) is on the schema only for Flanders, and the step drops a stored answer on any other region, so it cannot come back into force after a move back. Every earlier contract recorded by a switch reads the entry's answer, which belongs to the meter rather than the supplier, so a correction made after the switch reaches the months before it; a switch keeps none in its copy (`_ENTRY_FACTS`, `contract_periods.py`). The analog box is on the schema where `offers_analog_meter` (`snapshot_resolve.py`) holds for a meter the form can pick: a Flemish entry, and not on a contract only a digital meter carries; the step drops the answer wherever it does not hold for the meter picked, a dynamic one included, but stores it unticked on a Flemish entry that was analog or holds a replacement day. A copy kept at a switch recorded before the question was asked takes the entry's answer (`_UNASKED_FACTS`, `contract_periods.py`). A Flemish entry that is not analog, the box unticked or not offered, leads to `analog_replaced` where it holds no answer to it, and so does unticking the box on an entry stored ticked, or moving such an entry onto a meter or contract the box is not offered on; ticking it, or a move out of Flanders, drops a stored replacement day or blank answer |
+| `analog_replaced` | `async_step_analog_replaced` (`flow_wizard.py`) | The day Fluvius put a digital meter in place of the analog one, an optional `DateSelector` suggesting the day held and nothing else, since a suggested day is billed when accepted | `CONF_ANALOG_REPLACED` | Right after `meter`, on a Flemish entry the box leaves digital: unticked, or not offered on the smart meter or a contract only a digital meter carries. Once where the entry holds no answer (`CONF_ANALOG_REPLACED` absent): at setup, and on the first edit of an entry stored before it was asked, which 0.42.1 and earlier stored with no analog answer at all and 0.43.0 to 0.44.2 with the box alone. In Edit settings when the analog box goes from ticked (as stored, `analog_meter(_stored_data())`) to unticked, or to not offered: the smart meter, or a contract only a digital meter carries, which a switch to a dynamic contract picks. Also on every edit of a Flemish entry holding a day with the box unticked, while that day falls in this year or the last (`_day_still_billed`), the years whose days the year-to-date walks and a backfill still price, so a wrong day can be changed; an older day stays stored for a backfill. Left blank, no day is analog, the way a box ticked by mistake bills, and the key is stored as `None`, the answer that keeps the step from coming back on every edit. A day is stored with `CONF_ANALOG_METER` unticked, also where the box was not offered: a social entry holding no answer would take the kept contract's (`analog_answer`) and ignore the day. A day in the future is refused with `analog_replaced_in_future`; an earlier one is kept whatever the year, since a backfill can reach back into it. Every day before it bills as analog (`analog_meter` with a day, `snapshot_resolve.py`), whatever meter the entry has since; dropped when the box is ticked again or the entry moves out of Flanders, another connection. A contract kept at a switch recorded while the box was still ticked, or before it was asked, takes the day too, being the same meter (`replaced_meter_facts`, `snapshot_resolve.py`, through `_unasked_facts`); one that answered digital keeps its answer. Removing the switch keeps the entry's day, or its blank, where the copy holds none and the contract put back is not analog, one that answered digital included (`_remove_last_switch`, `flow_switch.py`) |
 | `professional` | `async_step_professional` (`flow_wizard.py`) | Whether prices include VAT, and the estimated yearly consumption | `CONF_INCLUDE_VAT`, `CONF_ANNUAL_CONSUMPTION_KWH` | Only on a professional contract (`Contract.professional`, through `_contract_is_professional`); runs after `meter`. Not asked means both keys are DROPPED (`_ask_professional`) |
 | `direct_debit` | `async_step_direct_debit` (`flow_wizard.py`) | Whether this household pays by direct debit | `CONF_DIRECT_DEBIT` | Only on a contract whose card prices a direct-debit payer (`Contract.direct_debit_discount`); runs after `meter` and after the professional step, where nothing downstream reads it. Not asked means the stored key is DROPPED (`_ask_direct_debit`), so an answer given on one contract cannot come back into force on another the day the user switches to a card that does grant a reduction |
 | `dso_tariff_mode` | `async_step_dso_tariff_mode` (`flow_wizard.py`) | DSO billing mode (simple/bi/impact) | `CONF_DSO_TARIFF_MODE` | Region == Wallonia AND the contract is not `tou_impact` (`flow_wizard.py`) |
@@ -104,7 +104,7 @@ the "Shown when" column gives the gate.
                                           │
                           async_step_meter  (kind-narrowed list)
                                           │
-        stored analog, now unticked? ─────┼── yes → async_step_analog_replaced
+    unasked, or was analog, or day held? ─┼── yes → async_step_analog_replaced
                                           │              │
                           _ask_professional  ◄──────────┘
                                           │
@@ -340,18 +340,23 @@ day always follows a "not analog" answer, and a social entry holding none would
 take the kept contract's again and ignore the day. What it
 changes is in [pricing-model.md](pricing-model.md#capacity-tariff).
 
-The answer is one per entry, so unticking it once Fluvius has replaced the meter
-would bill every day of the year on the digital meter. Edit settings therefore
-asks the day the meter was replaced (`analog_replaced`) when the box goes from
-ticked to unticked, or when a Flemish entry stored analog moves to a meter or
-contract only a digital meter carries, where the box is not offered, a switch to
-a dynamic contract included; it keeps it under `CONF_ANALOG_REPLACED`: the days
-before it bill as analog, those from it on the digital meter
+The answer is one per entry, so a box unticked once Fluvius has replaced the
+meter, or left unticked by a household set up after it did, would bill every day
+of the year on the digital meter. The flow therefore asks the day the meter was
+replaced (`analog_replaced`) of a Flemish entry that is not analog: once where it
+holds no answer, at setup and on the first edit of an entry stored before the
+question existed, and again when the box goes from ticked to unticked, or when a
+Flemish entry stored analog moves to a meter or contract only a digital meter
+carries, where the box is not offered, a switch to a dynamic contract included;
+it keeps it under `CONF_ANALOG_REPLACED`: the days before it bill as analog,
+those from it on the digital meter
 ([pricing-model.md](pricing-model.md#analog-meters)), and the contract kept at
 such a switch takes the day too (`replaced_meter_facts`). The step comes back on
-every edit while the day held falls in this year or the last, to change it, and a blank answer drops it, for a
-box ticked by mistake. Ticking the box again drops the day, and so does a move out of Flanders: another connection, none of
-whose days were on the replaced meter.
+every edit while the day held falls in this year or the last, to change it. A
+blank answer clears it and is kept as `None`, so a meter digital all along, or a
+box ticked by mistake, is not asked again. Ticking the box again drops the day
+or the blank, and so does a move out of Flanders: another connection, none of
+whose days were on the replaced meter, asked again if it comes back.
 
 The `exclusive_night` meter is not a first-class branch of the wizard: per
 `const.py`, a dedicated night circuit (electric water heater, night-storage
@@ -759,12 +764,18 @@ configured for it, meter, sensors and regime included. Pricing is in
 Because the kept copy is the whole settings as they stood, it is also the way
 back. `async_step_remove_switch` shows the last record's date and contract and,
 on submit, `_remove_last_switch` makes that copy the entry's settings again,
-keeping the records before it. Two settings are not taken from the copy: the
-Flemish day hours are always the entry's (`_ENTRY_FACTS`, `_with_entry_facts`),
-and a question added after the switch was recorded (`_UNASKED_FACTS`, the
-double-flow box) keeps the entry's answer (`_unasked_facts`,
-`contract_periods.py`), the same answers the earlier contract's period reads
-while the switch stands. It is the only way to correct a switch date:
+keeping the records before it. Three settings are not taken from the copy:
+the Flemish day hours are always the entry's (`_ENTRY_FACTS`,
+`_with_entry_facts`), a question added after the switch was recorded
+(`_UNASKED_FACTS`, the double-flow box) keeps the entry's answer
+(`_unasked_facts`, `contract_periods.py`), the same answers the earlier
+contract's period reads while the switch stands, and the analog meter's
+replacement day, or its blank answer, is the entry's where the copy holds none
+and the contract put back is not analog. That last one even on a copy that
+answered the box unticked, whose period does not read the day while the switch
+stands: the day is the connection's. A copy ticked analog takes a day through
+`replaced_meter_facts`, the box unticked with it, and is put back as it was
+after a blank. It is the only way to correct a switch date:
 `_validate_switch_date` refuses a new switch on or before the last one, and
 recording one would keep the contract set up since as the one left. An entry
 already set up for its new contract before the switch step existed has to be
