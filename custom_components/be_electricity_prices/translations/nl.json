@@ -65,7 +65,7 @@
           "analog_meter_replaced": "Dag waarop de digitale meter geplaatst werd"
         },
         "data_description": {
-          "analog_meter_replaced": "Zoals op de brief van Fluvius of het plaatsingsverslag van de meter. Niet in de toekomst. Vanaf die dag wordt het capaciteitstarief aangerekend op de piek van de digitale meter. Laat het leeg als de meter dit jaar niet analoog was, bijvoorbeeld als het vakje per vergissing aangevinkt werd: elke dag wordt dan op de digitale meter aangerekend."
+          "analog_meter_replaced": "Zoals op de brief van Fluvius of het plaatsingsverslag van de meter. Niet in de toekomst. Vanaf die dag wordt het capaciteitstarief aangerekend op de piek van de digitale meter. Laat het leeg als de meter in dit of vorig jaar niet analoog was, bijvoorbeeld als het vakje per vergissing aangevinkt werd: elke dag wordt dan op de digitale meter aangerekend."
         }
       },
       "professional": {
@@ -432,7 +432,7 @@
           "analog_meter_replaced": "Dag waarop de digitale meter geplaatst werd"
         },
         "data_description": {
-          "analog_meter_replaced": "Zoals op de brief van Fluvius of het plaatsingsverslag van de meter. Niet in de toekomst. Vanaf die dag wordt het capaciteitstarief aangerekend op de piek van de digitale meter. Laat het leeg als de meter dit jaar niet analoog was, bijvoorbeeld als het vakje per vergissing aangevinkt werd: elke dag wordt dan op de digitale meter aangerekend."
+          "analog_meter_replaced": "Zoals op de brief van Fluvius of het plaatsingsverslag van de meter. Niet in de toekomst. Vanaf die dag wordt het capaciteitstarief aangerekend op de piek van de digitale meter. Laat het leeg als de meter in dit of vorig jaar niet analoog was, bijvoorbeeld als het vakje per vergissing aangevinkt werd: elke dag wordt dan op de digitale meter aangerekend."
         }
       },
       "professional": {

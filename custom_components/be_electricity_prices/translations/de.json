@@ -65,7 +65,7 @@
           "analog_meter_replaced": "Tag des Einbaus des digitalen Zählers"
         },
         "data_description": {
-          "analog_meter_replaced": "Wie im Schreiben von Fluvius oder im Einbauprotokoll des Zählers. Nicht in der Zukunft. Ab diesem Tag wird der Kapazitätstarif auf die Spitze des digitalen Zählers berechnet. Leer lassen, wenn der Zähler dieses Jahr nicht analog war, etwa wenn das Kästchen versehentlich angekreuzt wurde: Jeder Tag wird dann über den digitalen Zähler abgerechnet."
+          "analog_meter_replaced": "Wie im Schreiben von Fluvius oder im Einbauprotokoll des Zählers. Nicht in der Zukunft. Ab diesem Tag wird der Kapazitätstarif auf die Spitze des digitalen Zählers berechnet. Leer lassen, wenn der Zähler in diesem oder im letzten Jahr nicht analog war, etwa wenn das Kästchen versehentlich angekreuzt wurde: Jeder Tag wird dann über den digitalen Zähler abgerechnet."
         }
       },
       "professional": {
@@ -432,7 +432,7 @@
           "analog_meter_replaced": "Tag des Einbaus des digitalen Zählers"
         },
         "data_description": {
-          "analog_meter_replaced": "Wie im Schreiben von Fluvius oder im Einbauprotokoll des Zählers. Nicht in der Zukunft. Ab diesem Tag wird der Kapazitätstarif auf die Spitze des digitalen Zählers berechnet. Leer lassen, wenn der Zähler dieses Jahr nicht analog war, etwa wenn das Kästchen versehentlich angekreuzt wurde: Jeder Tag wird dann über den digitalen Zähler abgerechnet."
+          "analog_meter_replaced": "Wie im Schreiben von Fluvius oder im Einbauprotokoll des Zählers. Nicht in der Zukunft. Ab diesem Tag wird der Kapazitätstarif auf die Spitze des digitalen Zählers berechnet. Leer lassen, wenn der Zähler in diesem oder im letzten Jahr nicht analog war, etwa wenn das Kästchen versehentlich angekreuzt wurde: Jeder Tag wird dann über den digitalen Zähler abgerechnet."
         }
       },
       "professional": {

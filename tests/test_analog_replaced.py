@@ -702,8 +702,8 @@ async def test_a_switch_off_a_social_entry_never_asked_keeps_it_analog(
 async def test_the_day_is_shown_again_only_while_it_is_still_billed(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """Shown on every edit for good once a day was held. This year's and
-    last year's are still priced, by the running bill and the rolling year;
+    """Shown on every edit for good once a day was held. One of this year or
+    the last still moves what the year-to-date walks and a backfill price;
     an older one stays stored for a backfill, without the step."""
     freezer.move_to("2026-10-24 12:00:00+02:00")
     for held, shown in (("2025-03-01", True), ("2024-12-31", False)):
@@ -713,3 +713,27 @@ async def test_the_day_is_shown_again_only_while_it_is_still_billed(
         assert ("analog_replaced" in steps) is shown, held
         assert entry.data["analog_meter_replaced"] == held
         await hass.config_entries.async_remove(entry.entry_id)
+
+
+def test_the_help_does_not_clear_a_day_of_last_year() -> None:
+    """The step shows a day of this year or the last (``_day_still_billed``),
+    and its help said to leave it empty if the meter was not analog this
+    year: in January that cleared a correct December day, and a backfill into
+    the year before then billed the days before it digital."""
+    import json
+    from pathlib import Path
+
+    base = Path("custom_components/be_electricity_prices")
+    window = {
+        "strings.json": "this year or the last",
+        "translations/en.json": "this year or the last",
+        "translations/fr.json": "cette année ou l'année passée",
+        "translations/nl.json": "in dit of vorig jaar",
+        "translations/de.json": "in diesem oder im letzten Jahr",
+    }
+    for name, words in window.items():
+        texts = json.loads((base / name).read_text(encoding="utf-8"))
+        for flow in ("config", "options"):
+            step = texts[flow]["step"]["analog_replaced"]
+            text = step["data_description"]["analog_meter_replaced"]
+            assert text.startswith("[%key:") or words in text, (name, flow)

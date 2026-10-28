@@ -137,8 +137,9 @@ from .snapshot_resolve import analog_meter, analog_replaced_on, offers_analog_me
 
 def _day_still_billed(data: Mapping[str, Any]) -> bool:
     """Whether the analog meter's replacement day held falls in this year or
-    the one before, which the running bill and the rolling year still price.
-    An older one stays stored for a backfill but is not shown on every edit."""
+    the one before, whose days the year-to-date walks and a backfill still
+    price. An older one stays stored for a backfill but is not shown on every
+    edit."""
     held = analog_replaced_on(data)
     return held is not None and held.year >= dt_util.now().year - 1
 

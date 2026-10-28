@@ -65,7 +65,7 @@
           "analog_meter_replaced": "Jour de la pose du compteur numérique"
         },
         "data_description": {
-          "analog_meter_replaced": "Tel qu'indiqué sur le courrier de Fluvius ou le rapport de pose du compteur. Pas dans le futur. À partir de ce jour, le tarif capacitaire est facturé sur le pic du compteur numérique. Laissez-le vide si le compteur n'était pas analogique cette année, par exemple si la case a été cochée par erreur : chaque jour est alors facturé sur le compteur numérique."
+          "analog_meter_replaced": "Tel qu'indiqué sur le courrier de Fluvius ou le rapport de pose du compteur. Pas dans le futur. À partir de ce jour, le tarif capacitaire est facturé sur le pic du compteur numérique. Laissez-le vide si le compteur n'était pas analogique cette année ou l'année passée, par exemple si la case a été cochée par erreur : chaque jour est alors facturé sur le compteur numérique."
         }
       },
       "professional": {
@@ -432,7 +432,7 @@
           "analog_meter_replaced": "Jour de la pose du compteur numérique"
         },
         "data_description": {
-          "analog_meter_replaced": "Tel qu'indiqué sur le courrier de Fluvius ou le rapport de pose du compteur. Pas dans le futur. À partir de ce jour, le tarif capacitaire est facturé sur le pic du compteur numérique. Laissez-le vide si le compteur n'était pas analogique cette année, par exemple si la case a été cochée par erreur : chaque jour est alors facturé sur le compteur numérique."
+          "analog_meter_replaced": "Tel qu'indiqué sur le courrier de Fluvius ou le rapport de pose du compteur. Pas dans le futur. À partir de ce jour, le tarif capacitaire est facturé sur le pic du compteur numérique. Laissez-le vide si le compteur n'était pas analogique cette année ou l'année passée, par exemple si la case a été cochée par erreur : chaque jour est alors facturé sur le compteur numérique."
         }
       },
       "professional": {

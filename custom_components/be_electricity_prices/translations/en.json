@@ -65,7 +65,7 @@
           "analog_meter_replaced": "Day the digital meter was placed"
         },
         "data_description": {
-          "analog_meter_replaced": "As on Fluvius's letter or the meter's placement report. Not in the future. From that day the capacity tariff is billed on the digital meter's peak. Leave it empty if the meter was not analog this year, a box ticked by mistake for one: every day is then billed on the digital meter."
+          "analog_meter_replaced": "As on Fluvius's letter or the meter's placement report. Not in the future. From that day the capacity tariff is billed on the digital meter's peak. Leave it empty if the meter was not analog this year or the last, a box ticked by mistake for one: every day is then billed on the digital meter."
         }
       },
       "professional": {
@@ -432,7 +432,7 @@
           "analog_meter_replaced": "Day the digital meter was placed"
         },
         "data_description": {
-          "analog_meter_replaced": "As on Fluvius's letter or the meter's placement report. Not in the future. From that day the capacity tariff is billed on the digital meter's peak. Leave it empty if the meter was not analog this year, a box ticked by mistake for one: every day is then billed on the digital meter."
+          "analog_meter_replaced": "As on Fluvius's letter or the meter's placement report. Not in the future. From that day the capacity tariff is billed on the digital meter's peak. Leave it empty if the meter was not analog this year or the last, a box ticked by mistake for one: every day is then billed on the digital meter."
         }
       },
       "professional": {
