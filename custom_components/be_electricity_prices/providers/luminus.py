@@ -560,7 +560,9 @@ def parse_snapshot(
     energy = _extract_energy(text, contract.kind)
     injection = _extract_injection(text, contract.kind)
     publication_label = _extract_publication_month(text)
-    federal_excise, energy_contribution, connection_fee = _extract_per_kwh_taxes(text)
+    federal_excise, energy_contribution, connection_fee = _extract_per_kwh_taxes(
+        text, region
+    )
     energy_fund = _extract_energy_fund(text) if region == REGION_FLANDERS else 0.0
 
     flanders_renewables = 0.0

@@ -41,6 +41,8 @@ from ..const import (
     DSO_RESA,
     DSO_REW,
     FLUVIUS_CARD_LABELS,
+    REGION_FLANDERS,
+    REGION_WALLONIA,
 )
 from ._parse import (
     excise_tier_bands,
@@ -52,8 +54,9 @@ from ._rates import TariffKind
 from .base import DsoOverlay, ExtractorError
 
 
-def _tax_block_values(text: str) -> list[str]:
-    """Return the contiguous ['-', '5,0329', ...] run after the tax labels.
+def _tax_block_values(text: str, region: str) -> list[str]:
+    """Return ``region``'s contiguous ['-', '5,0329', ...] run after the tax
+    labels.
 
     The 'Taxes et redevances' section prints every label first then the
     matching values on their own lines, in the same order:
@@ -75,33 +78,54 @@ def _tax_block_values(text: str) -> list[str]:
     Each value sits alone on its line - that's what tells us where the
     value list ends and the footnotes begin (the footnotes start with
     '(*) ...' and intermix numbers with text on the same line).
+
+    Until December 2025 one card served both regions: its block is headed
+    "3 Taxes et redevances : FL WAL" and prints the Flemish column's values,
+    then the Walloon one's, five each, so the Walloon connection fee is the
+    tenth value where the fifth is the Flemish "-". ``region`` takes its own
+    share of the run; a block naming one region is that region's whole.
     """
     # 'Taxes et redevances' is mentioned twice in every PDF: once in the
     # 'Composition du prix' legend (no colon, no region) and once for the
     # actual tax table (`3 Taxes et redevances : WAL/FL`). Anchor on the
     # colon to only match the second one.
     block = re.search(
-        r"3 Taxes et redevances\s*:\s*(?:WAL|FL|BRU).+?"
+        r"3 Taxes et redevances\s*:\s*((?:(?:WAL|FL|BRU)\b[ \t]*)+).+?"
         r"(?=INFORMATION SUR VOTRE TARIF|Conditions\b)",
         text,
         re.S,
     )
     if not block:
         return []
-    return re.findall(rf"^\s*(-|{_NUM})\s*$", block.group(0), re.MULTILINE)
+    values = re.findall(rf"^\s*(-|{_NUM})\s*$", block.group(0), re.MULTILINE)
+    columns = block.group(1).split()
+    if len(columns) < 2:
+        return values
+    column = _TAX_COLUMNS.get(region, "")
+    if column not in columns or len(values) % len(columns):
+        raise ExtractorError(
+            f"Luminus: no {region} column reads in the tax block for {columns}"
+        )
+    width = len(values) // len(columns)
+    start = columns.index(column) * width
+    return values[start : start + width]
 
 
-def _extract_per_kwh_taxes(text: str) -> tuple[float, float, float]:
+# The heading a region's column of the tax block goes by.
+_TAX_COLUMNS = {REGION_FLANDERS: "FL", REGION_WALLONIA: "WAL"}
+
+
+def _extract_per_kwh_taxes(text: str, region: str) -> tuple[float, float, float]:
     """Return (federal_excise, energy_contribution, connection_fee) in EUR/kWh.
 
     Federal excise + energy contribution are mandatory across regions;
     Walloon connection fee is mandatory in Wallonia (the
-    'Redevance de raccordement' label is present iff the card is a
-    Wallonia card). Raise on a layout drift that would otherwise zero
-    out the regulated tax silently and underbill ~50 EUR/year per
-    missed tier.
+    'Redevance de raccordement' label is present on a Wallonia card, and on
+    one printed for both regions, whose Flemish column prints "-" for it).
+    Raise on a layout drift that would otherwise zero out the regulated tax
+    silently and underbill ~50 EUR/year per missed tier.
     """
-    values = _tax_block_values(text)
+    values = _tax_block_values(text, region)
 
     def _decimal(s: str | None) -> float:
         if s is None or s == "-":
@@ -161,7 +185,7 @@ def _extract_energy_fund(text: str) -> float:
     Flanders prints BTNR (non-residential) first then BTR (residential);
     the integration's residential users want BTR. A '-' means no fee.
     """
-    values = _tax_block_values(text)
+    values = _tax_block_values(text, REGION_FLANDERS)
     if len(values) < 2 or values[1] == "-":
         return 0.0
     return to_float(values[1])
@@ -203,9 +227,18 @@ def _extract_flanders_renewables(text: str) -> float:
 
 def _extract_wallonia_renewables(text: str) -> float:
     """Mandatory in Wallonia (caller gates on REGION_WALLONIA); raise on
-    miss rather than silently zero out."""
+    miss rather than silently zero out.
+
+    A card printed for both regions, as every one was until December 2025,
+    prints the Walloon figure after the Flemish pair: "Coûts énergie verte
+    (c€/kWh)3 / Coûts cogénération (c€/kWh)3 / FL / 1,18 / 0,42 / WAL / 3,03
+    / -". A Flemish card has no WAL row, which is what the Dynamic card was
+    until April 2025, when the product was sold in Flanders alone.
+    """
     match = re.search(
-        rf"Coûts énergie verte\s*\(c€/kWh\)[^A-Z]*?WAL\s*\n?\s*({_NUM})",
+        rf"Coûts énergie verte\s*\(c€/kWh\)[^A-Z]*?"
+        rf"(?:Coûts cogénération\s*\(c€/kWh\)[^A-Z]*?FL\s+{_NUM}\s+{_NUM}\s+)?"
+        rf"WAL\s*\n?\s*({_NUM})",
         text,
         re.S,
     )
@@ -302,6 +335,15 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     is read from the headings: cards up to September 2026 print
     ECO | MEDIUM | PIC, October 2026 turned it round to PIC | MEDIUM | ECO
     with the same figures.
+
+    The Dynamic card Luminus printed for both regions from May to December
+    2025 gives each Walloon row four figures, the distribution alone, with
+    no transport and no fixed term. No row is read off it, since those would
+    be figures the card never printed, so a month billed on it is dropped
+    as on any card short of the entry's area, and the walk names it. A card
+    with no row read searches no other month for one
+    (``snapshot_areas._short_of``), and no card of its year prints the
+    table whole.
     """
     out: dict[str, DsoOverlay] = {}
     order: tuple[str, ...] | None = None

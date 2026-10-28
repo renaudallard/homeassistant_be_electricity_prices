@@ -499,6 +499,114 @@ async def test_a_contract_signed_in_2025_is_billed_its_own_card(
     assert today.energy.single == pytest.approx(0.2212)
 
 
+def test_a_card_printed_for_both_regions_reads_on_the_walloon_side() -> None:
+    """Until December 2025 one card served both regions. Its renewables row
+    prints the Walloon figure after the Flemish pair ("FL 1,18 0,42 WAL 3,03
+    -"), which the reader could not reach, so no Walloon card of 2025 read.
+    Its tax block prints the Flemish column then the Walloon one, and the
+    Walloon connection fee is the Walloon column's 0,0750, not the Flemish
+    column's "-" in fifth place."""
+    text = fixture_text("luminus_maxxfix_v_2025-03.pdf")
+    wal = parse_snapshot("luminus_maxxfix", text, "wallonia")
+    fl = parse_snapshot("luminus_maxxfix", text, "flanders")
+    assert wal.energy == fl.energy and wal.injection == fl.injection
+    assert wal.taxes.wallonia_renewables == pytest.approx(0.0303)
+    assert wal.taxes.flanders_renewables == 0.0
+    assert wal.taxes.region_connection_fee == pytest.approx(0.00075)
+    assert fl.taxes.region_connection_fee == 0.0
+    for taxes in (wal.taxes, fl.taxes):
+        assert taxes.federal_excise == pytest.approx(0.050329)
+        assert taxes.energy_contribution == pytest.approx(0.002042)
+        assert taxes.energy_fund_eur_per_month == 0.0
+    assert set(wal.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+    aieg = wal.dsos["aieg"]
+    # "AIEG 9,46 9,56 7,65 7,00 2,98 19,08 78,99"
+    assert (
+        aieg.distribution_single,
+        aieg.distribution_peak,
+        aieg.distribution_offpeak,
+        aieg.distribution_exclusive_night,
+        aieg.transport,
+    ) == pytest.approx((0.0946, 0.0956, 0.0765, 0.07, 0.0298))
+    assert aieg.data_management_per_year == pytest.approx(19.08)
+    assert aieg.prosumer_eur_per_kva_year == pytest.approx(78.99)
+    # "TECTEO RESA 10,62 ..." and "WAVRE 11,48 ...", as the other suppliers'
+    # cards of 2025 print them.
+    assert wal.dsos["resa"].distribution_single == pytest.approx(0.1062)
+    assert wal.dsos["rew"].distribution_single == pytest.approx(0.1148)
+
+
+def test_the_dynamic_card_for_both_regions_reads_without_its_walloon_network() -> None:
+    """Luminus Dynamic was sold in Flanders alone until April 2025, and from
+    May its card served both regions, its Walloon renewables and taxes
+    printed as on the other cards. Its Walloon network table prints the
+    distribution alone, four figures a row, with no transport and no fixed
+    term, so no row is read off it: a month billed on it is dropped as on
+    any card short of the area, where a signing cohort needs only its
+    formulas. A card of the Flemish months stays unread as a Walloon one."""
+    snap = parse_snapshot(
+        "luminus_dynamic", fixture_text("luminus_dynamic_v_2025-06.pdf"), "wallonia"
+    )
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(0.1054 * 10.0 * 1.06)
+    assert snap.energy.base == pytest.approx(2.094 / 100.0 * 1.06)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(0.825)
+    assert snap.injection.base == pytest.approx(-0.00779)
+    assert snap.taxes.wallonia_renewables == pytest.approx(0.0302)
+    assert snap.taxes.region_connection_fee == pytest.approx(0.00075)
+    assert snap.dsos == {}
+    with pytest.raises(ExtractorError, match="Wallonia renewables"):
+        parse_snapshot(
+            "luminus_dynamic", fixture_text("luminus_dynamic_v_2024-06.pdf"), "wallonia"
+        )
+
+
+async def test_a_walloon_contract_signed_in_2025_is_billed_its_own_card(
+    hass: Any, freezer: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Walloon MaxxFix signed in March 2025 and a Walloon Dynamic signed in
+    June 2025 are billed off their own cards, which no Walloon card of 2025
+    allowed: the fixed one at 17,81 c/kWh where today's card says 22,65, the
+    dynamic one on 0,1054 x Belpex H + 2,0940 where today's says 0,1019 x
+    Belpex H + 2,4591."""
+    freezer.move_to("2026-10-28 12:00:00+01:00")
+    _serve_the_archive(
+        monkeypatch,
+        "Luminus MaxxFix Electricité",
+        "2025-03",
+        "luminus_maxxfix_v_2025-03.pdf",
+    )
+    today = parse_snapshot(
+        "luminus_maxxfix", fixture_text("luminus_maxxfix_w_oct.pdf"), "wallonia"
+    )
+    legs = await _signed_legs(
+        hass, "luminus_maxxfix", "wallonia", "ores", "2025-03-15", today
+    )
+    assert legs.card == "mars 2025"
+    billed = legs.splice(today).energy
+    assert isinstance(billed, FixedRates) and isinstance(today.energy, FixedRates)
+    assert billed.single == pytest.approx(0.1781)
+    assert today.energy.single == pytest.approx(0.2265)
+
+    _serve_the_archive(
+        monkeypatch,
+        "Luminus Dynamic Online Electricité",
+        "2025-06",
+        "luminus_dynamic_v_2025-06.pdf",
+    )
+    today = parse_snapshot(
+        "luminus_dynamic", fixture_text("luminus_dynamic_w_oct.pdf"), "wallonia"
+    )
+    legs = await _signed_legs(
+        hass, "luminus_dynamic", "wallonia", "ores", "2025-06-15", today
+    )
+    assert legs.card == "juin 2025"
+    assert isinstance(legs.energy, DynamicRates)
+    assert legs.energy.factor == pytest.approx(0.1054 * 10.0 * 1.06)
+    assert legs.energy.base == pytest.approx(2.094 / 100.0 * 1.06)
+
+
 def test_missing_injection_row_fails_loud() -> None:
     # Every Luminus card publishes an injection rate; a non-dynamic card
     # whose injection row went missing is a layout drift, not a fee-free

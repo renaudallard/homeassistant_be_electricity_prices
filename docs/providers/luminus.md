@@ -171,7 +171,10 @@ Injection), so a contract signed in 2025 was billed today's card whatever its st
 date. Measured on 28 October 2026, every Flemish card of the eight products sold in
 2025 (Comfy, Comfy+, ComfyFlex, ComfyFlex+, MaxxFix, MaxxFlex, BasicFix and
 BasicFlex, January to December, 96 cards) reads whole, each field equal to the
-card's text.
+card's text. Those cards served both regions, and their Walloon side reads whole
+too, as does every card of those products the archive serves for 2024 on the
+Wallonia tab: 184 cards. The Dynamic card reads there from May 2025, when it was
+first sold in Wallonia, without its network table (see Wallonia below).
 
 The running month is not asked for, and `fetch_for_month` answers `None` for it.
 The archive keeps serving a month's first edition after the live card is
@@ -356,7 +359,14 @@ the same one on each register. Reading the later spelling alone left every card
 before September 2025 unparsed, so a contract signed on one billed each month's
 own card and those months stood in on the current one; their printed annual
 estimates reproduce at the Belpex H each expects for the year ahead
-(`test_dynamic_cards_before_september_2025_read_their_formulas`). The sign
+(`test_dynamic_cards_before_september_2025_read_their_formulas`). That made the
+Flemish edition read, January 2024 to August 2025. The Walloon one did not: the
+product was sold in Flanders alone until April 2025 (*"le point de fourniture se
+trouve en Région flamande"*), and the archive serves that Flemish card on the
+Wallonia tab, which rightly stays unread there; from May to December 2025 the
+card served both regions, and its Walloon side reads since the renewables and
+tax readers find the Walloon column (see Tax overlay), with no network table
+(see Wallonia below). The sign
 character is matched from the shared `SIGN_CHARS` class and resolved with
 `parse_sign` (`_parse.py`), so a card that flips to a Unicode minus does not
 silently break polarity.
@@ -463,6 +473,16 @@ Two column layouts (`_luminus_overlays.py`):
   of the same month (ComfyFlex, then MaxxFlex, then BasicFlex; the archive's
   card of that month for a past one) whenever a card names the tariff and
   prints no rate, and the card fails to parse when no sibling carries it.
+- **The Dynamic card of May to December 2025 prints 4 numbers**: mono,
+  pleines, creuses, excl_nuit, the distribution alone, with no transport and no
+  fixed term. No row is read off it, since those would be figures the card never
+  printed, so its Walloon snapshot carries no DSO overlay: a month billed on it
+  is dropped as on any card short of the entry's area, and the walk names it,
+  while a cohort signed on it bills its formulas, the legs a cohort takes off its
+  signing card. The short-table borrowing does not reach it: a card with no row
+  read searches no other month (`snapshot_areas._short_of`), and no Dynamic card
+  of 2025 prints the Walloon table whole
+  (`test_the_dynamic_card_for_both_regions_reads_without_its_walloon_network`).
 
 Band-ordering gotcha: the triplet's order is read from the column headings
 (`_impact_order`, `_luminus_overlays.py`), never assumed. Cards up to September
@@ -489,12 +509,20 @@ on their own lines, and the parser collects that contiguous run of `-` /
 documented in the `_tax_block_values` docstring (`_luminus_overlays.py`): BTNR,
 BTR, excise, contribution, and (Wallonia only) connection.
 
+Until December 2025 one card served both regions. Its block is headed
+`3 Taxes et redevances : FL WAL` and prints the Flemish column's five values and
+then the Walloon column's, so `_tax_block_values(text, region)` takes the
+region's own share of the run, and a block naming one region is that region's
+whole. Read as one run, a Walloon card took the Flemish column's `-` for its
+connection fee (`test_a_card_printed_for_both_regions_reads_on_the_walloon_side`).
+The `values[...]` below index the region's column.
+
 | TaxOverlay field | Source | Notes |
 | --- | --- | --- |
 | `federal_excise` | `values[2]` / 100 | mandatory both regions |
 | `federal_excise_bands` | `_extract_excise_bands`, the `(**)` footnote's `0-3.000 kWh : 5,0329 c€/kWh, ...` tiers, read by the shared `excise_tier_bands` (`_parse.py`) | until July 2026 only; a footnote whose tiers all carry one rate (August 2026 on) is one rate and leaves it None, so the law's excise still applies; the first tier has to equal `values[2]` or the card raises |
 | `energy_contribution` | `values[3]` / 100 | mandatory both regions |
-| `region_connection_fee` | `values[4]` / 100 | Wallonia only, iff `Redevance de raccordement` present |
+| `region_connection_fee` | `values[4]` / 100 | where `Redevance de raccordement` is printed: a Walloon card, and a card for both regions, whose Flemish column prints `-` |
 | `energy_fund_eur_per_month` | `_extract_energy_fund` BTR row | Flanders only, `values[1]` |
 | `flanders_renewables` | `_extract_flanders_renewables` | Flanders only |
 | `wallonia_renewables` | `_extract_wallonia_renewables` | Wallonia only |
@@ -517,7 +545,11 @@ Flanders renewables splits across green-energy + cogeneration
 both `Coûts énergie verte` and `Coûts cogénération`; a fallback handles cards
 that print only the green line. Both regional renewables helpers raise on a miss
 (the caller has already gated on region, so a miss is layout drift not a fee-free
-card).
+card). A card printed for both regions, every one until December 2025, puts the
+Walloon figure after the Flemish pair (`Coûts énergie verte (c€/kWh)3`,
+`Coûts cogénération (c€/kWh)3`, `FL 1,18 0,42`, `WAL 3,03 -`), which
+`_extract_wallonia_renewables` reads past; reaching for `WAL` straight after the
+green line left every Walloon card of 2024 and 2025 unread.
 
 ## Injection
 
