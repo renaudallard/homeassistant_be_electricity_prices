@@ -275,7 +275,9 @@ FEE_SENSORS: tuple[BePriceSensorDescription, ...] = (
         # Priced as its own window rather than sliced off the year, so under
         # the compensation regime it nets THAT month's registers and twelve of
         # these do not add up to the yearly figure; on every other regime they
-        # do. ``TOTAL`` with ``last_reset`` on the 1st for the same reason the
+        # do, unless what the year prices again on every tick has moved (the
+        # Flemish capacity mean, a volume tier, a month priced on a stand-in
+        # card). ``TOTAL`` with ``last_reset`` on the 1st for the same reason the
         # yearly one carries it, and MEASUREMENT would be wrong twice over:
         # this is money accumulating over a period, not a reading.
         device_class=SensorDeviceClass.MONETARY,

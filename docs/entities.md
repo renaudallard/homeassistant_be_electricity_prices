@@ -497,7 +497,12 @@ netted as its own window, per register and clamped at zero, so twelve monthly
 figures do not add up to `current_year_cost` on such an entry. The annual
 netting is what the supplier actually settles, so the yearly sensor stays the
 authority and the monthly one answers "what did this month cost, on its own".
-On every other regime they do add up.
+On every other regime they do add up as long as nothing the year prices again
+on every tick has moved: the year bills every month's Flemish capacity charge
+on today's twelve-month mean (`_ytd_capacity`) where each month kept the mean
+of its own end, reads a volume tier off today's yearly volume, and prices a
+month no card was kept for on the card in hand. A household whose peaks rose
+this year sees its months add up to less than the year.
 
 The second pass fills a breakdown of its own, which the sensor publishes
 (`CoordinatorData.month_diagnostics`) under the keys `current_year_cost` uses,
