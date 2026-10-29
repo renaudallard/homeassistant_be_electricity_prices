@@ -60,20 +60,22 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._luminus_cards import (
+    _LABEL_MONTH_RE,
     _VAT_PATTERNS,
     _extract_energy,
     _extract_injection,
     _extract_promo,
+    _named_month,
     published_indices,
 )
 from ._luminus_overlays import (
     _extract_energy_fund,
     _extract_excise_bands,
     _extract_flanders_dsos,
-    _extract_flanders_renewables,
     _extract_per_kwh_taxes,
+    _extract_renewables,
     _extract_wallonia_dsos,
-    _extract_wallonia_renewables,
+    _green_cost_folded,
     _wallonia_distribution,
 )
 from ._parse import (
@@ -239,10 +241,59 @@ async def fetch(
     async def _current(sibling: _ContractDef) -> str | None:
         return await fetch_pdf_text(session, _document_url(sibling.slug, region))
 
+    renewables = None
+    if _green_cost_folded(text):
+        month = _named_month(
+            _LABEL_MONTH_RE.fullmatch(_extract_publication_month(text).strip())
+        )
+        if month is None:
+            raise ExtractorError("Luminus: card month not found")
+        renewables = await _archived_renewables(session, contract, region, month)
     snap = await _with_sibling_network(
-        parse_snapshot(contract_id, text, region, url), text, region, _current
+        parse_snapshot(contract_id, text, region, url, renewables=renewables),
+        text,
+        region,
+        _current,
     )
     return await _with_sibling_prosumer(snap, text, region, _current)
+
+
+async def _archived_renewables(
+    session: aiohttp.ClientSession,
+    contract: _ContractDef,
+    region: str,
+    month: date,
+) -> float:
+    """The green energy cost of ``month``'s quarter, off the archive's cards.
+
+    For a card that no longer prints the figure (``_green_cost_folded``). The
+    cards that do print it say "Les montants mentionnés dans les présentes
+    conditions sont valables pour le trimestre en cours", so only a card of
+    the same quarter is asked, from ``month`` back to the quarter's first.
+    The archive keeps the first edition of a month, which on 29 October 2026
+    still printed the rows the reissue dropped. Where no card of the quarter
+    prints them the card fails to parse rather than bill a figure of another
+    quarter, or none.
+    """
+    start = (month.month - 1) // 3 * 3 + 1
+    for number in range(month.month, start - 1, -1):
+        held = month.replace(month=number)
+        try:
+            product_id = await _resolve_archive_product_id(
+                session, contract, region, held
+            )
+            if product_id is not None:
+                text = await fetch_pdf_text(
+                    session, _archive_pdf_url(product_id, held, region)
+                )
+                return _extract_renewables(text, region)
+        except ExtractorError as err:
+            if is_transient_fetch_error(str(err)):
+                raise
+    raise ExtractorError(
+        "Luminus: the card prints no green energy cost, nor does any archived "
+        "card of its quarter"
+    )
 
 
 # Cards asked, in order, for the Walloon figures a card bills but does not
@@ -485,6 +536,11 @@ async def fetch_for_month(
             return None
         url = _archive_pdf_url(product_id, first, region)
         text = await fetch_pdf_text(session, url)
+        renewables = (
+            await _archived_renewables(session, contract, region, first)
+            if _green_cost_folded(text)
+            else None
+        )
 
         async def _archived(sibling: _ContractDef) -> str | None:
             sibling_id = await _resolve_archive_product_id(
@@ -497,7 +553,10 @@ async def fetch_for_month(
             )
 
         snap = await _with_sibling_network(
-            parse_snapshot(contract_id, text, region, url), text, region, _archived
+            parse_snapshot(contract_id, text, region, url, renewables=renewables),
+            text,
+            region,
+            _archived,
         )
         snap = await _with_sibling_prosumer(snap, text, region, _archived)
     except ExtractorError as err:
@@ -623,9 +682,18 @@ def _settled(energy: EnergyRates, index: float) -> EnergyRates:
 
 
 def parse_snapshot(
-    contract_id: str, text: str, region: str, source_url: str = _API_URL
+    contract_id: str,
+    text: str,
+    region: str,
+    source_url: str = _API_URL,
+    *,
+    renewables: float | None = None,
 ) -> SupplierSnapshot:
-    """Pure parser exposed for unit tests."""
+    """Pure parser exposed for unit tests.
+
+    ``renewables`` is the region's green energy cost in EUR/kWh for a card
+    that does not print it (``_archived_renewables``), else the card's own.
+    """
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Luminus")
 
     energy = _extract_energy(text, contract.kind)
@@ -636,15 +704,17 @@ def parse_snapshot(
     )
     energy_fund = _extract_energy_fund(text) if region == REGION_FLANDERS else 0.0
 
+    if renewables is None:
+        renewables = _extract_renewables(text, region)
     flanders_renewables = 0.0
     wallonia_renewables = 0.0
     if region == REGION_FLANDERS:
-        flanders_renewables = _extract_flanders_renewables(text)
+        flanders_renewables = renewables
         dsos = _extract_flanders_dsos(
             text, contract.kind, _label_year(publication_label)
         )
     else:
-        wallonia_renewables = _extract_wallonia_renewables(text)
+        wallonia_renewables = renewables
         dsos = _extract_wallonia_dsos(text)
 
     return with_vat_basis(

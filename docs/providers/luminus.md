@@ -97,8 +97,11 @@ prix affiches sont calcules sur la base de la derniere valeur Belpex connue
 trimestrielles". `_quarterly_energy_coefficients` (`_luminus_cards.py`) reads them,
 gated on that sentence and on the energy block naming a quarter
 ("valeur de l'indice du 3ieme trimestre 2026"), and only at a zero Endex factor,
-which every card since January 2026 prints: a card giving the forward index weight
-keeps its printed rates. The leg is `quarter_indexed` and not `month_indexed`, as
+which every card from January 2026 prints, or with no Endex term at all, as on the
+cards reissued on 29 October 2026 ("0,1099 x Belpex + 4,5041"): a card giving the
+forward index weight keeps its printed rates. The reissue also prints the block's
+`Index (HTVA)` line above its heading rather than below, so `_ENERGY_FORMULA_BLOCK_RE`
+takes a line right above the heading into the block. The leg is `quarter_indexed` and not `month_indexed`, as
 Bolt's variable cards are, so an entry with day-ahead prices bills the running
 quarter on its mean to date, each register on its own pair
 (`cohort_legs._quarter_leg`), and a closed quarter settles on the next quarter's
@@ -293,7 +296,13 @@ fixed fee first (`_extract_yearly_fee`), then branches on `kind`.
 ### fixed / variable
 
 Both parse the same four-column `Énergie fournie (c€/kWh)` row (mono / pleines /
-creuses / exclusif-nuit), each divided by 100 (`_luminus_cards.py`). `fixed`
+creuses / exclusif-nuit), each divided by 100 (`_energy_row`, `_luminus_cards.py`).
+The cards reissued on 29 October 2026 label it `Énergie fournie + énergie verte` in
+Wallonia and `Énergie fournie, énergie verte + cogénération` in Flanders, wrapped on
+most Flemish cards so that only `verte + cogénération` sits above the figures. The
+annual estimate repeats that label, so those labels are only searched above the
+first `Estimation annuelle`: a card whose rate row does not read is refused, not
+billed its estimate (`test_a_reissued_card_never_bills_its_estimate_as_its_rate`). `fixed`
 returns `FixedRates(single, peak, offpeak, exclusive_night, ...)`
 (`_luminus_cards.py`); `variable` returns `VariableRates(current=mono, peak,
 offpeak, exclusive_night, ...)` (`_luminus_cards.py`). Illustrative
@@ -315,8 +324,9 @@ energy one.
 
 ### tou (SmartFlex)
 
-Parses the `Énergie fournie (c€/kWh)` row (peak / transition / offpeak) by
-asking `numeric_row` for a row four figures wide, then three. The October 2026
+Parses the `Énergie fournie (c€/kWh)` row (peak / transition / offpeak), or the
+reissue's labels above, by asking `_energy_row` for a row four figures wide, then
+three. The October 2026
 cards print a fourth column, Happy Sunday; earlier ones print three. The
 lookup stops at "Informations sur le prix transitoire": below it the same
 label carries the transitional MaxxFlex rates (mono / jour / nuit) billed to a
@@ -558,6 +568,24 @@ Walloon figure after the Flemish pair (`Coûts énergie verte (c€/kWh)3`,
 `_extract_wallonia_renewables` reads past; reaching for `WAL` straight after the
 green line left every Walloon card of 2024 and 2025 unread.
 
+The cards reissued on 29 October 2026 (#142) print no green energy rows. A footnote
+says instead that the energy price "comprend le coût de l'énergie, les coûts énergie
+verte (CEV) et les coûts de la cogénération (COG)", over the very figures, formulas
+included, that the cards of the 1st printed beside a separate 1,17 + 0,39 (Flanders)
+and 3,03 (Wallonia). Luminus's own page on these costs
+(`www.luminus.be/tarifselectriciteverte`) still says it bills them on top of the
+energy price, with 2026's figures, and on Dynamic in Wallonia an included 3,03 would
+leave the formula's 2,61 c/kWh base a negative margin. So the cost is still billed,
+taken from a card that prints it: when `_green_cost_folded` finds that footnote,
+`_archived_renewables` (`luminus.py`) asks Luminus's archive for the same product's
+card of the card month, then each earlier month of its quarter, and takes the first
+that prints the rows. The archive keeps a month's first edition, which on 29 October
+2026 still printed them. Only the quarter is asked, because the cards that print the
+figure say "les montants mentionnés ... sont valables pour le trimestre en cours";
+where no card of the quarter prints it the card fails to parse, rather than bill
+another quarter's figure or none. Both `fetch` and `fetch_for_month` pass the figure
+to `parse_snapshot` as `renewables`.
+
 ## Injection
 
 `_extract_injection(text, kind)` (`_luminus_cards.py`) covers three of the
@@ -680,7 +708,8 @@ print a single value and offer no exclusive-night), so the standard fee applies.
   in the same formula; never merge regions into one snapshot
   (`test_luminus.py`).
 - **Applicable-vs-estimate rows** on both the consumption (`Énergie fournie` vs
-  `Estimation annuelle de l'énergie fournie`) and injection (`Tarif` vs
+  `Estimation annuelle de l'énergie fournie`, `Estimation annuelle du prix de
+  l'énergie` on the reissue of 29 October 2026) and injection (`Tarif` vs
   `Estimation annuelle du tarif`) sides. Always take the current-month
   applicable row (`test_comfyflex_flanders_uses_current_monthly_not_annual_estimate`,
   `test_luminus.py`; injection at `test_luminus.py`).
@@ -739,6 +768,11 @@ Under `tests/fixtures/`, exercised by `tests/test_luminus.py`:
 | `luminus_maxxfix_v_2025-03.pdf` | MaxxFix (fixed), March 2025, one card for both regions | "Compensation pour l'énergie injectée" row, registers priced apart, a signing month of 2025 |
 | `luminus_maxxflex_v_2025-03.pdf` | MaxxFlex (variable), March 2025, one card for both regions | energy formulas named after the meter, "Jour (compteur de jour)" |
 | `luminus_comfyflex_w_2025-06.pdf` | ComfyFlex (variable), June 2025, one card for both regions | the Walloon network rows the June 2025 Dynamic card borrows |
+| `luminus_maxxfix_v_oct_reissue.pdf` | MaxxFix (fixed), Flanders, October 2026 reissued on the 29th | wrapped "verte + cogénération" label; green energy cost from the archive |
+| `luminus_maxxflex_w_oct_reissue.pdf` | MaxxFlex (variable), Wallonia, October 2026 reissued on the 29th | "Énergie fournie + énergie verte" label; cashback valued at the relabelled estimate |
+| `luminus_comfyflex_w_oct_reissue.pdf` | ComfyFlex (variable), Wallonia, October 2026 reissued on the 29th | quarterly formula with no Endex term, index line above the block |
+| `luminus_smartflex_v_oct_reissue.pdf` | SmartFlex (tou), Flanders, October 2026 reissued on the 29th | one-line Flemish label, four figures |
+| `luminus_dynamic_w_oct_reissue.pdf` | Dynamic, Wallonia, October 2026 reissued on the 29th | no green energy row, refused without the archive's figure |
 
 Note: fixtures for `luminus_comfy_plus` and `luminus_basicfix` are not present;
 those contracts share the fixed / variable parse paths already covered by the

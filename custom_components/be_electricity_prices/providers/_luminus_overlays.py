@@ -249,6 +249,31 @@ def _extract_wallonia_renewables(text: str) -> float:
     return to_float(match.group(1)) / 100.0
 
 
+def _extract_renewables(text: str, region: str) -> float:
+    """The green energy cost the card prints for ``region``."""
+    if region == REGION_FLANDERS:
+        return _extract_flanders_renewables(text)
+    return _extract_wallonia_renewables(text)
+
+
+# The cards reissued on 29 October 2026 print no green energy rows. They
+# say instead "Le prix mentionné pour l'énergie fournie comprend le coût de
+# l'énergie, les coûts énergie verte (CEV) et les coûts de la cogénération
+# (COG)", or "et les coûts énergie verte (CEV)" in Wallonia, over the very
+# figures the cards of the 1st printed beside a separate 1,17 + 0,39 and
+# 3,03. Luminus's own page on these costs still bills them on top of the
+# energy price, so the figure is taken from a card that prints it.
+_GREEN_COST_FOLDED_RE = re.compile(
+    r"comprend\s+le\s+coût\s+de\s+l['\u2019]énergie(?:,|\s+et)\s+"
+    r"les\s+coûts\s+énergie\s+verte"
+)
+
+
+def _green_cost_folded(text: str) -> bool:
+    """Whether the card says its energy row carries the green energy cost."""
+    return _GREEN_COST_FOLDED_RE.search(text) is not None
+
+
 # The first year Fluvius billed every low-voltage metering regime one
 # data-management fee: 17,51 EUR a year excluding VAT, then 17,85 in 2026,
 # where 2024 charged the quarter-hourly regime 14,28 and the monthly or yearly

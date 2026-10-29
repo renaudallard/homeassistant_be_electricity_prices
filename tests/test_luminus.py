@@ -2356,3 +2356,198 @@ def test_a_flat_excise_footnote_is_one_rate() -> None:
         "luminus_comfyflex", fixture_text("luminus_comfyflex_w_oct.pdf"), "wallonia"
     )
     assert snap.taxes.federal_excise_bands is None
+
+
+# The cards reissued on 29 October 2026 against the first edition of the
+# month: the same figures under new labels, with no green energy rows. The
+# first editions on file of the indexed cards are those of 1 October, priced
+# on August's Belpex where the reissue is on September's, so only the rates
+# they print differ.
+_REISSUED = (
+    ("luminus_maxxfix", "luminus_maxxfix_v_oct", "flanders"),
+    ("luminus_maxxflex", "luminus_maxxflex_w_oct", "wallonia"),
+    ("luminus_comfyflex", "luminus_comfyflex_w_oct", "wallonia"),
+    ("luminus_smartflex", "luminus_smartflex_v_oct", "flanders"),
+    ("luminus_dynamic", "luminus_dynamic_w_oct", "wallonia"),
+)
+_PRINTED_RATES = ("current", "peak", "transition", "offpeak", "exclusive_night")
+
+
+def _unprinted(snap: SupplierSnapshot) -> SupplierSnapshot:
+    """``snap`` without the rates a card prints at the index it was cut on."""
+
+    def _clear(leg: Any) -> Any:
+        fields = {name: None for name in _PRINTED_RATES if hasattr(leg, name)}
+        return replace(leg, **fields)
+
+    injection = None if snap.injection is None else _clear(snap.injection)
+    return replace(snap, energy=_clear(snap.energy), injection=injection)
+
+
+@pytest.mark.parametrize(("contract", "fixture", "region"), _REISSUED)
+def test_a_reissued_card_reads_as_its_first_edition(
+    contract: str, fixture: str, region: str
+) -> None:
+    """Every figure of the reissue is the first edition's: the energy row
+    under "Énergie fournie + énergie verte", or in Flanders "Énergie fournie,
+    énergie verte + cogénération" wrapped over the figures, the annual
+    estimate the MaxxFlex campaign is valued at, and ComfyFlex's formula
+    with its Endex term gone and its index line above the block."""
+    first = parse_snapshot(contract, fixture_text(f"{fixture}.pdf"), region)
+    levy = first.taxes.flanders_renewables or first.taxes.wallonia_renewables
+    reissued = parse_snapshot(
+        contract, fixture_text(f"{fixture}_reissue.pdf"), region, renewables=levy
+    )
+    assert _unprinted(reissued) == _unprinted(first)
+
+
+def test_a_reissued_card_reads_its_own_printed_rates() -> None:
+    """The rates the reissue prints, on September's Belpex."""
+    comfyflex = parse_snapshot(
+        "luminus_comfyflex",
+        fixture_text("luminus_comfyflex_w_oct_reissue.pdf"),
+        "wallonia",
+        renewables=0.0303,
+    )
+    assert isinstance(comfyflex.energy, VariableRates)
+    assert comfyflex.energy.current == pytest.approx(0.2061)
+    assert comfyflex.energy.peak == pytest.approx(0.2394)
+    assert comfyflex.energy.quarter_indexed
+    smartflex = parse_snapshot(
+        "luminus_smartflex",
+        fixture_text("luminus_smartflex_v_oct_reissue.pdf"),
+        "flanders",
+        renewables=0.0156,
+    )
+    assert isinstance(smartflex.energy, TimeOfUseRates)
+    assert (
+        smartflex.energy.peak,
+        smartflex.energy.transition,
+        smartflex.energy.offpeak,
+        smartflex.energy.sunday,
+    ) == pytest.approx((0.2417, 0.2043, 0.0933, 0.0))
+    maxxflex = parse_snapshot(
+        "luminus_maxxflex",
+        fixture_text("luminus_maxxflex_w_oct_reissue.pdf"),
+        "wallonia",
+        renewables=0.0303,
+    )
+    assert maxxflex.welcome_credit_kwh_rate == pytest.approx(0.2070)
+
+
+@pytest.mark.parametrize(("contract", "fixture", "region"), _REISSUED)
+def test_a_reissued_card_is_not_billed_without_its_green_energy_cost(
+    contract: str, fixture: str, region: str
+) -> None:
+    """The reissue prints no green energy cost, and Luminus still bills it on
+    top of the energy price, so the card alone is refused rather than billed
+    with none."""
+    with pytest.raises(ExtractorError, match="renewables"):
+        parse_snapshot(contract, fixture_text(f"{fixture}_reissue.pdf"), region)
+
+
+def _reissue_archive(
+    monkeypatch: pytest.MonkeyPatch, archived: dict[str, str]
+) -> list[str]:
+    """Serve the reissued MaxxFix card live and ``archived`` (month to
+    fixture) from the archive; returns the archive months asked."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    asked: list[str] = []
+
+    async def _products(session: object, url: str, **kwargs: object) -> str:
+        month = url.split("signing=")[1]
+        asked.append(month)
+        if month not in archived:
+            return _archive_products()
+        return _archive_products(("Luminus MaxxFix Electricité", f"id-{month}"))
+
+    async def _card(session: object, url: str, **kwargs: object) -> str:
+        if "documentSlug=maxxfix&" in url:
+            return fixture_text("luminus_maxxfix_v_oct_reissue.pdf")
+        month = url.split("productId=id-")[1].split("&")[0]
+        assert f"date={month}&" in url and "region=Flanders" in url
+        return fixture_text(archived[month])
+
+    monkeypatch.setattr(luminus, "fetch_text", _products)
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _card)
+    return asked
+
+
+async def test_a_reissued_card_takes_its_green_energy_cost_from_the_archive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The archive keeps the month's first edition, which prints the rows."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    asked = _reissue_archive(monkeypatch, {"2026-10": "luminus_maxxfix_v_oct.pdf"})
+    snap = await luminus.fetch(
+        None,  # type: ignore[arg-type]
+        "luminus_maxxfix",
+        "flanders",
+    )
+    assert snap.taxes.flanders_renewables == pytest.approx(0.0117 + 0.0039)
+    assert asked == ["2026-10"]
+
+
+async def test_a_reissued_card_never_takes_the_cost_of_another_quarter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The printed amounts are "valables pour le trimestre en cours": an
+    October card whose month the archive holds only as a reissue asks no
+    September card and is refused."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    asked = _reissue_archive(
+        monkeypatch,
+        {
+            "2026-10": "luminus_maxxfix_v_oct_reissue.pdf",
+            "2026-09": "luminus_maxxfix_v_oct.pdf",
+        },
+    )
+    with pytest.raises(ExtractorError, match="green energy cost"):
+        await luminus.fetch(
+            None,  # type: ignore[arg-type]
+            "luminus_maxxfix",
+            "flanders",
+        )
+    assert asked == ["2026-10"]
+
+
+async def test_a_reissued_card_walks_back_through_its_quarter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A December card asks December, then November, then October, and takes
+    the first that prints the cost."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    asked = _reissue_archive(
+        monkeypatch,
+        {
+            "2026-11": "luminus_maxxfix_v_oct_reissue.pdf",
+            "2026-10": "luminus_maxxfix_v_oct.pdf",
+        },
+    )
+    renewables = await luminus._archived_renewables(
+        None,  # type: ignore[arg-type]
+        luminus._CONTRACTS_BY_ID["luminus_maxxfix"],
+        "flanders",
+        date(2026, 12, 1),
+    )
+    assert renewables == pytest.approx(0.0156)
+    assert asked == ["2026-12", "2026-11", "2026-10"]
+
+
+def test_a_reissued_card_never_bills_its_estimate_as_its_rate() -> None:
+    """The annual estimate repeats the energy row's label, so a card whose
+    rate row did not read must be refused, not billed the estimate."""
+    text = fixture_text("luminus_maxxflex_w_oct_reissue.pdf")
+    row = "Énergie fournie + énergie verte 22,02 25,67 19,12 19,12"
+    assert row in text
+    with pytest.raises(ExtractorError, match="variable energy block"):
+        parse_snapshot(
+            "luminus_maxxflex",
+            text.replace(row, "Énergie fournie + énergie verte"),
+            "wallonia",
+            renewables=0.0303,
+        )

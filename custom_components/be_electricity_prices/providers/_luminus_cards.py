@@ -190,6 +190,28 @@ def _named_month(match: re.Match[str] | None) -> date | None:
 
 _TRANSITIONAL_HEADING = "Informations sur le prix transitoire"
 
+# The cards reissued on 29 October 2026 name the energy row for what it
+# carries: "Énergie fournie + énergie verte" in Wallonia and "Énergie
+# fournie, énergie verte + cogénération" in Flanders, wrapped on most
+# Flemish cards so that only "verte + cogénération" sits above the figures.
+# The annual estimate below repeats the label, so the search stops there.
+_ENERGY_LABELS: tuple[str, ...] = (
+    "Énergie fournie + énergie verte",
+    "Énergie fournie, énergie verte + cogénération",
+    "verte + cogénération",
+)
+_ESTIMATE_HEADING = "Estimation annuelle"
+
+
+def _energy_row(text: str, columns: int, before: str | None = None) -> list[str] | None:
+    """The figures of the card's energy row, under either label."""
+    row = numeric_row(text, "Énergie fournie (c€/kWh)", columns, before=before)
+    for label in _ENERGY_LABELS:
+        if row:
+            break
+        row = numeric_row(text, label, columns, before=_ESTIMATE_HEADING)
+    return row
+
 
 def _band_formula_re(label: str) -> re.Pattern[str]:
     """One per-meter row inside the energy block.
@@ -224,12 +246,15 @@ def _rlp_band_formula_re(label: str) -> re.Pattern[str]:
 def _quarterly_band_formula_re(label: str) -> re.Pattern[str]:
     """ComfyFlex's per-meter row, "x Belpex + 0,0000 x Endex 1-0-3 + 4,5041".
 
-    The second term is matched only at a zero factor, which every card since
-    January 2026 prints. A card giving Endex weight prices on a forward index
-    nothing here resolves, and its row then reads as no formula at all.
+    The second term is matched only at a zero factor, which every card from
+    January 2026 prints, or absent, as on the cards reissued on 29 October
+    2026: "0,1099 x Belpex + 4,5041". A card giving Endex weight prices on a
+    forward index nothing here resolves, and its row then reads as no formula
+    at all.
     """
     return re.compile(
-        rf"{label}\s*=\s*({_NUM})\s*x\s*Belpex\s*\+\s*0+(?:,0+)?\s*x\s*Endex\s+1-0-3"
+        rf"{label}\s*=\s*({_NUM})\s*x\s*Belpex"
+        rf"(?:\s*\+\s*0+(?:,0+)?\s*x\s*Endex\s+1-0-3)?"
         rf"\s*([{SIGN_CHARS}])\s*({_NUM})(?![\d,])(?!\s*x)",
         re.S,
     )
@@ -246,10 +271,8 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         # conditions are not met, so the lookup stops at that heading:
         # left unbounded, a four-figure TOU row sent the three-figure
         # search there.
-        tou_row = numeric_row(
-            text, "Énergie fournie (c€/kWh)", 4, before=_TRANSITIONAL_HEADING
-        ) or numeric_row(
-            text, "Énergie fournie (c€/kWh)", 3, before=_TRANSITIONAL_HEADING
+        tou_row = _energy_row(text, 4, _TRANSITIONAL_HEADING) or _energy_row(
+            text, 3, _TRANSITIONAL_HEADING
         )
         if not tou_row:
             raise ExtractorError("could not parse Luminus TOU energy block")
@@ -309,7 +332,7 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
             yearly_fixed_fee=fee,
         )
 
-    energy_row = numeric_row(text, "Énergie fournie (c€/kWh)", 4)
+    energy_row = _energy_row(text, 4)
     if not energy_row:
         raise ExtractorError(f"could not parse Luminus {kind} energy block")
     mono = to_float(energy_row[0]) / 100.0
@@ -685,8 +708,15 @@ _PROMO_VALUED_AT_ESTIMATE_RE = re.compile(
 )
 # Its mono-hourly figure, the first on the row; the label wraps and a footnote
 # marker may sit against the closing parenthesis ("(c€/kWh)3 20,70 24,11").
+# The cards reissued on 29 October 2026 head the row "Estimation annuelle
+# du prix de l'énergie" and label it as the energy row above it is.
 _ANNUAL_ESTIMATE_RE = re.compile(
-    r"Estimation\s+annuelle\s+de\s+l['\u2019]énergie\s+fournie\s*\(c€/kWh\)\d?\s+(\d+,\d+)"
+    r"Estimation\s+annuelle\s+"
+    r"(?:de\s+l['\u2019]énergie\s+fournie|du\s+prix\s+de\s+l['\u2019]énergie)"
+    r"\s*\(c€/kWh\)\d*\s+"
+    r"(?:Énergie\s+fournie(?:,\s*énergie\s+verte\s*\+\s*cogénération"
+    r"|\s*\+\s*énergie\s+verte)\s+)?"
+    r"(\d+,\d+)"
 )
 # "pour la conclusion d'un contrat Luminus MaxxFix Electricite en octobre
 # 2026", and the card's own "(octobre 2026)" label.
@@ -783,7 +813,10 @@ _MONTHLY_RLP_RE = re.compile(
 # mono pattern also finds the INJECTION formula ("0,0481 x Belpex - 0,6392"),
 # and a fixed card would gain an energy formula it does not have. The feed-in
 # block that ends it is headed "pour la compensation de" until December 2025.
+# The cards reissued on 29 October 2026 print the block's "Index (HTVA)" line
+# above its heading instead of below, so a line right above belongs to it.
 _ENERGY_FORMULA_BLOCK_RE = re.compile(
+    r"(?:Index\s*\(HTVA\)[^\n]*\n\s*)?"
     r"Formules\s+tarifaires\s+pour\s+le\s+co[uû]t\s+de\s+l['\u2019\u00a9]\s*[ée]nergie"
     r"(?:(?!Formule\s+tarifaire\s+(?:pour\s+la\s+compensation\s+)?de).)*",
     re.S,
