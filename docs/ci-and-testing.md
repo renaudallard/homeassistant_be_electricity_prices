@@ -842,10 +842,11 @@ requests.
 total bytes against a budget. The global defaults are `LATENCY_WARN_THRESHOLD_S = 90.0` and
 `BYTES_WARN_THRESHOLD = 5_000_000` (`scripts/live_check.py`), with per-supplier overrides in
 `_BYTES_BUDGET_OVERRIDES` (`scripts/live_check.py`) for the known-large catalogues (Bolt,
-Ecofix, Engie, Frank, Mega, OCTA+, TotalEnergies) and `_LATENCY_BUDGET_OVERRIDES`
+Ecofix, Engie, Frank, Mega, OCTA+, TotalEnergies, and Luminus since its cards of 29 October
+2026 send each card to the archive for its green energy cost) and `_LATENCY_BUDGET_OVERRIDES`
 (`scripts/live_check.py`) for the same suppliers but Ecofix and Frank, which have no latency override,
-plus EBEM, Eneco, Energy Knights and Luminus, which are slow per fetch rather than large. That last group is the
-recurring one: each answers a residential line in seconds and a GitHub runner
+plus EBEM, Eneco and Energy Knights, which are slow per fetch rather than large. Luminus is slow per fetch too,
+which is what its latency override is for. Those four are the recurring ones: each answers a residential line in seconds and a GitHub runner
 in minutes, for a byte-identical payload, so the alert reports where the run
 executed rather than anything about the cards. Energy Knights joined it on
 2026-08-31 (issue #75) purely because it was added after the others and

@@ -5902,6 +5902,10 @@ BYTES_WARN_THRESHOLD = 5_000_000
 #     the October Boost range plus the withdrawn products, still checked
 #     while their cards are served (the Impact contracts are Wallonia-only).
 #     Allow 40 MB; the figure falls back once the withdrawn cards go.
+#   * luminus: ~8.1 MB measured on 29 October 2026, 20 cards at ~220 KB
+#     plus, since the reissue of that day prints no green energy cost, the
+#     archived card of each it is read from, 20 more at ~175 KB, and the
+#     archive's product listings. Allow 10 MB.
 _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     # bolt, engie and mega each gained a professional edition of most of
     # their catalogue (August 2026), which roughly doubles the number of
@@ -5915,6 +5919,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     "mega": 14_000_000,
     "octaplus": 40_000_000,
     "frank": 13_000_000,
+    "luminus": 10_000_000,
 }
 
 # Per-supplier latency budgets (override the global). NOTE: elapsed_s
