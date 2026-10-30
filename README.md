@@ -1521,7 +1521,8 @@ a supplier switch, each hour is priced on the contract that supplied it,
 and the running bill carries on across the switch. A card indexed on the
 load-profile-weighted Belpex is weighted on each year's own Synergrid load
 profile, so a window reaching into an earlier year downloads that year's
-for it.
+for it. Only an administrator can call it, as with Home Assistant's own
+statistics actions; an automation can too.
 
 The integration runs the backfill by itself on first install
 (or after a database reset) covering the year-to-date window (Jan 1 of

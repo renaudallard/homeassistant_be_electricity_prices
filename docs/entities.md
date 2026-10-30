@@ -694,7 +694,9 @@ run in the same error (`__init__.py`).
 
 Populates the recorder's long-term statistics for this entry's price sensors and
 `current_year_cost` over a date range, so the Energy dashboard can show history
-predating the entry's first live tick. Fields (`services.yaml`):
+predating the entry's first live tick. It is registered with
+`async_register_admin_service`, so a user who is not an administrator is
+refused; an automation, which has no user, is not. Fields (`services.yaml`):
 
 | Field | Required | Selector | Default |
 | --- | --- | --- | --- |

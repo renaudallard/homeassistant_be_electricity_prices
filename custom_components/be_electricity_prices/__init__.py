@@ -50,14 +50,11 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
-from homeassistant.helpers import (
-    config_validation as cv,
-)
-from homeassistant.helpers import (
-    entity_registry as er,
-)
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import dt as dt_util
@@ -209,7 +206,10 @@ async def async_setup(
         schema=WINDOW_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
-    hass.services.async_register(
+    # Administrators only, as HA's own statistics services: clear deletes a
+    # statistic's whole history. An automation, with no user, goes through.
+    async_register_admin_service(
+        hass,
         DOMAIN,
         SERVICE_BACKFILL_STATISTICS,
         _async_backfill_service,
