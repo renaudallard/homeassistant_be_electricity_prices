@@ -188,14 +188,24 @@ _FRANK_REGIONS = frozenset({REGION_FLANDERS})
 
 
 def _matches_suffix(filename: str, suffix: str | None) -> bool:
-    """True when *filename* belongs to the tier identified by *suffix*."""
-    m = re.search(r"Dynamisch\s+(\S+)", filename)
+    """True when *filename* belongs to the tier identified by *suffix*.
+
+    A tier's token is followed by the month, "Juli.pdf" and "Oktober'24"
+    included. Another product sharing the token is not the tier's: "Dynamisch
+    JN Pro November 2026", the business card, was uploaded after the
+    household JN card of that month and priced JN entries on its figures,
+    as "Dynamisch VT Slim" did VT entries in December 2024 and March 2025.
+    """
+    m = re.search(r"Dynamisch\s+(\S+)(?:\s+([A-Za-z]+))?", filename)
     if not m:
         return False
-    word = m.group(1)
+    word, after = m.group(1), m.group(2) or ""
     if suffix is None:
         return word.lower() in _NL_MONTHS_LOWER
-    return word in _SUFFIX_ALIASES.get(suffix, (suffix,))
+    return (
+        word in _SUFFIX_ALIASES.get(suffix, (suffix,))
+        and after.lower() in _NL_MONTHS_LOWER
+    )
 
 
 async def _sanity_query(

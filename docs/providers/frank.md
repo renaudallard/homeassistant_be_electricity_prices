@@ -161,7 +161,11 @@ suffix mapping is not identity: the Korting tier's PDF filename token is `VT`, n
 `Korting` (the card itself took that title in October 2026), and the Slim tier's token alternates between `SL` and the full word `Slim` from
 month to month (both live in the CMS at once), so `_SUFFIX_ALIASES` treats them as aliases
 (`providers/frank.py`). `test_matches_suffix_slim_accepts_both_sl_and_full_word`
-(`tests/test_frank.py`) pins this behaviour.
+(`tests/test_frank.py`) pins this behaviour. A tier's token must be followed by the
+month: "Dynamisch JN Pro November 2026", the business card uploaded after the household
+JN card on 30 October 2026, and "Dynamisch VT Slim", uploaded after the VT card in
+December 2024 and March 2025, are other products, and were read as those tiers' cards
+before (`test_matches_suffix_rejects_another_product_sharing_the_token`).
 
 No tier is retired. `discover()` (`providers/frank.py`) surfaces any unrecognised
 suffix as `frank_dynamic_<suffix>` so the catalog-drift detector flags a genuinely new

@@ -516,6 +516,62 @@ def test_matches_suffix_slim_accepts_both_sl_and_full_word() -> None:
     )
 
 
+def test_matches_suffix_rejects_another_product_sharing_the_token() -> None:
+    # November 2026: "JN Pro", the business card, was uploaded after the
+    # household JN card and carried a 0,00 subscription; read as JN, it
+    # priced household entries on it.
+    assert not _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch JN Pro November 2026 (2).pdf",
+        "JN",
+    )
+    assert _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch JN November 2026.pdf", "JN"
+    )
+    # "VT Slim" went up after the VT card in December 2024 and March 2025.
+    assert not _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch VT Slim Maart 2025.pdf", "VT"
+    )
+
+
+def test_matches_suffix_takes_a_month_run_into_what_follows() -> None:
+    # The 2024 filenames ran the month into the extension or the year.
+    assert _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch HV Juli.pdf", "HV"
+    )
+    assert _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch VT Oktober'24.pdf", "VT"
+    )
+    assert _matches_suffix(
+        "Frank Energie Tariefkaart Elektriciteit Dynamisch VT Juli (2e).pdf", "VT"
+    )
+
+
+async def test_the_household_card_wins_over_a_newer_pro_card(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [
+        {
+            "originalFilename": "Frank Energie Tariefkaart Elektriciteit Dynamisch JN Pro"
+            " November 2026 (2).pdf",
+            "url": "https://cdn.example/pro.pdf",
+            "_createdAt": "2026-10-30T12:43:12Z",
+        },
+        {
+            "originalFilename": "Frank Energie Tariefkaart Elektriciteit Dynamisch JN"
+            " November 2026.pdf",
+            "url": "https://cdn.example/jn.pdf",
+            "_createdAt": "2026-10-30T12:38:23Z",
+        },
+    ]
+
+    async def query(_session: object, _query: str) -> list[dict[str, str]]:
+        return rows
+
+    monkeypatch.setattr(frank, "_sanity_query", query)
+    url, label = await frank._resolve_pdf_url(None, "frank_dynamic_jn")  # type: ignore[arg-type]
+    assert (url, label) == ("https://cdn.example/jn.pdf", "november 2026")
+
+
 # ---- the September 2026 filename rename ------------------------------------------
 
 
