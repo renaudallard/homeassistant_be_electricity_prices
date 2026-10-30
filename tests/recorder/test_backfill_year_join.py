@@ -106,11 +106,16 @@ def _hours(
     ]
 
 
+@pytest.mark.parametrize("zone", [None, "Europe/Brussels"])
 async def test_a_new_year_backfill_continues_last_years_chain(
-    recorder_mock: Any, hass: HomeAssistant, freezer: Any
+    recorder_mock: Any, hass: HomeAssistant, freezer: Any, zone: str | None
 ) -> None:
     """The live chain holds last year's bill at 31 December; the imported
-    first hour of the new year has to add to it, not restart below it."""
+    first hour of the new year has to add to it, not restart below it. In
+    Brussels 1 January 00:00 starts a month, where a read by month that ends
+    there runs on into January."""
+    if zone is not None:
+        await hass.config.async_set_time_zone(zone)
     assert await async_setup_component(hass, "sensor", {})
     await hass.async_block_till_done()
     last_hour = NEW - timedelta(hours=2)

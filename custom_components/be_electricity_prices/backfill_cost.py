@@ -497,6 +497,9 @@ async def _chain_before(
     belongs to an earlier cycle, whose bill the new one starts on top of, so
     its whole ``sum`` is carried; a row of this cycle carries its ``sum`` less
     the bill it already counts.
+
+    The recorder moves a month read's end to the next month's start, so on
+    1 January it returns January too, which holds nothing before ``first``.
     """
     try:
         from homeassistant.components.recorder import (  # type: ignore[attr-defined]
@@ -523,6 +526,7 @@ async def _chain_before(
 
     try:
         months = await _rows(first - timedelta(days=400), "month")
+        months = [row for row in months if row["start"] < first.timestamp()]
         if not months:
             return 0.0
         month_start = datetime.fromtimestamp(months[-1]["start"], tz=UTC)
