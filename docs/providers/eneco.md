@@ -1,7 +1,8 @@
 # Provider: eneco
 
 This document is the maintenance reference for the Eneco extractor
-(`providers/eneco.py`). Eneco publishes one VAT-inclusive PDF tariff card per
+(`providers/eneco.py`, its network and tax readers in `providers/_eneco_overlays.py`).
+Eneco publishes one VAT-inclusive PDF tariff card per
 electricity contract on its own CDN, with the current URL advertised on a public
 listing page whose issue number rotates monthly. The extractor scrapes that
 listing to resolve the live PDF, downloads it, and parses the energy formula, the
@@ -230,8 +231,8 @@ SupplierSnapshot(
     supplier="eneco",
     contract=contract_id,
     energy=_extract_energy(text, contract_id),      # eneco.py
-    dsos=_extract_dsos(text),                        # eneco.py
-    taxes=_extract_taxes(text, region),              # eneco.py
+    dsos=_extract_dsos(text),                        # _eneco_overlays.py
+    taxes=_extract_taxes(text, region),              # _eneco_overlays.py
     source_url=source_url,
     publication_label=_extract_publication_month(text),  # eneco.py
     valid_until=parse_valid_until(text),             # _pdf.py
@@ -241,7 +242,7 @@ SupplierSnapshot(
 
 ### The `_NUM` numeric token
 
-The shared numeric token (`eneco.py`) is the parsing linchpin. It matches
+The shared numeric token (`_eneco_overlays.py`) is the parsing linchpin. It matches
 either a thousands-grouped Belgian number using a non-breaking / thin /
 narrow-no-break space (`\xa0`, ` `, ` `), or an ungrouped run of digits
 with an optional comma-decimal:
@@ -256,7 +257,7 @@ spaces is unambiguous. The comment records a historical bug: the previous
 more (for example a four-digit yearly fee) was truncated to its first `1.xxx` and
 mis-parsed. `test_num_parses_thousands_grouped_and_four_digit_values`
 (`tests/test_eneco.py`) locks both the NBSP-grouped and ungrouped
-four-digit round-trips. `_WS` (`eneco.py`) matches ASCII whitespace or NBSP
+four-digit round-trips. `_WS` (`_eneco_overlays.py`) matches ASCII whitespace or NBSP
 and is used to span line wraps in the tax block. All numeric values are parsed via
 `to_float` (`_parse.py`), which strips every Unicode space variant before
 swapping comma for dot.
@@ -353,7 +354,7 @@ would otherwise cancel.
 
 ### DSO overlay
 
-`_extract_dsos` (`eneco.py`) walks two label maps and emits a `DsoOverlay`
+`_extract_dsos` (`_eneco_overlays.py`) walks two label maps and emits a `DsoOverlay`
 per matched row. Every card prints both regions' tables whichever region it is
 read for, and `fetch` refuses a live one missing any of the thirteen areas
 rather than adopt it with a hole in it, since an entry on the missing area would
@@ -367,7 +368,7 @@ reads it (`running_month_short_of_an_area`, `_parse.py`), so the last good
 card stands in rather than the month walk dropping the running month.
 (`test_a_live_card_missing_an_area_is_refused`, `tests/test_eneco.py`).
 
-Wallonia (`_WALLONIA_LABELS`, `eneco.py`), via `_find_wallonia_row`
+Wallonia (`_WALLONIA_LABELS`, `_eneco_overlays.py`), via `_find_wallonia_row`
 (`eneco.py`):
 
 | PDF label | canonical key |
@@ -402,7 +403,7 @@ not shift them. Illustrative AIEG values from `test_fix_extracts_dso_overlay`
 `distribution_exclusive_night = 0.0666`, `transport = 0.0274`,
 `data_management_per_year = 19.49`, `prosumer_eur_per_kva_year = 81.04`.
 
-Flanders (`_FLUVIUS_LABELS`, `eneco.py`), via `_find_fluvius_row`
+Flanders (`_FLUVIUS_LABELS`, `_eneco_overlays.py`), via `_find_fluvius_row`
 (`eneco.py`):
 
 | PDF label | canonical key |
@@ -445,7 +446,7 @@ Illustrative Antwerpen values: `distribution_single = 0.0535`,
 
 ### Tax overlay
 
-`_extract_taxes` (`eneco.py`) builds a `TaxOverlay` with
+`_extract_taxes` (`_eneco_overlays.py`) builds a `TaxOverlay` with
 `vat_rate = 0.0` (prices are already VAT-incl, `eneco.py`). Fields:
 
 | field | source token | line |
@@ -460,7 +461,7 @@ Illustrative Antwerpen values: `distribution_single = 0.0535`,
 
 The renewables and connection-fee matches anchor on the `(€cent/kWh)` unit token
 rather than the first number after the label, because sibling rows carry `(2)(4)`
-footnote markers that a lazy `_NUM` would otherwise capture (`eneco.py`).
+footnote markers that a lazy `_NUM` would otherwise capture (`_eneco_overlays.py`).
 Both regional renewables are populated from every card; the pricing engine selects
 the right one per region (`tests/test_eneco.py`). Illustrative values from
 `test_fix_extracts_taxes` (`tests/test_eneco.py`):
@@ -655,10 +656,10 @@ Fixtures live under `tests/fixtures/` and are loaded via `fixture_text(...)`.
 | fixed energy parse error | `_extract_fixed` (`DAG NACHT` header or column count changed) | `eneco.py` |
 | variable energy or yearly fee wrong | `_extract_variable` anchors (`(€/jaar)`, `Geschatte jaarprijs`, `Maandprijs`) | `eneco.py` |
 | dynamic factor / base wrong | `_extract_dynamic` formula regex or VAT multiplier | `eneco.py` |
-| a DSO row missing | its label string in `_WALLONIA_LABELS` / `_FLUVIUS_LABELS`, or the row column count | `eneco.py` |
-| Impact bands swapped | column-order mapping in `_find_wallonia_row` | `eneco.py` |
+| a DSO row missing | its label string in `_WALLONIA_LABELS` / `_FLUVIUS_LABELS`, or the row column count | `_eneco_overlays.py` |
+| Impact bands swapped | column-order mapping in `_find_wallonia_row` | `_eneco_overlays.py` |
 | a mono Walloon entry on Tarif Impact billed the single rate in every band | `_IMPACT_PAIR_RE` (the Impact footnote reworded) | `eneco.py` |
-| tax value wrong or fatal error | `_extract_taxes` anchors (tier label, `(€cent/kWh)`, `Aansluitingsvergoeding`) | `eneco.py` |
+| tax value wrong or fatal error | `_extract_taxes` anchors (tier label, `(€cent/kWh)`, `Aansluitingsvergoeding`) | `_eneco_overlays.py` |
 | injection credit zeroed | `_extract_injection` heading anchor / section cutoff | `eneco.py` |
-| four-digit fee truncated | `_NUM` token | `eneco.py` |
+| four-digit fee truncated | `_NUM` token | `_eneco_overlays.py` |
 | historical month mis-billed | `fetch_for_month` volume walk or `archive_validity_check` | `eneco.py` |
