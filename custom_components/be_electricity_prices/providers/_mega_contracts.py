@@ -40,6 +40,7 @@ replaced.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 from ..const import REGION_WALLONIA
 from ._rates import ALL_REGIONS, TariffKind
@@ -69,6 +70,11 @@ class _ContractDef:
     # (that is what hid Zen Fixed's return), while a listed one has to, or it
     # is reported as new every day.
     b2b_listed: bool = False
+    # The first day Mega no longer sold it (``Contract.withdrawn``), and its
+    # last card's name past the region code, which stands in for the
+    # listing's link once the listing drops it.
+    withdrawn: date | None = None
+    last_card: str = ""
 
     @property
     def professional(self) -> bool:
@@ -101,12 +107,26 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     # Mega pulled "Off-peak Fixed" in July 2026 and brought it back for the
     # August 2026 card, in all three regions and with a B2B edition, which is
     # the catalog check doing exactly what it exists for. The card parses on
-    # the existing fixed path with no parser change.
+    # the existing fixed path with no parser change. The listing dropped it
+    # and Off-peak Flex again on 30 October 2026, in all three regions, with
+    # no product page selling either, so both are withdrawn from that day,
+    # their October cards the last. The B2B edition is built by name and
+    # still published.
     _ContractDef(
-        "mega_offpeak_fixed", "Mega Off-peak Fixed", "fixed", "Off-peak Fixed"
+        "mega_offpeak_fixed",
+        "Mega Off-peak Fixed",
+        "fixed",
+        "Off-peak Fixed",
+        withdrawn=date(2026, 10, 30),
+        last_card="102026-Offpeak-Bi0110-Fix",
     ),
     _ContractDef(
-        "mega_offpeak_flex", "Mega Off-peak Flex", "variable", "Off-peak Flex"
+        "mega_offpeak_flex",
+        "Mega Off-peak Flex",
+        "variable",
+        "Off-peak Flex",
+        withdrawn=date(2026, 10, 30),
+        last_card="102026-Offpeak-Bi-Var",
     ),
     _ContractDef(
         "mega_offpeak_impact_var",

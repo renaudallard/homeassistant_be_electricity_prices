@@ -7738,8 +7738,10 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # Eneco Zon & Wind Fix One adds one fixed card in each of Flanders
         # and Wallonia, read in the same listing fetch as Vast, and OCTA+'s
         # October 2026 range adds five in each region, at the 2,2 s an OCTA+
-        # card already costs, and takes out the four it replaced.
-        ("flanders", "static", False): 60,
+        # card already costs, and takes out the four it replaced. Mega's
+        # Off-peak Fixed and Flex, withdrawn on 30 October 2026, come out of
+        # each region's static cell.
+        ("flanders", "static", False): 58,
         ("flanders", "static", True): 21,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land
@@ -7759,7 +7761,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,
-        ("wallonia", "static", False): 53,
+        ("wallonia", "static", False): 51,
         ("wallonia", "static", True): 21,
         # 13 before EnergyVision's 1.800 kWh contract gained Wallonia, on
         # the French publication of the same card. Monthly-indexed, so the
@@ -7772,7 +7774,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # one fewer for the Fixed Impact they replaced.
         ("wallonia", "slot", False): 6,
         ("wallonia", "slot", True): 1,
-        ("brussels", "static", False): 29,
+        ("brussels", "static", False): 27,
         ("brussels", "static", True): 21,
         # 7 before EnergyVision's 1.800 kWh contract gained Brussels, where
         # it is published as Brusol on another site, and 8 before Brusol's

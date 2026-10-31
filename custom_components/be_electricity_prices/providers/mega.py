@@ -421,6 +421,18 @@ async def fetch(
 
     listing = await _fetch_listing_html(session)
     listed_url = _resolve_pdf_url(listing, contract.product_name, region_code)
+    if listed_url is None and contract.withdrawn is not None:
+        # Off the listing since it was withdrawn: this month's card by its
+        # name, the last one until its month ends, then the CDN's stub for a
+        # card it never published, which the coordinator takes for the end of
+        # a withdrawn product's cards and keeps the last one.
+        moved = _moved_urls(
+            _last_card_url(contract, region_code),
+            dt_util.now().date(),
+            allow_current=True,
+            first_day_first=False,
+        )
+        listed_url = moved[0] if moved else None
     if listed_url is None:
         raise ExtractorError(
             f"Mega {contract_id}: no listing entry for region {region!r}"
@@ -442,7 +454,8 @@ async def _archive_pdf_urls(
 
     Professional cards never appear in the public listing, so they take the
     same built filenames ``fetch`` tries with the requested month. Residential
-    ones resolve the current URL from the listing and rewrite BOTH month
+    ones resolve the current URL from the listing, or a withdrawn product's
+    last card where the listing no longer links it, and rewrite BOTH month
     placeholders: the ``-MMYYYY-`` segment and the ``<MM>`` half of the
     product's effective-date ``<DD><MM>`` suffix, while preserving the
     effective day, which is not the 1st for every product.
@@ -464,9 +477,38 @@ async def _archive_pdf_urls(
         if is_transient_fetch_error(str(err)):
             raise
         return []
-    current_url = _resolve_pdf_url(listing, contract.product_name, region_code)
+    current_url = _current_url(listing, contract, region_code)
     if current_url is None:
         return []
+    return _moved_urls(
+        current_url,
+        year_month,
+        allow_current=allow_current,
+        first_day_first=first_day_first,
+    )
+
+
+def _last_card_url(contract: _ContractDef, region_code: str) -> str:
+    """A withdrawn product's last card in ``region_code``."""
+    return f"{_CDN_BASE}Mega-FR-EL-B2C-{region_code}-{contract.last_card}.pdf"
+
+
+def _current_url(
+    listing_html: str, contract: _ContractDef, region_code: str
+) -> str | None:
+    """The card the listing links for a residential ``contract``, else a
+    withdrawn product's last card, which the listing no longer links."""
+    url = _resolve_pdf_url(listing_html, contract.product_name, region_code)
+    if url is None and contract.withdrawn is not None:
+        return _last_card_url(contract, region_code)
+    return url
+
+
+def _moved_urls(
+    current_url: str, year_month: date, *, allow_current: bool, first_day_first: bool
+) -> list[str]:
+    """The URLs ``current_url``'s card for ``year_month`` may sit under, the
+    month moved in both places ``_archive_pdf_urls`` describes."""
     mmyyyy_re = re.compile(r"-(\d{2})\d{4}-(?=[^/]*\.pdf$)")
     mmyyyy_match = mmyyyy_re.search(current_url)
     if mmyyyy_match is None:
@@ -831,6 +873,7 @@ EXTRACTOR = SupplierExtractor(
             kind=c.kind,
             regions=c.regions,
             professional=c.professional,
+            withdrawn=c.withdrawn,
             # The variable and Impact cards index the feed-in credit on the
             # monthly Epex SPP, which their own energy leg fetches no spots
             # for. Dynamic collects the key via its energy formula; the

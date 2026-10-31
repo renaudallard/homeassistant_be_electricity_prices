@@ -2380,7 +2380,10 @@ async def _check_engie(session: aiohttp.ClientSession, engie: types.ModuleType) 
 # they report as new every day. Engie is not filtered on purpose: its surface
 # is the public sitemap, which does not split by segment.
 _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
-    "mega": lambda m: {c.product_name for c in m._CONTRACTS if c.advertised},
+    # A withdrawn product is left out, so its name coming back reads as new.
+    "mega": lambda m: {
+        c.product_name for c in m._CONTRACTS if c.advertised and c.withdrawn is None
+    },
     "bolt": lambda m: {
         f"{c.folder}/{c.slug}" for c in m._CONTRACTS if not c.professional
     },

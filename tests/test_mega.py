@@ -2842,3 +2842,76 @@ def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> N
         assert offers_direct_debit("mega", conditional) is True
     # Dynamic's card takes 21,2 EUR off its ristourne for any other payer.
     assert offers_direct_debit("mega", "mega_dynamic") is True
+
+
+_OFFPEAK_BASE = "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-"
+
+
+def test_off_peak_is_withdrawn_on_30_october() -> None:
+    """The listing dropped both residential Off-peak products on 30 October
+    2026, in every region; the B2B Off-peak Fixed is built by name and
+    stays."""
+    withdrawn = {
+        c.id: c.withdrawn
+        for c in EXTRACTORS["mega"].contracts
+        if c.withdrawn is not None
+    }
+    assert withdrawn == dict.fromkeys(
+        ("mega_offpeak_fixed", "mega_offpeak_flex"), date(2026, 10, 30)
+    )
+
+
+@pytest.mark.parametrize(
+    ("contract_id", "expected"),
+    [
+        ("mega_offpeak_fixed", "VL-092026-Offpeak-Bi0109-Fix.pdf"),
+        ("mega_offpeak_flex", "VL-092026-Offpeak-Bi-Var.pdf"),
+    ],
+)
+async def test_a_withdrawn_products_past_month_is_built_off_its_last_card(
+    contract_id: str, expected: str
+) -> None:
+    """The listing no longer links it: the October card's name is moved to
+    the month asked for, as the listing's link would have been."""
+    contract = mega_mod._CONTRACTS_BY_ID[contract_id]
+    with patch.object(mega_mod, "_fetch_listing_html", new=AsyncMock(return_value="")):
+        urls = await mega_mod._archive_pdf_urls(
+            None,  # type: ignore[arg-type]
+            contract,
+            "VL",
+            date(2026, 9, 1),
+        )
+    assert urls == [_OFFPEAK_BASE + expected]
+
+
+@pytest.mark.parametrize(
+    ("moment", "asked"),
+    [
+        # Its own month: the last card itself.
+        ("2026-10-31 12:00:00+01:00", "WL-102026-Offpeak-Bi-Var.pdf"),
+        # The month after: a name the CDN answers with its stub.
+        ("2026-11-02 12:00:00+01:00", "WL-112026-Offpeak-Bi-Var.pdf"),
+    ],
+)
+async def test_a_withdrawn_product_is_asked_for_this_month_by_name(
+    freezer: Any, moment: str, asked: str
+) -> None:
+    """Off the listing, the fetch asks for this month's card by name. Past
+    its last month the CDN answers with the page it serves for a card it
+    never published, which reads as a missing card, so the coordinator keeps
+    the last one rather than reporting a broken layout."""
+    from custom_components.be_electricity_prices.providers._pdf import (
+        is_missing_card_error,
+    )
+
+    freezer.move_to(moment)
+    stub = ExtractorError("expected a PDF at x, payload starts with b'<!DOCTYPE html>'")
+    fetched = AsyncMock(side_effect=stub)
+    with (
+        patch.object(mega_mod, "_fetch_listing_html", new=AsyncMock(return_value="")),
+        patch.object(mega_mod, "fetch_pdf_text", new=fetched),
+        pytest.raises(ExtractorError) as err,
+    ):
+        await mega_fetch(None, "mega_offpeak_flex", "wallonia")  # type: ignore[arg-type]
+    assert fetched.call_args.args[1] == _OFFPEAK_BASE + asked
+    assert is_missing_card_error(str(err.value))

@@ -61,7 +61,16 @@ was off the listing for the August 2026 card only and came back for September
 retired in July 2026 and **came back for the August 2026 card**, in all three
 regions and with a B2B edition it had not had before -- the catalog check
 flagged it the day it reappeared (issue #57). Mega Cap was retired with the
-September 2026 cards, residential and professional together (issue #81).
+September 2026 cards, residential and professional together (issue #81). The
+listing dropped Off-peak Fixed and Off-peak Flex again on 30 October 2026, in
+all three regions, with no product page selling either: both are withdrawn
+from that day (`withdrawn`), so the picker still offers them, marked †, to a
+household whose contract runs on one, and the catalog baseline leaves them
+out, which reads their return as new. `last_card` keeps the October card's
+name, which their archive is built off and `fetch` asks this month's card
+under: the last card until October ends, then the CDN's stub, which the
+coordinator takes for a withdrawn product's last card being its last. The
+B2B Off-peak Fixed is built by name and still published.
 
 The table lists the residential products; the professional editions are
 described under [The professional editions](#the-professional-editions).
@@ -75,8 +84,8 @@ described under [The professional editions](#the-professional-editions).
 | `mega_online_flex` | Mega Online Flex | `variable` | all three | |
 | `mega_cosy_fixed` | Mega Cosy Fixed | `fixed` | all three | publishes on a non-1st day |
 | `mega_cosy_flex` | Mega Cosy Flex | `variable` | all three | |
-| `mega_offpeak_fixed` | Mega Off-peak Fixed | `fixed` | all three | retired July 2026, back for the August 2026 card |
-| `mega_offpeak_flex` | Mega Off-peak Flex | `variable` | all three | |
+| `mega_offpeak_fixed` | Mega Off-peak Fixed | `fixed` | all three | retired July 2026, back for the August 2026 card, withdrawn 2026-10-30 |
+| `mega_offpeak_flex` | Mega Off-peak Flex | `variable` | all three | withdrawn 2026-10-30 |
 | `mega_offpeak_impact_var` | Mega Off-peak Impact | `tou_impact` | Wallonia only | CWaPE Tarif réseau IMPACT + SMR3 meter |
 | `mega_dynamic` | Mega Dynamic | `dynamic` | all three | hourly-billed (see below) |
 

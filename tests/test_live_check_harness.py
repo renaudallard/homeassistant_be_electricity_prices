@@ -828,14 +828,24 @@ def test_catalog_baseline_ignores_editions_the_listing_never_shows() -> None:
     """
     mega = SimpleNamespace(
         _CONTRACTS=(
-            SimpleNamespace(product_name="Smart Fixed", advertised=True),
+            SimpleNamespace(
+                product_name="Smart Fixed", advertised=True, withdrawn=None
+            ),
             # The B2B edition of the same product, and one whose residential
             # edition has left the listing: neither is advertised.
-            SimpleNamespace(product_name="Smart Fixed", advertised=False),
-            SimpleNamespace(product_name="Zen Fixed", advertised=False),
+            SimpleNamespace(
+                product_name="Smart Fixed", advertised=False, withdrawn=None
+            ),
+            SimpleNamespace(product_name="Zen Fixed", advertised=False, withdrawn=None),
             # A professional card Mega DOES link from the listing: leaving it
             # out reports it as a new product every day.
-            SimpleNamespace(product_name="SME Flex", advertised=True),
+            SimpleNamespace(product_name="SME Flex", advertised=True, withdrawn=None),
+            # A withdrawn product is left out, so its return reads as new.
+            SimpleNamespace(
+                product_name="Off-peak Flex",
+                advertised=True,
+                withdrawn=date(2026, 10, 30),
+            ),
         )
     )
     assert lc._CATALOG_BASELINES["mega"](mega) == {  # type: ignore[arg-type]
