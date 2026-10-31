@@ -44,7 +44,7 @@ from tests import make_entry, make_snapshot
 
 
 def _stale_entry(hass: HomeAssistant) -> BePricesCoordinator:
-    entry = make_entry()
+    entry = make_entry(contract="power_fix_one")
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     entry.runtime_data = coord

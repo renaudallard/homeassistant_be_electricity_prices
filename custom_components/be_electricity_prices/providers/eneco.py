@@ -45,6 +45,7 @@ from dataclasses import replace
 from datetime import date
 
 import aiohttp
+from homeassistant.util import dt as dt_util
 
 from ..const import (
     REGION_FLANDERS,
@@ -100,6 +101,11 @@ _CONTRACT_SLUGS: dict[str, str] = {
     "power_dynamic": "DYNAMIC",
 }
 
+# The first day Eneco no longer sold a product (``Contract.withdrawn``): Zon
+# & Wind Vast left the listing on 30 October 2026, Fix One being the fixed
+# product sold since.
+_WITHDRAWN: dict[str, date] = {"power_fix": date(2026, 10, 30)}
+
 # "laatst gekende waarde van Belpex-RLP-M (08/2026: €133,4366/MWh)": the month
 # the printed Maandprijs was computed on and the value it settled at. Belpex-
 # RLP-M is only known at month end, so the card printed in September carries
@@ -136,6 +142,14 @@ async def fetch(
         raise ExtractorError(f"unknown Eneco contract {contract_id!r}")
     listing = await _fetch_listing(session)
     url = _resolve_url(listing, contract_id)
+    if url is None and contract_id in _WITHDRAWN:
+        # Off the listing since it was withdrawn: this month's first issue by
+        # name, the last card until its month ends, then the CDN's 404, which
+        # the coordinator takes for the end of a withdrawn product's cards
+        # and keeps the last one.
+        yymm = f"{dt_util.now():%y%m}"
+        slug = _CONTRACT_SLUGS[contract_id]
+        url = f"{_BASE_URL}/BC_032_01{yymm}_NL_ENECO_POWER_{slug}.pdf"
     if url is None:
         raise ExtractorError(
             f"Eneco listing page did not advertise a PDF for {contract_id!r}"
@@ -709,6 +723,7 @@ EXTRACTOR = SupplierExtractor(
             # Injection indexes on the monthly Belpex-injectie, which needs
             # spots the fixed energy leg never fetches.
             spot_indexed_injection=True,
+            withdrawn=_WITHDRAWN["power_fix"],
         ),
         Contract(
             # A one-year fixed card that appeared on the October 2026

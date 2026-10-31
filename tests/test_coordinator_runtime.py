@@ -2184,7 +2184,7 @@ async def test_a_probe_match_keeps_a_replayed_card_old(
     so the next tick adopted it as a card the running parser had read and
     wrote it back under the running schema."""
     freezer.move_to("2026-10-04 10:00:00+00:00")
-    entry = _entry()
+    entry = make_entry(contract="power_fix_one")
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     old = _fake_snapshot()
@@ -9291,7 +9291,7 @@ async def test_a_card_past_its_validity_by_a_week_is_stale(
     """A probe match restarts the card's age, so a supplier that kept
     serving September's card never had it go stale. It is stale a week past
     its validity, however recently it was fetched."""
-    entry = _entry()
+    entry = make_entry(contract="power_fix_one")
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     coord._snapshot_fetched_at = dt_util.utcnow()
@@ -9312,14 +9312,14 @@ async def test_a_supplier_still_serving_last_months_card_gives_way_to_the_archiv
     the card archive holds October's: the archive's card is priced on, dated
     to its month with no probe key, and a supplier card that is no older
     than the archive's is left alone."""
-    entry = _entry()
+    entry = make_entry(contract="power_fix_one")
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     september = make_snapshot(
-        supplier="eneco", contract="power_fix", valid_until=date(2026, 9, 30)
+        supplier="eneco", contract="power_fix_one", valid_until=date(2026, 9, 30)
     )
     october = make_snapshot(
-        supplier="eneco", contract="power_fix", valid_until=date(2026, 10, 31)
+        supplier="eneco", contract="power_fix_one", valid_until=date(2026, 10, 31)
     )
     archive = _archive_holding({date(2026, 10, 1): october})
 
@@ -9334,7 +9334,7 @@ async def test_a_supplier_still_serving_last_months_card_gives_way_to_the_archiv
     # not asked.
     archive.reset_mock()
     current = make_snapshot(
-        supplier="eneco", contract="power_fix", valid_until=date(2026, 10, 31)
+        supplier="eneco", contract="power_fix_one", valid_until=date(2026, 10, 31)
     )
     await _refresh_serving(coord, current, archive)
     archive.assert_not_awaited()
@@ -9348,7 +9348,7 @@ async def test_the_archive_is_walked_back_and_only_a_later_card_taken(
     """The archive is asked this month first, then back a month at a time to
     the first row it holds, and that row stands in only if it is a later card
     than the one held."""
-    entry = _entry()
+    entry = make_entry(contract="power_fix_one")
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     july = make_snapshot(valid_until=date(2026, 7, 31))
@@ -9377,7 +9377,7 @@ async def test_an_archive_row_short_of_the_entrys_area_does_not_stand_in(
     newest row printing the area."""
     from custom_components.be_electricity_prices.providers.base import DsoOverlay
 
-    entry = _entry()
+    entry = make_entry(contract="power_fix_one")
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
     july = make_snapshot(valid_until=date(2026, 7, 31))

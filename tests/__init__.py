@@ -287,6 +287,12 @@ def make_entry(
     Override any of the five base fields; pass extra entry-data keys as
     keyword arguments (e.g. ``solar_regime="none"``) and ``options`` for
     the entry options mapping.
+
+    Zon & Wind Vast was withdrawn on 30 October 2026 and a withdrawn
+    product's card is final: it never goes stale, the archive never stands
+    in for it, and the compare picker offers it only to an entry already on
+    it. A test of any of those passes ``contract="power_fix_one"``, the
+    fixed card still sold.
     """
     data: dict[str, object] = {
         "supplier": supplier,

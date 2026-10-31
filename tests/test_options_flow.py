@@ -6822,7 +6822,7 @@ async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
     )
     assert month_mean is not None and month_mean > 0.05
 
-    other = _stub_snapshot("eneco", "power_fix", 0.18)
+    other = _stub_snapshot("eneco", "power_fix_one", 0.18)
     fake = replace(EXTRACTORS["eneco"], fetch=AsyncMock(return_value=other), probe=None)
     with patch.dict(EXTRACTORS, {"eneco": fake}):
         result = await hass.config_entries.options.async_init(entry.entry_id)
@@ -6833,7 +6833,7 @@ async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
             result["flow_id"], {"supplier": "eneco"}
         )
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"contract": "power_fix"}
+            result["flow_id"], {"contract": "power_fix_one"}
         )
         if result["step_id"] == "compare_meter":
             result = await hass.config_entries.options.async_configure(
@@ -7181,10 +7181,10 @@ async def test_compare_offers_your_own_contract(hass: HomeAssistant) -> None:
         next(k for k in schema.schema if str(k) == "contract")
     ].config["options"]
     ids = [o["value"] for o in options]
-    assert "power_fix" in ids, ids
+    assert "power_fix_one" in ids, ids
     # And an explicit exclusion still works for callers that want one.
     excluded = _compare_contract_schema(
-        "eneco", "wallonia", "fixed", "power_fix", False
+        "eneco", "wallonia", "fixed", "power_fix_one", False
     )
     excluded_ids = [
         o["value"]
@@ -7192,7 +7192,7 @@ async def test_compare_offers_your_own_contract(hass: HomeAssistant) -> None:
             next(k for k in excluded.schema if str(k) == "contract")
         ].config["options"]
     ]
-    assert "power_fix" not in excluded_ids
+    assert "power_fix_one" not in excluded_ids
 
 
 def test_the_comparison_chart_keeps_both_rows_for_one_supplier() -> None:
@@ -7740,8 +7740,9 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # October 2026 range adds five in each region, at the 2,2 s an OCTA+
         # card already costs, and takes out the four it replaced. Mega's
         # Off-peak Fixed and Flex, withdrawn on 30 October 2026, come out of
-        # each region's static cell.
-        ("flanders", "static", False): 58,
+        # each region's static cell, and Eneco Zon & Wind Vast, withdrawn the
+        # same day, out of Flanders' and Wallonia's.
+        ("flanders", "static", False): 57,
         ("flanders", "static", True): 21,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land
@@ -7761,7 +7762,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,
-        ("wallonia", "static", False): 51,
+        ("wallonia", "static", False): 50,
         ("wallonia", "static", True): 21,
         # 13 before EnergyVision's 1.800 kWh contract gained Wallonia, on
         # the French publication of the same card. Monthly-indexed, so the
@@ -10907,9 +10908,9 @@ async def test_compare_prices_a_dynamic_own_year_on_the_spots_it_holds(
         page = await _drive_compare(
             hass,
             entry,
-            other_snap=_stub_snapshot("eneco", "power_fix", 0.18),
+            other_snap=_stub_snapshot("eneco", "power_fix_one", 0.18),
             other_supplier="eneco",
-            other_contract="power_fix",
+            other_contract="power_fix_one",
         )
         sensor = await _compute_current_year_cost(
             hass,
@@ -11004,9 +11005,9 @@ async def test_compare_prices_the_own_row_as_the_sensor_on_the_fallback_too(
         page = await _drive_compare(
             hass,
             entry,
-            other_snap=_stub_snapshot("eneco", "power_fix", 0.18),
+            other_snap=_stub_snapshot("eneco", "power_fix_one", 0.18),
             other_supplier="eneco",
-            other_contract="power_fix",
+            other_contract="power_fix_one",
         )
         sensor = await _compute_current_year_cost(
             hass,

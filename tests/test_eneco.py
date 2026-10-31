@@ -1184,3 +1184,54 @@ def test_a_flex_formula_with_an_integer_base_stays_month_indexed() -> None:
     assert energy.rlp_indexed is True
     assert energy.formula_factor == pytest.approx(0.102 * 1.06 * 10)
     assert energy.formula_base == pytest.approx(3 * 1.06 / 100)
+
+
+def test_zon_and_wind_vast_is_withdrawn_on_30_october() -> None:
+    """The listing has linked no POWER_FIX card since 30 October 2026, Fix
+    One being the fixed product Eneco sells since."""
+    withdrawn = {
+        c.id: c.withdrawn for c in eneco_mod.EXTRACTOR.contracts if c.withdrawn
+    }
+    assert withdrawn == {"power_fix": date(2026, 10, 30)}
+
+
+@pytest.mark.parametrize(
+    ("moment", "issue"),
+    [
+        # Its own month: the last card itself.
+        ("2026-10-31 12:00:00+01:00", "012610"),
+        # The month after: an issue the CDN answers with a 404.
+        ("2026-11-02 12:00:00+01:00", "012611"),
+    ],
+)
+def test_a_withdrawn_product_is_asked_for_this_month_by_name(
+    freezer: Any, moment: str, issue: str
+) -> None:
+    """Off the listing, the fetch asks for this month's first issue by name.
+    Past its last month the CDN answers 404, which reads as a missing card,
+    so the coordinator keeps the last one rather than reporting a broken
+    layout."""
+    from custom_components.be_electricity_prices.providers._pdf import (
+        is_missing_card_error,
+    )
+
+    freezer.move_to(moment)
+    fetched = AsyncMock(side_effect=eneco_mod.ExtractorError("HTTP 404 fetching x"))
+    with (
+        patch.object(eneco_mod, "_fetch_listing", new=AsyncMock(return_value="")),
+        patch.object(eneco_mod, "fetch_pdf_text", new=fetched),
+        pytest.raises(eneco_mod.ExtractorError) as err,
+    ):
+        _run(eneco_mod.fetch(None, "power_fix", REGION_WALLONIA))  # type: ignore[arg-type]
+    assert fetched.call_args.args[1] == (
+        f"https://cdn.eneco.be/downloads/nl/general/tk/BC_032_{issue}_NL_ENECO_POWER_FIX.pdf"
+    )
+    assert is_missing_card_error(str(err.value))
+
+
+def test_a_product_still_sold_off_the_listing_still_fails_loud() -> None:
+    with (
+        patch.object(eneco_mod, "_fetch_listing", new=AsyncMock(return_value="")),
+        pytest.raises(eneco_mod.ExtractorError, match="did not advertise a PDF"),
+    ):
+        _run(eneco_mod.fetch(None, "power_fix_one", REGION_WALLONIA))  # type: ignore[arg-type]

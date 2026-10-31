@@ -61,7 +61,7 @@ https://eneco.be/nl/elektriciteit-gas/tariefkaarten
 
 | id | label | kind | regions | source line |
 | --- | --- | --- | --- | --- |
-| `power_fix` | Eneco Zon & Wind Vast | `fixed` | flanders, wallonia | `eneco.py` |
+| `power_fix` | Eneco Zon & Wind Vast (withdrawn 2026-10-30) | `fixed` | flanders, wallonia | `eneco.py` |
 | `power_fix_one` | Eneco Zon & Wind Fix One | `fixed` | flanders, wallonia | `eneco.py` |
 | `power_flex` | Eneco Zon & Wind Flex | `variable` | flanders, wallonia | `eneco.py` |
 | `power_flex_one` | Eneco Zon & Wind Flex One | `variable` | flanders, wallonia | `eneco.py` |
@@ -140,6 +140,16 @@ HTML, reconstructing the absolute URL from `_BASE_URL` when only the filename is
 present. It keeps the first match: the listing only advertises one issue at a
 time, but the single-shot search defends against a future duplicate silently
 selecting a stale revision.
+
+Zon & Wind Vast left the listing on 30 October 2026, Fix One being the fixed
+product sold since, and is withdrawn from that day (`_WITHDRAWN`,
+`Contract.withdrawn`): the picker still offers it, marked †, to a household
+whose contract runs on it, and the catalog baseline leaves it out, which reads
+its return as new. Off the listing, `fetch` asks for this month's first issue by
+name: the October card until October ends, then the CDN's 404, which the
+coordinator takes for the end of a withdrawn product's cards and keeps the last
+one rather than reporting a broken layout. Its past issues are built off the CDN
+as for any product.
 
 ### `probe` (freshness)
 

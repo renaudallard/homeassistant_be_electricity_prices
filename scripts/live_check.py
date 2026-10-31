@@ -2389,7 +2389,8 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
     },
     "engie": lambda m: {c.family for c in m._CONTRACTS},
     "luminus": lambda m: {c.slug for c in m._CONTRACTS},
-    "eneco": lambda m: set(m._CONTRACT_SLUGS),
+    # A withdrawn product is left out, so its slug coming back reads as new.
+    "eneco": lambda m: set(m._CONTRACT_SLUGS) - set(m._WITHDRAWN),
     "totalenergies": lambda m: {c.slug for c in m._CONTRACTS},
     # A withdrawn product is left out, so its slug coming back reads as new.
     "octaplus": lambda m: {c.slug for c in m._CONTRACTS if c.withdrawn is None},
