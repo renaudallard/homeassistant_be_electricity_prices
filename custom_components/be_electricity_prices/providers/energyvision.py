@@ -89,6 +89,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from email.utils import parsedate_to_datetime
+from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -336,11 +337,12 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
 )
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
-# Every residential electricity product code EnergyVision currently lists,
-# across both regions, so discover() flags only a genuinely new SKU. All of
-# them are implemented except the catalogued-but-declined ones: GSEZ / GSEZLP
-# price self-consumed solar as a third energy leg, GSG / GS1JVG are gas, and
-# GRSO is a transient group-buy SKU.
+# Every residential product code EnergyVision and Brusol currently list, so
+# discover() flags only a genuinely new SKU. All of them are implemented
+# except the catalogued-but-declined ones: GSEZ / GSEZLP price self-consumed
+# solar as a third energy leg, and GSG / GS1JVG are gas. The listing names
+# its group buys apart, by partner rather than by product code (the iChoosr
+# GRSO cards of May to July 2026 among them), and discover() reads none.
 DISCOVER_IDS: frozenset[str] = frozenset(
     {
         "GSDYN",
@@ -354,7 +356,6 @@ DISCOVER_IDS: frozenset[str] = frozenset(
         "GSEZLP",
         "GSG",
         "GS1JVG",
-        "GRSO",
     }
 )
 
@@ -660,15 +661,47 @@ def _card_href_re(code: str, token: str) -> re.Pattern[str]:
     )
 
 
-async def discover(session: aiohttp.ClientSession) -> set[str]:
-    """Return the residential electricity product codes currently advertised,
-    so live_check can flag a new SKU. Diffed against :data:`DISCOVER_IDS`.
+# The script the listing draws its cards with, as the listing names it, and
+# one product of its catalogue: the code, then the fields before the
+# product's first nested object (its legacy file map) or its end. Neither
+# backtracks past the next quote or brace.
+_SCRIPT_SRC_RE = re.compile(r'src="([^"]*/tariefkaarten[^"]*)"')
+_PRODUCT_RE = re.compile(r'\{code:"([A-Z0-9-]+)",([^{}]*)')
+_SOLD_REGION_RE = re.compile(r'region:"(?:vlaanderen|wallonie)"')
 
-    Every index page is walked and so is every token in use: a product is
-    published for one region in one language, so matching one page or one
-    token would silently drop a whole region's catalogue from the drift
-    check. The tokens come from the registered cards rather than a literal,
-    so a card added with a new token extends the check with it.
+
+async def _listed_codes(session: aiohttp.ClientSession) -> set[str]:
+    """The product codes the listing's script sells: those of Flanders and
+    Wallonia with no end month, a Walloon code without its "-WAL" (the card
+    is ``EV-<MMYY>-GS1JV-WAL-fr.pdf``). The script is the one the listing
+    names, so a renamed one is followed rather than an old copy read.
+    Nothing when either cannot be read, which the live check reports as
+    every product gone."""
+    try:
+        listing = await fetch_text(session, _LISTING_URL)
+        src = _SCRIPT_SRC_RE.search(listing)
+        if src is None:
+            return set()
+        script = await fetch_text(session, urljoin(_LISTING_URL, src.group(1)))
+    except ExtractorError:
+        return set()
+    return {
+        code.removesuffix("-WAL")
+        for code, fields in _PRODUCT_RE.findall(script)
+        if 'end:"' not in fields and _SOLD_REGION_RE.search(fields)
+    }
+
+
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """Return the residential product codes currently advertised, so
+    live_check can flag a new SKU. Diffed against :data:`DISCOVER_IDS`.
+
+    EnergyVision's own codes come off its listing's script, and Brusol's off
+    every page a registered card is advertised on, with every token in use:
+    a product is published for one region in one language, so matching one
+    page or one token would silently drop a whole region's catalogue from
+    the drift check. The tokens come from the registered cards rather than a
+    literal, so a card added with a new token extends the check with it.
 
     Only pages advertising the CURRENT cards are read. Brusol also publishes
     an archive page, and reading that would report every product it has ever
@@ -680,8 +713,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
             key=lambda token: (-len(token), token),
         )
     )
-    found: set[str] = set()
-    for url in (_LISTING_URL, *_index_urls()):
+    found = await _listed_codes(session)
+    for url in _index_urls():
         try:
             html = await fetch_text(session, url)
         except ExtractorError:

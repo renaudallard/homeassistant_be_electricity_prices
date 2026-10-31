@@ -54,8 +54,10 @@ needs no parser of its own for the energy leg - see
 [Brussels](#brussels-is-published-as-brusol-on-another-site) below. Gas (GSG / GS1JVG) stays out
 of scope, and so do GSEZ / GSEZLP: they are tiered like the three above but also price
 self-consumed solar ("Groene stroom uit zonnepanelen op je dak 20 €cent/kWh"), a third
-energy leg with no representation in the model. GRSO is a transient group-buy SKU. `DISCOVER_IDS` (`providers/energyvision.py`) lists all of
-them so `discover()` only flags a genuinely new code.
+energy leg with no representation in the model. `DISCOVER_IDS` (`providers/energyvision.py`) lists all of
+them so `discover()` only flags a genuinely new code. Group buys are not in it: the listing
+names them apart, by partner rather than by product code (the iChoosr GRSO cards of May to
+July 2026 among them), and `discover()` reads none.
 
 EnergyVision publishes its cards as PDFs named `EV-<MMYY>-<CODE>-<lang>.pdf` under
 `/sites/default/files/inline-files/`. The filename carries the pricing month
@@ -176,12 +178,19 @@ saying it; it does not refetch the card every tick.
 
 ### Discover + archive
 
-`discover` (`providers/energyvision.py`) walks every registered card's `index_url` and
-returns the product codes advertised there, which live_check diffs against `DISCOVER_IDS`
-to flag a new SKU. The token alternation is built from the registered cards rather than
-written out, so a card added with a new token extends the check with it. Only pages
-advertising CURRENT cards are read: Brusol's archive page would report every product it has
-ever sold as a new SKU.
+`discover` (`providers/energyvision.py`) returns the product codes advertised, which
+live_check diffs against `DISCOVER_IDS` to flag a new SKU or a product gone. EnergyVision's
+own come from `_listed_codes`: the listing names the script it draws its cards with
+(`_SCRIPT_SRC_RE`), and the script's catalogue holds one `{code:"...",...}` object per
+product (`_PRODUCT_RE`). A product of Flanders or Wallonia with no `end` month is sold, and a
+Walloon code drops its `-WAL` (`GS1JV-WAL` is the `EV-<MMYY>-GS1JV-WAL-fr.pdf` card); the
+business products (`zakelijk`) and the group buys are left out. The script is the one the
+listing names, so a renamed one is followed rather than an old copy read, and a listing or
+script that does not read gives no code, which the live check reports as every product gone.
+Brusol's codes come off every page a registered card is advertised on; the token
+alternation is built from the registered cards rather than written out, so a card added
+with a new token extends the check with it. Only pages advertising CURRENT cards are read:
+Brusol's archive page would report every product it has ever sold as a new SKU.
 
 `fetch_for_month` builds the archived URL rather than scraping, through
 `_archive_card_urls`:

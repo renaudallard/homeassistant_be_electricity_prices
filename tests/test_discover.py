@@ -160,31 +160,58 @@ def test_mega_discover_matches_registry() -> None:
     assert discovered == expected
 
 
+# EnergyVision's listing and the script it draws its cards with.
+_EV_LISTING = {
+    "tariefkaarten.min.js": (_read("energyvision_tariefkaarten.js"), 200),
+    "energyvision.be/nl-be/tariefkaart": (_read("energyvision.html"), 200),
+}
+
+
 def test_energyvision_discover_matches_registry() -> None:
     session = _UrlFakeSession(
         {
             "goedkope-stroom-van-brusol": (_read("brusol_gs1800v.html"), 200),
             "groene-stroom-van-brusol": (_read("brusol_grs.html"), 200),
-            "energyvision.be": (_read("energyvision.html"), 200),
+            **_EV_LISTING,
         }
     )
     discovered = _run(energyvision_mod.discover(session))
-    # discover() returns every residential electricity code advertised, across
-    # EVERY page and EVERY language token: a product is published for one
-    # region in one language, and Brussels is not on the EnergyVision site at
-    # all but on Brusol's, so reading one page or matching one token would
-    # silently drop a whole region's catalogue from the drift check. The
-    # registry baseline is DISCOVER_IDS (the full catalogue, so only a
-    # genuinely new code flags).
+    # discover() returns every residential code advertised, off the listing's
+    # script and across EVERY Brusol page and EVERY language token: a product
+    # is published for one region in one language, and Brussels is not on the
+    # EnergyVision site at all but on Brusol's, so reading one page or
+    # matching one token would silently drop a whole region's catalogue from
+    # the drift check. The registry baseline is DISCOVER_IDS (the full
+    # catalogue, so only a genuinely new code flags).
     assert discovered == set(energyvision_mod.DISCOVER_IDS)
+
+
+def test_energyvision_discover_reads_the_products_the_script_sells() -> None:
+    """Since 30 October 2026 the listing links no card and its script holds
+    the catalogue. A product with an end month, a business one and a group
+    buy are not sold to a household, and a Walloon code drops its "-WAL"."""
+    listed = _run(energyvision_mod.discover(_UrlFakeSession(_EV_LISTING)))
+    assert listed == set(energyvision_mod.DISCOVER_IDS) - {"GRS"}
+    assert not listed & {"GS1000V", "ZEE", "GGS1800V-PRO", "GRSO", "GS1JV-WAL"}
+
+
+def test_energyvision_discover_reads_the_script_the_listing_names() -> None:
+    """A listing that names no script gives no product, which the live check
+    reports as every product gone, rather than a copy left at the old address
+    being read."""
+    session = _UrlFakeSession(
+        {
+            "tariefkaarten.min.js": (_read("energyvision_tariefkaarten.js"), 200),
+            "energyvision.be/nl-be/tariefkaart": ("<h1>Tariefkaart</h1>", 200),
+        }
+    )
+    assert _run(energyvision_mod.discover(session)) == set()
 
 
 def test_energyvision_discover_reads_the_brusol_pages() -> None:
     """The Brussels catalogue is invisible from energyvision.be. Without the
     Brusol pages GRS is never seen, and a new Brussels SKU never flags."""
-    off_ev_only = _run(
-        energyvision_mod.discover(_FakeSession(_read("energyvision.html")))
-    )
+    off_ev_only = _run(energyvision_mod.discover(_UrlFakeSession(_EV_LISTING)))
     assert "GRS" not in off_ev_only
     off_brusol = _run(
         energyvision_mod.discover(
