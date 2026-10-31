@@ -488,9 +488,11 @@ would still count as running, and a card short of an area for it would be left a
 
 The gate covers the **eight supplier-families that pick a card from a set of several advertised
 ones** -- Bolt, Cociter (variable + trihoraire + dynamic), EBEM, Ecopower (definitive + dynamic),
-Eneco, EnergyVision and Frank (one row per product code, and for EnergyVision per region too,
-since its Brussels cards are advertised on a different site), and Mega. That shape is the one
-that can silently resolve an older card, because the older card is still there and still parses.
+Eneco, EnergyVision on Brusol's pages and Frank (one row per product code, and for EnergyVision
+per Brussels card), and Mega. That shape is the one that can silently resolve an older card,
+because the older card is still there and still parses. EnergyVision's own cards have been found
+by name since 30 October 2026, as its listing's script finds them, so no page advertises a set to
+measure them against and they get no row.
 The row count is deliberately not written down here: it is one row per advertised card and it
 moves whenever a supplier adds a product or a region, which is not worth a doc edit to restate.
 
