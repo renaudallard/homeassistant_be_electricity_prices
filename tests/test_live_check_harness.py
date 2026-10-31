@@ -3769,6 +3769,47 @@ def test_every_frank_tier_is_checked_and_gets_its_own_freshness_row(
     assert fresh["frank/freshness: newest advertised frank_dynamic_jn card"].ok
 
 
+def test_a_frank_tier_on_the_running_month_s_card_is_current(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """On 30 October 2026 Frank uploaded the November cards of five tiers and
+    not VT's. VT, on the running month's card, is current; once November has
+    begun it is a month behind and fails."""
+    frank = lc._load_providers()["frank"]
+    rows = [
+        {
+            "originalFilename": f"Frank Energie Dynamisch {s}{month} 2026.pdf",
+            "url": f"https://cdn/{month}/{i}.pdf",
+            "_createdAt": created,
+        }
+        for month, created in (
+            ("Oktober", "2026-09-30T14:00:00Z"),
+            ("November", "2026-10-30T14:00:00Z"),
+        )
+        for i, s in enumerate(["", "HV ", "VT ", "JN ", "SL ", "Plus "])
+        if not (month == "November" and s == "VT ")
+    ]
+
+    async def _query(_session: object, _q: str) -> list[dict[str, str]]:
+        return rows
+
+    monkeypatch.setattr(frank, "_sanity_query", _query)
+    vt = "frank/freshness: newest advertised frank_dynamic_korting card"
+    freezer.move_to("2026-10-31 12:00:00+01:00")
+    lc.CHECKS.clear()
+    asyncio.run(lc._check_card_freshness(None, {"frank": frank}))
+    fresh = {c.label: c for c in _rows("frank/freshness")}
+    assert fresh[vt].ok and "running month" in fresh[vt].detail
+    assert all(c.ok for c in fresh.values())
+
+    freezer.move_to("2026-11-02 12:00:00+01:00")
+    lc.CHECKS.clear()
+    asyncio.run(lc._check_card_freshness(None, {"frank": frank}))
+    fresh = {c.label: c for c in _rows("frank/freshness")}
+    assert not fresh[vt].ok
+    assert all(c.ok for label, c in fresh.items() if label != vt)
+
+
 # ---- the workflow's retry loop -----------------------------------------------
 
 

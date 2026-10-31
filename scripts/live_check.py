@@ -3965,6 +3965,8 @@ async def _check_card_freshness(
             # hides the other four. Each tier resolves on its own too: one
             # whose card was not found used to pass the whole block as an
             # unreadable CMS and leave every later tier without a row.
+            today = datetime.now(ZoneInfo("Europe/Brussels")).date()
+            running = today.year * 100 + today.month
             for tier_id, _tier_label, _suffix in frank._TIERS:
                 label = f"frank/freshness: newest advertised {tier_id} card"
                 try:
@@ -3978,8 +3980,20 @@ async def _check_card_freshness(
                         f"{type(err).__name__}: {err}",
                     )
                     continue
-                if _frank_month_key(card_label) == _UNREADABLE_STAMP:
+                served = _frank_month_key(card_label)
+                if served == _UNREADABLE_STAMP:
                     _expect(label, False, f"cannot read a month out of {card_label!r}")
+                    continue
+                if served >= running:
+                    # On the running month's card the tier is current, whatever
+                    # its siblings already show of the next month: Frank
+                    # uploads each tier's next card on its own day, VT's after
+                    # the five others' on 30 October 2026. A resolver that
+                    # cannot see a renamed card is still caught, the day the
+                    # month turns.
+                    _record(
+                        label, True, f"serving the running month's card ({card_label})"
+                    )
                     continue
                 _expect_newest_card(
                     label,

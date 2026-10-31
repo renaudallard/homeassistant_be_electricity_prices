@@ -365,6 +365,12 @@ the same listing page the extractor does, but with a **looser** pattern. When a 
 filename shape, the extractor's strict pattern stops seeing the new file and keeps resolving the old
 one; the loose pattern still sees it, and the mismatch fails the run.
 
+Frank's rows measure each tier against the newest month any of its cards names, so a tier whose
+next card goes up later than its siblings' read as broken: on 30 October 2026 the November cards
+of five tiers were up and VT still had October's. A Frank tier on the running month's card
+passes for that reason, and is held to the newest advertised card once the month has turned, which
+is when a resolver blind to a renamed card serves last month's.
+
 ### The federal tax block
 
 `_check_federal_tax_consensus` (`scripts/live_check.py`) asks the freshness question about a
