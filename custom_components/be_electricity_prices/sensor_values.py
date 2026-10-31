@@ -302,10 +302,12 @@ def _split_today_tomorrow(
     Tomorrow is left empty while the card does not cover it
     (``_card_covers_tomorrow``), as the tomorrow_* sensors are: on the last
     day of a monthly card the table forward-fills rates the supplier has not
-    published, and a chart drew them as tomorrow's prices.
+    published, and a chart drew them as tomorrow's prices. A dynamic card's
+    tomorrow stays, being the day-ahead curve on the card's own formula.
     """
     today, tomorrow = _split_hourly_today_tomorrow(data.hourly, breakdown_row)
-    return today, tomorrow if _card_covers_tomorrow(data) else []
+    covered = _card_covers_tomorrow(data, data.energy_follows_spot)
+    return today, tomorrow if covered else []
 
 
 def _split_injection_today_tomorrow(
@@ -322,13 +324,16 @@ def _split_injection_today_tomorrow(
     floored quarter rates is not the rate of their mean, and the hourly row
     this used to show was the former while the credit is earned per slot.
 
-    Tomorrow is gated on the card covering it, as the price arrays are.
+    Tomorrow is gated on the card covering it, as the price arrays are, on
+    the feed-in's own leg: one credited per slot on the day-ahead price keeps
+    it past the card's last day, a flat or monthly one does not.
     """
     today, tomorrow = _split_hourly_today_tomorrow(
         data.injection_hourly,
         lambda local, rate: {"start": local.isoformat(), "injection": round(rate, 6)},
     )
-    return today, tomorrow if _card_covers_tomorrow(data) else []
+    covered = _card_covers_tomorrow(data, data.injection_follows_spot)
+    return today, tomorrow if covered else []
 
 
 def _current_field(field: str) -> Callable[[CoordinatorData], float | None]:

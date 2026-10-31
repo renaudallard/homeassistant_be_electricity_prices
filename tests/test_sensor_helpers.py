@@ -457,6 +457,42 @@ def test_the_tomorrow_arrays_stop_at_the_card_validity() -> None:
     assert len(today) == 24 and tomorrow == []
 
 
+def test_a_dynamic_card_keeps_tomorrow_until_it_goes_stale() -> None:
+    """Issue #146: energie.be and Energy Knights had no November card up on
+    31 October, so every dynamic entry lost tomorrow once the day-ahead curve
+    was out, though from midnight the October card prices the day anyway. A
+    leg on the day-ahead price keeps its tomorrow past the card's end until
+    the card goes stale; a flat feed-in beside it does not."""
+    today = _fixed_today_local().date()
+    base = replace(
+        _today_and_tomorrow_data([0.10] * 24, [0.20] * 24),
+        injection_hourly=_injection_today_and_tomorrow(
+            [0.05] * 24, [0.06] * 24
+        ).injection_hourly,
+        energy_follows_spot=True,
+    )
+    for ended in (today, today - timedelta(days=7)):
+        late = replace(base, snapshot_valid_until=ended)
+        assert _has_tomorrow(late) is True, ended
+        assert _tomorrow_avg(late) == pytest.approx(0.20)
+        assert len(_split_today_tomorrow(late)[1]) == 24
+        assert _split_injection_today_tomorrow(late)[1] == []
+        credited = replace(late, injection_follows_spot=True)
+        assert len(_split_injection_today_tomorrow(credited)[1]) == 24
+    stale = replace(
+        base,
+        injection_follows_spot=True,
+        snapshot_valid_until=today - timedelta(days=8),
+        snapshot_stale=True,
+    )
+    assert _has_tomorrow(stale) is False
+    assert _tomorrow_avg(stale) is None
+    assert _split_today_tomorrow(stale)[1] == []
+    assert _split_injection_today_tomorrow(stale)[1] == []
+    # Today stays on the stale card, which has its own repair issue.
+    assert len(_split_today_tomorrow(stale)[0]) == 24
+
+
 def test_a_withdrawn_products_last_card_keeps_tomorrow() -> None:
     """OCTA+ Fixed was withdrawn on 1 October 2026 and its entries stay on
     the September card, which is dated only by its "09/2026" label. The

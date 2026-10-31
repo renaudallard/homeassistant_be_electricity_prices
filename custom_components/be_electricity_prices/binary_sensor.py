@@ -63,27 +63,38 @@ def _has_tomorrow(data: CoordinatorData) -> bool:
          month's rates yet, so we shouldn't claim they're available.
          A card stating no validity end is dated by the month its title
          names (``card_valid_until``); only one naming neither is
-         trusted on the price table alone.
+         trusted on the price table alone. A dynamic card passes past
+         its end until it goes stale: its tomorrow is the day-ahead
+         curve on its own formula.
 
     The second gate is ``_card_covers_tomorrow``, which also gates the
     ``tomorrow`` arrays on the price sensors.
     """
-    if not data.hourly or not _card_covers_tomorrow(data):
+    if not data.hourly or not _card_covers_tomorrow(data, data.energy_follows_spot):
         return False
     tomorrow = dt_util.now().date() + timedelta(days=1)
     return any(dt_util.as_local(h).date() == tomorrow for h in data.hourly)
 
 
-def _card_covers_tomorrow(data: CoordinatorData) -> bool:
+def _card_covers_tomorrow(data: CoordinatorData, follows_spot: bool) -> bool:
     """Whether the card in hand is still good tomorrow, or cannot be dated.
 
     A withdrawn product's card is good for as long as the entry stays on it:
     no other will come, and today is priced off it past its date too.
+
+    So is a leg priced per slot on the day-ahead price (``follows_spot``),
+    until the card goes stale. Tomorrow's spot is what moves that price, and
+    from midnight the same card prices today until the next one is read, so
+    refusing it only hid until midnight what the table shows from then on
+    (issue #146). A flat, variable or monthly rate for a month whose card is
+    not out is not known at all (issue #108).
     """
     if data.card_is_final:
         return True
     valid_until = card_valid_until(data.snapshot_valid_until, data.snapshot_publication)
-    return valid_until is None or dt_util.now().date() < valid_until
+    if valid_until is None or dt_util.now().date() < valid_until:
+        return True
+    return follows_spot and not data.snapshot_stale
 
 
 _DESCRIPTION = BinarySensorEntityDescription(

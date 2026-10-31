@@ -86,6 +86,13 @@ class CoordinatorData:
     # the last it will ever have and the one every day from here bills on,
     # tomorrow included, whatever date it states.
     card_is_final: bool = False
+    # True when the energy in ``hourly`` is priced per slot on the day-ahead
+    # price (a dynamic card), and when the feed-in in ``injection_hourly`` is
+    # credited per slot on it. Such a leg keeps its tomorrow past the card's
+    # last day until the card goes stale: tomorrow's spot is what moves it,
+    # and from midnight the same card prices today until the next is read.
+    energy_follows_spot: bool = False
+    injection_follows_spot: bool = False
     last_error: str = ""
     # True while these prices come from a card that had no text layer and was
     # read off its pixels by the repository's archive walk. Not an error: the

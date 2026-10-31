@@ -97,6 +97,7 @@ from .fees import _compute_capacity, _compute_prosumer, bills_capacity
 from .fluvius import ensure_analog_surcharge, ensure_tariff_sheet
 from .injection import (
     _compute_injection_price,
+    _injection_follows_spot,
     _static_injection_bands,
 )
 from .meter_warm import KeptRows, warm_meter_reads
@@ -111,7 +112,7 @@ from .providers import (
 from .providers import (
     get as get_extractor,
 )
-from .providers._rates import EnergyRates
+from .providers._rates import DynamicRates, EnergyRates
 from .snapshot_resolve import analog_meter
 from .snapshot_store import cached_month_card
 from .spot_stats import _injection_is_quarter_hourly
@@ -509,6 +510,10 @@ class _TickMixin:
             snapshot_stale=stale,
             snapshot_valid_until=self._snapshot.valid_until,
             card_is_final=self._card_is_final(),
+            energy_follows_spot=isinstance(priced.energy, DynamicRates),
+            injection_follows_spot=_injection_follows_spot(
+                injection_snapshot.injection, priced.energy
+            ),
             last_error=self._last_error,
             card_read_by_ocr=self._card_read_by_ocr,
             spot_source=self._spot_source,

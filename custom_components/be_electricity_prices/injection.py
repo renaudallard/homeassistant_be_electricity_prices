@@ -548,6 +548,24 @@ def _injection_is_spot_formula(inj: InjectionRates, energy: EnergyRates) -> bool
     )
 
 
+def _injection_follows_spot(inj: InjectionRates | None, energy: EnergyRates) -> bool:
+    """True when every slot of this feed-in leg is credited on the day-ahead
+    formula, as ``_injection_price_for_slot`` credits it.
+
+    A leg printing a rate per time-of-use slot, per register or per Impact
+    band is credited that rate before the formula, so it is left out whether
+    or not the entry's meter reads it. A month-indexed leg fails
+    ``_injection_is_spot_formula``, and so does one the tick baked on the
+    month's mean, which keeps no coefficients.
+    """
+    return (
+        inj is not None
+        and inj.peak is None
+        and _impact_band_rates(inj) is None
+        and _injection_is_spot_formula(inj, energy)
+    )
+
+
 def _injection_replays_hourly_spot(inj: InjectionRates) -> bool:
     """True when this feed-in leg settles on the hour's own spot, so a walk
     holding no spot must not credit the printed figure.

@@ -1371,6 +1371,89 @@ async def test_a_feed_in_credited_per_quarter_hour_is_shown_per_quarter_hour(
     assert len([s for s in data.injection_hourly if s.date() == now.date()]) > 24
 
 
+@pytest.mark.parametrize(
+    ("energy", "follows"),
+    [(DynamicRates(factor=1.02, base=0.0049), True), (FixedRates(single=0.18), False)],
+    ids=["dynamic", "fixed"],
+)
+async def test_a_dynamic_card_keeps_tomorrow_on_its_last_day(
+    hass: HomeAssistant, freezer: Any, energy: Any, follows: bool
+) -> None:
+    """Issue #146: on 31 October 2026 energie.be had not published its
+    November card, and with the day-ahead curve for 1 November out its
+    Dynamisch entries still showed no tomorrow, prices or feed-in, though
+    from midnight the October card prices the day anyway. The tick says
+    which legs follow the spot, and those keep their tomorrow; a fixed
+    card's forward-filled rates for a month not published stay hidden."""
+    from custom_components.be_electricity_prices.binary_sensor import _has_tomorrow
+    from custom_components.be_electricity_prices.providers.base import DsoOverlay
+    from custom_components.be_electricity_prices.sensor_values import (
+        _split_injection_today_tomorrow,
+        _split_today_tomorrow,
+    )
+
+    freezer.move_to("2026-10-31 14:30:00+01:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "energiebe",
+            "contract": "energiebe_dynamic",
+            "region": "flanders",
+            "dso": "fluvius_limburg",
+            "meter": "dynamic",
+            "solar_regime": "injection",
+            "api_key": "test-token",
+        },
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(
+        supplier="energiebe",
+        contract="energiebe_dynamic",
+        energy=energy,
+        dsos={"fluvius_limburg": DsoOverlay(distribution_single=0.05, transport=0.0)},
+        injection=InjectionRates(current=0.0795, factor=1.01, base=-0.0098),
+        publication_label="oktober 2026",
+        valid_until=date(2026, 10, 31),
+    )
+    coord._snapshot_fetched_at = dt_util.utcnow()
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+
+    async def _fake_fetch(
+        start: datetime, end: datetime, *, quarter_hourly: bool = False
+    ) -> dict[datetime, float]:
+        step = timedelta(minutes=15 if quarter_hourly else 60)
+        prices: dict[datetime, float] = {}
+        when = start
+        while when < end:
+            prices[when] = 0.08
+            when += step
+        return prices
+
+    with (
+        _patch_spot_fetch(_fake_fetch),
+        patch(
+            "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._update_body()
+
+    assert data.snapshot_valid_until == date(2026, 10, 31)
+    assert data.snapshot_stale is False
+    assert data.energy_follows_spot is follows
+    assert data.injection_follows_spot is follows
+    # The table holds 1 November either way: the curve, or the fixed card's
+    # rates carried forward.
+    assert any(dt_util.as_local(s).date() == date(2026, 11, 1) for s in data.hourly)
+    assert _has_tomorrow(data) is follows
+    assert len(_split_today_tomorrow(data)[1]) == (24 if follows else 0)
+    assert len(_split_injection_today_tomorrow(data)[1]) == (24 if follows else 0)
+
+
 async def test_the_spot_grid_follows_the_leg_the_tick_prices_on(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -9696,6 +9779,36 @@ def test_a_solar_weighted_formula_is_never_priced_at_one_slot() -> None:
     # A leg carrying neither still prices per slot on a dynamic card.
     plain = InjectionRates(current=0.05, factor=0.9, base=-0.01)
     assert _injection_is_spot_formula(plain, energy) is True
+
+
+def test_only_a_feed_in_on_the_day_ahead_formula_follows_the_spot() -> None:
+    """Issue #146: a feed-in keeps its tomorrow past the card's last day only
+    when every slot is credited on the day-ahead formula. A rate printed per
+    time-of-use slot, register or Impact band is credited before the formula,
+    a month index is not the hour's spot, and a leg the tick baked on the
+    month's mean has no coefficients left."""
+    from custom_components.be_electricity_prices.injection import (
+        _injection_follows_spot,
+    )
+
+    dynamic = DynamicRates(factor=1.02, base=0.0049)
+    fixed = FixedRates(single=0.18)
+    formula = InjectionRates(current=0.0795, factor=1.01, base=-0.0098)
+    assert _injection_follows_spot(formula, dynamic) is True
+    # A static card credits its printed figure unless it bills per slot.
+    assert _injection_follows_spot(formula, fixed) is False
+    assert _injection_follows_spot(replace(formula, slot_indexed=True), fixed) is True
+    assert _injection_follows_spot(replace(formula, current=None), fixed) is True
+    for printed in (
+        {"peak": 0.06, "offpeak": 0.04},
+        {"impact_pic": 0.06, "impact_medium": 0.05, "impact_eco": 0.04},
+        {"month_indexed": True},
+        {"spp_indexed": True},
+        {"factor": None, "base": None},
+    ):
+        leg = replace(formula, **printed)  # type: ignore[arg-type]
+        assert _injection_follows_spot(leg, dynamic) is False, printed
+    assert _injection_follows_spot(None, dynamic) is False
 
 
 async def test_a_card_held_into_a_new_month_is_resolved_for_it(

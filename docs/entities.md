@@ -205,7 +205,15 @@ issue.
 The `tomorrow` arrays on `current_price` and `injection_price` follow the same
 validity gate (`_card_covers_tomorrow`, `binary_sensor.py`): on that last day
 they are empty rather than drawing the extrapolation as tomorrow's prices
-(issue #108).
+(issue #108). A leg priced per slot on the day-ahead price is the exception
+(issue #146): its tomorrow is the curve on the card's own formula, which from
+midnight prices today too until the next card is read, so it stays until the
+card goes stale (`snapshot_stale`). Each array asks with its own leg's flag:
+the price array whether the card is dynamic (`energy_follows_spot`), the
+feed-in array whether every slot is credited on the day-ahead formula
+(`injection_follows_spot`, `_injection_follows_spot` in `injection.py`), which
+leaves out a flat or monthly-indexed credit and any printed per time-of-use
+slot, register or Impact band.
 
 ### extra_state_attributes
 
@@ -301,7 +309,7 @@ price table is hourly and its feed-in is credited per quarter-hour, so its rows
 and the state follow the quarters (`injection_resolution`). `tomorrow` fills
 in once the day-ahead publishes (~13:00 CET)
 on a spot-indexed contract, and it stays empty on the last day the card covers,
-like the price arrays.
+like the price arrays, unless every slot is credited on the day-ahead formula.
 
 Publishing the slots rather than an hourly mean of them also retired an
 approximation. A floored feed-in formula is convex, so the mean of four floored
@@ -561,10 +569,12 @@ only when both gates hold:
    or when it states none the end of the month its title names
    (`card_valid_until`, `providers/_validity.py`), is not before tomorrow.
    A withdrawn product's last card always does (`card_is_final`): no other
-   will come, and every day from here is priced off it.
+   will come, and every day from here is priced off it. So does a dynamic
+   card (`energy_follows_spot`) past its end, until it goes stale (7 days past
+   its end or since it was last refreshed, `snapshot_stale`).
 
 ```python
-if not data.hourly or not _card_covers_tomorrow(data):
+if not data.hourly or not _card_covers_tomorrow(data, data.energy_follows_spot):
     return False
 tomorrow = dt_util.now().date() + timedelta(days=1)
 return any(dt_util.as_local(h).date() == tomorrow for h in data.hourly)
@@ -573,13 +583,17 @@ return any(dt_util.as_local(h).date() == tomorrow for h in data.hourly)
 Gate 2 is the historical fix for monthly variable cards (Eneco, Mega, ...): at
 month-end the previously extrapolated "tomorrow" hours are no longer billable
 because the supplier has not yet published the new month's rates, so the sensor
-must not claim they are available. A card with no parseable validity end
-(`valid_until is None`) is dated by its title: Bolt and TotalEnergies print only
-"Septembre 2026", and skipping the gate for them left a September card
-advertising October's prices. The title counts when it names the month in words
-or as `MM/YYYY`; an ISO `YYYY-MM` label does not, because Ecopower's names the
-month its index settled rather than the month the card is used in. Only a card
-dated by neither skips gate 2, and the price table alone decides.
+must not claim they are available. A dynamic card is the exception: its
+tomorrow is the day-ahead curve on the card's own formula, which the card in
+hand prices today on from midnight until the next one is read, so gate 2 lets
+it through until the card goes stale (issue #146). A card with no parseable
+validity end (`valid_until is None`) is dated by its title: Bolt and
+TotalEnergies print only "Septembre 2026", and skipping the gate for them left
+a September card advertising October's prices. The title counts when it names
+the month in words or as `MM/YYYY`; an ISO `YYYY-MM` label does not, because
+Ecopower's names the month its index settled rather than the month the card is
+used in. Only a card dated by neither skips gate 2, and the price table alone
+decides.
 
 ## Button (`button.py`)
 
@@ -665,10 +679,11 @@ Both call `_resolve_window_inputs` (`__init__.py`) then `_find_window`
   silently drop an interior hour from its average (`__init__.py`).
 - No validity gate: on the last day a monthly card covers, the window can rank
   tomorrow's rows, which `tomorrow_prices_available` and the `tomorrow_*`
-  sensors withhold (`_card_covers_tomorrow`). They are priced on the current
-  card with the federal levies of their own month (`_build_hourly`), so the
-  figures may move with next month's card; on a spot-priced energy leg the
-  ranking does not, a new positive factor or base moving every hour alike.
+  sensors withhold on any card but a dynamic one (`_card_covers_tomorrow`).
+  They are priced on the current card with the federal levies of their own
+  month (`_build_hourly`), so the figures may move with next month's card; on
+  a spot-priced energy leg the ranking does not, a new positive factor or base
+  moving every hour alike.
 
 Return value (`ServiceResponse`, `__init__.py`):
 
