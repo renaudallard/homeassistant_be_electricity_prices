@@ -3990,6 +3990,10 @@ async def _check_card_freshness(
     if energyvision is not None:
         for contract in energyvision._CONTRACTS:
             for region, card in sorted(contract.cards.items()):
+                if card.index_url is None:
+                    # Found by its name, as the listing's own script finds
+                    # it: no page links a card to measure the fetch against.
+                    continue
                 # The trailing literal hyphen after the code keeps the GS1JVG
                 # gas card out of the GS1JV row. The directory is not anchored:
                 # the Brussels cards live under the month Brusol uploaded them
@@ -4003,9 +4007,12 @@ async def _check_card_freshness(
                     _html: str,
                     _c: object = contract,
                     _card: object = card,
+                    _page: str = card.index_url,
                     _p: str = pattern,
                 ) -> list[str | None]:
-                    url = await energyvision._resolve_card_url(session, _c, _card)
+                    url = await energyvision._resolve_card_url(
+                        session, _c, _card, _page
+                    )
                     return _stamps_from(_p, url)
 
                 await _freshness_row(

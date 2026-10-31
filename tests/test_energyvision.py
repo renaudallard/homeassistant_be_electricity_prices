@@ -318,13 +318,13 @@ async def test_a_live_card_missing_a_dso_row_is_refused(
     snap = parse_snapshot(contract_id, short, "test://ev", region=region)
     assert missing not in snap.dsos and len(snap.dsos) > 1
 
-    async def resolve(*_args: Any) -> str:
-        return "test://ev"
+    async def current(*_args: Any) -> tuple[str, None]:
+        return "test://ev", None
 
     async def read(_session: Any, _url: str) -> str:
         return short
 
-    monkeypatch.setattr(ev, "_resolve_card_url", resolve)
+    monkeypatch.setattr(ev, "_current_upload", current)
     monkeypatch.setattr(ev, "fetch_pdf_text_layout", read)
     with pytest.raises(
         ExtractorError, match=rf"DSO rows not found for \['{missing}'\]"
@@ -1432,8 +1432,8 @@ async def test_the_newest_card_a_page_links_is_resolved(
     monkeypatch.setattr(ev, "fetch_text", page)
     contract = ev._CONTRACTS_BY_ID[_GRS]
     card = contract.card("brussels")
-    assert card is not None
-    url = await ev._resolve_card_url(None, contract, card)  # type: ignore[arg-type]
+    assert card is not None and card.index_url is not None
+    url = await ev._resolve_card_url(None, contract, card, card.index_url)  # type: ignore[arg-type]
     assert url == f"{base}/2026-09/EV-1026-GRS-BXL-nl.pdf"
 
 
@@ -1454,9 +1454,235 @@ async def test_a_card_href_ending_in_a_space_is_resolved(
     monkeypatch.setattr(ev, "fetch_text", page)
     contract = ev._CONTRACTS_BY_ID[_GRS]
     card = contract.card("brussels")
-    assert card is not None
-    url = await ev._resolve_card_url(None, contract, card)  # type: ignore[arg-type]
+    assert card is not None and card.index_url is not None
+    url = await ev._resolve_card_url(None, contract, card, card.index_url)  # type: ignore[arg-type]
     assert url == f"{base}/2026-09/EV-1026-GRS-BXL-nl.pdf"
+
+
+_EV_FILES = "https://www.energyvision.be/sites/default/files/inline-files/"
+
+
+class _Uploads:
+    """A HEAD answering for the EnergyVision files ``names``, each with a
+    Last-Modified of its own, failing for ``down`` as a site that is down
+    fails, and 404 for any other; it keeps the names it was asked."""
+
+    def __init__(self, *names: str, down: str = "") -> None:
+        self.names = names
+        self.down = down
+        self.asked: list[str] = []
+
+    async def __call__(self, _session: Any, url: str, **_kw: Any) -> str:
+        name = url.removeprefix(_EV_FILES)
+        self.asked.append(name)
+        if name == self.down:
+            raise ExtractorError(f"network error fetching {url}: reset")
+        if name not in self.names:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+        return f"stamp of {name}"
+
+
+@pytest.mark.parametrize(
+    ("contract_id", "region", "moment", "name", "fixture"),
+    [
+        (
+            _DYNAMIC,
+            "flanders",
+            "2026-07-15 12:00:00+02:00",
+            "EV-0726-GSDYN-nl.pdf",
+            "energyvision_dynamic_jul.pdf",
+        ),
+        (
+            _FIXED_WAL,
+            "wallonia",
+            "2026-07-15 12:00:00+02:00",
+            "EV-0726-GS1JV-WAL-fr.pdf",
+            "energyvision_fixed_1y_wal_jul.pdf",
+        ),
+        (
+            _TIERED_1800,
+            "flanders",
+            "2026-09-15 12:00:00+02:00",
+            "EV-0926-GS1800V-nl.pdf",
+            "energyvision_tiered_1800_sep.pdf",
+        ),
+    ],
+)
+async def test_a_card_is_found_by_its_name(
+    monkeypatch: pytest.MonkeyPatch,
+    freezer: Any,
+    contract_id: str,
+    region: str,
+    moment: str,
+    name: str,
+    fixture: str,
+) -> None:
+    """The listing links no card since 30 October 2026: its script asks for
+    the month's name and the first two uploads after it, as the fetch does."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    freezer.move_to(moment)
+    head = _Uploads(name)
+    read: list[str] = []
+
+    async def text(_session: Any, url: str) -> str:
+        read.append(url)
+        return fixture_text(fixture, layout=True)
+
+    monkeypatch.setattr(ev, "head_or_raise", head)
+    monkeypatch.setattr(ev, "fetch_pdf_text_layout", text)
+    snap = await ev.fetch(None, contract_id, region)  # type: ignore[arg-type]
+    stem = name.removesuffix(".pdf")
+    assert head.asked == [name, f"{stem}_0.pdf", f"{stem}_1.pdf"]
+    assert read == [_EV_FILES + name]
+    assert snap.source_url == _EV_FILES + name
+
+
+@pytest.mark.parametrize(
+    ("uploaded", "read", "asked"),
+    [
+        # Each upload after the first in turn, up to the first one missing.
+        (("", "_0", "_1", "_2"), "_2", ("", "_0", "_1", "_2", "_3")),
+        # A missing _0 is passed over, as the listing's script passes it.
+        (("", "_1"), "_1", ("", "_0", "_1", "_2")),
+        # A missing _1 ends the walk, whatever was uploaded after it.
+        (("", "_0", "_2"), "_0", ("", "_0", "_1")),
+        # No further than _9, the script's limit.
+        (
+            ("", *(f"_{n}" for n in range(11))),
+            "_9",
+            ("", *(f"_{n}" for n in range(10))),
+        ),
+    ],
+)
+async def test_the_newest_upload_is_read(
+    monkeypatch: pytest.MonkeyPatch,
+    freezer: Any,
+    uploaded: tuple[str, ...],
+    read: str,
+    asked: tuple[str, ...],
+) -> None:
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    stem = "EV-0726-GSDYN-nl"
+    head = _Uploads(*(f"{stem}{suffix}.pdf" for suffix in uploaded))
+    fetched: list[str] = []
+
+    async def text(_session: Any, url: str) -> str:
+        fetched.append(url)
+        return _dyn_text()
+
+    monkeypatch.setattr(ev, "head_or_raise", head)
+    monkeypatch.setattr(ev, "fetch_pdf_text_layout", text)
+    await ev.fetch(None, _DYNAMIC, "flanders")  # type: ignore[arg-type]
+    assert head.asked == [f"{stem}{suffix}.pdf" for suffix in asked]
+    assert fetched == [f"{_EV_FILES}{stem}{read}.pdf"]
+
+
+async def test_last_months_card_is_read_until_this_months_is_up(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """Half past midnight on 1 August in Brussels, still 31 July in UTC: the
+    month asked first is Home Assistant's."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    freezer.move_to("2026-08-01 00:30:00+02:00")
+    head = _Uploads("EV-0726-GSDYN-nl.pdf")
+
+    async def text(_session: Any, _url: str) -> str:
+        return _dyn_text()
+
+    monkeypatch.setattr(ev, "head_or_raise", head)
+    monkeypatch.setattr(ev, "fetch_pdf_text_layout", text)
+    snap = await ev.fetch(None, _DYNAMIC, "flanders")  # type: ignore[arg-type]
+    assert head.asked == [
+        "EV-0826-GSDYN-nl.pdf",
+        "EV-0826-GSDYN-nl_0.pdf",
+        "EV-0826-GSDYN-nl_1.pdf",
+        "EV-0726-GSDYN-nl.pdf",
+        "EV-0726-GSDYN-nl_0.pdf",
+        "EV-0726-GSDYN-nl_1.pdf",
+    ]
+    assert snap.source_url == _EV_FILES + "EV-0726-GSDYN-nl.pdf"
+
+
+async def test_no_card_this_month_or_the_month_before_fails_the_fetch(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    monkeypatch.setattr(ev, "head_or_raise", _Uploads("EV-0526-GSDYN-nl.pdf"))
+    with pytest.raises(
+        ExtractorError, match=r"no card GSDYN \(nl\) for 2026-07 or the month before"
+    ):
+        await ev.fetch(None, _DYNAMIC, "flanders")  # type: ignore[arg-type]
+
+
+async def test_a_site_that_does_not_answer_fails_the_fetch_as_transient(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """A name that fails for another reason than not being there is no
+    month without a card: the fetch is tried again."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+    from custom_components.be_electricity_prices.providers._pdf import (
+        is_transient_fetch_error,
+    )
+
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    fetched: list[str] = []
+
+    async def text(_session: Any, url: str) -> str:
+        fetched.append(url)
+        return _dyn_text()
+
+    monkeypatch.setattr(
+        ev,
+        "head_or_raise",
+        _Uploads("EV-0726-GSDYN-nl.pdf", down="EV-0726-GSDYN-nl_0.pdf"),
+    )
+    monkeypatch.setattr(ev, "fetch_pdf_text_layout", text)
+    with pytest.raises(ExtractorError) as err:
+        await ev.fetch(None, _DYNAMIC, "flanders")  # type: ignore[arg-type]
+    assert is_transient_fetch_error(str(err.value))
+    assert not fetched
+
+
+async def test_the_probe_follows_the_current_card(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """The listing's ETag no longer moves with a card: the key is the
+    current card's URL and Last-Modified, which a card uploaded again
+    moves, and None when the site does not answer."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    freezer.move_to("2026-07-15 12:00:00+02:00")
+    plain, again = "EV-0726-GSDYN-nl.pdf", "EV-0726-GSDYN-nl_0.pdf"
+    keys: list[str | None] = []
+    for head in (_Uploads(plain), _Uploads(plain, again), _Uploads(plain, down=again)):
+        monkeypatch.setattr(ev, "head_or_raise", head)
+        keys.append(await ev.probe(None, _DYNAMIC, "flanders"))  # type: ignore[arg-type]
+    assert keys == [
+        f"{_EV_FILES}{plain} stamp of {plain}",
+        f"{_EV_FILES}{again} stamp of {again}",
+        None,
+    ]
+
+
+async def test_the_brussels_probe_heads_brusols_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    headed: list[str] = []
+
+    async def head(_session: Any, url: str, **_kw: Any) -> None:
+        headed.append(url)
+
+    monkeypatch.setattr(ev, "head_freshness_key", head)
+    assert await ev.probe(None, _GRS, "brussels") is None  # type: ignore[arg-type]
+    assert headed == [ev._BRUSOL_GRS_URL]
 
 
 # ---- Brussels (Brusol) card: GRS "Groene stroom" -----------------------------

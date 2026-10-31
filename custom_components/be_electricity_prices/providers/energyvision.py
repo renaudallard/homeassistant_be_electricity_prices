@@ -28,10 +28,13 @@
 EnergyVision publishes its "Goedkope stroom" residential cards as monthly
 PDFs named ``EV-<MMYY>-<CODE>-<lang>.pdf`` under
 ``/sites/default/files/inline-files/``. The filenames carry the pricing
-month (``EV-0726-...`` = July 2026) and the server adds Drupal dedup
-suffixes (the fixed card ships as ``EV-0726-GS3JV-nl_0.pdf``), so a
-constructed URL would miss it. The fetch therefore scrapes the current
-card href off the tariefkaart listing page (the Mega / Frank shape).
+month (``EV-0726-...`` = July 2026) and Drupal adds a dedup suffix to a
+card uploaded again (the fixed card ships as ``EV-0726-GS3JV-nl_0.pdf``),
+so the plain name can be a draft. Since 30 October 2026 the tariefkaart
+listing links no card: its script
+(``/sites/default/files/ftp/tariefkaarten.min.js``) builds the names for
+the month and shows the newest upload that answers, else last month's
+card, and the fetch finds the current card the same way.
 
 A product is published per region, one card each: the Flemish cards are
 ``-nl``, the Walloon ones ``-WAL-fr`` and the Brussels ones ``-BXL-nl``.
@@ -127,6 +130,7 @@ from ._pdf import (
     fetch_text,
     head_freshness_key,
     head_or_raise,
+    is_missing_card_error,
     is_transient_fetch_error,
     printed_vat_rate,
 )
@@ -151,8 +155,9 @@ _SITE_BASE = "https://www.energyvision.be"
 # The supplier's months end at midnight in Brussels, whatever zone Home
 # Assistant runs in.
 _BRUSSELS = ZoneInfo("Europe/Brussels")
-# One listing page carries every card on the EnergyVision site, Flemish and
-# Walloon alike, so the freshness probe covers both.
+# The listing of every card on the EnergyVision site, Flemish and Walloon
+# alike. Since 30 October 2026 its script draws the cards and the page
+# links none.
 _LISTING_URL = f"{_SITE_BASE}/nl-be/tariefkaart"
 
 # EnergyVision sells in Brussels under the Brusol brand, off its own site.
@@ -185,8 +190,9 @@ class _CardDef:
     token: str
     # Site the card and the page that advertises it live on.
     site: str = _SITE_BASE
-    # Page whose HTML carries the current card's href.
-    index_url: str = _LISTING_URL
+    # Page whose HTML carries the current card's href, or None where the
+    # card is found by its name, as EnergyVision's own listing finds it.
+    index_url: str | None = None
     # How an archived card is located under <site>/sites/default/files/.
     # False is EnergyVision's flat "inline-files" folder, where the filename
     # alone locates every month; True is Brusol, which files each card under
@@ -410,23 +416,29 @@ async def fetch(
             f"EnergyVision {contract_id} is not sold in {region!r}; "
             f"published for {sorted(contract.regions)}"
         )
-    url = await _resolve_card_url(session, contract, card)
-    # The page can lag the upload: Brusol's still linked the September 2026
-    # cards on 1 October while the October ones had sat in its 2026-09 folder
-    # since the 30th. A card named for a month before this one sends the
-    # fetch to where this month's card would be filed, the archive's own
-    # lookup, and back to the linked card when nothing is there yet or the
-    # lookup fails: the page's card is what the fetch served before.
-    linked = _card_month(url)
-    today = dt_util.now().date()
-    running = date(today.year, today.month, 1)
-    if linked is not None and linked < running:
-        try:
-            newer = await _archived_card(session, contract_id, card, region, running)
-        except ExtractorError:
-            newer = None
-        if newer is not None:
-            return newer
+    if card.index_url is None:
+        url, _ = await _current_upload(session, contract, card)
+    else:
+        url = await _resolve_card_url(session, contract, card, card.index_url)
+        # The page can lag the upload: Brusol's still linked the September
+        # 2026 cards on 1 October while the October ones had sat in its
+        # 2026-09 folder since the 30th. A card named for a month before
+        # this one sends the fetch to where this month's card would be
+        # filed, the archive's own lookup, and back to the linked card when
+        # nothing is there yet or the lookup fails: the page's card is what
+        # the fetch served before.
+        linked = _card_month(url)
+        today = dt_util.now().date()
+        running = date(today.year, today.month, 1)
+        if linked is not None and linked < running:
+            try:
+                newer = await _archived_card(
+                    session, contract_id, card, region, running
+                )
+            except ExtractorError:
+                newer = None
+            if newer is not None:
+                return newer
     text = await fetch_pdf_text_layout(session, url)
     snap = parse_snapshot(contract_id, text, url, region=region)
     # Here and not in the reader: a past month's card keeps a short table.
@@ -598,12 +610,9 @@ async def probe(
     contract_id: str,
     region: str,
 ) -> str | None:
-    """Cheap freshness key: HEAD the page this card is advertised on. Its
-    ETag / Last-Modified flips when EnergyVision rotates the monthly cards,
-    which is exactly when the resolved PDF URL changes.
-
-    The page is per region, not per supplier: the Brussels cards are
-    advertised on the Brusol site and rotate on their own schedule.
+    """Cheap freshness key: the current card's URL and Last-Modified, which
+    a new month and a card uploaded again both move, where the card is found
+    by its name, else the ETag or Last-Modified of the page that links it.
 
     Brusol's pages are Drupal dynamic pages and answer with neither header,
     so Brussels has no probe key and falls back to the 24h TTL, the path
@@ -612,11 +621,17 @@ async def probe(
     """
     contract = _CONTRACTS_BY_ID.get(contract_id)
     card = None if contract is None else contract.card(region)
-    if card is None:
+    if contract is None or card is None:
         return None
-    return await head_freshness_key(
-        session, card.index_url, prefer=("ETag", "Last-Modified")
-    )
+    if card.index_url is not None:
+        return await head_freshness_key(
+            session, card.index_url, prefer=("ETag", "Last-Modified")
+        )
+    try:
+        url, modified = await _current_upload(session, contract, card)
+    except ExtractorError:
+        return None
+    return f"{url} {modified}"
 
 
 def _index_urls() -> tuple[str, ...]:
@@ -625,18 +640,18 @@ def _index_urls() -> tuple[str, ...]:
     seen: dict[str, None] = {}
     for contract in _CONTRACTS:
         for card in contract.cards.values():
-            seen.setdefault(card.index_url, None)
+            if card.index_url is not None:
+                seen.setdefault(card.index_url, None)
     return tuple(seen)
 
 
 def _card_href_re(code: str, token: str) -> re.Pattern[str]:
     """Match one card's href on an index page.
 
-    The href is site-relative on the EnergyVision listing and absolute on the
-    Brusol pages, so the site prefix is optional, and Brusol has ended one in
-    a space ("EV-1026-GSG-BXL-nl.pdf "). The directory is not
-    anchored: EnergyVision keeps every card in one ``inline-files`` folder
-    while Brusol files each one under the month it uploaded it.
+    The href is absolute on the Brusol pages and the site prefix optional, so
+    a site-relative one reads too, and Brusol has ended one in a space
+    ("EV-1026-GSG-BXL-nl.pdf "). The directory is not anchored: Brusol files
+    each card under the month it uploaded it.
     """
     return re.compile(
         rf'href="((?:https?://[^"/]+)?/sites/default/files/[^"]*?'
@@ -666,7 +681,7 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
         )
     )
     found: set[str] = set()
-    for url in _index_urls():
+    for url in (_LISTING_URL, *_index_urls()):
         try:
             html = await fetch_text(session, url)
         except ExtractorError:
@@ -700,21 +715,78 @@ def _archive_card_urls(
     )
 
 
-async def _resolve_card_url(
+# The last re-upload the listing's script asks for ("maxSuffix": 9). The
+# archive walk above goes further, to _MAX_REUPLOADS.
+_MAX_SUFFIX = 9
+
+
+async def _newest_upload(
+    session: aiohttp.ClientSession, url: str
+) -> tuple[str, str | None] | None:
+    """The newest upload of the card filed at ``url`` and its
+    Last-Modified, or None where none answers.
+
+    The listing's script takes the newest of the plain name, ``_0`` and
+    ``_1`` that answers and, past ``_1``, each next one for as long as it
+    answers; the same names are asked here in the same order. A failure
+    other than a name that is not there raises, so a site that is down is
+    not taken for a month without a card.
+    """
+    stem = url.removesuffix(".pdf")
+    names = (url, *(f"{stem}_{n}.pdf" for n in range(_MAX_SUFFIX + 1)))
+    newest: tuple[str, str | None] | None = None
+    for asked, name in enumerate(names):
+        try:
+            modified = await head_or_raise(session, name)
+        except ExtractorError as err:
+            if not is_missing_card_error(str(err)):
+                raise
+            # From _1 on, the first name missing ends the walk.
+            if asked >= 2:
+                break
+            continue
+        newest = (name, modified)
+    return newest
+
+
+async def _current_upload(
     session: aiohttp.ClientSession, contract: _ContractDef, card: _CardDef
+) -> tuple[str, str | None]:
+    """The card the listing shows today and its Last-Modified: the newest
+    upload of this month's card, else of last month's, which the listing
+    goes on showing until this month's is up.
+
+    The month is Home Assistant's, which the coordinator holds a card's
+    validity to; the listing's script takes the one in Brussels.
+    """
+    first = dt_util.now().date().replace(day=1)
+    for month in (first, (first - timedelta(days=1)).replace(day=1)):
+        for url in _archive_card_urls(contract, card, month):
+            found = await _newest_upload(session, url)
+            if found is not None:
+                return found
+    raise ExtractorError(
+        f"EnergyVision: no card {contract.code} ({card.token}) for "
+        f"{first:%Y-%m} or the month before"
+    )
+
+
+async def _resolve_card_url(
+    session: aiohttp.ClientSession, contract: _ContractDef, card: _CardDef, page: str
 ) -> str:
-    """The newest card the page links, by the month its file name prices.
+    """The newest card ``page``, the page ``card`` is advertised on, links,
+    by the month its file name prices.
 
     A page can link more than one: from October 2026 Brusol's signup pages
     carry the current card on their button and last month's in the signup
     form's consent checkbox, which comes first in the HTML.
     """
-    html = await fetch_text(session, card.index_url)
+    html = await fetch_text(session, page)
     hrefs: list[str] = _card_href_re(contract.code, card.token).findall(html)
     if not hrefs:
         raise ExtractorError(
             f"EnergyVision: no listing entry for card {contract.code} "
-            f"({card.token}) on {card.index_url}"
+            f"({card.token}) on {page}"
         )
     href = max(hrefs, key=lambda h: _card_month(h) or date.min)
     return href if href.startswith("http") else card.site + href

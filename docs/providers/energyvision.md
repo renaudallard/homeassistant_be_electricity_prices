@@ -1,8 +1,8 @@
 # Provider: energyvision
 
 This document is the maintenance reference for the EnergyVision extractor
-(`providers/energyvision.py`). It explains how the extractor resolves EnergyVision's
-monthly "Goedkope stroom" tariff cards off the site listing, how the energy / injection /
+(`providers/energyvision.py`). It explains how the extractor finds EnergyVision's
+monthly "Goedkope stroom" tariff cards, how the energy / injection /
 tax / DSO fields are parsed for each supported product, and the land mines a future
 maintainer must know when EnergyVision changes its cards. The test module
 `tests/test_energyvision.py` is treated as ground truth throughout: it pins the expected
@@ -59,14 +59,17 @@ them so `discover()` only flags a genuinely new code.
 
 EnergyVision publishes its cards as PDFs named `EV-<MMYY>-<CODE>-<lang>.pdf` under
 `/sites/default/files/inline-files/`. The filename carries the pricing month
-(`EV-0726-GSDYN-nl.pdf` = July 2026) and the Drupal CMS adds dedup suffixes (the fixed
-card ships as `EV-0726-GS3JV-nl_0.pdf`), so a constructed URL would miss it. The fetch
-therefore scrapes the current card href off the tariefkaart listing page
+(`EV-0726-GSDYN-nl.pdf` = July 2026) and the Drupal CMS adds a dedup suffix to a card
+uploaded again (the fixed card ships as `EV-0726-GS3JV-nl_0.pdf`), so the plain name can
+be a draft. Since 30 October 2026 the tariefkaart listing
 (`_LISTING_URL = https://www.energyvision.be/nl-be/tariefkaart`,
-`providers/energyvision.py`) - the Mega / Frank listing-resolution shape.
+`providers/energyvision.py`) links no card: its script,
+`/sites/default/files/ftp/tariefkaarten.min.js`, builds the names for the month and
+shows the newest upload that answers. The fetch finds the current card the same way, by
+name, and reads Brusol's cards off the pages that link them.
 
 ```
-config (contract_id) -> fetch(): GET listing -> regex the EV-<MMYY>-<CODE>-nl href
+config (contract_id) -> fetch(): HEAD EV-<MMYY>-<CODE>-<token>.pdf, _0, _1, ...
                                     |
                                     v
                              fetch_pdf_text_layout() -> layout text
@@ -125,20 +128,31 @@ leg pays for the key, not about whether the index is hourly.
 
 ## Fetch strategy
 
-### Resolve + download (`fetch`, `_resolve_card_url`)
+### Find + download (`fetch`, `_current_upload`, `_resolve_card_url`)
 
 `fetch` (`providers/energyvision.py`) looks the contract's card up by region, refusing a
-region it is not sold in, then `_resolve_card_url` GETs that card's `index_url` and regexes
-every `href=".../sites/default/files/<any path>/EV-<4 digits>-<CODE>-<token>...pdf"`,
-keeping the one whose `EV-<MMYY>` names the latest month. A page can link more than one:
-from October 2026 Brusol's signup pages link last month's card in the form's consent
-checkbox, ahead of the current card on the button, and the first match was September's.
-The `[^"]*` before `.pdf` tolerates the Drupal `_0` dedup suffix; the site prefix is
-optional because the EnergyVision listing writes site-relative hrefs and Brusol absolute
-ones; whitespace is allowed before the closing quote because Brusol's October 2026 page
-ended the gas card's href in a space; and the directory is not anchored because Brusol
-files each card under the month it uploaded it. The resolved absolute URL is layout-extracted with `fetch_pdf_text_layout`
-(the layout extractor keeps column alignment, important for the DSO table), then parsed.
+region it is not sold in. A card with no `index_url`, every card on the EnergyVision site,
+is found by name as the listing's script finds it. `_current_upload` asks `_newest_upload`
+for this month's plain name (from `_archive_card_urls`), `_0` and `_1` with HEAD requests
+and keeps the newest that answers, then from `_1` on each next one while it answers, up to
+`_MAX_SUFFIX` (`_9`, the script's limit). With none for this month it takes last month's
+card, which the listing shows until the new one is up, and with neither the fetch fails.
+The month is Home Assistant's, where the script takes Brussels'. A HEAD failing for another
+reason than a 404 or a 410 raises, so a site that is down fails the fetch as transient
+rather than as a month without a card.
+
+A Brusol card is linked from its signup page: `_resolve_card_url` GETs the card's
+`index_url` and regexes every
+`href=".../sites/default/files/<any path>/EV-<4 digits>-<CODE>-<token>...pdf"`, keeping the
+one whose `EV-<MMYY>` names the latest month. A page can link more than one: from October
+2026 Brusol's signup pages link last month's card in the form's consent checkbox, ahead of
+the current card on the button, and the first match was September's. The `[^"]*` before
+`.pdf` tolerates the Drupal `_0` dedup suffix; the site prefix is optional, so a
+site-relative href reads too; whitespace is allowed before the closing quote because
+Brusol's October 2026 page ended the gas card's href in a space; and the directory is not
+anchored because Brusol files each card under the month it uploaded it. Either way the card
+is layout-extracted with `fetch_pdf_text_layout` (the layout extractor keeps column
+alignment, important for the DSO table), then parsed.
 
 The page can lag the upload. On 1 October 2026 Brusol's pages still linked the September
 cards while the October ones had sat in its `2026-09` folder since the day before. So when
@@ -148,16 +162,17 @@ serves the linked card only when nothing is filed there yet or that lookup fails
 
 ### Probe
 
-`EXTRACTOR.probe` = `probe` (`providers/energyvision.py`): a cheap `head_freshness_key`
-HEAD on the card's own `index_url` (ETag / Last-Modified). That key flips when EnergyVision
-rotates the monthly cards, which is exactly when the resolved PDF URL changes, so the
-coordinator re-fetches on a month roll rather than on the time-based TTL.
+`EXTRACTOR.probe` = `probe` (`providers/energyvision.py`). For a card found by name the key
+is the current card's URL and `Last-Modified`, from the same walk as the fetch, so a new
+month and a card uploaded again both move it and the coordinator re-fetches then rather
+than on the time-based TTL; the listing's own ETag no longer moves with a card. A walk that
+fails gives `None`.
 
-The page is per region, not per supplier, and the two sites do not behave alike: Brusol's
-pages are Drupal dynamic pages and send neither header, so a **Brussels entry has no probe
-key and falls back to the 24h TTL**, the path Engie and Luminus take. `probe` returns
-`None` to say so, which is the documented way of saying it; it does not refetch the card
-every tick.
+For a Brusol card it is a cheap `head_freshness_key` HEAD on the card's own `index_url`
+(ETag / Last-Modified), but Brusol's pages are Drupal dynamic pages and send neither
+header, so a **Brussels entry has no probe key and falls back to the 24h TTL**, the path
+Engie and Luminus take. `probe` returns `None` to say so, which is the documented way of
+saying it; it does not refetch the card every tick.
 
 ### Discover + archive
 
@@ -560,12 +575,12 @@ subtracts it through the one finaliser every branch returns by. Three gates matt
 
 ## Month archive
 
-`fetch_for_month` builds a past month's filename, `EV-<MMYY>-<CODE>-<token>.pdf`, because
-a past month is not on the listing at all. The plain name resolves for every month a
+`fetch_for_month` builds a past month's filename, `EV-<MMYY>-<CODE>-<token>.pdf`. The plain
+name resolves for every month a
 product existed (measured across GSDYN / GS3JV / GS1800V / GSVI3 / GSLP for March to
 September 2026), but it is the FIRST upload of that month's card. EnergyVision corrects a
 card by uploading it again, Drupal files the reissue as `<name>_0.pdf`, then `_1`, `_2`,
-and never removes the earlier files, and the listing links the newest. The drafts differ:
+and never removes the earlier files, and the listing shows the newest. The drafts differ:
 GS3JV March 2026 prints 285 EUR of welcome credit on the plain file and 300 on the
 reissues, April 200 against 250, July 230 against 240, and GS1800V Flanders August 200
 against 250. So `_uploads_newest_first` walks the suffixes up with HEAD requests until one
@@ -577,7 +592,7 @@ Only uploads made while the month ran count: EnergyVision also uploads a month's
 again after it has ended (every February 2026 card on 7 March, every January one on
 2 February), and those are not what the month was sold on. On 1 April the Walloon March
 1.800 kWh card went back to the plain file's 50 EUR standing charge where the uploads made
-during March print none. What is read is therefore the card the listing linked when the
+during March print none. What is read is therefore the card the listing showed when the
 month closed, which is not always the one it opened with: the February GS3JV card printed
 165 EUR of welcome credit until 11 February and 285 after. The cut-off is midnight in
 Brussels at the end of the month, read
@@ -685,7 +700,8 @@ figures are billed as each card prints them.
   coefficients with `spp_indexed` so they resolve against the delivery MONTH's mean, and
   never let them reach the hourly spot (`_spp_injection`).
 - **Month-versioned URLs + Drupal dedup suffix.** The card URL carries the pricing month and
-  the CMS may append `_0`; resolve it off the listing, do not construct it
+  the CMS appends `_0`, `_1` and so on to a card uploaded again; walk the uploads as the
+  listing's script does (`_newest_upload`), never take the plain name alone
   (`providers/energyvision.py`).
 - **Upper-case Fluvius labels.** EnergyVision prints them in caps, so it needs its own
   `_DSO_ROWS` map, not `FLUVIUS_CARD_LABELS` (`providers/_energyvision_overlays.py`).
@@ -737,4 +753,5 @@ parser, and it will fail the day the two publications diverge.
 | "EnergyVision: vaste vergoeding row not found" | `_FEE_RE` | the "Vaste vergoeding ... €/jaar" label reworded |
 | Tax under/over-billing or "could not parse tax block" | `_extract_taxes` regexes (-209) | a levy row label or unit changed; energy fund is the only optional one |
 | A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row lookup in `_extract_dsos`; the "Digitale Meter" anchor | a label renamed or the section header changed |
-| "EnergyVision: no listing entry for card ..." | `_resolve_card_url` | the listing markup or the `EV-<MMYY>-<CODE>-nl` filename scheme changed |
+| "EnergyVision: no card ... for ... or the month before" | `_current_upload` | no card answers for this month or the last: the product was withdrawn, or the listing's script (`/sites/default/files/ftp/tariefkaarten.min.js`) builds its names another way |
+| "EnergyVision: no listing entry for card ..." | `_resolve_card_url` | Brusol's signup page markup or the `EV-<MMYY>-<CODE>-BXL-nl` filename scheme changed |
