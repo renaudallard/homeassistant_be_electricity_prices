@@ -70,7 +70,7 @@ hourly formula; the household's own answer flips it, and every tier carries
 | `frank_dynamic` | Frank Energie Dynamisch | dynamic | flanders | none (bare month) | offered | standard tier |
 | `frank_dynamic_hv` | Frank Energie Dynamisch HV | dynamic | flanders | `HV` | offered | since October 2026 the same formula and subscription as VT; until September a higher subscription, a lower per-kWh margin and a 115 EUR cashback after 1 year |
 | `frank_dynamic_korting` | Frank Energie Dynamisch VT (Korting) | dynamic | flanders | `VT` | offered | titled "VT" since October 2026, HV's card billed on a double advance; until September titled "Korting", with a 120 EUR cashback after 1 year |
-| `frank_dynamic_jn` | Frank Energie Dynamisch JN | dynamic | flanders | `JN` | offered | lower subscription, different formula and injection base; 35 EUR cashback after 1 year |
+| `frank_dynamic_jn` | Frank Energie Dynamisch JN | dynamic | flanders | `JN` | offered | lower subscription, different formula and injection base; 35 EUR cashback after 1 year until October 2026, from November the subscription waived for the first 12 months |
 | `frank_dynamic_slim` | Frank Energie Dynamisch Slim | dynamic | flanders | `SL` | offered | requires smart devices (solar, EV, battery, heat pump) |
 | `frank_dynamic_plus` | Frank Energie Dynamisch Plus | dynamic | flanders | `Plus` | offered | since October 2026; the lowest subscription and per-kWh margin of the six, HV's injection formula, no cashback, billed on a double advance like VT |
 
@@ -120,6 +120,26 @@ JN carry all four, three of which are invisible from here.
 A household that fails one sees a credit it will not be granted, which is still nearer
 than ranking a tier as though its whole reason for existing were not there. The assumption
 is stated rather than left implied, here and in the README.
+
+### JN's waived subscription (November 2026)
+
+The November 2026 JN card drops the 35 EUR cashback and prints `Abonnementskost (EUR/maand)
+0,00*`, the asterisk opening *"Korting abbonementskosten (incl. btw)"*: *"Gedurende de eerste
+12 maanden van het contract ontvang je een maandelijkse korting op de abonnementskosten,
+waardoor deze worden verlaagd naar € 0,00 per maand. Na afloop van deze periode gelden de
+abonnementskosten volgens de tariefkaart Dynamisch - JN - Oktober 2026"*, not to be combined
+with another promotion. Read as printed, the card billed every JN household no subscription
+at all, while only a contract signed on it pays none, and only for a year.
+
+`_with_waived_fee` (`frank.py`), applied by `fetch` and `fetch_for_month`, reads the card the
+footnote names (October's prints 2,33 EUR a month) and bills its subscription, 27,96 EUR a
+year, then grants the waiver back as a welcome credit of the same amount with
+`welcome_credit_kind = "pro_rata"`, accrued over the first year as EnergyVision's is. Like
+every credit it is read off a contract's signing month's card, so it reaches a contract
+signed on the November card and no other. The named card's subscription is read once per
+process (`_NAMED_FEES`): a published card's does not change, and laying out a Frank card
+costs about 25 s of CPU on a Raspberry Pi. A waiver over another term than twelve months, or
+one naming no card, fails the fetch, since a first-year credit would misprice it.
 
 ### Hourly or quarter-hourly settlement
 

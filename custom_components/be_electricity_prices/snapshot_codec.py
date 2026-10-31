@@ -492,7 +492,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # Flemish prosumer rate only as a whole figure; Eneco's cards and Engie's
 # Walloon cards, its social one included, carry day_night_under_impact, the
 # social card on its feed-in leg too.
-_SNAPSHOT_SCHEMA_VERSION = 85
+# v86: Frank's November 2026 JN card bills the subscription it waives for a
+# contract's first year at the one its named card prints, and grants the
+# waiver back as a pro-rata welcome credit; read as printed, it billed none.
+_SNAPSHOT_SCHEMA_VERSION = 86
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

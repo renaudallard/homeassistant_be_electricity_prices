@@ -41,6 +41,13 @@ neither grants a cashback: the VT card differs only in billing a "dubbel
 voorschot". Until September HV had the higher subscription and the lower
 margin, and the Korting card the 120 EUR cashback that gave it its name.
 
+The November 2026 JN card prints its subscription as 0,00 and waives it for
+a contract's first twelve months, after which "gelden de abonnementskosten
+volgens de tariefkaart Dynamisch - JN - Oktober 2026". The subscription is
+billed at the one the named card prints, and the waiver is granted back to a
+contract signed on the card as a first-year credit, pro rata like
+EnergyVision's welcome credit; see ``_with_waived_fee``.
+
 Every tier prices "BELPEX per uur" and carries the same footnote offering
 the 15-minute grid instead:
 
@@ -65,6 +72,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import replace
 from datetime import date
 
 import aiohttp
@@ -80,6 +88,7 @@ from ..const import (
     DSO_FLUVIUS_ZENNE_DIJLE,
     REGION_FLANDERS,
     WELCOME_CREDIT_ANNIVERSARY,
+    WELCOME_CREDIT_PRO_RATA,
 )
 from ._parse import (
     SIGN_CHARS,
@@ -285,7 +294,9 @@ async def fetch(
         raise ExtractorError("Frank Energie only operates in Flanders")
     pdf_url, label = await _resolve_pdf_url(session, contract_id)
     text = await fetch_pdf_text_layout(session, pdf_url)
-    snap = parse_snapshot(text, pdf_url, contract_id, label)
+    snap = await _with_waived_fee(
+        session, contract_id, text, parse_snapshot(text, pdf_url, contract_id, label)
+    )
     # Here and not in the reader: a past month's card keeps a short table.
     require_every_area("Frank Energie", snap, _FLUVIUS_LABELS.values())
     return snap
@@ -304,7 +315,12 @@ async def fetch_for_month(
             session, contract_id, target_month=year_month
         )
         text = await fetch_pdf_text_layout(session, pdf_url)
-        snap = parse_snapshot(text, pdf_url, contract_id, label)
+        snap = await _with_waived_fee(
+            session,
+            contract_id,
+            text,
+            parse_snapshot(text, pdf_url, contract_id, label),
+        )
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
         # so the month cache retries it instead of caching it as absent.
@@ -314,6 +330,67 @@ async def fetch_for_month(
     if running_month_short_of_an_area(snap.dsos, _FLUVIUS_LABELS.values(), year_month):
         return None
     return archive_validity_check(snap, text, year_month, month_names=_NL_MONTHS)
+
+
+# "Gedurende de eerste 12 maanden van het contract ontvang je een maandelijkse
+# korting op de abonnementskosten, waardoor deze worden verlaagd naar € 0,00
+# per maand. Na afloop van deze periode gelden de abonnementskosten volgens de
+# tariefkaart Dynamisch - JN - Oktober 2026", under the JN card's "0,00*".
+_FEE_WAIVER_RE = re.compile(
+    r"eerste\s+(\d+)\s+maanden\s+van\s+het\s+contract\s+ontvang\s+je\s+een\s+"
+    r"maandelijkse\s+korting\s+op\s+de\s+abonnementskosten",
+    re.IGNORECASE,
+)
+_FEE_CARD_RE = re.compile(
+    r"abonnementskosten\s+volgens\s+de\s+tariefkaart\s+Dynamisch\s*-\s*\S+\s*-\s*"
+    r"([A-Za-z]+)\s+(\d{4})",
+    re.IGNORECASE,
+)
+
+# The yearly subscription of the cards a waiver names, by (contract, month):
+# a published card's subscription does not change, and reading one costs a
+# whole card's layout, about 25 s of CPU on a Raspberry Pi.
+_NAMED_FEES: dict[tuple[str, date], float] = {}
+
+
+async def _with_waived_fee(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    text: str,
+    snap: SupplierSnapshot,
+) -> SupplierSnapshot:
+    """``snap`` with the subscription its card waives for a contract's first
+    year: billed at the one the card it names prints, and granted back to a
+    contract signed on it as a first-year credit of the same amount, pro rata
+    over the year. A card without a waiver is returned as it is; one waiving
+    for another term than a year, or naming no card, fails loud, since a
+    credit over the first year would misprice it."""
+    waiver = _FEE_WAIVER_RE.search(text)
+    if waiver is None:
+        return snap
+    named = _FEE_CARD_RE.search(text)
+    month_name = "" if named is None else named.group(1).lower()
+    if named is None or month_name not in _NL_MONTHS_LOWER or waiver.group(1) != "12":
+        raise ExtractorError(
+            "Frank Energie: the card waives its subscription in a way not priced here"
+        )
+    month = date(int(named.group(2)), _NL_MONTHS.index(month_name) + 1, 1)
+    yearly = _NAMED_FEES.get((contract_id, month))
+    if yearly is None:
+        url, _ = await _resolve_pdf_url(session, contract_id, target_month=month)
+        fee = _MONTHLY_FEE_RE.search(await fetch_pdf_text_layout(session, url))
+        if fee is None:
+            raise ExtractorError(
+                f"Frank Energie: the {month:%m/%Y} card a waiver names prints no subscription"
+            )
+        yearly = to_float(fee.group(1)) * 12.0
+        _NAMED_FEES[(contract_id, month)] = yearly
+    return replace(
+        snap,
+        energy=replace(snap.energy, yearly_fixed_fee=yearly),
+        welcome_credit_eur=yearly,
+        welcome_credit_kind=WELCOME_CREDIT_PRO_RATA,
+    )
 
 
 async def probe(

@@ -842,3 +842,84 @@ def test_the_cashback_anchor_survives_the_word_korting_elsewhere() -> None:
     assert text.lower().count("korting") == 4
     snap = parse_snapshot(text, "test://frank", "frank_dynamic_korting", "juni 2026")
     assert snap.welcome_credit_eur == pytest.approx(120.0)
+
+
+_NOV_JN = "test://frank-jn-nov"
+_OCT_JN = "test://frank-jn-oct"
+
+
+def _jn_nov_text() -> str:
+    return fixture_text("frank_dynamic_jn_nov.pdf", layout=True)
+
+
+def _served_jn(monkeypatch: pytest.MonkeyPatch, nov: str) -> AsyncMock:
+    """The November JN card as the current one, and the October card it
+    names, which prints the subscription the waiver ends on."""
+
+    async def resolve(
+        _session: Any, _contract: str, target_month: date | None = None
+    ) -> tuple[str, str]:
+        if target_month is None:
+            return _NOV_JN, "november 2026"
+        assert target_month == date(2026, 10, 1)
+        return _OCT_JN, "oktober 2026"
+
+    async def text(_session: Any, url: str) -> str:
+        return nov if url == _NOV_JN else "Abonnementskost (EUR/maand) 2,33"
+
+    tracked = AsyncMock(side_effect=resolve)
+    monkeypatch.setattr(frank, "_resolve_pdf_url", tracked)
+    monkeypatch.setattr(frank, "fetch_pdf_text_layout", text)
+    monkeypatch.setattr(frank, "_NAMED_FEES", {})
+    return tracked
+
+
+async def test_a_waived_subscription_is_billed_and_credited_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The November 2026 JN card prints "Abonnementskost (EUR/maand) 0,00*",
+    waived for a contract's first twelve months, after which the October
+    card's 2,33 applies. An entry is billed 27,96 a year, and a contract
+    signed on the card is credited the same amount over its first year."""
+    from custom_components.be_electricity_prices.const import WELCOME_CREDIT_PRO_RATA
+
+    printed = parse_snapshot(
+        _jn_nov_text(), _NOV_JN, "frank_dynamic_jn", "november 2026"
+    )
+    assert printed.energy.yearly_fixed_fee == 0.0
+    assert printed.welcome_credit_eur is None
+    resolve = _served_jn(monkeypatch, _jn_nov_text())
+    for _ in range(2):
+        snap = await frank.fetch(None, "frank_dynamic_jn", REGION_FLANDERS)  # type: ignore[arg-type]
+        assert snap.energy.yearly_fixed_fee == pytest.approx(27.96)
+        assert snap.welcome_credit_eur == pytest.approx(27.96)
+        assert snap.welcome_credit_kind == WELCOME_CREDIT_PRO_RATA
+    # The named card is read once: its subscription does not change.
+    assert [call.kwargs.get("target_month") for call in resolve.call_args_list] == [
+        None,
+        date(2026, 10, 1),
+        None,
+    ]
+
+
+async def test_a_waiver_for_another_term_than_a_year_fails_loud(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    text = _jn_nov_text().replace("eerste 12 maanden", "eerste 6 maanden")
+    assert text != _jn_nov_text(), "the fixture stopped printing the waiver"
+    _served_jn(monkeypatch, text)
+    with pytest.raises(ExtractorError, match="waives its subscription"):
+        await frank.fetch(None, "frank_dynamic_jn", REGION_FLANDERS)  # type: ignore[arg-type]
+
+
+async def test_a_card_without_a_waiver_keeps_its_subscription(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    text = fixture_text("frank_dynamic_jn_sep.pdf", layout=True)
+    snap = parse_snapshot(
+        text, "test://frank-jn-sep", "frank_dynamic_jn", "september 2026"
+    )
+    monkeypatch.setattr(frank, "_resolve_pdf_url", AsyncMock())
+    kept = await frank._with_waived_fee(None, "frank_dynamic_jn", text, snap)  # type: ignore[arg-type]
+    assert kept is snap
+    frank._resolve_pdf_url.assert_not_called()  # type: ignore[attr-defined]
