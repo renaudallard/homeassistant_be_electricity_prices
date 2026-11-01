@@ -2414,6 +2414,24 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
 # or Empty House while all three cards were current.
 _CATALOG_PARTIAL: frozenset[str] = frozenset({"engie"})
 
+# The product names whose cards are found without the listing, so the listing
+# leaving them out is no news: Mega builds a professional card's name, and
+# asks for a residential product with a last_card under that name. A name is
+# one of them only if every contract still sold under it is found that way;
+# it stays registered, so the listing showing it again is not new either.
+# Mega's November 2026 listing dropped Zen Fixed, Dynamic and the SME pair
+# while their cards were published, and the row reported all four every day.
+_CATALOG_OFF_LISTING: dict[str, Callable[[types.ModuleType], set[str]]] = {
+    "mega": lambda m: (
+        {c.product_name for c in m._CONTRACTS if c.withdrawn is None}
+        - {
+            c.product_name
+            for c in m._CONTRACTS
+            if c.withdrawn is None and not c.professional and not c.last_card
+        }
+    ),
+}
+
 
 async def _discover(
     discover: Callable[[aiohttp.ClientSession], Awaitable[set[str]]],
@@ -2498,7 +2516,10 @@ async def _check_catalogs(
         )
         if name in _CATALOG_PARTIAL:
             continue
-        gone = sorted(registered - discovered)
+        off_listing = _CATALOG_OFF_LISTING.get(name)
+        gone = sorted(
+            registered - discovered - (off_listing(mod) if off_listing else set())
+        )
         _record(
             f"{name}/catalog: no products gone from supplier",
             not gone,

@@ -76,7 +76,8 @@ listing also dropped Zen Fixed and Dynamic, in every region, while the
 fixed-price and dynamic tariff pages still sell both and the CDN serves their
 November cards. Neither is withdrawn: each carries its October name as
 `last_card`, and `fetch` asks for this month's card under it for as long as
-the listing links none.
+the listing links none. The live check's catalog row does not report them
+gone, nor the SME pair, whose professional cards are built by name.
 
 The table lists the residential products; the professional editions are
 described under [The professional editions](#the-professional-editions).

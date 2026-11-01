@@ -4016,6 +4016,54 @@ def test_a_withdrawn_suppliers_catalog_failure_does_not_set_the_exit_bit() -> No
     assert lc._catalog_gates_ci(rows) is True
 
 
+def test_a_product_found_without_the_listing_is_not_reported_gone() -> None:
+    """Mega's November 2026 listing dropped Zen Fixed, Dynamic and the SME
+    pair while their cards stayed on the CDN, where the integration finds
+    them by name, so their absence is no news. A product the listing is the
+    only way to find still is, and a name found again is not new."""
+
+    def _mega(found: set[str]) -> SimpleNamespace:
+        async def _discover(_session: Any) -> set[str]:
+            return found
+
+        def _contract(name: str, professional: bool, last_card: str) -> SimpleNamespace:
+            return SimpleNamespace(
+                product_name=name,
+                advertised=True,
+                withdrawn=None,
+                professional=professional,
+                last_card=last_card,
+            )
+
+        return SimpleNamespace(
+            discover=_discover,
+            _CONTRACTS=(
+                # Found through the listing only.
+                _contract("Smart Fixed", False, ""),
+                _contract("Cosy Flex", False, ""),
+                # Asked for under its last listed card's name.
+                _contract("Zen Fixed", False, "102026-Zen0110-Fix"),
+                # A professional card's name is always built.
+                _contract("SME Flex", True, ""),
+            ),
+        )
+
+    lc.CHECKS.clear()
+    asyncio.run(lc._check_catalogs(None, {"mega": _mega({"Cosy Flex"})}))  # type: ignore[arg-type]
+    asyncio.run(
+        lc._check_catalogs(
+            None, {"mega": _mega({"Smart Fixed", "Cosy Flex", "Zen Fixed", "SME Flex"})}
+        )  # type: ignore[arg-type]
+    )
+    assert [(c.label, c.ok, c.detail) for c in lc.CHECKS] == [
+        ("mega/catalog: no new products at supplier", True, ""),
+        ("mega/catalog: no products gone from supplier", False, "Smart Fixed"),
+        ("mega/catalog: no new products at supplier", True, ""),
+        ("mega/catalog: no products gone from supplier", True, ""),
+    ]
+    lc.CHECKS.clear()
+
+
 def test_a_discovery_that_sees_nothing_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     """An empty discovery passed with a warning on stderr. Luminus's sitemap
     became an index, its discover() found nothing, and new products at

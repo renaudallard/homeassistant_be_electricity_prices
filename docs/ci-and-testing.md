@@ -929,7 +929,13 @@ green. A product the registry already marks withdrawn (`Contract.withdrawn`) is 
 OCTA+ baseline, so it is not reported gone every night and its slug coming back reads as new.
 Suppliers in `_CATALOG_PARTIAL` skip this half: Engie's sitemap names no page for Basic Online,
 Direct Online or Empty House while all three cards are current
-(`test_a_product_the_listing_no_longer_names_is_reported`).
+(`test_a_product_the_listing_no_longer_names_is_reported`). And a product whose card is found
+without the listing is not reported gone (`_CATALOG_OFF_LISTING`): Mega builds a professional
+card's name, and asks for a residential product with a `last_card` under that name. Mega's
+November 2026 listing dropped Zen Fixed, Dynamic and the SME pair while their cards were
+published, and the row reported all four every day. Such a name stays registered, so the
+listing showing it again is not new either
+(`test_a_product_found_without_the_listing_is_not_reported_gone`).
 
 ### Exit codes and the two report side-channels
 
