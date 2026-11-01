@@ -120,8 +120,8 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     # the existing fixed path with no parser change. The listing dropped it
     # and Off-peak Flex again on 30 October 2026, in all three regions, with
     # no product page selling either, so both are withdrawn from that day,
-    # their October cards the last. The B2B edition is built by name and
-    # still published.
+    # their October cards the last. The B2B edition, built by name, followed
+    # on 1 November (below).
     _ContractDef(
         "mega_offpeak_fixed",
         "Mega Off-peak Fixed",
@@ -168,7 +168,10 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     # building the filename. Online Flex, Off-peak Flex and Off-peak Impact
     # have no B2B card; Off-peak Fixed gained one when it returned in August
     # 2026, and Zen Fixed kept its own through the month its residential
-    # edition was off the listing.
+    # edition was off the listing. Off-peak Fixed's went with its residential
+    # edition: Mega published no November 2026 card for it in any region
+    # while every other professional card came out, so it is withdrawn from
+    # 1 November, its October card the last.
     _ContractDef(
         "mega_pro_offpeak_fixed",
         "Mega Off-peak Fixed (pro)",
@@ -177,6 +180,7 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         segment="B2B",
         file_family="Offpeak-Bi",
         file_variant="-Fix",
+        withdrawn=date(2026, 11, 1),
     ),
     _ContractDef(
         "mega_pro_smart_fixed",

@@ -2879,18 +2879,20 @@ def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> N
 _B2C_BASE = "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-"
 
 
-def test_off_peak_is_withdrawn_on_30_october() -> None:
+def test_off_peak_is_withdrawn() -> None:
     """The listing dropped both residential Off-peak products on 30 October
-    2026, in every region; the B2B Off-peak Fixed is built by name and
-    stays."""
+    2026, in every region. The B2B Off-peak Fixed, built by name, had no
+    November card in any region, so it went on 1 November."""
     withdrawn = {
         c.id: c.withdrawn
         for c in EXTRACTORS["mega"].contracts
         if c.withdrawn is not None
     }
-    assert withdrawn == dict.fromkeys(
-        ("mega_offpeak_fixed", "mega_offpeak_flex"), date(2026, 10, 30)
-    )
+    assert withdrawn == {
+        "mega_offpeak_fixed": date(2026, 10, 30),
+        "mega_offpeak_flex": date(2026, 10, 30),
+        "mega_pro_offpeak_fixed": date(2026, 11, 1),
+    }
 
 
 @pytest.mark.parametrize(

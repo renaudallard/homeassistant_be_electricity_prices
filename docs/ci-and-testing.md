@@ -638,7 +638,8 @@ Early in a month that rollback is correct behaviour rather than a defect, so the
 past `_PRO_PUBLICATION_GRACE_DAYS`. Mega does not publish ahead - next month's URL is a stub today,
 measured - so failing without that grace would file an issue every single month. Within the grace
 the row passes and records how many cards are not yet up, which is the honest report: the fallback
-is in use, and that is fine for now.
+is in use, and that is fine for now. A withdrawn edition is left out from its withdrawal date, since
+its last card is its last: the pro Off-peak Fixed, whose November 2026 card never came out.
 
 ### The stamps do not sort
 

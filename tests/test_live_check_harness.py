@@ -809,6 +809,27 @@ def test_mega_professional_check_finds_a_card_under_its_other_spelling(
     assert session.calls == 33
 
 
+def test_mega_professional_check_skips_an_edition_from_its_withdrawal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The pro Off-peak Fixed had no November 2026 card in any region and is
+    withdrawn from 1 November, so its missing card is no longer reported."""
+
+    class _NoOffpeakSession(_FakeSession):
+        def head(self, _url: str, **_kw: object) -> _FakeHead:
+            self.calls += 1
+            return _FakeHead("text/html" if "Offpeak" in _url else "application/pdf")
+
+    mega = _mega_module()
+    monkeypatch.setattr(mega, "dt_util", _FakeClock(date(2026, 11, 20)), raising=False)
+    session = _NoOffpeakSession("")
+    asyncio.run(lc._check_mega_professional(session, mega))  # type: ignore[arg-type]
+    (row,) = _rows("mega/freshness: professional")
+    assert row.ok is True
+    # Nine editions left in three regions.
+    assert session.calls == 27
+
+
 def test_catalog_baseline_ignores_editions_the_listing_never_shows() -> None:
     """A professional edition must not vouch for a residential product.
 

@@ -2807,6 +2807,10 @@ async def _check_mega_professional(
     for contract in mega._CONTRACTS:
         if not contract.professional:
             continue
+        # From its withdrawal date a product's last card is its last, so no
+        # card for the month is expected.
+        if contract.withdrawn is not None and today >= contract.withdrawn:
+            continue
         for region, code in mega._REGION_TO_CODE.items():
             if region not in contract.regions:
                 continue

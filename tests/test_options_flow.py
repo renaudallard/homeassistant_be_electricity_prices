@@ -7741,9 +7741,11 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # card already costs, and takes out the four it replaced. Mega's
         # Off-peak Fixed and Flex, withdrawn on 30 October 2026, come out of
         # each region's static cell, and Eneco Zon & Wind Vast, withdrawn the
-        # same day, out of Flanders' and Wallonia's.
+        # same day, out of Flanders' and Wallonia's. The professional
+        # Off-peak Fixed, withdrawn on 1 November 2026, comes out of each
+        # region's professional static cell.
         ("flanders", "static", False): 57,
-        ("flanders", "static", True): 21,
+        ("flanders", "static", True): 20,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land
         # in the spot cell rather than the static one. Re-costed with them:
@@ -7763,7 +7765,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,
         ("wallonia", "static", False): 50,
-        ("wallonia", "static", True): 21,
+        ("wallonia", "static", True): 20,
         # 13 before EnergyVision's 1.800 kWh contract gained Wallonia, on
         # the French publication of the same card. Monthly-indexed, so the
         # spot cell. 14 before Eneco Zon & Wind Dynamisch was sold in
@@ -7776,7 +7778,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("wallonia", "slot", False): 6,
         ("wallonia", "slot", True): 1,
         ("brussels", "static", False): 27,
-        ("brussels", "static", True): 21,
+        ("brussels", "static", True): 20,
         # 7 before EnergyVision's 1.800 kWh contract gained Brussels, where
         # it is published as Brusol on another site, and 8 before Brusol's
         # own Groene stroom joined it. Both settle on a monthly index, so

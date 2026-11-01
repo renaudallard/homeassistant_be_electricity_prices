@@ -70,7 +70,8 @@ out, which reads their return as new. `last_card` keeps the October card's
 name, which their archive is built off and `fetch` asks this month's card
 under: the last card until October ends, then the CDN's stub, which the
 coordinator takes for a withdrawn product's last card being its last. The
-B2B Off-peak Fixed is built by name and still published. The November 2026
+B2B Off-peak Fixed followed on 1 November (see
+[The professional editions](#the-professional-editions)). The November 2026
 listing also dropped Zen Fixed and Dynamic, in every region, while the
 fixed-price and dynamic tariff pages still sell both and the CDN serves their
 November cards. Neither is withdrawn: each carries its October name as
@@ -212,7 +213,10 @@ excise tranches, and an Epex SPP injection formula on the Flex card. Their
 filenames carry `-ND` on both variants (`SME01<MM>-ND`, `SME01<MM>-ND-Fixed`).
 
 Online Flex, Off-peak Flex and Off-peak Impact have no B2B card. Off-peak Fixed
-gained one when it returned in August 2026 (`Offpeak-Bi01<MM>-Fix`), and Zen
+gained one when it returned in August 2026 (`Offpeak-Bi01<MM>-Fix`) and lost it
+with the November 2026 cards, which every other professional edition got and it
+did not, in any region: it is withdrawn from 1 November (`withdrawn`), its
+October card the last, and the publication row leaves it out from then. Zen
 Fixed kept its own through the month its residential edition was off the
 listing -- which is why the catalog diff never flagged the return: `known` was
 built from every contract's `product_name`, professional ones included, so the
