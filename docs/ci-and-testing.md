@@ -617,7 +617,10 @@ print; the French card is billed. The French myComfort card in Brussels was re-u
 October (issue #139) with its figures drawn in fonts that carry no Unicode map, so no reader
 sees them, and its Dutch edition still has the stray comma, so neither reads; the upload
 repeats the figures of the card it replaced, which entries keep pricing on until the November
-card. The report gives these rows their own section.
+card. TotalEnergies had published no November card by 1 November, so these TotalEnergies
+entries run to 6 November (`_TOTALENERGIES_OCTOBER_UNTIL`), the day after the period check's
+grace, which flags a card a month behind from then on. The report gives these rows their own
+section.
 
 An unreadable label is reported but does not fail: unknown is not evidence of staleness. The label
 parser is unicode-aware on purpose - a character class that forgets the `u` in `août` silently

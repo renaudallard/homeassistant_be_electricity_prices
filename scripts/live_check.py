@@ -769,6 +769,11 @@ def _expect_vat_stated(
 # entry expires on the day the supplier's next card is due: a card still broken
 # then is news again.
 _ALLOWED_CARD_MARKER = "KnownCardDefect"
+# TotalEnergies had put up no November 2026 card by 1 November, so the October
+# cards and their defects were still the ones served. Their entries run to the
+# day after the period check's grace, which flags a card a month behind from
+# then on.
+_TOTALENERGIES_OCTOBER_UNTIL = date(2026, 11, 6)
 # (label, detail) -> (expires, why).
 _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
     (
@@ -786,7 +791,7 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "Dutch cards agree",
         "energy.yearly_fixed_fee: French 100.0, Dutch 94.34",
     ): (
-        date(2026, 11, 1),
+        _TOTALENERGIES_OCTOBER_UNTIL,
         "the October 2026 Dutch card prints the fee ex-VAT under 'BTW 6 % "
         "inbegrepen'; the French card is billed",
     ),
@@ -795,7 +800,7 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "cards agree",
         "energy.single_under_impact: French True, Dutch False",
     ): (
-        date(2026, 11, 1),
+        _TOTALENERGIES_OCTOBER_UNTIL,
         "the October 2026 Dutch card leaves out the notice that its day/night "
         "rate does not apply under Tarif Impact, which the French card and "
         "every other Walloon card print; the French card is billed",
@@ -805,7 +810,7 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "the Dutch card does not read: ExtractorError: TotalEnergies: variable "
         "formula not found",
     ): (
-        date(2026, 11, 1),
+        _TOTALENERGIES_OCTOBER_UNTIL,
         "the October 2026 Dutch card prints its formula with a stray comma "
         "('7,01'); the French card is billed",
     ),
@@ -814,7 +819,7 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "the French card does not read: ExtractorError: TotalEnergies: yearly "
         "fee + renewables row not found; the Dutch card stands in",
     ): (
-        date(2026, 11, 1),
+        _TOTALENERGIES_OCTOBER_UNTIL,
         "the French card re-uploaded on 2026-10-26 draws its figures in fonts "
         "with no Unicode map, so no reader sees them; the Dutch card prints the "
         "same figures and is billed",
@@ -825,7 +830,7 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "the French card does not read: ExtractorError: TotalEnergies: yearly "
         "fee + renewables row not found; the Dutch card stands in",
     ): (
-        date(2026, 11, 1),
+        _TOTALENERGIES_OCTOBER_UNTIL,
         "the October 2026 French card leaves its green contribution blank; the "
         "Dutch card is billed",
     ),
@@ -833,7 +838,7 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "totalenergies/totalenergies_mycomfort/brussels: fetch",
         "ExtractorError: TotalEnergies: yearly fee + renewables row not found",
     ): (
-        date(2026, 11, 1),
+        _TOTALENERGIES_OCTOBER_UNTIL,
         "the French card re-uploaded on 2026-10-26 draws its figures in fonts "
         "with no Unicode map, so no reader sees them, and the Dutch card prints "
         "its formula with a stray comma; the upload repeats the figures of the "
