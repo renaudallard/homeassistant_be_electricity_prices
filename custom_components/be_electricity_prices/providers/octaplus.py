@@ -64,6 +64,7 @@ from ._octaplus_formulas import (
     _RLP_METER_RES,
     _SPP_FORMULA_RE,
     _dynamic_consumption_formula,
+    _formula_coefficients,
     _injection_formula,
 )
 from ._octaplus_overlays import (
@@ -78,7 +79,6 @@ from ._octaplus_overlays import (
 )
 from ._parse import (
     fold_accents,
-    parse_sign,
     require_contract,
     require_every_area,
     running_month_short_of_an_area,
@@ -572,16 +572,16 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         formula = _dynamic_consumption_formula(text)
         if not formula:
             raise ExtractorError("could not parse OCTA+ dynamic formula")
-        factor_pdf = to_float(formula.group(1))
-        base_pdf_eur_mwh = parse_sign(formula.group(2)) * to_float(formula.group(3))
-        vat = _vat_multiplier(text)
+        coefficients = _formula_coefficients(text, formula, feed_in=False)
+        if coefficients is None:
+            raise ExtractorError("OCTA+ dynamic formula in a unit no card has used")
+        factor, base = coefficients
         # Formula is HTVA; the rest of the snapshot is TVAC, so apply
-        # the parsed VAT multiplier. spot in our model is EUR/kWh so:
-        #   factor_eur_kwh = factor_pdf * vat
-        #   base_eur_kwh   = base_eur_mwh / 1000 * vat
+        # the parsed VAT multiplier.
+        vat = _vat_multiplier(text)
         return DynamicRates(
-            factor=factor_pdf * vat,
-            base=base_pdf_eur_mwh / 1000.0 * vat,
+            factor=factor * vat,
+            base=base * vat,
             yearly_fixed_fee=yearly_fee,
             # OCTA+ indexes on the 15-minute Epex spot ("Epex 15'"), so
             # the contract bills per quarter-hour like Engie / Cociter /
@@ -650,41 +650,21 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     # published series, since its cards print a forecast rather than a
     # realised value. Documented in docs/providers/octaplus.md rather than
     # hidden.
-    coefs: dict[str, tuple[float, float]] = {}
-    for slot, pattern in _RLP_METER_RES.items():
-        m = pattern.search(text)
-        if m is None:
-            continue
-        # EUR/MWh HTVA -> EUR/kWh TVAC, same axis as the dynamic branch: the
-        # factor is a dimensionless multiplier on a EUR/kWh spot, the base
-        # divides by 1000.
-        vat = _vat_multiplier(text)
-        coefs[slot] = (
-            to_float(m.group(1)) * vat,
-            parse_sign(m.group(2)) * to_float(m.group(3)) / 1000.0 * vat,
-        )
+    vat = _vat_multiplier(text)
+    coefs = _rlp_coefficients(text, _RLP_METER_RES, vat)
     if "single" not in coefs:
         # Every variable card states the formula. A miss is a layout drift,
         # and silently billing the V-test estimate is what this exists to
         # stop, so leave the printed rates and let the live check say so.
         return rates
-    impact = {band: pattern.search(text) for band, pattern in _RLP_IMPACT_RES.items()}
+    bands = _rlp_coefficients(text, _RLP_IMPACT_RES, vat)
     banded = _with_impact_bands(text, rates)
     if (
         banded.impact_pic is not None
         and "peak" in coefs
         and "offpeak" in coefs
-        and all(impact.values())
+        and len(bands) == len(_RLP_IMPACT_RES)
     ):
-        vat = _vat_multiplier(text)
-        bands = {
-            band: (
-                to_float(m.group(1)) * vat,
-                parse_sign(m.group(2)) * to_float(m.group(3)) / 1000.0 * vat,
-            )
-            for band, m in impact.items()
-            if m is not None
-        }
         rates = replace(
             banded,
             formula_factor_pic=bands["pic"][0],
@@ -706,6 +686,23 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         formula_factor_exclusive_night=coefs.get("exclusive_night", (None, None))[0],
         formula_base_exclusive_night=coefs.get("exclusive_night", (None, None))[1],
     )
+
+
+def _rlp_coefficients(
+    text: str, patterns: dict[str, re.Pattern[str]], vat: float
+) -> dict[str, tuple[float, float]]:
+    """Each pattern's formula as a TVAC factor and base on a EUR/kWh index,
+    keyed as ``patterns`` is. A formula that does not read, or one stated in a
+    unit no card has used, is left out."""
+    pairs: dict[str, tuple[float, float]] = {}
+    for key, pattern in patterns.items():
+        match = pattern.search(text)
+        if match is None:
+            continue
+        coefficients = _formula_coefficients(text, match, feed_in=False)
+        if coefficients is not None:
+            pairs[key] = (coefficients[0] * vat, coefficients[1] * vat)
+    return pairs
 
 
 def _with_impact_bands(text: str, rates: VariableRates) -> VariableRates:
@@ -784,11 +781,12 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # "Le prix de votre injection est indexé ..."
         # so we anchor on that lead-in to skip the consumption formula.
         inj = _injection_formula(text)
-        if inj is not None:
-            f_pdf = to_float(inj.group(1))
-            b_eur_mwh = parse_sign(inj.group(2)) * to_float(inj.group(3))
-            factor = f_pdf  # injection is VAT-exempt
-            base = b_eur_mwh / 1000.0
+        coefficients = (
+            None if inj is None else _formula_coefficients(text, inj, feed_in=True)
+        )
+        if inj is not None and coefficients is not None:
+            # Injection is VAT-exempt.
+            factor, base = coefficients
             formula = inj.group(0)
     else:
         # Every other card settles the credit on a MONTHLY index: "Le prix de
@@ -802,16 +800,14 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # identical today and InjectionRates carries a single pair, so the
         # coefficients are surfaced only while all of them agree: a card that
         # splits them keeps the estimate rather than billing two meter types
-        # on a third one's formula.
-        rows = _SPP_FORMULA_RE.findall(text)
-        distinct = {
-            (to_float(f), parse_sign(sign) * to_float(b) / 1000.0)
-            for f, sign, b in rows
-        }
-        if len(distinct) == 1:
-            factor, base = distinct.pop()
-            match = _SPP_FORMULA_RE.search(text)
-            formula = match.group(0) if match else None
+        # on a third one's formula. A row in a unit no card has used is one
+        # that does not agree.
+        rows = list(_SPP_FORMULA_RE.finditer(text))
+        distinct = {_formula_coefficients(text, row, feed_in=True) for row in rows}
+        pair = distinct.pop() if len(distinct) == 1 else None
+        if pair is not None:
+            factor, base = pair
+            formula = rows[0].group(0)
             # Epex SPP is the solar-weighted mean. The flag routes the
             # coefficients to the delivery month's own weighted mean and keeps
             # them off the hourly spot, which they are not coefficients for.

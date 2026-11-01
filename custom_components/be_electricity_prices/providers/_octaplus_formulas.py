@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import re
 
-from ._parse import SIGN_CHARS
+from ._parse import SIGN_CHARS, parse_sign, to_float
 
 # The January and February 2026 cards name both indices Belpex: "Belpex 15' * 1
 # - 13,89" on the dynamic card, "Belpex SPP x 0,852 - 13,39" on the monthly
@@ -52,7 +52,8 @@ _EPEX_FORMULA = (
 #   January "monohoraire : Belpex SPP x 0,852 - 13,39"  (one row per meter)
 #   April  "monohoraire : Epex SPP x 0,852 - 13,39"     (one row per meter)
 #   August "en EUR/MWh HTVA : Epex SPP M * 0,8560 - 16,20"  (one row)
-# Stated in EUR/MWh either way. The value part is anchored rather than left as
+# Stated in EUR/MWh until October 2026, in the unit its sentence states since
+# (_formula_coefficients). The value part is anchored rather than left as
 # a character class, or the sentence-final period is swallowed into the number.
 # The optional M must be followed by the operator, so the prose mention of the
 # parameter name on its own ("le parametre << Epex SPP M >>") cannot match.
@@ -65,8 +66,9 @@ _SPP_FORMULA_RE = re.compile(
 # configuration. Both card generations, same as the SPP sibling above:
 #   April  "compteur monohoraire : Epex RLP * 1,15 + 10"
 #   August "mono-horaire (simple) : Epex RLP M * 1,150 + 10,000"
-# Stated in EUR/MWh HTVA. The meter label sits before the formula and the two
-# generations word it differently, so each meter gets its own lead-in.
+# Stated in EUR/MWh HTVA until October 2026, in c€/kWh since. The meter label
+# sits before the formula and the two generations word it differently, so each
+# meter gets its own lead-in.
 _RLP_FORMULA = (
     rf"Epex\s*RLP\s*M?\s*[x*]\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}+])\s*"
     rf"(\d+(?:[.,]\d+)?)"
@@ -113,10 +115,11 @@ def _injection_formula(text: str) -> re.Match[str] | None:
 # The sentence that introduces the consumption formula, once on every dynamic
 # card: "La formule tarifaire HTVA (en €/MWh) est la suivante:" until the
 # August 2026 redesign, "La formule de prix est la suivante, en EUR/MWh HTVA :"
-# after it.
+# after it, with "en cEUR/kWh HTVA" since November 2026.
 _CONSUMPTION_LEAD = (
     r"La\s+formule\s+(?:tarifaire\s+HTVA(?:\s*\(en\s*€\s*/\s*MWh\))?|de\s+prix)"
-    r"\s+est\s+la\s+suivante\s*(?:,\s*en\s+(?:EUR|€)\s*/\s*MWh\s+HTVA)?\s*:"
+    r"\s+est\s+la\s+suivante\s*"
+    r"(?:,\s*en\s+c?(?:EUR|€)\s*/\s*(?:MWh|kWh)\s+HTVA)?\s*:"
 )
 
 
@@ -132,10 +135,11 @@ def _dynamic_consumption_formula(text: str) -> re.Match[str] | None:
 
     Since the June 2026 card the feed-in paragraph opens with the same
     sentence as the consumption one, told apart only by writing the unit
-    EUR/MWh against €/MWh. The lead accepts either spelling, and the match
-    that is the feed-in formula is skipped, so a card that prints the feed-in
-    paragraph first, or spells both units alike, still binds the consumption
-    formula rather than raising or billing the feed-in one as energy.
+    EUR/MWh against €/MWh, and since November cEUR/kWh against €/kWh. The
+    lead accepts every spelling, and the match that is the feed-in formula is
+    skipped, so a card that prints the feed-in paragraph first, or spells both
+    units alike, still binds the consumption formula rather than raising or
+    billing the feed-in one as energy.
     """
     feed_in = _injection_formula(text)
     for match in re.finditer(
@@ -144,3 +148,56 @@ def _dynamic_consumption_formula(text: str) -> re.Match[str] | None:
         if feed_in is None or match.start(1) != feed_in.start(1):
             return match
     return None
+
+
+# The unit a formula's sentence states ahead of it: "(en €/MWh)" up to May
+# 2026, "en EUR/MWh HTVA" and "en €/MWh HTVA" from June, and since November
+# 2026 "en cEUR/kWh HTVA" ahead of the consumption formulas and "en €/kWh
+# HTVA" ahead of the feed-in ones. No formula on an archived card sits more
+# than 333 characters after its statement, the last of the seven of a Walloon
+# variable card being the farthest. Smart Variable's cards of January to May
+# 2026 state none ahead of their meter formulas, which are in EUR/MWh.
+_UNIT_RE = re.compile(
+    r"\ben\s+(c?)(?:EUR|€)\s*/\s*(MWh|kWh)\s+HTVA|\(en\s*(c?)€\s*/\s*(MWh|kWh)\)"
+)
+_UNIT_REACH = 600
+# Factor multiplier and base divisor per stated unit, keyed on whether it is
+# in cents and what it is per; see _formula_coefficients.
+_CONSUMPTION_SCALES: dict[tuple[bool, str], tuple[float, float]] = {
+    (False, "MWh"): (1.0, 1000.0),
+    (True, "kWh"): (1.0, 100.0),
+}
+_FEED_IN_SCALES = {**_CONSUMPTION_SCALES, (False, "kWh"): (10.0, 100.0)}
+
+
+def _formula_coefficients(
+    text: str, match: re.Match[str], *, feed_in: bool
+) -> tuple[float, float] | None:
+    """The factor and base of the formula ``match`` holds in groups 1 to 3,
+    as a price in EUR/kWh on an index in EUR/kWh, before any VAT.
+
+    A formula stated in EUR/MWh keeps its factor and divides its base by 1000.
+    The November 2026 cards state c€/kWh and say that a parameter published in
+    EUR/MWh is divided by 10 before the formula applies, so the factor stays
+    as printed and the base divides by 100. Their feed-in formulas say €/kWh
+    over a factor and a base both a tenth of October's, "Epex SPP M * 0,0879 –
+    1,61" where October printed "0,8790 – 16,15" in €/MWh. The estimates on
+    their first page come out of that factor applied to the parameter in
+    EUR/MWh, giving c€/kWh, so that is how it is read: ten times the factor and
+    the base over 100. A formula stated in any other unit answers None.
+    """
+    start = match.start(1)
+    stated = list(_UNIT_RE.finditer(text, max(0, start - _UNIT_REACH), start))
+    if stated:
+        last = stated[-1]
+        unit = (bool(last.group(1) or last.group(3)), last.group(2) or last.group(4))
+    else:
+        unit = (False, "MWh")
+    scale = (_FEED_IN_SCALES if feed_in else _CONSUMPTION_SCALES).get(unit)
+    if scale is None:
+        return None
+    times, per = scale
+    return (
+        to_float(match.group(1)) * times,
+        parse_sign(match.group(2)) * to_float(match.group(3)) / per,
+    )

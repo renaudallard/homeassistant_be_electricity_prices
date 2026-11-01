@@ -495,7 +495,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v86: Frank's November 2026 JN card bills the subscription it waives for a
 # contract's first year at the one its named card prints, and grants the
 # waiver back as a pro-rata welcome credit; read as printed, it billed none.
-_SNAPSHOT_SCHEMA_VERSION = 86
+# v87: OCTA+'s November 2026 cards state their formulas in c€/kWh, and their
+# feed-in ones in a misprinted €/kWh; read as EUR/MWh, every formula base and
+# every feed-in factor came out ten times too small, and the dynamic cards
+# did not parse.
+_SNAPSHOT_SCHEMA_VERSION = 87
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

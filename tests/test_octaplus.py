@@ -359,6 +359,127 @@ def test_the_october_2026_range_parses_on_the_same_template() -> None:
     assert flex.valid_until == date(2026, 10, 31)
 
 
+# The values paramètres_forward_fr.pdf (octaplus.be/prixattendus) lists for
+# November 2026, in EUR/MWh HTVA: what that month's cards compute the estimates
+# on their first page at.
+_V_TEST_NOVEMBER_2026 = {
+    "consumption weighted": 180.031,
+    "consumption arithmetic": 173.23,
+    "injection arithmetic": 145.611,
+    "injection weighted": 93.778,
+}
+
+
+def test_the_november_2026_dynamic_card_is_read_in_its_own_units() -> None:
+    """The November 2026 cards state the consumption formula in c€/kWh, "en
+    cEUR/kWh HTVA : Epex 15' * 1,094 + 0,5520" where October printed "1,094 +
+    5,520" in EUR/MWh, and the feed-in one as "en €/kWh HTVA : Epex 15' *
+    0,0922 – 1,31" where October printed "0,9220 – 13,09" in €/MWh. The lead
+    took EUR/MWh only, so the card did not parse. Read in its own units it bills
+    what October's did, and the estimates on its first page, 20,67 c€/kWh for
+    consumption and 12,12 for feed-in, come out of its formulas at the month's
+    V-test values."""
+    text = _text("octaplus_dynamic_v_nov.pdf")
+    snap = parse_snapshot("octaplus_dynamic", text, "flanders")
+    assert snap.publication_label == "11/2026"
+    assert isinstance(snap.energy, DynamicRates)
+    # 1,094 x 1,06, and 0,5520 c€/kWh / 100 x 1,06.
+    assert snap.energy.factor == pytest.approx(1.15964)
+    assert snap.energy.base == pytest.approx(0.0058512)
+    assert snap.energy.quarter_hourly is True
+    assert snap.injection is not None
+    factor, base = snap.injection.factor, snap.injection.base
+    assert factor is not None
+    assert base is not None
+    # 0,0922 on the parameter in EUR/MWh gives c€/kWh: 0,922 on the spot.
+    assert factor == pytest.approx(0.922)
+    assert base == pytest.approx(-0.0131)
+
+    assert "Smart Meter Regime (SMR) 3 20,67 12,12" in text
+    v_test = _V_TEST_NOVEMBER_2026
+    consumption = snap.energy.factor * v_test["consumption arithmetic"] / 1000
+    assert consumption + snap.energy.base == pytest.approx(0.2067, abs=5e-5)
+    feed_in = factor * v_test["injection arithmetic"] / 1000
+    assert feed_in + base == pytest.approx(0.1212, abs=5e-5)
+
+
+def test_the_november_2026_variable_card_is_read_in_its_own_units() -> None:
+    """The variable and fixed cards moved the same way: "en cEUR/kWh HTVA :
+    mono-horaire (simple) : Epex RLP M * 1,066 + 0,6770" where October printed
+    "1,066 + 6,770" in EUR/MWh, and the feed-in "en €/kWh HTVA : Epex SPP M *
+    0,0879 – 1,61" where it printed "0,8790 – 16,15". These cards parsed, read
+    as EUR/MWh, with every base and the feed-in factor ten times too small. The
+    estimates on the first page, the Impact rows included, come out of the
+    formulas read in their own units at the month's V-test values."""
+    text = _text("octaplus_boostflex_w_nov.pdf")
+    snap = parse_snapshot("octaplus_boostflex", text, "wallonia")
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is True
+    # 1,066 x 1,06, and 0,6770 c€/kWh / 100 x 1,06.
+    assert energy.formula_factor == pytest.approx(1.12996)
+    assert energy.formula_base == pytest.approx(0.0071762)
+    assert energy.formula_base_pic == pytest.approx(0.0071762)
+    inj = snap.injection
+    assert inj is not None
+    assert inj.spp_indexed is True
+    assert inj.factor is not None
+    assert inj.base is not None
+    assert inj.factor == pytest.approx(0.879)
+    assert inj.base == pytest.approx(-0.0161)
+
+    v_test = _V_TEST_NOVEMBER_2026["consumption weighted"] / 1000
+    printed = [
+        (energy.formula_factor, energy.formula_base, 0.2106),
+        (energy.formula_factor_peak, energy.formula_base_peak, 0.2524),
+        (energy.formula_factor_offpeak, energy.formula_base_offpeak, 0.1795),
+        (
+            energy.formula_factor_exclusive_night,
+            energy.formula_base_exclusive_night,
+            0.1955,
+        ),
+        (energy.formula_factor_pic, energy.formula_base_pic, 0.2679),
+        (energy.formula_factor_medium, energy.formula_base_medium, 0.2251),
+        (energy.formula_factor_eco, energy.formula_base_eco, 0.1656),
+    ]
+    for factor, base, estimate in printed:
+        assert factor is not None
+        assert base is not None
+        assert factor * v_test + base == pytest.approx(estimate, abs=5e-5)
+    assert "Compteur monohoraire 21,06 6,63" in text
+    feed_in = inj.factor * _V_TEST_NOVEMBER_2026["injection weighted"] / 1000
+    assert feed_in + inj.base == pytest.approx(0.0663, abs=5e-5)
+    assert inj.current == pytest.approx(0.0663)
+
+
+def test_a_formula_in_a_unit_no_card_has_used_is_not_read() -> None:
+    """Each formula is read in the unit its own sentence states. One stated in a
+    unit no card has used, or a consumption formula in the €/kWh only the
+    feed-in sentences print, is refused rather than guessed at: the dynamic
+    card fails the parse, and a monthly feed-in keeps the printed estimate."""
+    dynamic = _text("octaplus_dynamic_v_nov.pdf")
+    for unit in ("cEUR/MWh", "EUR/kWh"):
+        with pytest.raises(ExtractorError):
+            parse_snapshot(
+                "octaplus_dynamic",
+                dynamic.replace("en cEUR/kWh HTVA", f"en {unit} HTVA"),
+                "flanders",
+            )
+    unread = parse_snapshot(
+        "octaplus_dynamic",
+        dynamic.replace("en €/kWh HTVA", "en c€/MWh HTVA"),
+        "flanders",
+    )
+    assert unread.injection is None
+
+    flex = _text("octaplus_boostflex_w_nov.pdf").replace("en €/kWh", "en c€/MWh")
+    snap = parse_snapshot("octaplus_boostflex", flex, "wallonia")
+    assert snap.injection is not None
+    assert snap.injection.factor is None
+    assert snap.injection.spp_indexed is False
+    assert snap.injection.current == pytest.approx(0.0663)
+
+
 def test_the_year_one_credit_note_is_read_as_an_anniversary_lump() -> None:
     """The June to September 2026 cards grant "une note de crédit de 180 €
     après une année de consommation sur base de ce tarif". The April card's

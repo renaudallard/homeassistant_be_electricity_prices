@@ -223,19 +223,21 @@ By kind:
   The consumption formula is read by `_dynamic_consumption_formula` within a
   short distance of its own lead-in (`_CONSUMPTION_LEAD`: *"La formule tarifaire
   HTVA (en €/MWh) est la suivante:"* up to the May 2026 card, *"La formule de
-  prix est la suivante, en EUR/MWh HTVA :"* from June), as the feed-in one is read
-  after its own. From June the feed-in paragraph opens with the same sentence,
-  spelt *"en €/MWh HTVA"*; the lead accepts either spelling and the match that
-  is the feed-in formula is skipped. Reordering the two paragraphs or spelling
+  prix est la suivante, en EUR/MWh HTVA :"* from June, *"en cEUR/kWh HTVA"*
+  from November 2026), as the feed-in one is read after its own. From June the
+  feed-in paragraph opens with the same sentence, spelt *"en €/MWh HTVA"*, and
+  *"en €/kWh HTVA"* from November; the lead accepts every spelling and the match
+  that is the feed-in formula is skipped. Reordering the two paragraphs or spelling
   both units alike cannot bind the feed-in formula as the consumption rate
   (`test_dynamic_consumption_formula_skips_injection_on_reorder`,
   `test_the_june_leads_are_told_apart_by_more_than_the_unit`),
   and a consumption formula in an unknown spelling fails the parse instead of
   being billed off the AMR clause further down
   (`test_an_unread_consumption_formula_is_not_taken_from_the_amr_clause`).
-  The card formula is HTVA and in EUR/MWh, so it is converted to the model's
-  TVAC EUR/kWh: `factor = factor_pdf * vat`, `base = base_eur_mwh / 1000 * vat`
-. VAT comes from `_vat_multiplier` reading `Tarifs N% TVAC`, a header the cards
+  The card formula is HTVA, in the unit its sentence states (see
+  [Formula units](#formula-units)), and is converted to the model's TVAC
+  EUR/kWh: `factor = factor_pdf * vat`, `base = base_eur_mwh / 1000 * vat`, or
+  `base / 100 * vat` for a base in c€/kWh. VAT comes from `_vat_multiplier` reading `Tarifs N% TVAC`, a header the cards
   printed through May 2026 and not since: from June the formula is grossed by the
   residential rate and the snapshot records it as `TaxOverlay.assumed_vat_rate`
 . `test_dynamic_parses_smr3_formula` pins illustrative
@@ -308,8 +310,8 @@ divided by 100, pinned illustrative `0.0472`
 sits under the card's own **Prix estimés** heading and is not the rate: *"Le prix
 de votre injection est indexé mensuellement sur base du paramètre d'indexation de
 la Epex SPP ... La valeur de la Epex du mois en cours ne sera connue qu'en fin de
-mois"*. `_SPP_FORMULA_RE` (`_octaplus_formulas.py`) parses the stated formula (EUR/MWh,
-so `base = b_eur_mwh / 1000`) and the leg is marked `spp_indexed`, which resolves
+mois"*. `_SPP_FORMULA_RE` (`_octaplus_formulas.py`) parses the stated formula, in the
+unit its sentence states (see [Formula units](#formula-units)), and the leg is marked `spp_indexed`, which resolves
 it against the delivery month's own solar-weighted mean and keeps the month
 coefficients off the hourly spot. The estimate stays as `current`, the fallback
 while that mean is unpublished
@@ -327,8 +329,8 @@ third one's formula (`test_disagreeing_meter_formulas_keep_the_estimate`).
 For `dynamic`, the injection
 formula is found within 500 characters after the `_INJECTION_LEAD` prose
 (`_injection_formula`, `_octaplus_formulas.py`; 174 to 252 on every archived card) and yields `factor` and `base`
-that are NOT VAT-adjusted (injection is VAT-exempt, `_rates.py`);
-`base = b_eur_mwh / 1000`. Pinned illustrative `factor 1.0`, `base -0.01389` for
+that are NOT VAT-adjusted (injection is VAT-exempt, `_rates.py`), in the
+unit its sentence states (`base = b_eur_mwh / 1000` up to October 2026). Pinned illustrative `factor 1.0`, `base -0.01389` for
 `Epex 15' * 1 - 13,89 €/MWh` (`test_dynamic_extracts_injection_formula`). Returns
 `None` only when both `current` and `factor` are absent.
 
@@ -343,6 +345,49 @@ first. An open search walked into that clause whenever the real formula went
 unread, which is what the January 2026 cards did, and credited the consumption
 formula as the feed-in. Bounded, such a card reads no formula, which the live
 check reports (`test_an_unread_injection_formula_is_not_taken_from_the_amr_clause`).
+
+### Formula units
+
+Every formula is read in the unit its own sentence states, the last statement
+before it within 600 characters (`_UNIT_RE`, `_formula_coefficients`,
+`_octaplus_formulas.py`): *"(en €/MWh)"* up to May 2026, *"en EUR/MWh HTVA"* and
+*"en €/MWh HTVA"* from June, and from November 2026 *"en cEUR/kWh HTVA"* ahead of
+the consumption formulas and *"en €/kWh HTVA"* ahead of the feed-in ones. No
+formula on an archived card sits more than 333 characters after its statement,
+the seventh formula of a Walloon variable card being the farthest. Smart
+Variable's cards of January to May 2026 state none ahead of their meter
+formulas, which are in EUR/MWh, so a formula with no statement is read in
+EUR/MWh.
+
+- **EUR/MWh**: the factor as printed, the base divided by 1000.
+- **c€/kWh**: the November cards add *"Au cas où la valeur du paramètre serait
+  exprimée en EUR/MWh, celle-ci devra être divisée par 10 avant d'y appliquer la
+  formule de prix en cEUR/kWh"*, so the factor stays as printed and the base is
+  divided by 100. *"Epex 15' * 1,094 + 0,5520"* bills what October's *"1,094 +
+  5,520"* in EUR/MWh did.
+- **€/kWh, on a feed-in formula only**: the November feed-in sentences print a
+  factor and a base both a tenth of October's, *"Epex SPP M * 0,0879 – 1,61"*
+  where October printed *"0,8790 – 16,15"* in €/MWh, and *"Epex 15' * 0,0922 –
+  1,31"* on the dynamic cards. Read literally the credit cannot be right, and
+  read under the card's own c€/kWh rule it would pay −0,39 c€/kWh at 100 €/MWh.
+  The estimates on the first page are that factor applied to the parameter in
+  EUR/MWh, giving c€/kWh, so that is how it is read: the factor times 10, the
+  base divided by 100, which is October's formula again.
+
+Checked against the V-test values OCTA+ publishes for the month
+(`paramètres_forward_fr.pdf`, behind octaplus.be/prixattendus, in EUR/MWh): every
+estimate on the first page of the sixteen November 2026 cards, 61 figures, comes
+out of the formulas read that way, and
+`test_the_november_2026_dynamic_card_is_read_in_its_own_units` and
+`test_the_november_2026_variable_card_is_read_in_its_own_units` pin it on two of
+them. Read as EUR/MWh, as they were until then, the November cards billed every
+formula base and every feed-in factor ten times too small, and the dynamic cards
+did not parse; the fix came with snapshot schema v87.
+
+Any other unit, c€/MWh, or €/kWh ahead of a consumption formula, is refused:
+the dynamic card fails the parse, a variable meter keeps its printed rate, and
+a monthly feed-in keeps the printed estimate
+(`test_a_formula_in_a_unit_no_card_has_used_is_not_read`).
 
 ### Year-one credit note (`_extract_credit_note`, `octaplus.py`)
 
@@ -574,6 +619,12 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
   of this parser was written against April cards only and matched nothing on
   anything live, while the suite stayed green
   (`test_august_redesign_formula_is_parsed`).
+- **November 2026, the units moved.** Every card states its formulas in c€/kWh
+  from then on, and its feed-in ones under a misprinted €/kWh. Read as EUR/MWh,
+  every card but the dynamic pair still parsed, with every formula base and
+  feed-in factor ten times too small: the live check's floor on a feed-in factor
+  catches the second, nothing bounds a base that tightly, and the first-page
+  estimates show both. See [Formula units](#formula-units).
 - **Consumption vs injection formula collision**: both dynamic formulas share the
   `Epex 15'` shape; `_dynamic_consumption_formula` must skip the injection one by
   offset, robust to paragraph reordering.
@@ -627,6 +678,8 @@ cards unless the row names another month):
 | `octaplus_boostfix_w_oct.pdf` | OCTA+ Boost Fix, Wallonia, **October 2026**, the first card of the Boost range. Also parsed as Boost Fix Impact. |
 | `octaplus_boostflex_w_oct.pdf` | OCTA+ Boost Flex, Wallonia, **October 2026**. Impact rows and one `Epex RLP` formula per CWaPE band beside the per-meter ones. |
 | `octaplus_ecoboostflex_v_oct.pdf` | OCTA+ Eco Boost Flex, Flanders, **October 2026**. `Epex RLP M` formula per meter, `Epex SPP M * 0,8790 – 16,15` feed-in. |
+| `octaplus_dynamic_v_nov.pdf` | OCTA+ Dynamic, Flanders, **November 2026**. The consumption formula in c€/kWh, the feed-in one under a misprinted €/kWh, and the first-page estimates the month's V-test values reproduce. |
+| `octaplus_boostflex_w_nov.pdf` | OCTA+ Boost Flex, Wallonia, **November 2026**. Meter and Impact formulas in c€/kWh, `Epex SPP M * 0,0879 – 1,61` feed-in under €/kWh. |
 
 Fixture text is read through `extract_pdf_text_aligned(..., x_join_threshold=1.0)`
 in the test helper `_text` (`test_octaplus.py`), matching the production
@@ -642,6 +695,8 @@ fetch path.
 - Dynamic formula wording / unit change: `_EPEX_FORMULA`,
   `_dynamic_consumption_formula` and `_INJECTION_LEAD` (`_octaplus_formulas.py`),
   and the VAT/unit conversion in `_extract_energy`.
+- A unit statement reworded, or a new unit: `_UNIT_RE` and the scales
+  `_formula_coefficients` picks from (`_octaplus_formulas.py`).
 - Impact bands relabelled: `_extract_energy` Impact branch.
 - Tax tier / connection fee moved: `_extract_taxes`; if the glyph
   spacing changes, revisit `x_join_threshold` in `fetch`.
