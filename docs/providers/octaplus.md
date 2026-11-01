@@ -211,7 +211,7 @@ to 0, so a layout drift surfaces instead of silently dropping the annual fee.
 By kind:
 
 - **`dynamic`**: parses the prose formula `Epex 15' * <factor> <sign> <base>`
-  (`_EPEX_FORMULA`), which also accepts `Belpex 15'`, the name the January and
+  (`_EPEX_FORMULA`, `_octaplus_formulas.py`), which also accepts `Belpex 15'`, the name the January and
   February 2026 cards give the index (`test_dynamic_formulas_read_the_belpex_spelling`),
   and `Belpex Hourly`, the index the cards from 2023 to 2025 name: without it a
   contract signed before 2026 could not read its own card and was priced on
@@ -308,7 +308,7 @@ divided by 100, pinned illustrative `0.0472`
 sits under the card's own **Prix estimés** heading and is not the rate: *"Le prix
 de votre injection est indexé mensuellement sur base du paramètre d'indexation de
 la Epex SPP ... La valeur de la Epex du mois en cours ne sera connue qu'en fin de
-mois"*. `_SPP_FORMULA_RE` parses the stated formula (EUR/MWh,
+mois"*. `_SPP_FORMULA_RE` (`_octaplus_formulas.py`) parses the stated formula (EUR/MWh,
 so `base = b_eur_mwh / 1000`) and the leg is marked `spp_indexed`, which resolves
 it against the delivery month's own solar-weighted mean and keeps the month
 coefficients off the hourly spot. The estimate stays as `current`, the fallback
@@ -326,7 +326,7 @@ third one's formula (`test_disagreeing_meter_formulas_keep_the_estimate`).
 
 For `dynamic`, the injection
 formula is found within 500 characters after the `_INJECTION_LEAD` prose
-(`_injection_formula`; 174 to 252 on every archived card) and yields `factor` and `base`
+(`_injection_formula`, `_octaplus_formulas.py`; 174 to 252 on every archived card) and yields `factor` and `base`
 that are NOT VAT-adjusted (injection is VAT-exempt, `_rates.py`);
 `base = b_eur_mwh / 1000`. Pinned illustrative `factor 1.0`, `base -0.01389` for
 `Epex 15' * 1 - 13,89 €/MWh` (`test_dynamic_extracts_injection_formula`). Returns
@@ -524,7 +524,7 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
   6,770 ; Impact Medium : Epex RLP * 1,142 + 6,770 ; Impact Pic : Epex RLP *
   1,366 + 6,770"* on the October 2026 Boost Flex card (the lines wrap inside a
   formula, so the gaps take a newline). `_with_impact_bands` reads the rows into
-  `VariableRates.impact_*` and `_RLP_IMPACT_RES` the formulas into
+  `VariableRates.impact_*` and `_RLP_IMPACT_RES` (`_octaplus_formulas.py`) the formulas into
   `formula_factor_pic` ... `formula_base_eco`, which the monthly leg carries as
   `factor_pic` .... An entry on the Impact configuration is then billed per
   band, on the printed rows without a key and on the formulas with one; on any
@@ -640,8 +640,8 @@ fetch path.
 - Meter-rate rows renamed or reordered: `_meter_value` label patterns in
   `_extract_energy`.
 - Dynamic formula wording / unit change: `_EPEX_FORMULA`,
-  `_dynamic_consumption_formula`, the VAT/unit conversion
-, and `_INJECTION_LEAD`.
+  `_dynamic_consumption_formula` and `_INJECTION_LEAD` (`_octaplus_formulas.py`),
+  and the VAT/unit conversion in `_extract_energy`.
 - Impact bands relabelled: `_extract_energy` Impact branch.
 - Tax tier / connection fee moved: `_extract_taxes`; if the glyph
   spacing changes, revisit `x_join_threshold` in `fetch`.

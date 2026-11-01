@@ -267,7 +267,7 @@ def test_the_parameter_name_alone_is_not_a_formula() -> None:
     "sur base du paramètre « Epex SPP M » dont les dernières valeurs". The
     optional M has to be followed by the operator or that sentence binds as a
     formula with whatever digits happen to follow it."""
-    from custom_components.be_electricity_prices.providers.octaplus import (
+    from custom_components.be_electricity_prices.providers._octaplus_formulas import (
         _SPP_FORMULA_RE,
     )
 
@@ -516,7 +516,7 @@ def test_dynamic_consumption_formula_skips_injection_on_reorder() -> None:
     """Consumption and injection share the 'Epex 15' shape. Even if a
     future card prints the injection paragraph first, the consumption
     picker must not bind the injection formula as the consumption rate."""
-    from custom_components.be_electricity_prices.providers.octaplus import (
+    from custom_components.be_electricity_prices.providers._octaplus_formulas import (
         _dynamic_consumption_formula,
     )
 
@@ -569,7 +569,7 @@ def test_the_june_leads_are_told_apart_by_more_than_the_unit(
     est la suivante", energy in EUR/MWh and feed-in in €/MWh. The anchor accepted the
     EUR spelling only: an energy lead written with € raised, and a feed-in
     paragraph printed first with an EUR lead was billed as the energy price."""
-    from custom_components.be_electricity_prices.providers.octaplus import (
+    from custom_components.be_electricity_prices.providers._octaplus_formulas import (
         _dynamic_consumption_formula,
     )
 
