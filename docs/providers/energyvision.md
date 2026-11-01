@@ -467,7 +467,10 @@ card. Three things are the Walloon card's own:
 - **The thousand is grouped differently.** The excise row reads "0 & 3 000 kWh" here and
   "0 & 3.000 kWh" on the 1-year fixed cards, same month and same rate. `_EXCISE_FR_RE`
   accepts either; pinned to the dot it lost the whole tax block on this publication, and
-  with it every archived Walloon month of this contract.
+  with it every archived Walloon month of this contract. The tranche row followed in
+  November 2026, "Électricité verte (<1 800 kWh – tarif fixe)" where October had
+  "<1.800", so both tranche patterns read their bound through `_TIER_BOUND`, which takes
+  the dot or the space.
 
 The DSO table and the rest of the tax block are the ones the 1-year fixed card already
 carries, so `_extract_dsos_fr` and `_extract_taxes_fr` read them unchanged, Impact bands
@@ -742,6 +745,7 @@ The fixtures live under `tests/fixtures/`:
 | `energyvision_groene_stroom_bxl_jan.pdf` | the same card for January 2026, the archive's copy: the degressive excise table on a Brussels card |
 | `energyvision_tiered_1800_wal_sep.pdf` | the GS1800V card for Wallonia, same month: the French publication of the tiered shape |
 | `energyvision_laadpunt_nov.pdf` | the GSLP card for November 2026: the levy row spelled "GSC en WKK" |
+| `energyvision_tiered_1800_wal_nov.pdf` | the Walloon GS1800V card for November 2026: the tranche bound grouped with a space, "<1 800 kWh" |
 
 Tests load them through `fixture_text("energyvision_<...>.pdf", layout=True)`, matching
 the layout-preserving extraction used in production. Both Walloon fixtures are kept on

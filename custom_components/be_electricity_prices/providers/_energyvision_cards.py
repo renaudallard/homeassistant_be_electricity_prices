@@ -262,12 +262,15 @@ _FIXED_INJECTION_RE = re.compile(
     rf"Injectie\s*[{SIGN_CHARS}]\s*variabel\s+{_NUM}\s*€?\s*cent\s*/\s*kWh",
     re.IGNORECASE,
 )
-# Tiered cards, page 1: "Groene stroom (<1.800 kWh - vast tarief) 10,60
-# €cent/kWh" and its ">" twin for the remainder. The bound's dot is a
-# thousands separator, so it goes through tier_bound_kwh rather than to_float,
+# A tranche bound as the cards print it: "1.800", or "1 800" on the Walloon
+# card from November 2026. The dot or the space groups the thousands, so the
+# bound goes through tier_bound_kwh, which drops either, rather than to_float,
 # which would read 1.800 kWh as one point eight.
+_TIER_BOUND = r"(\d{1,3}(?:[.    ]\d{3})+|\d+)"
+# Tiered cards, page 1: "Groene stroom (<1.800 kWh - vast tarief) 10,60
+# €cent/kWh" and its ">" twin for the remainder.
 _TIER_FIXED_RE = re.compile(
-    rf"Groene\s+stroom[^(\n]*\(\s*<\s*([\d.,]+)\s*kWh\s*[{SIGN_CHARS}]\s*"
+    rf"Groene\s+stroom[^(\n]*\(\s*<\s*{_TIER_BOUND}\s*kWh\s*[{SIGN_CHARS}]\s*"
     rf"vast\s+tarief\s*\)\s*{_NUM}\s*€?\s*cent\s*/\s*kWh",
     re.IGNORECASE,
 )

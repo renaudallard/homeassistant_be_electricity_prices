@@ -1860,6 +1860,22 @@ def test_the_walloon_excise_row_is_read_with_either_thousands_separator() -> Non
     ).taxes.federal_excise == pytest.approx(0.0503288)
 
 
+def test_the_walloon_tranche_reads_a_bound_grouped_with_a_space() -> None:
+    """The November 2026 card prints "Électricité verte (<1 800 kWh – tarif
+    fixe) 12,72 €cent/kWh", the thousand grouped with a space where October
+    had "<1.800", and the tranche row was refused."""
+    text = fixture_text("energyvision_tiered_1800_wal_nov.pdf", layout=True)
+    assert "(<1 800 kWh" in text
+    snap = _tiered(
+        _TIERED_1800, "energyvision_tiered_1800_wal_nov.pdf", region="wallonia"
+    )
+    assert snap.publication_label == "novembre 2026"
+    energy = snap.energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.tier_kwh == pytest.approx(1800.0)
+    assert energy.tier_rate == pytest.approx(0.1272)
+
+
 def test_a_walloon_tiered_card_missing_its_tranche_is_refused() -> None:
     text = fixture_text("energyvision_tiered_1800_wal_sep.pdf", layout=True)
     row = [line for line in text.splitlines() if "tarif fixe)" in line]

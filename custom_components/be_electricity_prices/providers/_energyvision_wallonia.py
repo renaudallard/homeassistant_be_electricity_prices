@@ -36,7 +36,7 @@ from __future__ import annotations
 import re
 
 from ..const import DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW
-from ._energyvision_cards import _spp_injection, _tiered_legs
+from ._energyvision_cards import _TIER_BOUND, _spp_injection, _tiered_legs
 from ._parse import SIGN_CHARS, excise_tier_bands, to_float
 from ._pdf import NUM_NO_THOUSANDS, printed_vat_rate
 from ._rates import EnergyRates, FixedRates, InjectionRates, SpotMonthlyRates
@@ -256,11 +256,11 @@ _FIXED_INJECTION_FR_RE = re.compile(
 # The Walloon tiered card's tranche row, "Électricité verte (<1.800 kWh –
 # tarif fixe) 10,60 €cent/kWh". The parenthetical is what tells it apart from
 # the flat card's "Électricité verte – tarif fixe", which _FIXED_ENERGY_FR_RE
-# reads and which correctly misses this one. The bound's dot is a thousands
-# separator, so it goes through tier_bound_kwh rather than to_float, which
-# would read 1.800 kWh as one point eight.
+# reads and which correctly misses this one. From November 2026 the bound
+# groups the thousand with a space, "(<1 800 kWh", which _TIER_BOUND reads as
+# it reads the dot.
 _TIER_FIXED_FR_RE = re.compile(
-    rf"Électricité\s+verte[^(\n]*\(\s*<\s*([\d.,]+)\s*kWh\s*[{SIGN_CHARS}]\s*"
+    rf"Électricité\s+verte[^(\n]*\(\s*<\s*{_TIER_BOUND}\s*kWh\s*[{SIGN_CHARS}]\s*"
     rf"tarif\s+fixe\s*\)\s*{_NUM}\s*€?\s*cent\s*/\s*kWh",
     re.IGNORECASE,
 )
