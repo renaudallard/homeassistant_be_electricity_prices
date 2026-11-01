@@ -2876,7 +2876,7 @@ def test_the_cards_that_price_a_direct_debit_payer_say_so_in_the_registry() -> N
     assert offers_direct_debit("mega", "mega_dynamic") is True
 
 
-_OFFPEAK_BASE = "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-"
+_B2C_BASE = "https://my.mega.be/resources/tarif/Mega-FR-EL-B2C-"
 
 
 def test_off_peak_is_withdrawn_on_30_october() -> None:
@@ -2898,9 +2898,11 @@ def test_off_peak_is_withdrawn_on_30_october() -> None:
     [
         ("mega_offpeak_fixed", "VL-092026-Offpeak-Bi0109-Fix.pdf"),
         ("mega_offpeak_flex", "VL-092026-Offpeak-Bi-Var.pdf"),
+        # Still sold, but off the listing from November 2026.
+        ("mega_zen_fixed", "VL-092026-Zen0109-Fix.pdf"),
     ],
 )
-async def test_a_withdrawn_products_past_month_is_built_off_its_last_card(
+async def test_an_unlisted_products_past_month_is_built_off_its_last_card(
     contract_id: str, expected: str
 ) -> None:
     """The listing no longer links it: the October card's name is moved to
@@ -2913,7 +2915,7 @@ async def test_a_withdrawn_products_past_month_is_built_off_its_last_card(
             "VL",
             date(2026, 9, 1),
         )
-    assert urls == [_OFFPEAK_BASE + expected]
+    assert urls == [_B2C_BASE + expected]
 
 
 @pytest.mark.parametrize(
@@ -2945,5 +2947,30 @@ async def test_a_withdrawn_product_is_asked_for_this_month_by_name(
         pytest.raises(ExtractorError) as err,
     ):
         await mega_fetch(None, "mega_offpeak_flex", "wallonia")  # type: ignore[arg-type]
-    assert fetched.call_args.args[1] == _OFFPEAK_BASE + asked
+    assert fetched.call_args.args[1] == _B2C_BASE + asked
     assert is_missing_card_error(str(err.value))
+
+
+@pytest.mark.parametrize(
+    ("contract_id", "asked"),
+    [
+        ("mega_zen_fixed", "VL-112026-Zen0111-Fix.pdf"),
+        ("mega_dynamic", "VL-112026-Dynamic0111.pdf"),
+    ],
+)
+async def test_a_product_still_sold_off_the_listing_is_asked_for_by_name(
+    freezer: Any, contract_id: str, asked: str
+) -> None:
+    """The November 2026 listing dropped Zen Fixed and Dynamic while Mega
+    still sold both and published their cards: this month's is asked for
+    under the last listed name, moved a month."""
+    freezer.move_to("2026-11-02 12:00:00+01:00")
+    fetched = AsyncMock(return_value="card text")
+    with (
+        patch.object(mega_mod, "_fetch_listing_html", new=AsyncMock(return_value="")),
+        patch.object(mega_mod, "fetch_pdf_text", new=fetched),
+        patch.object(mega_mod, "parse_snapshot") as parsed,
+    ):
+        await mega_fetch(None, contract_id, "flanders")  # type: ignore[arg-type]
+    assert fetched.call_args.args[1] == _B2C_BASE + asked
+    assert parsed.call_args.args[3] == _B2C_BASE + asked

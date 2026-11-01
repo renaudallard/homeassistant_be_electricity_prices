@@ -421,11 +421,12 @@ async def fetch(
 
     listing = await _fetch_listing_html(session)
     listed_url = _resolve_pdf_url(listing, contract.product_name, region_code)
-    if listed_url is None and contract.withdrawn is not None:
-        # Off the listing since it was withdrawn: this month's card by its
-        # name, the last one until its month ends, then the CDN's stub for a
-        # card it never published, which the coordinator takes for the end of
-        # a withdrawn product's cards and keeps the last one.
+    if listed_url is None and contract.last_card:
+        # Off the listing: this month's card by its name. For a product Mega
+        # still sells that is this month's card. For a withdrawn one it is the
+        # last card until its month ends, then the CDN's stub for a card it
+        # never published, which the coordinator takes for the end of a
+        # withdrawn product's cards and keeps the last one.
         moved = _moved_urls(
             _last_card_url(contract, region_code),
             dt_util.now().date(),
@@ -454,8 +455,8 @@ async def _archive_pdf_urls(
 
     Professional cards never appear in the public listing, so they take the
     same built filenames ``fetch`` tries with the requested month. Residential
-    ones resolve the current URL from the listing, or a withdrawn product's
-    last card where the listing no longer links it, and rewrite BOTH month
+    ones resolve the current URL from the listing, or the last card it linked
+    where it no longer links the product, and rewrite BOTH month
     placeholders: the ``-MMYYYY-`` segment and the ``<MM>`` half of the
     product's effective-date ``<DD><MM>`` suffix, while preserving the
     effective day, which is not the 1st for every product.
@@ -489,17 +490,17 @@ async def _archive_pdf_urls(
 
 
 def _last_card_url(contract: _ContractDef, region_code: str) -> str:
-    """A withdrawn product's last card in ``region_code``."""
+    """The last card the listing linked for ``contract`` in ``region_code``."""
     return f"{_CDN_BASE}Mega-FR-EL-B2C-{region_code}-{contract.last_card}.pdf"
 
 
 def _current_url(
     listing_html: str, contract: _ContractDef, region_code: str
 ) -> str | None:
-    """The card the listing links for a residential ``contract``, else a
-    withdrawn product's last card, which the listing no longer links."""
+    """The card the listing links for a residential ``contract``, else the
+    last one it linked, for a product it no longer lists."""
     url = _resolve_pdf_url(listing_html, contract.product_name, region_code)
-    if url is None and contract.withdrawn is not None:
+    if url is None and contract.last_card:
         return _last_card_url(contract, region_code)
     return url
 

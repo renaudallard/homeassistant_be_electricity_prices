@@ -70,7 +70,12 @@ out, which reads their return as new. `last_card` keeps the October card's
 name, which their archive is built off and `fetch` asks this month's card
 under: the last card until October ends, then the CDN's stub, which the
 coordinator takes for a withdrawn product's last card being its last. The
-B2B Off-peak Fixed is built by name and still published.
+B2B Off-peak Fixed is built by name and still published. The November 2026
+listing also dropped Zen Fixed and Dynamic, in every region, while the
+fixed-price and dynamic tariff pages still sell both and the CDN serves their
+November cards. Neither is withdrawn: each carries its October name as
+`last_card`, and `fetch` asks for this month's card under it for as long as
+the listing links none.
 
 The table lists the residential products; the professional editions are
 described under [The professional editions](#the-professional-editions).
@@ -79,7 +84,7 @@ described under [The professional editions](#the-professional-editions).
 | --- | --- | --- | --- | --- |
 | `mega_smart_fixed` | Mega Smart Fixed (2 years) | `fixed` | all three | flagship fixed product |
 | `mega_smart_flex` | Mega Smart Flex (2 years) | `variable` | all three | monthly-indexed "Flex" |
-| `mega_zen_fixed` | Mega Zen Fixed (3 years) | `fixed` | all three | off the listing for the August 2026 card only |
+| `mega_zen_fixed` | Mega Zen Fixed (3 years) | `fixed` | all three | off the listing for the August 2026 card, and from November 2026, asked for by name |
 | `mega_online_fixed` | Mega Online Fixed | `fixed` | all three | |
 | `mega_online_flex` | Mega Online Flex | `variable` | all three | |
 | `mega_cosy_fixed` | Mega Cosy Fixed | `fixed` | all three | publishes on a non-1st day |
@@ -87,7 +92,7 @@ described under [The professional editions](#the-professional-editions).
 | `mega_offpeak_fixed` | Mega Off-peak Fixed | `fixed` | all three | retired July 2026, back for the August 2026 card, withdrawn 2026-10-30 |
 | `mega_offpeak_flex` | Mega Off-peak Flex | `variable` | all three | withdrawn 2026-10-30 |
 | `mega_offpeak_impact_var` | Mega Off-peak Impact | `tou_impact` | Wallonia only | CWaPE Tarif réseau IMPACT + SMR3 meter |
-| `mega_dynamic` | Mega Dynamic | `dynamic` | all three | hourly-billed (see below) |
+| `mega_dynamic` | Mega Dynamic | `dynamic` | all three | hourly-billed (see below); off the listing from November 2026, asked for by name |
 
 Notes on the enumeration:
 
@@ -254,15 +259,19 @@ did before.
    `test_listing_url_finder_picks_electricity_for_region` (`test_mega.py`) confirms
    a Smart Fixed / WL match ends `Smart2204-Fixed.pdf` and never contains `NG`;
    `test_resolver_falls_back_to_sibling_region_when_block_missing` (`test_mega.py`)
-   covers the fallback.
+   covers the fallback. When no region links the product, one with a
+   `last_card` is asked for this month's card under that name, its months
+   moved (`_moved_urls`, `mega.py`): a withdrawn product, or Zen Fixed and
+   Dynamic, which the November 2026 listing dropped in every region while Mega
+   still sold both and published their cards.
 4. Download the PDF text (`fetch_pdf_text`, `_pdf.py`) and hand it to
    `parse_snapshot`, which asserts the card's own `Client résidentiel - <Region>`
    header matches the requested region (`_assert_card_region`, `mega.py`) so a
    wrong sibling guess fails loud rather than mis-pricing a region's overlays.
 
 `fetch` raises `ExtractorError` on an unknown contract, an unknown region, or a
-listing that has no entry for the (product, region) pair in any region
-(`mega.py`).
+listing that has no entry for the (product, region) pair in any region when
+the product has no `last_card` (`mega.py`).
 
 ### Probe
 

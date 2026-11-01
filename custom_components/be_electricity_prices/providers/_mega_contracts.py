@@ -70,10 +70,11 @@ class _ContractDef:
     # (that is what hid Zen Fixed's return), while a listed one has to, or it
     # is reported as new every day.
     b2b_listed: bool = False
-    # The first day Mega no longer sold it (``Contract.withdrawn``), and its
-    # last card's name past the region code, which stands in for the
-    # listing's link once the listing drops it.
+    # The first day Mega no longer sold it (``Contract.withdrawn``).
     withdrawn: date | None = None
+    # The name past the region code of the last card the listing linked,
+    # which stands in for the listing's link once the listing drops the
+    # product: a withdrawn one, or one Mega still sells and publishes.
     last_card: str = ""
 
     @property
@@ -98,8 +99,17 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
     # ordinary fixed path with no parser change. Its B2B edition never went
     # away, which is why the catalog diff stayed quiet through the gap: the
     # professional contract carries the same product_name and covered the
-    # listing entry for it.
-    _ContractDef("mega_zen_fixed", "Mega Zen Fixed (3 years)", "fixed", "Zen Fixed"),
+    # listing entry for it. It left the listing again with the November 2026
+    # cards, in all three regions, while the fixed-price page still sells it
+    # and the CDN serves its November card under October's name moved a
+    # month, so it is asked for by that name.
+    _ContractDef(
+        "mega_zen_fixed",
+        "Mega Zen Fixed (3 years)",
+        "fixed",
+        "Zen Fixed",
+        last_card="102026-Zen0110-Fix",
+    ),
     _ContractDef("mega_online_fixed", "Mega Online Fixed", "fixed", "Online Fixed"),
     _ContractDef("mega_online_flex", "Mega Online Flex", "variable", "Online Flex"),
     _ContractDef("mega_cosy_fixed", "Mega Cosy Fixed", "fixed", "Cosy Fixed"),
@@ -135,7 +145,16 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "Off-peak Impact",
         regions=frozenset({REGION_WALLONIA}),
     ),
-    _ContractDef("mega_dynamic", "Mega Dynamic", "dynamic", "Dynamic"),
+    # Dynamic left the listing with the November 2026 cards the same way, in
+    # the two regions still linking it, while the dynamic tariff page still
+    # sells it and the CDN serves its November card in all three.
+    _ContractDef(
+        "mega_dynamic",
+        "Mega Dynamic",
+        "dynamic",
+        "Dynamic",
+        last_card="102026-Dynamic0110",
+    ),
     # Mega discontinued "Mega Cap" (the "prix variable plafonne" product)
     # with the September 2026 cards, residential and B2B together: the
     # listing dropped the product block in all three regions and the CDN
