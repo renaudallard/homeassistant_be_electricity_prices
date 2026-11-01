@@ -597,8 +597,9 @@ still broken is news again. Added for issue #114, where three October 2026 Total
 served the Dutch card, the Brussels injection card and a card with no green energy contribution.
 The first went once the parser read Dutch cards, the other two once a French card that does not
 parse fell back to its Dutch edition. Mega's Flemish professional Smart Flex card printed no
-price formula in either language the same month, where the Wallonia and Brussels cards do; it
-still parses, so its entries bill the rates it prints. The five October 2026 TotalEnergies
+price formula in either language the same month, and again in November, where the Wallonia
+and Brussels cards do; it still parses, so its entries bill the rates it prints, and its entry
+now runs to the December card. The five October 2026 TotalEnergies
 cards whose Dutch edition disagreed with the French one (issues #115 and #117) were allowed the
 same way: three Dutch addresses served another document, one prints its formula with a stray
 comma and one prints its fee ex-VAT. TotalEnergies corrected the three addresses on 5 and 6

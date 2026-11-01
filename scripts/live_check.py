@@ -776,9 +776,10 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "registry flag",
         "parsed month_indexed=False, registry month_indexed_energy=True",
     ): (
-        date(2026, 11, 1),
-        "the October 2026 card prints no price formula in French or Dutch, "
-        "where the Wallonia and Brussels cards do; billed on the printed rates",
+        date(2026, 12, 1),
+        "the October and November 2026 cards print no price formula in French "
+        "or Dutch, where the Wallonia and Brussels cards do; billed on the "
+        "printed rates",
     ),
     (
         "totalenergies/totalenergies_electricite_variable/wallonia: French and "
