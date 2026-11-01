@@ -98,7 +98,7 @@ per config entry (`providers/base.py`).
 | quarter-hourly (`quarter_hourly=True`) | See billing grid. Keeps ENTSO-E's native 15-minute slots for the live table, next-slot sensor, and cheapest-window service. | `providers/_rates.py` |
 | region | One of Flanders / Wallonia / Brussels (`REGIONS`). Determines DSO choices, regulator, and which regional renewables levy applies. | `const.py` |
 | region connection fee | Regional per-kWh connection levy in the tax overlay (`region_connection_fee`). | `providers/base.py` |
-| regional renewables | Region-specific green-energy / cogen surcharges: `flanders_renewables`, `wallonia_renewables`, `brussels_renewables` (EUR/kWh). The pricing engine picks the one matching the entry's region; extractors leave the others at 0. | `providers/base.py` |
+| regional renewables | Region-specific green-energy / cogen surcharges: `flanders_renewables`, `wallonia_renewables`, `brussels_renewables` (EUR/kWh). The pricing engine picks the one matching the entry's region; extractors leave the others at 0. A card whose energy row carries the cost (Luminus from November 2026) bills 0 for its own region too and sets `renewables_in_energy`. | `providers/base.py` |
 | RESA | Walloon DSO for the Liege area. | `const.py` |
 | REW (Regie de Wavre) | Small Walloon municipal DSO. | `const.py` |
 | SDAC 15-minute go-live | The Single Day-Ahead Coupling switch to a 15-minute MTU on 2025-10-01, after which ENTSO-E publishes the BE curve at 15-minute resolution. | `const.py` |

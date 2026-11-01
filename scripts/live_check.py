@@ -4512,11 +4512,11 @@ def _expected_injection_shape(contract_id: str) -> str:
 def _expect_region_basics(prefix: str, region_key: str, snap: object) -> None:
     """The three assertions every per-(contract, region) check makes.
 
-    Expected DSOs present, that region's renewables levy above zero, and the
-    federal excise above zero. Seven checks carried these three byte-identical
-    _expect calls plus their own copy of the region maps, so a new
-    region-level invariant had to be added seven times and the copies had
-    already fallen into two arity groups.
+    Expected DSOs present, that region's renewables levy above zero (zero on
+    a card whose energy row carries it), and the federal excise above zero.
+    Seven checks carried these three byte-identical _expect calls plus their
+    own copy of the region maps, so a new region-level invariant had to be
+    added seven times and the copies had already fallen into two arity groups.
 
     Deliberately only these three. The publication-label assertion differs
     between checks (some pass a detail=), and the per-supplier extras,
@@ -4531,11 +4531,20 @@ def _expect_region_basics(prefix: str, region_key: str, snap: object) -> None:
         expected <= set(dsos),
         detail=f"missing: {sorted(expected - set(dsos))}",
     )
-    _expect(
-        f"{prefix}: regional renewables > 0",
-        getattr(taxes, _RENEWABLES_FIELD[region_key]) > 0,
-        detail=str(taxes),
-    )
+    renewables = getattr(taxes, _RENEWABLES_FIELD[region_key])
+    if getattr(taxes, "renewables_in_energy", False):
+        # The energy row bills the cost, so a figure here would bill it twice.
+        _expect(
+            f"{prefix}: regional renewables carried in the energy row",
+            renewables == 0,
+            detail=str(taxes),
+        )
+    else:
+        _expect(
+            f"{prefix}: regional renewables > 0",
+            renewables > 0,
+            detail=str(taxes),
+        )
     _expect(
         f"{prefix}: federal excise > 0",
         getattr(taxes, "federal_excise", 0) > 0,

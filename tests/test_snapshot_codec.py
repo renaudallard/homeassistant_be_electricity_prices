@@ -139,6 +139,18 @@ def test_the_unread_excise_flag_is_written_only_when_set() -> None:
     assert _snapshot_from_dict(row).taxes == unread.taxes
 
 
+def test_the_green_cost_in_energy_flag_is_written_only_when_set() -> None:
+    """Only a card whose energy row carries the green energy cost sets it, so
+    every other row keeps the shape an earlier version wrote."""
+    plain = make_snapshot()
+    row = _snapshot_to_dict(plain, NOW)
+    assert "renewables_in_energy" not in row["taxes"]
+    carried = replace(plain, taxes=replace(plain.taxes, renewables_in_energy=True))
+    row = _snapshot_to_dict(carried, NOW)
+    assert row["taxes"]["renewables_in_energy"] is True
+    assert _snapshot_from_dict(row).taxes == carried.taxes
+
+
 def test_a_field_this_version_does_not_know_is_dropped_not_refused() -> None:
     row = _snapshot_to_dict(make_snapshot(injection=InjectionRates(current=0.05)), NOW)
     row["injection"]["from_the_future"] = True

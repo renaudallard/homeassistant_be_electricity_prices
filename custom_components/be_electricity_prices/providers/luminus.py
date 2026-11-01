@@ -242,10 +242,8 @@ async def fetch(
         return await fetch_pdf_text(session, _document_url(sibling.slug, region))
 
     renewables = None
-    if _green_cost_folded(text):
-        month = _named_month(
-            _LABEL_MONTH_RE.fullmatch(_extract_publication_month(text).strip())
-        )
+    if _green_cost_borrowed(text):
+        month = _card_month(text)
         if month is None:
             raise ExtractorError("Luminus: card month not found")
         renewables = await _archived_renewables(session, contract, region, month)
@@ -258,6 +256,38 @@ async def fetch(
     return await _with_sibling_prosumer(snap, text, region, _current)
 
 
+# The first month whose cards are taken at their word when they say the
+# energy row carries the green energy cost. The reissue of 29 October 2026
+# said so over the very figures of the first edition, which printed the cost
+# beside them, so October still bills it. The November cards raised every
+# formula base by about the cost: 1,46 to 1,51 c/kWh excluding VAT in
+# Flanders, where Luminus's own table gives 1,17 + 0,39 including it, and
+# 2,93 to 3,00 in Wallonia, for 3,03. The feed-in formulas did not move.
+_GREEN_COST_IN_ENERGY_FROM = date(2026, 11, 1)
+
+
+def _card_month(text: str) -> date | None:
+    """The first of the month a card's title names, or None."""
+    return _named_month(
+        _LABEL_MONTH_RE.fullmatch(_extract_publication_month(text).strip())
+    )
+
+
+def _green_cost_in_energy(text: str) -> bool:
+    """Whether the card's energy row carries the green energy cost, so none
+    is billed beside it (``_GREEN_COST_IN_ENERGY_FROM``)."""
+    if not _green_cost_folded(text):
+        return False
+    month = _card_month(text)
+    return month is not None and month >= _GREEN_COST_IN_ENERGY_FROM
+
+
+def _green_cost_borrowed(text: str) -> bool:
+    """Whether the card bills a green energy cost it does not print, which
+    ``_archived_renewables`` then reads off an archived card."""
+    return _green_cost_folded(text) and not _green_cost_in_energy(text)
+
+
 async def _archived_renewables(
     session: aiohttp.ClientSession,
     contract: _ContractDef,
@@ -266,14 +296,15 @@ async def _archived_renewables(
 ) -> float:
     """The green energy cost of ``month``'s quarter, off the archive's cards.
 
-    For a card that no longer prints the figure (``_green_cost_folded``). The
-    cards that do print it say "Les montants mentionnés dans les présentes
-    conditions sont valables pour le trimestre en cours", so only a card of
-    the same quarter is asked, from ``month`` back to the quarter's first.
-    The archive keeps the first edition of a month, which on 29 October 2026
-    still printed the rows the reissue dropped. Where no card of the quarter
-    prints them the card fails to parse rather than bill a figure of another
-    quarter, or none.
+    For a card that no longer prints the figure while its figures still leave
+    it out (``_green_cost_borrowed``). The cards that do print it say "Les
+    montants mentionnés dans les présentes conditions sont valables pour le
+    trimestre en cours", so only a card of the same quarter is asked, from
+    ``month`` back to the quarter's first. The archive kept the first edition
+    of a month, which on 29 October 2026 still printed the rows the reissue
+    dropped; by 1 November it served the reissue for most products. Where no
+    card of the quarter prints them the card fails to parse rather than bill a
+    figure of another quarter, or none.
     """
     start = (month.month - 1) // 3 * 3 + 1
     for number in range(month.month, start - 1, -1):
@@ -538,7 +569,7 @@ async def fetch_for_month(
         text = await fetch_pdf_text(session, url)
         renewables = (
             await _archived_renewables(session, contract, region, first)
-            if _green_cost_folded(text)
+            if _green_cost_borrowed(text)
             else None
         )
 
@@ -693,6 +724,8 @@ def parse_snapshot(
 
     ``renewables`` is the region's green energy cost in EUR/kWh for a card
     that does not print it (``_archived_renewables``), else the card's own.
+    A card whose energy row carries the cost bills none beside it
+    (``_green_cost_in_energy``), whatever is passed.
     """
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Luminus")
 
@@ -704,7 +737,10 @@ def parse_snapshot(
     )
     energy_fund = _extract_energy_fund(text) if region == REGION_FLANDERS else 0.0
 
-    if renewables is None:
+    in_energy = _green_cost_in_energy(text)
+    if in_energy:
+        renewables = 0.0
+    elif renewables is None:
         renewables = _extract_renewables(text, region)
     flanders_renewables = 0.0
     wallonia_renewables = 0.0
@@ -729,6 +765,7 @@ def parse_snapshot(
                 energy_contribution=energy_contribution,
                 flanders_renewables=flanders_renewables,
                 wallonia_renewables=wallonia_renewables,
+                renewables_in_energy=in_energy,
                 region_connection_fee=connection_fee,
                 energy_fund_eur_per_month=energy_fund,
                 vat_rate=0.0,

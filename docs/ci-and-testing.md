@@ -742,7 +742,8 @@ runs these gates:
   repository actually had was a figure a thousand times too small that every ceiling accepted,
   with zero exempt since a card granting nothing does not always say so with a null, plus a cap
   that may not sit under the amount it caps), and a ceiling on the federal excise and
-  the regional levies (`_expect_region_basics`). The bands are sized on the unit slip they catch,
+  the regional levies (`_expect_region_basics`, which expects the regional levy at zero on a card
+  whose energy row carries it, `renewables_in_energy`). The bands are sized on the unit slip they catch,
   measured over the September 2026 archive, never on tariff economics: a figure read in c/kWh
   lands ten times above a ceiling, one read in EUR/MWh a hundred below a floor, while every real
   card sits well inside. The federal energy contribution is bounded for every supplier from

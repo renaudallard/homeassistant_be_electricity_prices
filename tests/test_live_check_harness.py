@@ -2663,6 +2663,32 @@ def test_every_populated_rate_is_bounded_against_a_unit_slip(
     ]
 
 
+def test_a_card_carrying_the_green_cost_in_its_energy_row_bills_none_beside_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Luminus's cards from November 2026 carry the regional green energy cost
+    in their energy row: zero is their reading there, and a figure beside it
+    would bill the cost twice."""
+    from custom_components.be_electricity_prices.providers.base import TaxOverlay
+
+    monkeypatch.setitem(lc._EXPECTED_DSOS, "wallonia", frozenset())
+    carried = TaxOverlay(
+        federal_excise=0.04876, energy_contribution=0.0, renewables_in_energy=True
+    )
+
+    def basics(taxes: TaxOverlay) -> list[str]:
+        snap = SimpleNamespace(dsos={}, taxes=taxes)
+        return _failures(lambda: lc._expect_region_basics("x", "wallonia", snap))
+
+    assert basics(carried) == []
+    assert basics(replace(carried, wallonia_renewables=0.0303)) == [
+        "regional renewables carried in the energy row"
+    ]
+    assert basics(replace(carried, renewables_in_energy=False)) == [
+        "regional renewables > 0"
+    ]
+
+
 def test_an_impact_card_may_print_no_walloon_fixed_term(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

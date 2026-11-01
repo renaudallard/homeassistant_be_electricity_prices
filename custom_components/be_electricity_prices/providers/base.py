@@ -227,6 +227,11 @@ class TaxOverlay:
     flanders_renewables: float = 0.0
     wallonia_renewables: float = 0.0
     brussels_renewables: float = 0.0
+    # True when the card's energy row carries the region's green energy cost,
+    # so the renewables figure above is zero by the card's word rather than
+    # unread: Luminus's cards from November 2026. Pricing needs nothing more,
+    # since a zero adds nothing and the energy row bills the cost.
+    renewables_in_energy: bool = False
     region_connection_fee: float = 0.0
     # True when the card is Walloon but prints no connection-fee row, so the
     # fee above is a stand-in rather than a reading. Wallonia still levies it

@@ -2551,3 +2551,109 @@ def test_a_reissued_card_never_bills_its_estimate_as_its_rate() -> None:
             "wallonia",
             renewables=0.0303,
         )
+
+
+# The cards of November 2026 print the reissue's footnote, and their figures
+# took the cost in: every formula base rose by about it.
+_NOVEMBER = (
+    ("luminus_dynamic", "luminus_dynamic_v_nov", "flanders"),
+    ("luminus_maxxflex", "luminus_maxxflex_w_nov", "wallonia"),
+)
+
+
+@pytest.mark.parametrize(("contract", "fixture", "region"), _NOVEMBER)
+def test_a_november_card_carries_its_green_energy_cost_in_the_energy_row(
+    contract: str, fixture: str, region: str
+) -> None:
+    """From November 2026 the card bills no green energy cost beside its
+    energy row, which carries it, even when one is passed."""
+    for renewables in (None, 0.0156):
+        snap = parse_snapshot(
+            contract, fixture_text(f"{fixture}.pdf"), region, renewables=renewables
+        )
+        assert snap.taxes.renewables_in_energy
+        assert snap.taxes.flanders_renewables == 0.0
+        assert snap.taxes.wallonia_renewables == 0.0
+
+
+def test_a_november_card_reads_the_figures_the_cost_went_into() -> None:
+    """Dynamic's base went from October's 1,9591 to 3,4208 c/kWh excluding
+    VAT in Flanders, and MaxxFlex's mono formula in Wallonia from 3,6149 to
+    6,6115, which prints 25,20 on September's Belpex where October printed
+    22,02."""
+    dynamic = parse_snapshot(
+        "luminus_dynamic", fixture_text("luminus_dynamic_v_nov.pdf"), "flanders"
+    )
+    assert isinstance(dynamic.energy, DynamicRates)
+    assert dynamic.energy.factor == pytest.approx(0.1019 * 10 * 1.06)
+    assert dynamic.energy.base == pytest.approx(0.034208 * 1.06)
+    maxxflex = parse_snapshot(
+        "luminus_maxxflex", fixture_text("luminus_maxxflex_w_nov.pdf"), "wallonia"
+    )
+    assert isinstance(maxxflex.energy, VariableRates)
+    assert maxxflex.energy.formula_factor == pytest.approx(0.1097 * 10 * 1.06)
+    assert maxxflex.energy.formula_base == pytest.approx(0.066115 * 1.06)
+    assert (
+        maxxflex.energy.current,
+        maxxflex.energy.peak,
+        maxxflex.energy.offpeak,
+    ) == pytest.approx((0.2520, 0.2884, 0.2230))
+
+
+async def test_a_november_card_asks_no_archive_for_its_green_energy_cost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only a card whose figures leave the cost out sends for an archived
+    card: the November card is billed on its own."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    async def _card(session: object, url: str, **kwargs: object) -> str:
+        assert "documentSlug=dynamic&" in url
+        return fixture_text("luminus_dynamic_v_nov.pdf")
+
+    async def _archive(session: object, url: str, **kwargs: object) -> str:
+        raise AssertionError(f"archive asked: {url}")
+
+    monkeypatch.setattr(luminus, "fetch_text", _archive)
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _card)
+    snap = await luminus.fetch(
+        None,  # type: ignore[arg-type]
+        "luminus_dynamic",
+        "flanders",
+    )
+    assert snap.taxes.renewables_in_energy
+    assert snap.taxes.flanders_renewables == 0.0
+
+
+async def test_a_closed_november_is_billed_on_its_own_card(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """In December the archive's November card is read the same way: the
+    product list and the card, and no second card for the cost."""
+    from custom_components.be_electricity_prices.providers import luminus
+
+    freezer.move_to("2026-12-05 12:00:00+01:00")
+    asked: list[str] = []
+
+    async def _products(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        return _archive_products(("Luminus Dynamic Online Electricité", "id-dynamic"))
+
+    async def _card(session: object, url: str, **kwargs: object) -> str:
+        asked.append(url)
+        return fixture_text("luminus_dynamic_v_nov.pdf")
+
+    monkeypatch.setattr(luminus, "fetch_text", _products)
+    monkeypatch.setattr(luminus, "fetch_pdf_text", _card)
+    snap = await luminus.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "luminus_dynamic",
+        "flanders",
+        date(2026, 11, 1),
+    )
+    assert snap is not None
+    assert snap.taxes.renewables_in_energy
+    assert snap.taxes.flanders_renewables == 0.0
+    assert len(asked) == 2
+    assert "signing=2026-11" in asked[0]
+    assert "productId=id-dynamic&date=2026-11&" in asked[1]

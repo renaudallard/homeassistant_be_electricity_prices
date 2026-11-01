@@ -575,16 +575,29 @@ included, that the cards of the 1st printed beside a separate 1,17 + 0,39 (Fland
 and 3,03 (Wallonia). Luminus's own page on these costs
 (`www.luminus.be/tarifselectriciteverte`) still says it bills them on top of the
 energy price, with 2026's figures, and on Dynamic in Wallonia an included 3,03 would
-leave the formula's 2,61 c/kWh base a negative margin. So the cost is still billed,
-taken from a card that prints it: when `_green_cost_folded` finds that footnote,
-`_archived_renewables` (`luminus.py`) asks Luminus's archive for the same product's
-card of the card month, then each earlier month of its quarter, and takes the first
-that prints the rows. The archive keeps a month's first edition, which on 29 October
-2026 still printed them. Only the quarter is asked, because the cards that print the
+leave the formula's 2,61 c/kWh base a negative margin. So an October card still
+bills the cost, taken from a card that prints it: when `_green_cost_borrowed` finds
+that footnote on a card before November 2026, `_archived_renewables` (`luminus.py`)
+asks Luminus's archive for the same product's card of the card month, then each
+earlier month of its quarter, and takes the first that prints the rows. The archive
+kept a month's first edition, which on 29 October 2026 still printed them; by
+1 November it served the reissue for most products, and their October cards no
+longer parse from it. Only the quarter is asked, because the cards that print the
 figure say "les montants mentionnés ... sont valables pour le trimestre en cours";
 where no card of the quarter prints it the card fails to parse, rather than bill
 another quarter's figure or none. Both `fetch` and `fetch_for_month` pass the figure
 to `parse_snapshot` as `renewables`.
+
+From November 2026 the footnote is taken at its word (`_green_cost_in_energy`,
+from `_GREEN_COST_IN_ENERGY_FROM`). The November cards raised every formula base by
+about the cost: Dynamic from 1,9591 to 3,4208 c/kWh excluding VAT in Flanders and
+from 2,4591 to 5,3878 in Wallonia, the variable and time-of-use formulas by 1,47 to
+1,51 in Flanders and 2,98 to 3,00 in Wallonia, against the 1,17 + 0,39 and 3,03
+including VAT of Luminus's own table, which did not change. The feed-in formulas did
+not move. Such a card bills no green energy cost beside its energy row: its
+renewables figure is `0.0` and `TaxOverlay.renewables_in_energy` says why. No
+archived card is asked for it. Billed on top, the cost counted twice on the cards
+that still found an archived card printing it, and the others did not parse.
 
 ## Injection
 
@@ -773,6 +786,8 @@ Under `tests/fixtures/`, exercised by `tests/test_luminus.py`:
 | `luminus_comfyflex_w_oct_reissue.pdf` | ComfyFlex (variable), Wallonia, October 2026 reissued on the 29th | quarterly formula with no Endex term, index line above the block |
 | `luminus_smartflex_v_oct_reissue.pdf` | SmartFlex (tou), Flanders, October 2026 reissued on the 29th | one-line Flemish label, four figures |
 | `luminus_dynamic_w_oct_reissue.pdf` | Dynamic, Wallonia, October 2026 reissued on the 29th | no green energy row, refused without the archive's figure |
+| `luminus_dynamic_v_nov.pdf` | Dynamic, Flanders, November 2026 | green energy cost in the energy row, base 3,4208 c/kWh excluding VAT |
+| `luminus_maxxflex_w_nov.pdf` | MaxxFlex (variable), Wallonia, November 2026 | green energy cost in the energy row, mono formula base 6,6115 |
 
 Note: fixtures for `luminus_comfy_plus` and `luminus_basicfix` are not present;
 those contracts share the fixed / variable parse paths already covered by the
@@ -791,6 +806,7 @@ fixtures above.
 | Tax value zeroed / block too short | `_tax_block_values` + `_extract_per_kwh_taxes` (`_luminus_overlays.py`) | colon anchor, value-run boundary, BTNR/BTR ordering |
 | Yearly / exclusive-night fee wrong | `_extract_yearly_fee` / `_extract_excl_night_fee` (`_luminus_cards.py`) | `Redevance fixe` line format, third-column `-` handling |
 | Publication label empty | `_extract_publication_month` (`luminus.py`) | parens padding / month spelling |
+| Green energy cost missing, or billed twice | `_green_cost_folded` (`_luminus_overlays.py`), `_green_cost_in_energy` (`luminus.py`) | footnote reworded, or the cards print the rows again |
 | A new product appears / a slug 404s | `_CONTRACTS` + `discover` (`luminus.py`) | add a `_ContractDef`; sitemap slug directory |
 
 When the layout drifts, refresh the affected fixture PDF under `tests/fixtures/`

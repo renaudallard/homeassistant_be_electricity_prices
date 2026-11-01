@@ -499,7 +499,11 @@ class _MigratingStore(Store[dict[str, Any]]):
 # feed-in ones in a misprinted €/kWh; read as EUR/MWh, every formula base and
 # every feed-in factor came out ten times too small, and the dynamic cards
 # did not parse.
-_SNAPSHOT_SCHEMA_VERSION = 87
+# v88: Luminus's November 2026 cards carry the green energy cost in their
+# energy row, and their figures took it in. The cards that still found an
+# archived card printing the cost billed it a second time on top, and the
+# others did not parse. TaxOverlay carries renewables_in_energy for them.
+_SNAPSHOT_SCHEMA_VERSION = 88
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
@@ -545,9 +549,15 @@ _INJECTION_OPTIONAL_KEYS = (
 _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
 # The same rule for the tax overlay, from v73.
 # And on the tax overlay, for the same reason: only a social tariff card the
-# law was not read for carries ``protected_excise_unread``, so every other
-# row stays byte-identical to what an earlier version wrote.
-_TAXES_OPTIONAL_KEYS = ("card_vat_rate", "assumed_vat_rate", "protected_excise_unread")
+# law was not read for carries ``protected_excise_unread``, and only a card
+# whose energy row carries the green energy cost ``renewables_in_energy``, so
+# every other row stays byte-identical to what an earlier version wrote.
+_TAXES_OPTIONAL_KEYS = (
+    "card_vat_rate",
+    "assumed_vat_rate",
+    "protected_excise_unread",
+    "renewables_in_energy",
+)
 _TAXES_DEFAULTS = {f.name: f.default for f in fields(TaxOverlay)}
 # And for the energy leg: SmartFlex's Happy Sunday band, on the card's
 # TimeOfUseRates and on the monthly leg it re-prices through. Every one
