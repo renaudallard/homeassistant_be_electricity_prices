@@ -132,22 +132,43 @@ def _extract_supplier_prosumer(text: str, region: str, kind: str) -> float | Non
     raise ExtractorError("could not parse Mega PV compensation-regime forfait")
 
 
+# A row of the professional excise table. Until October 2026 it carries both
+# levies, the tranche's excise and the energy contribution beside it, which
+# the professional cards kept after the residential ones folded it into the
+# excise in August 2026:
+#
+#   Consommation entre 0 et 20.000
+#   kWh
+#   1.42100
+#   0.19261
+#
+# From 1 November 2026 the contribution is 0 and folded into the excise there
+# too, and the row prints the excise alone:
+#
+#   Consommation entre 0 et 20.000 kWh
+#   1.11000
 _PRO_TIER_RE = re.compile(
-    r"Consommation entre\s+([\d.]+)\s+et\s+([\d.]+)\s+kWh\s+([\d.,]+)\s+([\d.,]+)"
+    r"Consommation entre\s+([\d.]+)\s+et\s+([\d.]+)\s+kWh\s+([\d.,]+)(?:\s+([\d.,]+))?"
 )
 
 
 def _extract_pro_excise_tiers(text: str) -> list[tuple[str, str, str, str]]:
     """The professional card's degressive excise table.
 
-    Each row carries both levies: the tranche's excise and, beside it, the
-    energy contribution, which professional cards still print where the
-    residential ones folded it into the excise in August 2026.
+    Each row is the tranche's bounds, its excise and its energy contribution,
+    "0" where the card prints the excise alone. The rows must all have the
+    same shape: a contribution missing from some of them is a layout drift,
+    not the end of the levy.
     """
     tiers = _PRO_TIER_RE.findall(text)
     if not tiers:
         raise ExtractorError("Mega: professional excise tiers not found")
-    return tiers
+    if len({contribution == "" for *_row, contribution in tiers}) > 1:
+        raise ExtractorError("Mega: professional excise rows mix two layouts")
+    return [
+        (lower, upper, rate, contribution or "0")
+        for lower, upper, rate, contribution in tiers
+    ]
 
 
 # The residential tier table, which wraps its label across a line:

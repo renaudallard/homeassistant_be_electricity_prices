@@ -233,7 +233,11 @@ caller prices the running one.
 Professional cards keep whatever they print, which is why the resolver takes
 the flag: Bolt, Engie and Mega have all printed 0,0019261 ex-VAT on theirs
 through the change and every month since, so the professional scheme keeps the
-levy rather than three suppliers being stale in lockstep. The live check still
+levy rather than three suppliers being stale in lockstep. Mega's professional
+cards set it to 0 from 1 November 2026 and fold it into an excise they print
+alone per tranche (1,11, 0,90 and 0,83 c/kWh ex-VAT, against October's 1,421,
+1,209 and 1,139 beside the contribution), and those are billed as printed too.
+The live check still
 reports every disagreement against the month's consensus, which is how a stale
 card gets noticed at all (`docs/ci-and-testing.md`).
 
@@ -313,12 +317,13 @@ The schedule is billed PER TRANCHE, which the cards state outright: *"un tarif
 degressif par tranche de consommation, calcule sur une base annuelle"*. So the
 resolved figure is the BLEND over the year's volume (`blended_excise_rate`,
 `providers/_resolve.py`), not the rate of the band the total lands in. At the
-2026 professional schedule a 30.000 kWh site pays the first 20.000 at 1,421 and
-the rest at 1,209, which is 405,10 EUR/year and a 1,3503 c/kWh blend; billing
-all 30.000 at 1,209 gives 362,70. The engine prices per hour and cannot know
-where in the year an hour sits, but it does not need to: the charge is defined
-on an annual basis, so the year's total over the year's volume is the honest
-per-kWh figure, and the annual bill is exact whenever the volume estimate is.
+professional schedule Mega printed until October 2026, a 30.000 kWh site pays
+the first 20.000 at 1,421 and the rest at 1,209, which is 405,10 EUR/year and a
+1,3503 c/kWh blend; billing all 30.000 at 1,209 gives 362,70. The engine prices
+per hour and cannot know where in the year an hour sits, but it does not need
+to: the charge is defined on an annual basis, so the year's total over the
+year's volume is the honest per-kWh figure, and the annual bill is exact
+whenever the volume estimate is.
 
 A volume past the last band is billed at the last band's rate for the
 remainder. Until July 2026 the household excise was a schedule too (5,0329 to

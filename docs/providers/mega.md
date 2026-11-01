@@ -221,7 +221,7 @@ Card differences, all handled in `parse_snapshot` on the contract's
 | Header | `Client résidentiel - <Region>` | `Client professionnel - <Region>` |
 | VAT basis | TVAC, `vat_rate=0.0` | HTVA, `vat_rate=0.21` |
 | Federal excise | one `Accise spéciale` rate since August 2026 | three tranches (0-20.000 / 20.000-50.000 / 50.000-1.000.000 kWh) into `federal_excise_bands` |
-| Energy contribution | folded into the excise, row gone | still printed, one column per tranche |
+| Energy contribution | folded into the excise, row gone | printed beside each tranche until October 2026; from November 2026 it is 0, folded into the excise, and each tranche prints the excise alone |
 | Injection | not taxed | fixed and smart cards say *"les prix d'injection sont à majorer de la TVA"*; the DYNAMIC card says *"exemptés de TVA"* like its residential twin |
 
 The region header check accepts either wording but still pins the region, since

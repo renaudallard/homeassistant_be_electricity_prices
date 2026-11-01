@@ -1075,6 +1075,38 @@ def test_pro_card_is_parsed_ex_vat_with_the_excise_schedule() -> None:
     assert {"aieg", "aiesh", "ores", "resa", "rew"} <= set(snap.dsos)
 
 
+def test_november_2026_pro_card_prints_the_excise_alone() -> None:
+    """From 1 November 2026 the energy contribution is 0 on the professional
+    cards too, folded into the excise, and each tranche prints one figure."""
+    snap = parse_snapshot(
+        "mega_pro_smart_fixed",
+        fixture_text("mega_pro_smart_fixed_v_2026-11.pdf"),
+        "flanders",
+    )
+    assert snap.taxes.federal_excise_bands == (
+        (20_000.0, pytest.approx(0.0111)),
+        (50_000.0, pytest.approx(0.009)),
+        (1_000_000.0, pytest.approx(0.0083)),
+    )
+    assert snap.taxes.federal_excise == pytest.approx(0.0111)
+    assert snap.taxes.energy_contribution == 0.0
+
+
+def test_pro_excise_rows_of_two_layouts_are_refused() -> None:
+    """A contribution printed on some rows only is a lost column, not the end
+    of the levy, so the card is refused rather than billed without it."""
+    from custom_components.be_electricity_prices.providers._mega_overlays import (
+        _extract_pro_excise_tiers,
+    )
+
+    mixed = (
+        "Consommation entre 0 et 20.000 kWh\n1.42100\n0.19261\n"
+        "Consommation entre 20.000 et 50.000 kWh\n1.20900\n*\n"
+    )
+    with pytest.raises(ExtractorError, match="mix two layouts"):
+        _extract_pro_excise_tiers(mixed)
+
+
 def test_injection_vat_is_read_off_the_card_not_the_edition() -> None:
     """The two sentences Mega prints do not split the way the edition does.
 
