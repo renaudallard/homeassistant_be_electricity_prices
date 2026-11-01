@@ -147,16 +147,51 @@ def test_a_page_that_is_not_the_article_is_refused() -> None:
 def test_a_month_takes_the_rate_in_force_on_its_first_day() -> None:
     assert excise_law.standard_excise(date(2026, 7, 31)) is None
     assert excise_law.standard_excise(date(2026, 8, 15)) == pytest.approx(0.046)
-    assert excise_law.standard_excise(date(2026, 12, 1)) == pytest.approx(0.046)
-    assert excise_law.standard_excise(date(2027, 1, 1)) == pytest.approx(0.043)
-    assert excise_law.standard_excise(date(2031, 6, 1)) == pytest.approx(0.038)
+    assert excise_law.standard_excise(date(2026, 10, 1)) == pytest.approx(0.046)
+    # The law of 25 October 2026, which the page read predates.
+    assert excise_law.standard_excise(date(2026, 11, 1)) == pytest.approx(0.0422)
+    assert excise_law.standard_excise(date(2027, 1, 1)) == pytest.approx(0.0392)
+    assert excise_law.standard_excise(date(2028, 1, 1)) == pytest.approx(0.0362)
+    assert excise_law.standard_excise(date(2031, 6, 1)) == pytest.approx(0.0342)
+    assert excise_law.protected_excise(date(2026, 12, 1)) == pytest.approx(0.001)
+
+
+def test_a_text_that_consolidated_the_amendment_is_billed_as_read() -> None:
+    """Once Justel prints the wording of 25 October 2026 its text starts on
+    1 November, and its own steps are billed, whatever they say."""
+    excise_law._HELD[excise_law.STANDARD] = (
+        (date(2026, 11, 1), 0.0422),
+        (date(2027, 1, 1), 0.039),
+    )
+    assert excise_law.standard_excise(date(2027, 2, 1)) == pytest.approx(0.039)
+
+
+def test_august_to_october_2026_keep_their_rate_once_the_text_moves_on() -> None:
+    """A consolidated text prints the wording in force alone, so once it
+    starts on 1 November the months of the wording before it take its rates
+    from the typed-in table, and a month before August 2026 still none."""
+    excise_law._HELD.clear()
+    excise_law._HELD[excise_law.STANDARD] = ((date(2026, 11, 1), 0.0422),)
+    excise_law._HELD[excise_law.PROTECTED] = ((date(2026, 11, 1), 0.001),)
+    assert excise_law.standard_excise(date(2026, 9, 1)) == pytest.approx(0.046)
+    assert excise_law.standard_excise(date(2026, 7, 1)) is None
+    assert excise_law.protected_excise(date(2026, 9, 1)) == pytest.approx(0.001)
+    assert excise_law.protected_excise(date(2026, 7, 1)) == pytest.approx(0.02362)
+
+
+def test_an_unread_law_bills_no_household_rate() -> None:
+    """The typed-in rates fill months a reading leaves out; with nothing
+    read the card is billed as printed, as before."""
+    excise_law._HELD.clear()
+    assert excise_law.standard_excise(date(2026, 9, 1)) is None
+    assert excise_law.standard_excise(date(2026, 11, 1)) is None
 
 
 def test_the_store_round_trips_and_never_replaces_what_is_held() -> None:
     stored = excise_law.held_table()
     excise_law._HELD.clear()
     excise_law.restore(stored)
-    assert excise_law.standard_excise(date(2027, 3, 1)) == pytest.approx(0.043)
+    assert excise_law.standard_excise(date(2027, 3, 1)) == pytest.approx(0.0392)
     # A second entry's older copy does not replace what is held.
     excise_law.restore({excise_law.STANDARD: [["2026-08-01", 0.05]]})
     assert excise_law.standard_excise(date(2026, 9, 1)) == pytest.approx(0.046)
@@ -245,7 +280,8 @@ async def test_a_read_replaces_the_table(fresh_fetch: None, page: str) -> None:
     excise_law._HELD.clear()
     with patch.object(excise_law, "fetch_text", AsyncMock(return_value=page)):
         await excise_law.ensure_excise_law(AsyncMock())
-    assert excise_law.standard_excise(date(2028, 2, 1)) == pytest.approx(0.040)
+    # The page predates the law of 25 October 2026, which sets 2028's step.
+    assert excise_law.standard_excise(date(2028, 2, 1)) == pytest.approx(0.0362)
 
 
 def _card(excise: float, vat_rate: float = 0.0) -> SupplierSnapshot:
@@ -267,7 +303,7 @@ def test_a_stale_card_is_billed_the_law_and_an_earlier_month_the_card() -> None:
     july = resolve_federal_excise(stale, date(2026, 7, 1), professional=False)
     assert july is stale
     january = resolve_federal_excise(stale, date(2027, 1, 1), professional=False)
-    assert january.taxes.federal_excise == pytest.approx(0.043 * 1.06)
+    assert january.taxes.federal_excise == pytest.approx(0.0392 * 1.06)
 
 
 _EK = ((3000.0, 0.050329), (20000.0, 0.050329), (50000.0, 0.048188))
@@ -599,7 +635,8 @@ async def test_a_card_resolved_before_the_law_is_read_is_resolved_again(
     assert coord._snapshot.taxes.federal_excise == pytest.approx(0.0503288)
     excise_law.hold(held)
     coord._reresolve_snapshot()
-    assert coord._snapshot.taxes.federal_excise == pytest.approx(0.04876)
+    # November's rate, the law of 25 October 2026's 42,20 EUR/MWh with VAT.
+    assert coord._snapshot.taxes.federal_excise == pytest.approx(0.044732)
 
 
 async def test_the_law_travels_through_the_store(hass: HomeAssistant) -> None:
@@ -620,7 +657,7 @@ async def test_the_law_travels_through_the_store(hass: HomeAssistant) -> None:
     excise_law._HELD.clear()
     coord._store.async_load = AsyncMock(return_value=saved[-1])  # type: ignore[method-assign]
     await coord.async_load_persistent()
-    assert excise_law.standard_excise(date(2027, 2, 1)) == pytest.approx(0.043)
+    assert excise_law.standard_excise(date(2027, 2, 1)) == pytest.approx(0.0392)
 
 
 # The household wording before the one in force, from Justel's archive.

@@ -9152,8 +9152,9 @@ def test_a_stale_card_is_billed_the_excise_the_law_sets() -> None:
     On the card's own VAT basis, not one number for everyone: most print the
     levy including VAT, Ecopower prints it excluding and the engine grosses it
     later. The professional scheme bands the levy by annual volume and is left
-    alone. The rate is the law's, steps included: January 2027 owes the 43
-    EUR/MWh the law voted for it. A residential card still printing the
+    alone. The rate is the law's, steps included: January 2027 owes the
+    39,20 EUR/MWh the law of 25 October 2026 set for it. A residential card
+    still printing the
     degressive table takes it too from August 2026, when the measure
     flattened the household scheme, and keeps its table before.
     """
@@ -9191,7 +9192,7 @@ def test_a_stale_card_is_billed_the_excise_the_law_sets() -> None:
     )
     assert ecopower.taxes.federal_excise == pytest.approx(0.046)
     january = resolve_federal_excise(stale, date(2027, 1, 1), professional=False)
-    assert january.taxes.federal_excise == pytest.approx(0.043 * 1.06)
+    assert january.taxes.federal_excise == pytest.approx(0.0392 * 1.06)
     # Untouched: the professional scheme, and a banded card before the law.
     banded = card(0.0503288, bands=((20000.0, 0.0503288), (50000.0, 0.0481876)))
     for snap, month, pro in (

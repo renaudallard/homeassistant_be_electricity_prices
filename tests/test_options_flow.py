@@ -6798,12 +6798,12 @@ async def test_compare_prices_a_spot_monthly_side_on_the_delivery_month(
         contract="custom_monthly",
         energy=SpotMonthlyRates(factor=1.10, base=0.01, yearly_fixed_fee=50.0),
     )
-    entry.runtime_data = _real_coordinator(hass, entry, own)
-
     # Pinned mid-month: the month-to-date window below runs from the 1st up to
     # today, so on the 1st it is empty and the "month-to-date dominates" check
-    # reads today's day-ahead window alone.
+    # reads today's day-ahead window alone. Pinned before the coordinator
+    # resolves its card, which bills the levies of the month it runs in.
     freezer.move_to("2026-08-14 12:00:00+02:00")
+    entry.runtime_data = _real_coordinator(hass, entry, own)
     now_local = dt_util.now()
     month_start = now_local.replace(
         day=1, hour=0, minute=0, second=0, microsecond=0

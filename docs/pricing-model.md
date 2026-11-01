@@ -279,6 +279,20 @@ into force, and the innermost bracket around the rate dates it (2026-08-01 for
 the measure that flattened it). The table is held for the process and kept in
 each entry's store, so a restart without the network still bills it.
 
+Justel consolidates an amendment some time after it takes effect. The law of
+25 October 2026 on the energy norm (Moniteur belge of 30 October 2026, numac
+2026007970) replaced article 419, i), from 1 November 2026: 42,20 EUR/MWh
+excluding VAT for a household, 4,4732 c/kWh with it, as Mega's and Eneco's
+November cards print, then 39,20, 36,20 and 34,20 each 1 January from 2027 to
+2029, where the text it replaced had 43, 40 and 38. Justel still printed that
+text the day it took effect, so `excise_law.py` types the new steps in
+(`_AMENDED_STANDARD`) and lays them over a reading that starts before
+1 November; a reading that starts on it is Justel's consolidated text and is
+billed as read. A consolidated text only prints the wording in force, so once
+it starts on 1 November the months of August to October 2026 take the rates
+they had, 46 and, for a protected customer, 1 EUR/MWh (`_REPLACED`), provided
+the law has been read at all.
+
 The consolidated text is only the wording in force, so a month before the
 first step it holds is billed as the card prints it, which is every month
 before August 2026. A card standing in for such a month is the exception

@@ -49,8 +49,9 @@ from tests.test_card_vat import _restated
 pytestmark = pytest.mark.timeout(300)
 
 OCT, NOV, DEC = date(2026, 10, 1), date(2026, 11, 1), date(2026, 12, 1)
-# The household excise article 419 sets from August 2026, EUR/kWh before VAT.
-_LAW_EXCISE = 0.046
+# The household excise article 419 sets for November 2026, the law of 25
+# October 2026's, EUR/kWh before VAT.
+_LAW_EXCISE = 0.0422
 
 
 @pytest.fixture

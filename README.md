@@ -359,11 +359,11 @@ protected customer on the social tariff owes a rate of its own, see
 [The social tariff](#the-social-tariff)), so the month being billed decides
 them, not the month your card was printed in.
 
-Since **1 August 2026** the law sets a flat excise of **4,876 c€/kWh** including VAT (4,6 excluding) and
+From **1 August 2026** the law set a flat excise of **4,876 c€/kWh** including VAT (4,6 excluding) and
 abolished the energy contribution, folding it into that rate. The integration
 reads the excise from the law itself, article 419 of the programme law of 27
 December 2004 as consolidated on Justel (ejustice.just.fgov.be), once a day,
-and bills that for every month from then on. A card that still prints
+and bills it for every month the law sets. A card that still prints
 the old pair is not billed as printed. Four suppliers were still printing some
 of it in September 2026: Ecofix, whose card is an image of its July card, and
 Aspiravi printed the whole old pair, Cociter the contribution beside the new
@@ -371,15 +371,22 @@ excise, and TotalEnergies a rounded excise with the contribution. Together the t
 corrections are worth about 12,64 € a year at 3.500 kWh on an Ecofix or
 Aspiravi contract.
 
+From **1 November 2026** the law of 25 October 2026 on the energy norm
+(Moniteur belge of 30 October 2026) lowers it to **4,4732 c€/kWh** including
+VAT (42,20 € per MWh excluding), then to 39,20, 36,20 and 34,20 € per MWh
+excluding VAT each 1 January from 2027 to 2029, where the law before it had 43,
+40 and 38. Justel had not consolidated that law yet when it took effect, so the
+integration holds its figures and lays them over the text it reads, until
+Justel prints them itself. The months of August to October 2026 keep 4,876 once
+it does, since a consolidated text only prints the wording in force.
+
 Two limits worth knowing. **Professional contracts are untouched**, because
 that scheme bands the excise by annual volume and is a genuinely different
-rate. And **the correction covers the months the law's current text sets**: the
-same measure steps the excise down each January, to 43, 40 and then 38 € per
-MWh excluding VAT from 2027 to 2029, and each step is billed from its own month
-because the law states it. The figures that look ahead, the rolling year cost
-and the comparison page, price the coming twelve months once at today's
-tariffs, today's excise included, so they take a step only once its month
-has come. Your card's own excise is used for the months
+rate. And **the correction covers the months the law sets**: each January
+step is billed from its own month because the law states it. The figures that
+look ahead, the rolling year cost and the comparison page, price the coming
+twelve months once at today's tariffs, today's excise included, so they take
+a step only once its month has come. Your card's own excise is used for the months
 before August 2026, which the correction leaves alone, except where a later
 card stands in for a month whose own card no archive kept (TotalEnergies
 before September 2026, Ecofix before August 2026 but for May): that month is billed the excise table and the

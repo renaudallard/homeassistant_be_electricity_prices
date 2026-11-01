@@ -55,6 +55,14 @@ billed as printed. The protected customer has no card that prints it
 reliably, so its two closed rates are typed in beside the law they came from.
 Both are held for the process, the law read again daily, and kept in every
 entry's store so a restart without the network still knows the last one.
+
+Justel consolidates an amendment some time after it takes effect. The law of
+25 October 2026 on the energy norm replaced the whole of article 419, i),
+from 1 November 2026, and Justel's text still printed the wording before it
+that day. So its household rates are typed in too, laid over a reading that
+starts before that day. And since a consolidated text only prints the
+wording in force, the rates of 1 August to 31 October 2026 are typed in
+beside it, for the day Justel's text starts on 1 November.
 """
 
 from __future__ import annotations
@@ -425,13 +433,45 @@ def after_transitions(schedule: Schedule, dossier: str, page: str) -> Schedule:
     return replace(schedule, start=start)
 
 
+# The household rates the law of 25 October 2026 on the energy norm set in
+# article 419, i), from 1 November 2026 (its articles 2 and 6, Moniteur belge
+# of 30 October 2026, numac 2026007970), as (first day, EUR/kWh excluding
+# VAT). They are laid over a reading that starts before that day, which is
+# Justel's text before it consolidates the law.
+_AMENDED_FROM: Final = date(2026, 11, 1)
+_AMENDED_STANDARD: Final = (
+    (date(2026, 11, 1), 0.0422),
+    (date(2027, 1, 1), 0.0392),
+    (date(2028, 1, 1), 0.0362),
+    (date(2029, 1, 1), 0.0342),
+)
+# The rates of the wording the law of 30 May 2026 wrote, in force from
+# 1 August 2026 until that amendment. Justel's text no longer prints them once
+# it consolidates the amendment and starts on 1 November, so a month of theirs
+# a reading does not reach takes them from here.
+_REPLACED: Final = {STANDARD: 0.046, PROTECTED: 0.001}
+_REPLACED_FROM: Final = date(2026, 8, 1)
+
+
+def _steps_held(kind: str) -> tuple[tuple[date, float], ...]:
+    """The steps held for ``kind``, the household ones with the law of
+    25 October 2026 laid over a reading of the wording before it."""
+    steps = _HELD.get(kind, ())
+    if kind != STANDARD or not steps or steps[0][0] >= _AMENDED_FROM:
+        return steps
+    return (*(step for step in steps if step[0] < _AMENDED_FROM), *_AMENDED_STANDARD)
+
+
 def _rate_for(kind: str, month: date) -> float | None:
     first = month.replace(day=1)
+    steps = _steps_held(kind)
     rate = None
-    for when, value in _HELD.get(kind, ()):
+    for when, value in steps:
         if when > first:
             break
         rate = value
+    if rate is None and steps and _REPLACED_FROM <= first < _AMENDED_FROM:
+        return _REPLACED[kind]
     return rate
 
 
