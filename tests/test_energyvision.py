@@ -805,6 +805,20 @@ def test_the_laadpunt_card_reads_its_own_gsc_wording() -> None:
     assert energy.yearly_fixed_fee == pytest.approx(410.0)
 
 
+def test_the_laadpunt_card_reads_the_levy_spelled_wkk() -> None:
+    """The November 2026 card prints "Kosten GSC en WKK bedragen 1,554", the
+    certificate named as in the heading above it, where October had WKC."""
+    text = fixture_text("energyvision_laadpunt_nov.pdf", layout=True)
+    assert "Kosten GSC en WKK bedragen 1,554" in text
+    snap = _tiered(_TIERED_LP, "energyvision_laadpunt_nov.pdf")
+    assert snap.publication_label == "november 2026"
+    assert snap.taxes.flanders_renewables == pytest.approx(0.01554)
+    energy = snap.energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.tier_kwh == pytest.approx(1000.0)
+    assert energy.tier_rate == pytest.approx(0.1166)
+
+
 def test_the_fixed_injection_card_prices_its_feed_in_flat() -> None:
     """GSVI3 fixes the feed-in price for the term ("Injectie - vast 4,00
     €cent/kWh") and prints no SPP formula, which is the only shape difference

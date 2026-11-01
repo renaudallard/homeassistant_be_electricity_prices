@@ -133,8 +133,10 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
 # "Kosten GSC en WKC geldig voor 1,554 €cent/kWh" on most cards and
 # "... bedragen 1,554 €cent/kWh" on the laadpunt one. Same levy, same figure,
 # two verbs; pinning one of them lost the whole tax overlay on the other.
+# The laadpunt card of November 2026 spells the second certificate WKK, as
+# the heading above it ("Bijdrage groene stroom en WKK") always did.
 _GSC_WKC_RE = re.compile(
-    rf"GSC\s+en\s+WKC\s+(?:geldig\s+voor|bedragen)\s+{_NUM}", re.IGNORECASE
+    rf"GSC\s+en\s+WK[CK]\s+(?:geldig\s+voor|bedragen)\s+{_NUM}", re.IGNORECASE
 )
 # From 1 August 2026 the federal scheme folded the separate energy
 # contribution into the special excise and flattened it, so the tier table

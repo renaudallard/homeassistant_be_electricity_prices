@@ -511,7 +511,9 @@ Two per-card differences are worth knowing, because both broke the first parse:
   figure for the term.
 - **GSLP words its GSC/WKC levy differently**: "Kosten GSC en WKC *bedragen* 1,554
   €cent/kWh" where every other card says "geldig voor". Same levy and same figure, and
-  pinning one verb cost the laadpunt card its entire tax overlay.
+  pinning one verb cost the laadpunt card its entire tax overlay. From November 2026 it
+  spells the second certificate WKK ("Kosten GSC en WKK bedragen 1,554"), as the heading
+  above it does, so `_GSC_WKC_RE` takes either spelling.
 
 The allowance is stated per year and charged pro rata per day (footnote a), split 900/900
 across a day/night meter and not applied to an exclusive-night register. The 900/900 split
@@ -739,6 +741,7 @@ The fixtures live under `tests/fixtures/`:
 | `energyvision_groene_stroom_bxl_sep.pdf` | the Brusol GRS card, September 2026: the untranched shape |
 | `energyvision_groene_stroom_bxl_jan.pdf` | the same card for January 2026, the archive's copy: the degressive excise table on a Brussels card |
 | `energyvision_tiered_1800_wal_sep.pdf` | the GS1800V card for Wallonia, same month: the French publication of the tiered shape |
+| `energyvision_laadpunt_nov.pdf` | the GSLP card for November 2026: the levy row spelled "GSC en WKK" |
 
 Tests load them through `fixture_text("energyvision_<...>.pdf", layout=True)`, matching
 the layout-preserving extraction used in production. Both Walloon fixtures are kept on
