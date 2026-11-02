@@ -189,8 +189,13 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
 # ---- taxes -------------------------------------------------------------------
 
 
+# The household excise is the first row of its table, the one from 0 kWh,
+# whatever its upper bound: "tussen 0 en 3.000 kWh: 0,04600 euro/kWh" until
+# October 2026, then "tussen 0 en 20.000 kWh: 0,0422 euro/kWh" once the law of
+# 25 October 2026 had flattened the household scheme. Pinned to 3.000, the
+# November cards were refused.
 _FEDERAL_EXCISE_RE = re.compile(
-    r"Bijzondere accijns[^\n]*tussen 0\s+en\s+3\.000[^\n]*?([\d,]+)\s*euro/kWh"
+    r"Bijzondere accijns[^\n]*tussen 0\s+en\s+[\d.]+\s*kWh[^\n]*?([\d,]+)\s*euro/kWh"
 )
 _ENERGY_CONTRIB_RE = re.compile(r"Bijdrage op de energie\s+([\d,]+)\s*euro/kWh")
 _GSC_RE = re.compile(r"Kost GSC\s+([\d,]+)\s*euro/kWh")

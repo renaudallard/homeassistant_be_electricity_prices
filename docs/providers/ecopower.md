@@ -333,14 +333,21 @@ renames `Fluvius` to `XXX`, and `test_a_live_card_with_one_area_unread_is_refuse
 
 | TaxOverlay field | Card row | Regex | Required? |
 | --- | --- | --- | --- |
-| `federal_excise` | Bijzondere accijns (0 - 3.000) | `_FEDERAL_EXCISE_RE` | yes |
-| `federal_excise_bands` | the four "Bijzondere accijns verbruik tussen" rows, in euro and excluding VAT like the excise | `excise_tier_bands` (`_parse.py`) | no |
+| `federal_excise` | Bijzondere accijns, the row from 0 kWh (0 - 3.000 until October 2026, 0 - 20.000 from November) | `_FEDERAL_EXCISE_RE` | yes |
+| `federal_excise_bands` | the "Bijzondere accijns verbruik tussen" rows (four until October 2026, three from November), in euro and excluding VAT like the excise | `excise_tier_bands` (`_parse.py`) | no |
 | `energy_contribution` | Bijdrage op de energie | `_ENERGY_CONTRIB_RE` | yes |
 | `flanders_renewables` | Kost GSC + Kost WKK | `_GSC_RE` + `_WKK_RE` | yes (both) |
 | `energy_fund_eur_per_month` | Bijdrage Energiefonds euro/maand | `_FUND_RE` | optional (0 if absent) |
 | `vat_rate` | Particuliere klanten betalen N% btw | `_VAT_RE` | yes in practice; if absent, `VAT_RATE_REDUCED` and `assumed_vat_rate` records it |
 
 Wallonia and Brussels renewables stay 0 (Ecopower is Flanders-only, `test_ecopower.py`).
+
+The excise is read off the row that starts at 0 kWh, whatever its upper bound. The law of
+25 October 2026 flattened the household scheme, and the November cards print one rate from 0 to
+20.000 kWh where the earlier ones had a row from 0 to 3.000, which a pattern pinned to that bound
+refused (`test_the_november_2026_dbs_card_reads_the_flattened_excise`). Every row has carried the
+same rate since August 2026, so `federal_excise_bands` is `None` and the law's excise
+(`resolve_federal_excise`) bills the month.
 
 GSC (Groenestroomcertificaten) and WKK (warmte-krachtkoppeling / cogen) certificate costs are the
 Flanders renewable surcharge in disguise. They are printed in the energy block but passed straight

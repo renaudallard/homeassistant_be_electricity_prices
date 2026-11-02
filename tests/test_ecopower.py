@@ -589,6 +589,29 @@ def test_dbs_card_taxes_are_htva_with_vat_06() -> None:
     assert t.flanders_renewables == pytest.approx(0.01492)
 
 
+def test_the_november_2026_dbs_card_reads_the_flattened_excise() -> None:
+    """From November 2026 the card prints the household excise as one rate
+    over three rows, the first "tussen 0 en 20.000 kWh: 0,0422 euro/kWh",
+    where August's started "tussen 0 en 3.000 kWh". The pattern pinned to the
+    3.000 bound refused the card, so entries kept August's."""
+    snap = parse_dbs_snapshot(
+        _text("ecopower_dynamische_burgerstroom_nov.pdf"),
+        "test://ecopower-dbs",
+        "2026-11",
+    )
+    t = snap.taxes
+    assert t.federal_excise == pytest.approx(0.0422)
+    # Every row carries the same rate, so there is no table to blend.
+    assert t.federal_excise_bands is None
+    assert t.energy_contribution == pytest.approx(0.0)
+    assert t.flanders_renewables == pytest.approx(0.01492)
+    assert t.vat_rate == 0.06
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.02)
+    assert snap.energy.base == pytest.approx(0.004)
+    assert set(snap.dsos) == set(FLUVIUS_KEYS)
+
+
 def test_dbs_card_supplier_and_contract_metadata() -> None:
     snap = _dbs_snap()
     assert snap.supplier == "ecopower"
