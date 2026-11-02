@@ -100,6 +100,7 @@ from .injection import (
     _injection_follows_spot,
     _static_injection_bands,
 )
+from .law_archive import ensure_law_archive
 from .meter_warm import KeptRows, warm_meter_reads
 from .pricing import (
     PriceBreakdown,
@@ -274,9 +275,11 @@ class _TickMixin:
                     self._session, year, str(self.entry.data.get(CONF_DSO, ""))
                 )
         # The month's VAT rate, read before the card is resolved like the term
-        # above, and from the card archive, so only where the entry reads it.
+        # above, and from the card archive, so only where the entry reads it;
+        # with it what the law billed each month the law no longer gives.
         if self.entry.data.get(CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE):
             await ensure_vat_rates(self._session)
+            await ensure_law_archive(self._session)
         # The excise the law sets, read before the card is resolved for the
         # same reason, and for every entry, since every residential card's
         # excise is resolved against it.

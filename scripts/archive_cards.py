@@ -132,6 +132,7 @@ from live_check import (  # type: ignore[import-not-found]  # noqa: E402
     label_month,
 )
 
+from custom_components.be_electricity_prices import excise_law  # noqa: E402
 from custom_components.be_electricity_prices.const import (  # noqa: E402
     SUPPLIER_CUSTOM,
 )
@@ -197,6 +198,7 @@ _RELEASE_PREFIX = "electricity"
 # table of every supplier grows by a column a month.
 _COVERAGE = "coverage.md"
 _VAT = "vat.json"
+_LAW = "law.json"
 _COVERAGE_DIR = "coverage"
 # Which cards were downloaded and could not be read, by the row they would
 # have become. Ecofix publishes page images some months and no reader can
@@ -1417,6 +1419,47 @@ def _write_vat(out: Path) -> None:
     )
 
 
+def _write_law(out: Path, today: date) -> int:
+    """``law.json``: what the integration bills each month on from the excise
+    law, from the first month it does up to this one. Returns the months held.
+
+    Justel's consolidated text prints only the wording in force, so a month
+    the integration still bills from the law, as it reads it now
+    (excise_law.py), is written again, rate by rate, and one it no longer
+    does keeps what was written, which is what an installation reads for it
+    (law_archive.py). Deterministic, so a day that changed nothing rewrites
+    the same bytes.
+    """
+    path = out / _LAW
+    try:
+        held = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        held = None
+    section = held.get("residential") if isinstance(held, dict) else None
+    months: dict[str, Any] = dict(section) if isinstance(section, dict) else {}
+    year, month = excise_law.FIRST_MONTH.year, excise_law.FIRST_MONTH.month
+    while (year, month) <= (today.year, today.month):
+        delivery = date(year, month, 1)
+        entry = {
+            kind: rate
+            for kind, rate in (
+                (excise_law.STANDARD, excise_law.standard_excise(delivery)),
+                (excise_law.PROTECTED, excise_law.protected_excise(delivery)),
+            )
+            if rate is not None
+        }
+        if entry:
+            label = _month_id(year, month)
+            kept = months.get(label)
+            months[label] = {**(kept if isinstance(kept, dict) else {}), **entry}
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    table = {"residential": dict(sorted(months.items()))}
+    path.write_text(
+        json.dumps(table, indent=1, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return len(months)
+
+
 def _write_listings(
     out: Path, pdf_base_url: str | None = None, archive_base_url: str | None = None
 ) -> None:
@@ -2244,6 +2287,12 @@ async def archive(
             )
         else:
             stamp.write_text(f"{parser}\n", encoding="utf-8")
+        # The law the months are billed on, read as an installation reads
+        # it, for law.json. A read that raised must not cost the cards.
+        try:
+            await excise_law.ensure_excise_law(session)
+        except Exception as err:
+            print(f"the excise law could not be read: {type(err).__name__}: {err}")
     cards.file_the_rest()
     _write_unparsed(out, unreadable, keep_months, today)
     summary.rendered = cards.rendered
@@ -2251,10 +2300,12 @@ async def archive(
     summary.pdfs_saved = len(cards.saved)
     removed = _prune(out, keep_months, today) + _drop_unnamed_texts(out)
     _write_listings(out, pdf_base_url, archive_base_url)
+    law = _write_law(out, today)
     print(
         f"{summary.stored} stored, {summary.unchanged} unchanged, "
         f"{summary.backfilled} backfilled, {summary.settled} settled, "
         f"{summary.absent} absent, {summary.reoffered} offered again, "
+        f"{law} months of the law, "
         f"{len(summary.failed)} failed, {removed} pruned, "
         f"{len(targets)} cards asked; {summary.rendered} rendered, "
         f"{summary.unrendered} served from stored text, "

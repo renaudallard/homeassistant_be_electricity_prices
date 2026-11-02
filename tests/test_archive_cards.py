@@ -17,13 +17,14 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import ANY
+from unittest.mock import ANY, AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 import aiohttp
 import pytest
 from homeassistant.util import dt as dt_util
 
+from custom_components.be_electricity_prices import excise_law
 from custom_components.be_electricity_prices.const import (
     SUPPLIER_CUSTOM,
     SUPPLIER_SOCIAL,
@@ -123,6 +124,14 @@ def _card_fetch(
         )
 
     return fetch
+
+
+@pytest.fixture(autouse=True)
+def law_read() -> Iterator[AsyncMock]:
+    """The run reads the excise law from Justel; tests see the article as it
+    was published (conftest) and reach no network."""
+    with patch.object(excise_law, "ensure_excise_law", AsyncMock()) as read:
+        yield read
 
 
 async def _no_sleep(_seconds: float) -> None:
@@ -241,6 +250,25 @@ async def test_a_stored_text_keeps_its_line_endings(tmp_path: Path) -> None:
     rel = ac._write_text(tmp_path, "2026-09", text)
     assert ac.read_text(tmp_path / rel) == text
     assert hashlib.sha256(text.encode()).hexdigest() in rel
+
+
+async def test_the_run_reads_the_law_and_writes_its_table(
+    tmp_path: Path, law_read: AsyncMock
+) -> None:
+    """What the integration bills each month on from the law, from the first
+    month it does, read as an installation reads it; a read that raised
+    costs the run nothing."""
+    extractors = [_extractor(_card_fetch("september 2026"))]
+    await ac.archive(tmp_path, extractors=extractors, now=NOW, sleep=_no_sleep)
+    law_read.assert_awaited_once()
+    table = json.loads((tmp_path / "law.json").read_text())["residential"]
+    assert (min(table), max(table)) == ("2022-10", "2026-09")
+    law_read.side_effect = RuntimeError("a bug in the reader")
+    summary = await ac.archive(
+        tmp_path, extractors=extractors, now=NOW, sleep=_no_sleep
+    )
+    assert summary.failed == []
+    assert json.loads((tmp_path / "law.json").read_text())["residential"] == table
 
 
 async def test_a_card_is_filed_under_the_month_its_label_names(tmp_path: Path) -> None:

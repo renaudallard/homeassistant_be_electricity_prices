@@ -195,6 +195,23 @@ def _vat_table_holds_nothing() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _law_table_holds_nothing() -> Iterator[None]:
+    """The tick reads the card archive's law table over the network. Tests
+    see no table, so every month is billed on the law as read and the rates
+    typed beside it, and whatever a test holds is gone before the next one."""
+    from unittest.mock import AsyncMock, patch
+
+    from custom_components.be_electricity_prices import coordinator_tick, law_archive
+
+    law_archive._HELD.clear()
+    law_archive._TABLE.fetched_at = None
+    law_archive._TABLE.failed_at = None
+    with patch.object(coordinator_tick, "ensure_law_archive", AsyncMock()):
+        yield
+    law_archive._HELD.clear()
+
+
+@pytest.fixture(autouse=True)
 def _fluvius_sheets_as_published() -> Iterator[None]:
     """The tick reads the VREG network ceiling off Fluvius's tariff sheets,
     and an analog meter's kWh rate off its area's. Tests see the figures the

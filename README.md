@@ -2173,8 +2173,14 @@ on, when at least three suppliers state one rate and none states another. The
 integration reads it once a day to price what a card leaves without a rate
 (see [The VAT rate](#the-vat-rate)); a month the cards disagree on is left out,
 and the last month they agreed on stands.
+It also writes `law.json`: for each month from October 2022, the household
+and the protected customer's excise the integration bills from the law,
+read from Justel as an installation reads it. Justel prints only the
+wording in force, so a month it no longer gives keeps what was written,
+and the integration bills it only for a month the law it read does not
+give.
 The *Read past cards from the project's archive* box on the meters step,
-on by default, switches both off per entry: the integration then never
+on by default, switches all three off per entry: the integration then never
 contacts GitHub, those months are priced on the current card, a rate a
 card does not state is the last one read while the box was on, or else 6%
 for a household and 21% on a professional contract, and a card published as

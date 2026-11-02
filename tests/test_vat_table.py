@@ -16,7 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices import vat_rates
+from custom_components.be_electricity_prices import archive_table, vat_rates
 from custom_components.be_electricity_prices.const import DOMAIN, VAT_RATE_REDUCED
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.providers._rates import DynamicRates
@@ -132,11 +132,11 @@ async def test_the_table_is_read_once_a_day_and_a_failure_waits(
     freezer: Any,
 ) -> None:
     freezer.move_to("2026-11-02 08:00:00+01:00")
-    vat_rates._fetched_at = None
-    vat_rates._failed_at = None
+    vat_rates._TABLE.fetched_at = None
+    vat_rates._TABLE.failed_at = None
     body = json.dumps({"residential": {"2026-11": {"rate": 0.07, "suppliers": []}}})
     fetch = AsyncMock(return_value=body)
-    with patch.object(vat_rates, "fetch_text", fetch):
+    with patch.object(archive_table, "fetch_text", fetch):
         await vat_rates.ensure_vat_rates(None)  # type: ignore[arg-type]
         await vat_rates.ensure_vat_rates(None)  # type: ignore[arg-type]
         assert fetch.await_count == 1
@@ -153,8 +153,8 @@ async def test_the_table_is_read_once_a_day_and_a_failure_waits(
         freezer.tick(timedelta(hours=2))
         await vat_rates.ensure_vat_rates(None)  # type: ignore[arg-type]
         assert fetch.await_count == 3
-    vat_rates._fetched_at = None
-    vat_rates._failed_at = None
+    vat_rates._TABLE.fetched_at = None
+    vat_rates._TABLE.failed_at = None
 
 
 # The coordinator.

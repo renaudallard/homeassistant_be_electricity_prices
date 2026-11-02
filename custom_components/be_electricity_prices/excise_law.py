@@ -80,6 +80,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 import aiohttp
 from homeassistant.util import dt as dt_util
 
+from . import law_archive
 from .const import EXCISE_LAW_ARCHIVE_URL, EXCISE_LAW_URL
 from .providers._pdf import FR_MONTHS, fetch_text
 from .providers.base import ExtractorError
@@ -463,6 +464,8 @@ def _steps_held(kind: str) -> tuple[tuple[date, float], ...]:
 
 
 def _rate_for(kind: str, month: date) -> float | None:
+    """The law as read; else what the card archive kept for a month it no
+    longer gives (law_archive.py); else the rates typed beside it."""
     first = month.replace(day=1)
     steps = _steps_held(kind)
     rate = None
@@ -470,6 +473,8 @@ def _rate_for(kind: str, month: date) -> float | None:
         if when > first:
             break
         rate = value
+    if rate is None:
+        rate = law_archive.excise_for(kind, first)
     if rate is None and steps and _REPLACED_FROM <= first < _AMENDED_FROM:
         return _REPLACED[kind]
     return rate
@@ -500,6 +505,9 @@ def standard_excise(month: date) -> float | None:
 # tariff is billed.
 _PROTECTED_CLOSED: Final = ((date(2022, 10, 1), 0.0), (date(2023, 7, 1), 0.02362))
 _PROTECTED_CLOSED_UNTIL: Final = date(2026, 8, 1)
+# The first month a rate of the law is billed for, the protected customer's
+# first closed one: as far back as the card archive keeps it (law_archive.py).
+FIRST_MONTH: Final = _PROTECTED_CLOSED[0][0]
 
 
 def protected_excise(month: date) -> float | None:

@@ -82,6 +82,7 @@ machinery.
 | `tests/test_synergrid_spp.py` | Synergrid SPP profile fetch and parse and the SPP-weighted custom injection |
 | `tests/test_vat_rates.py` | The VAT rate of the month billed (`vat_rates.py`) and where it reaches a card |
 | `tests/test_vat_table.py` | The archive's VAT table: the consensus `scripts/archive_cards.py` writes from the cards and `vat_rates.py` reading it |
+| `tests/test_law_archive.py` | The archive's law table: what `scripts/archive_cards.py` writes from the law, `law_archive.py` reading it, and the months `excise_law.py` bills on it |
 | `tests/test_card_vat.py` | The VAT basis each card records: the rate it states, or the one its parser grossed a formula by |
 | `tests/test_frank.py` | Frank Energie extractor |
 | `tests/test_luminus.py` | Luminus extractor |
@@ -1256,6 +1257,11 @@ state (`taxes.card_vat_rate`), `residential` from the residential contracts and 
 the professional ones. A month gets a `rate` only when at least three suppliers state one and
 none states another; a disagreement is written as `disputed` and a lone rate as `too_few`, and
 an installation reads neither (`vat_rates.py` keeps the last month that agreed).
+`_write_law` writes `law.json` after the walk has read the law (`excise_law.ensure_excise_law`,
+a read that raises costing the run nothing): per month from `excise_law.FIRST_MONTH`, October
+2022, up to the current one, the `standard` and `protected` excise `excise_law.py` bills. A month
+it still gives is written again, rate by rate, and one it no longer gives keeps what was written,
+which `law_archive.py` reads for a month the law an installation holds does not give.
 `_write_listings` writes the sheets and the VAT table and removes the `pdfs.md` index earlier versions wrote, since the sheets link every file now.
 The workflow rewrites them once more after the uploads (`--index-only`, no fetch) so the
 day's new files are linked the day they are uploaded, writes the two READMEs itself (`Write the
@@ -1428,7 +1434,8 @@ These validate packaging and manifest conformance, not runtime behaviour.
 
 Runs on the daily `cron: "17 6 * * *"` (06:17 UTC, after suppliers' overnight publication), on
 manual dispatch, and on pull requests that touch `providers/**`, the package modules it loads
-beside them or the providers import (`const.py`, `api.py`, `excise_law.py`, `vat_rates.py`),
+beside them or the providers import (`const.py`, `api.py`, `archive_table.py`, `excise_law.py`,
+`law_archive.py`, `vat_rates.py`),
 `scripts/live_check.py`, `scripts/card_texts.py` (which it imports), or the workflow itself
 (`.github/workflows/live_check.yml`). It runs as two jobs. `check` runs the extractors and the
 card readers, third-party code, on what the suppliers serve, with a read-only `github.token` and

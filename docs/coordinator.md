@@ -115,6 +115,7 @@ _update_body (coordinator_tick.py)
  ├─ ensure_power_term(year)              Brussels only (brugel.py)
  ├─ ensure_tariff_sheet(year)            Flanders only (fluvius.py)
  ├─ ensure_vat_rates()                   card archive on (vat_rates.py)
+ ├─ ensure_law_archive()                 card archive on (law_archive.py)
  ├─ ensure_excise_law()                  every entry (excise_law.py)
  ├─ _refresh_custom_snapshot() | _maybe_refresh_snapshot()
  │                                       custom formula | probe / TTL / fetch, may adopt sibling cache

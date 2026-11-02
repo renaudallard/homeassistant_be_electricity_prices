@@ -31,31 +31,22 @@ entry's store so a restart without the network still knows the last one.
 
 from __future__ import annotations
 
-import json
-import logging
 from collections.abc import Mapping
-from datetime import date, datetime
+from datetime import date
 from typing import Any, Final
 
 import aiohttp
-from homeassistant.util import dt as dt_util
 
+from .archive_table import ArchiveTable
 from .const import VAT_RATE_REDUCED, VAT_RATE_STANDARD, VAT_TABLE_URL
-from .providers._pdf import fetch_text
-
-_LOGGER = logging.getLogger(__name__)
 
 # A rate outside these is a misread, not a rate.
 _MIN_RATE: Final = 0.0
 _MAX_RATE: Final = 0.5
-_REFRESH_S: Final = 24 * 3600
-_FAILURE_RETRY_S: Final = 6 * 3600
 
 # (year, month) -> rate, as held.
 _RESIDENTIAL: dict[tuple[int, int], float] = {}
 _STANDARD: dict[tuple[int, int], float] = {}
-_fetched_at: datetime | None = None
-_failed_at: datetime | None = None
 
 
 def _rate_for(table: Mapping[tuple[int, int], float], month: date) -> float | None:
@@ -127,26 +118,9 @@ def held_table() -> dict[str, dict[str, dict[str, float]]]:
     }
 
 
-async def ensure_vat_rates(session: aiohttp.ClientSession) -> None:
-    """Refresh the table from the card archive once a day.
+_TABLE: Final = ArchiveTable(VAT_TABLE_URL, hold)
 
-    A failure keeps what is held and is retried after ``_FAILURE_RETRY_S``;
-    nothing here raises, since the caller is the coordinator tick.
-    """
-    global _fetched_at, _failed_at
-    now = dt_util.utcnow()
-    if _fetched_at is not None and (now - _fetched_at).total_seconds() < _REFRESH_S:
-        return
-    if _failed_at is not None and (now - _failed_at).total_seconds() < _FAILURE_RETRY_S:
-        return
-    try:
-        table = json.loads(await fetch_text(session, VAT_TABLE_URL))
-        if not isinstance(table, Mapping):
-            raise ValueError("not a table")
-    except Exception as err:  # the docstring promises no raise
-        _LOGGER.debug("VAT table could not be read: %s", err)
-        _failed_at = now
-        return
-    hold(table)
-    _fetched_at = now
-    _failed_at = None
+
+async def ensure_vat_rates(session: aiohttp.ClientSession) -> None:
+    """Refresh the table from the card archive once a day (archive_table.py)."""
+    await _TABLE.ensure(session)
