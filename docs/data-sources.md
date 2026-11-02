@@ -832,6 +832,17 @@ service schema puts no upper bound on `end`, so a mistyped year was enough: an
 end one year out produced 8760 phantom hours. The `end=None` default always
 stopped at now; an explicit end now gets the same bound.
 
+`_backfill_range` then holds the end to the newest hour the recorder has
+compiled (`_compiled_until`, `backfill_window.py`), read off its newest
+statistics run, or an hour before the clock when that cannot be read. The
+recorder inserts an hour's own rows when it compiles that hour, without an
+upsert, so an imported row that got there first made the insert fail and the
+recorder rolled back the whole period for every entity, run marker included,
+never compiling it again. It compiles an hour ten seconds after it ends, and
+after a restart only once startup is over, so the current hour was not
+enough. `tests/recorder/test_backfill_window.py` pins both against a real
+recorder.
+
 ### Idempotency and replay
 
 `async_import_statistics` upserts on `(statistic_id, start)`, so re-running

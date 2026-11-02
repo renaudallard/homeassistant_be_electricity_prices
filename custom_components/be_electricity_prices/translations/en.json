@@ -779,7 +779,7 @@
         },
         "end": {
           "name": "End",
-          "description": "First hour NOT to backfill (exclusive). Defaults to the current hour. On or before the start of the year-to-date window, only the price sensors are rebuilt."
+          "description": "First hour NOT to backfill (exclusive). Defaults to the current hour; the backfill never goes past the newest hour the recorder has compiled. On or before the start of the year-to-date window, only the price sensors are rebuilt."
         },
         "clear": {
           "name": "Clear ENTIRE series before re-import",

@@ -536,6 +536,51 @@ async def test_backfill_range_writes_one_mean_row_per_hour_per_price_sensor(
     assert result["rows_written"] == sum(len(r) for r in written.values())
 
 
+@pytest.mark.freeze_time("2026-05-01 12:30:00+02:00")
+async def test_backfill_range_stops_at_the_newest_hour_the_recorder_compiled(
+    hass: HomeAssistant,
+) -> None:
+    """After a restart the recorder compiles the hours Home Assistant was down
+    for only once startup is over, and its rows for them go in without an
+    upsert: one the backfill got in first lost the hour for every entity. Its
+    newest run says where it stands, three hours behind the clock here, and
+    the window stops there rather than at the current hour."""
+    entry = _entry()
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_price", "current_year_cost"])
+    entry.runtime_data = await _make_coordinator(entry)
+    captured: dict[str, list[Any]] = {}
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        captured[metadata["statistic_id"]] = list(statistics)
+
+    newest = datetime(2026, 5, 1, 7, 25, tzinfo=UTC)
+
+    async def executor(fn: Any, *args: Any) -> Any:
+        if fn is backfill_window._newest_statistics_run:
+            return newest
+        return {}
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(side_effect=executor)
+    start = datetime(2026, 5, 1, 0, 0, tzinfo=BRUSSELS)
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        result = await bf.backfill_range(hass, entry, start)
+    rows = captured[ids["current_price"]]
+    # 07:25 to 07:30 UTC is the newest five minutes compiled, so the last
+    # settled hour ends at 07:00 UTC, 09:00 in Brussels.
+    assert rows[-1]["start"] == datetime(2026, 5, 1, 6, tzinfo=UTC)
+    assert len(rows) == 9
+    assert result["range"][1] == datetime(2026, 5, 1, 7, tzinfo=UTC).isoformat()
+
+
 async def test_backfill_if_missing_skips_when_recorder_already_has_data(
     hass: HomeAssistant,
 ) -> None:
@@ -4039,9 +4084,12 @@ async def test_the_automatic_backfill_writes_the_running_cost_once_the_recorder_
 
     instance = MagicMock()
     instance.async_add_executor_job = AsyncMock(side_effect=executor)
+    # A recorder on time, its newest compiled hour the one that just ended.
+    compiled = AsyncMock(return_value=datetime(2026, 1, 3, 11, tzinfo=UTC))
     with (
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
         patch.object(bf.asyncio, "sleep", wait),
+        patch.object(bf, "_compiled_until", compiled),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
             new=_fake_import,

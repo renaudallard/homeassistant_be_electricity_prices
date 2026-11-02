@@ -717,7 +717,7 @@ refused; an automation, which has no user, is not. Fields (`services.yaml`):
 | --- | --- | --- | --- |
 | `entry_id` | no | `config_entry` | first loaded entry |
 | `start` | no | datetime | the year-to-date window start (`ytd_window_reset`): Jan 1 00:00 of the current local year, or the contract start date on an entry that bills from it, or of a contract a recorded switch kept that billed from it (`ytd_billed_from`) |
-| `end` | no | datetime (exclusive) | the current hour |
+| `end` | no | datetime (exclusive) | the current hour, never past the newest hour the recorder has compiled |
 | `clear` | no | boolean | false |
 
 The handler `_async_backfill_service` (`__init__.py`) resolves the target
@@ -744,8 +744,13 @@ once the card can be read), and `stand_in`, the days of an earlier contract no
 archive kept a card for, imported on today's card (`backfill.py`).
 
 `end` defaults to the current hour so the in-progress hour the live coordinator
-is about to write itself stays untouched. Re-runs are safe: rows are upserted on
-`(statistic_id, hour)`. `clear=true` is destructive: it deletes the ENTIRE
+is about to write itself stays untouched, and is held to the newest hour the
+recorder has compiled (`_compiled_until`, `backfill_window.py`): the recorder
+writes an hour's own rows without an upsert, so one the backfill got in first
+lost that hour for every entity, and after a restart its catch-up of the hours
+Home Assistant was down waits for startup to finish. Re-runs are safe: rows are
+upserted on `(statistic_id, hour)`.
+`clear=true` is destructive: it deletes the ENTIRE
 target series (not just the requested range) and then repopulates only the
 requested range, so a window starting after the end year's year-to-date start
 (Jan 1, or the contract start date on an entry, or a contract a recorded switch

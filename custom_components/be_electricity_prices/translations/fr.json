@@ -779,7 +779,7 @@
         },
         "end": {
           "name": "Fin",
-          "description": "Première heure NON reconstituée (exclusif). Par défaut: heure courante. Au plus tard au début de la fenêtre du coût de l'année, seuls les capteurs de prix sont reconstitués."
+          "description": "Première heure NON reconstituée (exclusif). Par défaut: heure courante ; la reconstitution ne va jamais au-delà de la dernière heure dont le recorder a calculé les statistiques. Au plus tard au début de la fenêtre du coût de l'année, seuls les capteurs de prix sont reconstitués."
         },
         "clear": {
           "name": "Effacer TOUTE la série avant import",

@@ -779,7 +779,7 @@
         },
         "end": {
           "name": "Eind",
-          "description": "Eerste uur dat NIET wordt aangevuld (exclusief). Standaard: huidige uur. Op of vóór het begin van het venster van dit jaar worden alleen de prijssensoren herbouwd."
+          "description": "Eerste uur dat NIET wordt aangevuld (exclusief). Standaard: huidige uur; het aanvullen gaat nooit verder dan het laatste uur waarvan de recorder de statistieken al heeft berekend. Op of vóór het begin van het venster van dit jaar worden alleen de prijssensoren herbouwd."
         },
         "clear": {
           "name": "VOLLEDIGE reeks wissen voor herimport",

@@ -72,6 +72,7 @@ from .backfill_window import (
     _COST_SENSOR_KEY,
     _build_context,
     _clear_all,
+    _compiled_until,
     _contract_segments,
     _existing_stat_window,
     _floor_to_hour_utc,
@@ -454,6 +455,11 @@ async def _backfill_range(
     retry_later: bool,
 ) -> dict[str, Any]:
     start_utc, end_utc = _normalize_window(start, end, ytd_window_reset(entry))
+    # Never into an hour the recorder has still to compile, which after a
+    # restart can be hours behind the clock: its own rows for that hour go in
+    # without an upsert, and one of ours got in first lost the hour for every
+    # entity.
+    end_utc = min(end_utc, await _compiled_until(hass))
     if start_utc >= end_utc:
         return {"rows_written": 0, "sensors": {}, "range": [None, None]}
 

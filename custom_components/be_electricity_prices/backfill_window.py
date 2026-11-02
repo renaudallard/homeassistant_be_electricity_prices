@@ -207,6 +207,50 @@ def _normalize_window(
     return start_utc, end_utc
 
 
+def _newest_statistics_run(hass: HomeAssistant) -> datetime | None:
+    """The start of the newest period the recorder has compiled, read on its
+    own executor."""
+    from homeassistant.components.recorder.db_schema import StatisticsRuns
+    from homeassistant.components.recorder.models import process_timestamp
+    from homeassistant.helpers.recorder import session_scope
+    from sqlalchemy import func
+
+    with session_scope(hass=hass, read_only=True) as session:
+        start: datetime | None = session.query(func.max(StatisticsRuns.start)).scalar()
+    return process_timestamp(start)
+
+
+async def _compiled_until(hass: HomeAssistant) -> datetime:
+    """The end of the newest hour the recorder has compiled.
+
+    The recorder writes an hour's rows when it compiles that hour's last
+    five minutes, ten seconds after the hour, and much later after a
+    restart: its catch-up for the hours Home Assistant was down waits for
+    startup to finish. It inserts those rows without an upsert, so a row a
+    backfill got in first makes the insert fail, and the recorder then rolls
+    back that whole period for every entity, its run marker with it, and
+    never compiles it again. Each compiled period leaves a run marker and
+    the catch-up resumes after the newest one, so every hour that ends by
+    the end of that period is settled. Without the marker, the hour that has
+    just ended is taken as not compiled yet.
+    """
+    hour = _floor_to_hour_utc(dt_util.utcnow())
+    try:
+        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+            get_instance,
+        )
+        from homeassistant.components.recorder.db_schema import StatisticsShortTerm
+
+        newest = await get_instance(hass).async_add_executor_job(
+            _newest_statistics_run, hass
+        )
+    except Exception:  # recorder may surface anything
+        newest = None
+    if not isinstance(newest, datetime):
+        return hour - timedelta(hours=1)
+    return min(hour, _floor_to_hour_utc(newest + StatisticsShortTerm.duration))
+
+
 async def _existing_stat_window(
     hass: HomeAssistant, statistic_id: str, anchor: datetime
 ) -> bool | None:

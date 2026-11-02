@@ -779,7 +779,7 @@
         },
         "end": {
           "name": "Ende",
-          "description": "Erste Stunde, die NICHT mehr befüllt wird (exklusiv). Standard: aktuelle Stunde. Liegt es spätestens am Beginn des Zeitraums dieses Jahres, werden nur die Preissensoren neu aufgebaut."
+          "description": "Erste Stunde, die NICHT mehr befüllt wird (exklusiv). Standard: aktuelle Stunde; das Befüllen geht nie über die letzte Stunde hinaus, deren Statistik der Recorder schon berechnet hat. Liegt es spätestens am Beginn des Zeitraums dieses Jahres, werden nur die Preissensoren neu aufgebaut."
         },
         "clear": {
           "name": "GESAMTE Reihe vor dem Import löschen",
