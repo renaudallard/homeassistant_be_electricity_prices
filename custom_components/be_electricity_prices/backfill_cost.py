@@ -34,6 +34,7 @@ this the long half of a backfill.
 
 from __future__ import annotations
 
+import asyncio
 import calendar
 import logging
 from collections.abc import Callable
@@ -43,6 +44,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .backfill_window import (
@@ -58,6 +60,7 @@ from .const import (
     CONF_CONTRACT_START_DATE,
     CONF_SUPPLIER,
     DAY_START,
+    DOMAIN,
     METER_MONO,
     REGION_FLANDERS,
     SOLAR_REGIME_COMPENSATION,
@@ -115,12 +118,17 @@ from .ytd_legs import _dso_prosumer_day
 if TYPE_CHECKING:
     # Annotations only, as _recorder_models says: the package has to load
     # without the recorder, and the calls take the lazy copies it returns.
-    from homeassistant.components.recorder.models import (
-        StatisticData,
-        StatisticMetaData,
-    )
+    from homeassistant.components.recorder.models import StatisticMetaData
 
 _LOGGER = logging.getLogger(__name__)
+
+# hass.data[DOMAIN] key of the locks _import_cost_rows takes, by statistic id.
+_JOIN_LOCKS_KEY = "cost_join_locks"
+
+# Why a run left the cost series as it was, each followed in the response by
+# the sensors it names.
+UNANSWERED = "the recorder did not answer for"
+UNJOINED = "the recorder has no recent statistics for"
 
 
 def _injection_rate_for_hour(
@@ -217,7 +225,7 @@ async def _backfill_cost_sensor(
     quarters: dict[datetime, list[float]],
     emit_from: datetime | None = None,
     gaps: dict[str, int] | None = None,
-    unanswered: set[str] | None = None,
+    held: dict[str, set[str]] | None = None,
 ) -> dict[str, int]:
     """Write cumulative state/sum rows for ``current_year_cost`` over ``hours``.
 
@@ -264,11 +272,12 @@ async def _backfill_cost_sensor(
     of the walk's meter reads, or a read of the chain the rows join
     (``_import_cost_rows``): a busy database answers each meter read with
     nothing, which priced the year at its fees alone over the rows it had.
-    ``unanswered``, when given, receives the sensors it did not answer for,
+    Nor while it holds no live row of the sensor to join them to.
+    ``held``, when given, receives why, with the sensors each reason names,
     for the caller to run it again.
     """
     sid = _stat_id(hass, entry, _COST_SENSOR_KEY)
-    if sid is None:
+    if sid is None or not _compiled(hass, sid):
         return {}
 
     (
@@ -302,8 +311,8 @@ async def _backfill_cost_sensor(
                 gaps=missing,
             )
     if failed:
-        if unanswered is not None:
-            unanswered.update(failed)
+        if held is not None:
+            held.setdefault(UNANSWERED, set()).update(failed)
         return {sid: 0}
 
     if rows:
@@ -321,11 +330,12 @@ async def _backfill_cost_sensor(
         # midnight would otherwise chain last year's rows onto this year's
         # cycle.
         reset = ytd_window_reset(entry, dt_util.as_local(rows[-1]["start"]))
-        if not await _import_cost_rows(
+        why = await _import_cost_rows(
             hass, metadata, rows, reset, async_import_statistics
-        ):
-            if unanswered is not None:
-                unanswered.add(sid)
+        )
+        if why is not None:
+            if held is not None:
+                held.setdefault(why, set()).add(sid)
             return {sid: 0}
     if missing:
         _LOGGER.warning(
@@ -347,7 +357,7 @@ async def _import_cost_rows(
     rows: list[Any],
     reset: datetime,
     import_statistics: Any,
-) -> bool:
+) -> str | None:
     """Import the year-to-date rows as a continuation of the recorded chain.
 
     Each row is built with ``sum = state``, the year-to-date bill. The live
@@ -361,128 +371,139 @@ async def _import_cost_rows(
     less the part of this cycle already in it. A first backfill, with nothing
     recorded before it, shifts by nothing and imports what it always did.
 
-    The rows the live compile wrote after the window, short-term and hourly,
-    are read before anything is written and moved onto the imported chain
-    with them (``_rechained``): the window ends where the run began, and a
-    run that takes past the next hour finds that hour compiled on the old
-    chain, which read as minus the shift that hour and plus it the next.
+    The rows the live compile wrote are moved onto the imported chain by the
+    recorder itself: an adjustment queued ahead of the import shifts the sum
+    of every row from the first imported hour on, short-term and hourly, by
+    what lies between the two chains, and the import then writes its hours
+    over the live ones. Within a cycle the compile adds to ``sum`` exactly
+    what the state moves by, so one shift moves every live row. A row
+    compiled before the adjustment reaches the queue is moved with the rest,
+    and one compiled after it resumes from a moved one. Read and written back
+    from here, a compile landing between the read and the write stayed on the
+    old chain, and the next hour fell by the whole year's bill.
 
-    False, with nothing imported, when the recorder did not answer one of
-    those reads. Taken for nothing recorded, a chain it could not read put
-    every row a year's bill below it, which the first hour of the year read
-    as minus that bill, and the imported rows stay.
+    None once the rows are queued. With nothing imported, ``UNANSWERED``
+    when the recorder did not answer one of those reads, and ``UNJOINED``
+    when it holds no live row of the sensor yet to move: a new sensor's
+    first is compiled within five minutes, and the automatic backfill runs
+    again. Taken for nothing recorded, a chain it could not read put every
+    row a year's bill below it, which the first hour of the year read as
+    minus that bill, and the imported rows stay.
     """
-    sid = metadata["statistic_id"]
-    base = await _chain_before(hass, sid, rows[0]["start"], reset)
-    if base is None:
-        return False
-    if base:
-        rows = [{**row, "sum": round(base + row["state"], 4)} for row in rows]
-    last = rows[-1]
-    later = await _rows_after(
-        hass, sid, last["start"] + timedelta(minutes=5), "5minute"
+    from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+        get_instance,
     )
-    hours = await _rows_after(hass, sid, last["start"] + timedelta(hours=1), "hour")
-    if later is None or hours is None:
+
+    sid = metadata["statistic_id"]
+    first = rows[0]["start"]
+    instance = get_instance(hass)
+    # One join at a time, each read once the one before it is written: the
+    # adjustment moves the live rows by what lies between the two chains,
+    # and two joins that read before either wrote moved them twice, the
+    # automatic backfill's and a service call's alike.
+    async with _join_lock(hass, sid):
+        base = await _chain_before(hass, sid, first, reset)
+        if base is None:
+            return UNANSWERED
+        try:
+            anchor = await _live_anchor(
+                hass, sid, rows[-1]["start"] + timedelta(hours=1)
+            )
+        except Exception:  # recorder may surface anything
+            _LOGGER.debug("could not read the live %s rows the backfill joins", sid)
+            return UNANSWERED
+        if anchor is None:
+            _LOGGER.debug("no live %s row the backfill can join yet", sid)
+            return UNJOINED
+        if base:
+            rows = [{**row, "sum": round(base + row["state"], 4)} for row in rows]
+        state, chained = anchor
+        # From the first imported hour, not the reset: a window that starts
+        # later continues the chain the rows before it hold, read above.
+        shift = round(base - (chained - state), 4)
+        if shift:
+            instance.async_adjust_statistics(sid, first, shift, "EUR")
+        import_statistics(hass, metadata, rows)
+        await instance.async_block_till_done()
+    return None
+
+
+def _compiled(hass: HomeAssistant, statistic_id: str) -> bool:
+    """Whether the recorder compiles the statistics of ``statistic_id``: an
+    enabled sensor it records. The cost rows join the live ones, and a
+    sensor it does not compile never has any, which every run would wait
+    for again."""
+    from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+        get_instance,
+    )
+
+    found = er.async_get(hass).async_get(statistic_id)
+    if found is not None and found.disabled_by is not None:
+        _LOGGER.debug("%s is disabled; its cost is not backfilled", statistic_id)
         return False
-    import_statistics(hass, metadata, [*rows, *_rechained(last, reset, hours)])
-    _seed_short_term_sum(hass, metadata, last, reset)
-    _import_short_term(hass, metadata, _rechained(last, reset, later))
+    # The filter is_entity_recorded reads: newer releases (2026.9.4) only
+    # re-export that function from the recorder package, and strict mypy
+    # refuses the import there.
+    recorded = get_instance(hass).entity_filter
+    if recorded is not None and not recorded(statistic_id):
+        _LOGGER.debug("%s is not recorded; its cost is not backfilled", statistic_id)
+        return False
     return True
 
 
-async def _rows_after(
-    hass: HomeAssistant, statistic_id: str, start: datetime, period: str
-) -> list[Any] | None:
-    """The rows of ``period`` the live compile has written from ``start`` on,
-    or None when the recorder did not answer.
+def _join_lock(hass: HomeAssistant, statistic_id: str) -> asyncio.Lock:
+    """The lock :func:`_import_cost_rows` holds while it joins
+    ``statistic_id``'s rows."""
+    bucket: dict[str, Any] = hass.data.setdefault(DOMAIN, {})
+    locks: dict[str, asyncio.Lock] = bucket.setdefault(_JOIN_LOCKS_KEY, {})
+    if statistic_id not in locks:
+        locks[statistic_id] = asyncio.Lock()
+    return locks[statistic_id]
 
-    The compiler resumes from the newest short-term row, so a seed at the last
-    backfilled hour only holds while nothing newer exists. A setup's first
-    compile can land before the backfill finishes, and a service call always
-    runs on a live entry, so those rows are read before anything is written.
-    """
-    try:
-        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
-            get_instance,
-        )
-        from homeassistant.components.recorder.statistics import (
-            statistics_during_period,
-        )
 
-        got = await get_instance(hass).async_add_executor_job(
-            statistics_during_period,
-            hass,
-            start,
-            None,
-            {statistic_id},
-            period,
-            None,
-            {"sum", "state", "last_reset"},
-        )
-    except Exception:  # recorder may surface anything
-        return None
+async def _live_anchor(
+    hass: HomeAssistant, statistic_id: str, end: datetime
+) -> tuple[float, float] | None:
+    """The state and ``sum`` of a live row of the cycle near ``end``: the
+    sensor's hour before it, or, for a sensor that started after it, its
+    first five minutes. None when the recorder holds neither. Raises what
+    the recorder raised."""
+    rows = await _read(hass, statistic_id, end - timedelta(hours=1), end, "hour")
+    if not rows:
+        rows = await _read(hass, statistic_id, end, None, "5minute")
+    for row in rows:
+        if row.get("state") is not None and row.get("sum") is not None:
+            return float(row["state"]), float(row["sum"])
+    return None
+
+
+async def _read(
+    hass: HomeAssistant,
+    statistic_id: str,
+    start: datetime,
+    stop: datetime | None,
+    period: str,
+) -> list[Any]:
+    """The state and ``sum`` rows of ``period`` from ``start`` to ``stop``,
+    or to the newest when None. Raises what the recorder raised."""
+    from homeassistant.components.recorder import (  # type: ignore[attr-defined]
+        get_instance,
+    )
+    from homeassistant.components.recorder.statistics import (
+        statistics_during_period,
+    )
+
+    got = await get_instance(hass).async_add_executor_job(
+        statistics_during_period,
+        hass,
+        start,
+        stop,
+        {statistic_id},
+        period,
+        None,
+        {"sum", "state"},
+    )
     return list(got.get(statistic_id, []))
-
-
-def _rechained(
-    last: StatisticData, reset: datetime, later: list[Any]
-) -> list[StatisticData]:
-    """The live rows after the backfill, put onto its chain.
-
-    Each keeps the state it compiled, and its total moves from the last
-    backfilled one by what the live compile added: the bill's move within a
-    cycle, and a new cycle's whole state across its reset (``old_state =
-    0.0``), so a run that crosses New Year's midnight moves the new year's
-    first rows as well. The newest short-term row, which the compiler resumes
-    from, then continues the imported series. A row of an earlier cycle is
-    left where it is.
-    """
-    cycle = reset.timestamp()
-    total = float(last.get("sum") or 0.0)
-    before = float(last.get("state") or 0.0)
-    opened = cycle
-    moved: list[StatisticData] = []
-    for row in later:
-        state, row_reset = row.get("state"), row.get("last_reset")
-        if state is None or row_reset is None or row_reset < cycle:
-            continue
-        if row_reset != opened:
-            before, opened = 0.0, row_reset
-        total += state - before
-        before = state
-        moved.append(
-            {
-                "start": datetime.fromtimestamp(row["start"], tz=UTC),
-                "state": state,
-                "sum": round(total, 4),
-                "last_reset": datetime.fromtimestamp(row_reset, tz=UTC),
-            }
-        )
-    return moved
-
-
-def _import_short_term(
-    hass: HomeAssistant, metadata: StatisticMetaData, moved: list[StatisticData]
-) -> None:
-    """Write ``moved`` over the live short-term rows. Best effort, like the
-    seed."""
-    if not moved:
-        return
-    try:
-        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
-            get_instance,
-        )
-        from homeassistant.components.recorder.db_schema import StatisticsShortTerm
-    except ImportError:  # pragma: no cover - recorder always ships with HA
-        return
-    try:
-        get_instance(hass).async_import_statistics(metadata, moved, StatisticsShortTerm)
-    except Exception:  # recorder may surface anything
-        _LOGGER.debug(
-            "could not move the live short-term rows of %s onto the backfill",
-            metadata["statistic_id"],
-        )
 
 
 async def _chain_before(
@@ -502,35 +523,14 @@ async def _chain_before(
     1 January it returns January too, which holds nothing before ``first``.
     """
     try:
-        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
-            get_instance,
+        months = await _read(
+            hass, statistic_id, first - timedelta(days=400), first, "month"
         )
-        from homeassistant.components.recorder.statistics import (
-            statistics_during_period,
-        )
-    except ImportError:  # pragma: no cover - recorder always ships with HA
-        return None
-
-    async def _rows(start: datetime, period: str) -> list[Any]:
-        got = await get_instance(hass).async_add_executor_job(
-            statistics_during_period,
-            hass,
-            start,
-            first,
-            {statistic_id},
-            period,
-            None,
-            {"sum", "state"},
-        )
-        return list(got.get(statistic_id, []))
-
-    try:
-        months = await _rows(first - timedelta(days=400), "month")
         months = [row for row in months if row["start"] < first.timestamp()]
         if not months:
             return 0.0
         month_start = datetime.fromtimestamp(months[-1]["start"], tz=UTC)
-        hours = await _rows(month_start, "hour")
+        hours = await _read(hass, statistic_id, month_start, first, "hour")
     except Exception:  # recorder may surface anything
         _LOGGER.debug("could not read the %s chain before the backfill", statistic_id)
         return None
@@ -936,61 +936,3 @@ async def _accrue_cost(
             rows.append(make_row(start=utc_hour, state=state, sum=state))
 
     return carried + bill
-
-
-def _seed_short_term_sum(
-    hass: HomeAssistant,
-    metadata: StatisticMetaData,
-    last: StatisticData,
-    last_reset: datetime,
-) -> None:
-    """Continue the imported ``sum`` chain into the live one.
-
-    The cost sensor is ``state_class: TOTAL``, so the recorder's own sensor
-    platform compiles statistics for the same id we import into, and it seeds
-    its running sum from ``statistics_short_term`` alone
-    (``sensor/recorder.py``: ``_sum = last_stat.get("sum") or 0.0``).
-    ``async_import_statistics`` writes only the long-term table, so without
-    this the live chain restarts at zero directly after a backfilled row
-    carrying the whole year: the first compiled hour then reports
-    ``change = 0 - <year to date>``, and the Energy dashboard's Cost card
-    shows roughly minus one annual bill for that day.
-
-    Writing one short-term row at the last backfilled instant hands the
-    platform the running total to resume from. It has to carry ``last_reset``
-    as well as ``state`` and ``sum``: the compiler reads all three off that
-    row, and a row without one looks like a fresh cycle against the sensor's
-    own Jan-1 ``last_reset``, which takes the meter-reset branch and adds the
-    whole live reading on top of the resumed sum instead of the delta.
-    ``last_reset`` is passed in rather than computed here so it can only ever
-    be what the caller resolved through ``ytd_window_reset``, which is the same
-    function the sensor's ``last_reset_fn`` is: local Jan 1, or the start
-    date of a contract that bills its year-to-date from there, the entry's own
-    or the latest one a recorded switch kept that did.
-
-    Best effort: a recorder that refuses the write leaves the seam, which is
-    no worse than not trying, so it must never take the backfill down with it.
-    """
-    try:
-        from homeassistant.components.recorder import (  # type: ignore[attr-defined]
-            get_instance,
-        )
-        from homeassistant.components.recorder.db_schema import StatisticsShortTerm
-    except ImportError:  # pragma: no cover - recorder always ships with HA
-        return
-    seed: StatisticData = {
-        **last,
-        # Must be the SAME instant the current_year_cost sensor reports as its
-        # last_reset, or the compiler takes the meter-reset branch.
-        "last_reset": last_reset,
-    }
-    try:
-        get_instance(hass).async_import_statistics(
-            metadata, [seed], StatisticsShortTerm
-        )
-    except Exception:  # recorder may surface anything
-        _LOGGER.debug(
-            "could not seed the short-term sum for %s; the first compiled "
-            "hour will show a one-off negative change",
-            metadata["statistic_id"],
-        )

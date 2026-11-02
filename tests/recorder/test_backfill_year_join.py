@@ -150,15 +150,19 @@ async def test_a_first_backfill_imports_the_bill_as_it_is(
     recorder_mock: Any, hass: HomeAssistant, freezer: Any
 ) -> None:
     """With nothing recorded before the window the rows are not shifted, which
-    is every backfill of the year the entry was installed in."""
+    is every backfill of the year the entry was installed in. The sensor's
+    first five minutes, compiled on a total of their own, join them."""
     assert await async_setup_component(hass, "sensor", {})
     await hass.async_block_till_done()
+    await _live(hass, freezer, NEW + timedelta(hours=2, minutes=1), "5.0", NEW)
     rows = [
         StatisticData(start=NEW, state=3.0, sum=3.0),
         StatisticData(start=NEW + timedelta(hours=1), state=5.0, sum=5.0),
     ]
-    freezer.move_to(NEW + timedelta(hours=2, minutes=1))
     await _import_cost_rows(hass, META, rows, NEW, async_import_statistics)
     await async_wait_recording_done(hass)
     got = await hass.async_add_executor_job(_hours, hass, NEW - timedelta(hours=1))
     assert [r[2] for r in got] == pytest.approx([3.0, 5.0]), got
+    await _live(hass, freezer, NEW + timedelta(hours=2, minutes=56), "5.5", NEW)
+    got = await hass.async_add_executor_job(_hours, hass, NEW - timedelta(hours=1))
+    assert [r[2] for r in got] == pytest.approx([3.0, 5.0, 5.5]), got

@@ -60,7 +60,7 @@ from custom_components.be_electricity_prices.snapshot_resolve import (
     _resolve_snapshot,
     analog_meter,
 )
-from tests import make_entry, make_snapshot, make_stub_extractor
+from tests import make_entry, make_recorder, make_snapshot, make_stub_extractor
 from tests.test_capacity_meters import _saved, _steps
 from tests.test_config_flow_energy_defaults import _shown
 
@@ -452,7 +452,6 @@ async def test_the_backfill_bills_the_days_before_the_replacement_as_analog(
     day, so a meter replaced on 15 January meets it at the end of the month:
     the analog kWh rate and the minimum peak on the first 14 days."""
     from types import SimpleNamespace
-    from unittest.mock import MagicMock
 
     from homeassistant.helpers import entity_registry as er
 
@@ -510,8 +509,7 @@ async def test_the_backfill_bills_the_days_before_the_replacement_as_analog(
     def fake_import(_h: Any, _meta: Any, stats: Any) -> None:
         captured.extend(stats)
 
-    instance = MagicMock()
-    instance.async_add_executor_job = AsyncMock(return_value={})
+    instance = make_recorder()
     legs = AsyncMock(return_value=_CohortLegs(None, None))
     with (
         patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),

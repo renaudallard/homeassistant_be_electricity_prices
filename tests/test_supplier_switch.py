@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import aiohttp
 import pytest
@@ -87,7 +87,7 @@ from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
 )
 from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
-from tests import make_entry, make_snapshot, make_stub_extractor
+from tests import make_entry, make_recorder, make_snapshot, make_stub_extractor
 
 _TICK = "custom_components.be_electricity_prices.coordinator_tick"
 _COSTS = "custom_components.be_electricity_prices.coordinator_costs"
@@ -1661,8 +1661,7 @@ async def test_the_backfill_bills_a_stand_in_as_the_live_sensor_does(
     def fake_import(_h: Any, metadata: Any, stats: Any) -> None:
         captured[metadata["statistic_id"]] = list(stats)
 
-    instance = MagicMock()
-    instance.async_add_executor_job = AsyncMock(return_value={})
+    instance = make_recorder()
 
     async def run(read_failed: bool, retry_later: bool) -> dict[str, Any]:
         captured.clear()
@@ -1806,8 +1805,7 @@ async def test_the_automatic_backfill_imports_the_year_once(
         sid = next(iter(sids))
         return {sid: [r for r in store.get(sid, []) if start <= r["start"] < end]}
 
-    instance = MagicMock()
-    instance.async_add_executor_job = AsyncMock(side_effect=executor)
+    instance = make_recorder(executor)
     runs = AsyncMock(side_effect=bf.backfill_range)
     with (
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
@@ -2020,8 +2018,7 @@ async def test_the_backfilled_year_ends_on_what_the_two_contracts_cost_live(
     def fake_import(_h: Any, _meta: Any, stats: Any) -> None:
         captured.append(list(stats))
 
-    instance = MagicMock()
-    instance.async_add_executor_job = AsyncMock(return_value={})
+    instance = make_recorder()
     with (
         patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
         patch.object(ytd_energy, "_top_up_today_hourly", new=AsyncMock()),
@@ -2180,8 +2177,7 @@ async def test_an_earlier_contracts_months_bill_their_own_federal_levies(
         return sorted(days.items())
 
     captured: list[dict[str, Any]] = []
-    instance = MagicMock()
-    instance.async_add_executor_job = AsyncMock(return_value={})
+    instance = make_recorder()
     fetched = SimpleNamespace(
         row=SimpleNamespace(snapshot=old_raw), error=None, error_message=""
     )
@@ -2377,8 +2373,7 @@ async def test_an_earlier_card_on_another_blend_nets_on_the_entrys_profile(
             None,
         )
     )
-    instance = MagicMock()
-    instance.async_add_executor_job = AsyncMock(return_value={})
+    instance = make_recorder()
     with (
         patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
         patch.object(ytd_energy, "_top_up_today_hourly", new=AsyncMock()),

@@ -530,7 +530,7 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
 | `backfill_range` (`backfill.py`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists; when a card read failed, again an hour later and then less often until those days are written, carrying on at the next setup when Home Assistant stopped during a wait (`_backfill_retry_from`, kept in the coordinator's store). A probe the recorder did not answer is asked again on the same waits, never taken for no statistics, and a running cost whose meter or chain reads failed (`noting_failed_reads`) is not imported and retried the same way. |
+| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists; when a card read failed, again an hour later and then less often until those days are written, carrying on at the next setup when Home Assistant stopped during a wait (`_backfill_retry_from`, kept in the coordinator's store). A probe the recorder did not answer is asked again on the same waits, never taken for no statistics, and a running cost whose meter or chain reads failed (`noting_failed_reads`), or whose sensor has no live row yet to join, is not imported and retried the same way. |
 
 There is no backfill button. The only button in the integration is
 `reset_monthly_peak` (`button.py`). Backfill is reached either automatically
@@ -767,34 +767,39 @@ cost. Two rules enforce this:
 
 **The `sum` chain has to be handed over to the live compile.** `current_year_cost`
 is `state_class: TOTAL`, so HA's own sensor platform compiles statistics under the
-same statistic id the backfill imports into — and it seeds its running sum from
-`statistics_short_term` alone (`sensor/recorder.py`: `_sum = last_stat.get("sum")
-or 0.0`), a table `async_import_statistics` never writes. Left alone, the live
-chain restarts at zero directly after a backfilled row carrying the whole year, so
-the first compiled hour reports `change = 0 - <year to date>` and the Energy
-dashboard's Cost card shows roughly **minus one annual bill** for that day.
-`_seed_short_term_sum` (`backfill_cost.py`) writes one short-term row at the last
-backfilled instant to hand the platform its resume point. That row must carry
-`last_reset` as well as `state` and `sum`: the compiler reads all three, and a row
-missing `last_reset` looks like a fresh cycle against the sensor's Jan-1
-`last_reset`, taking the meter-reset branch and adding the whole live reading on
-top of the resumed sum (observed: `sum` 1000.4 instead of 500.3). The compiler
-resumes from the NEWEST short-term row, so the seed alone only holds while nothing
-newer exists, and a setup's first compile can land before the backfill finishes
-(a service call always runs on a live entry). `_rechained` therefore moves the
-live rows written after the last backfilled hour onto the imported chain: each
-keeps its state and takes the imported total plus what the live compile added
-since, the bill's move within a cycle and the new cycle's whole state across a
-reset (`_rows_after` reads them before anything is written). That covers the
-long-term hourly rows as well as the short-term ones: the window ends where the
-run began, so a run that takes past the next hour finds that hour compiled on
-the old chain, which read as minus the shift in that hour and plus it in the
-next, and a run crossing New Year's midnight finds the new year's first rows
-there too. The seed and the short-term move are best effort and swallow
-recorder errors, since failing is no worse than not trying.
-`tests/recorder/test_backfill_seam.py` pins the three seed states and the race
-against a real recorder, `tests/recorder/test_backfill_slow_run.py` a run that
-crosses an hour and New Year's midnight.
+same statistic id the backfill imports into, and it resumes its running sum from
+the newest `statistics_short_term` row (`sensor/recorder.py`: `_sum =
+last_stat.get("sum") or 0.0`), a table `async_import_statistics` never writes.
+Left alone, the live rows stay on a chain of their own, which for a sensor set up
+this year starts at zero, so the first compiled hour after the backfill reports
+`change = 0 - <year to date>` and the Energy dashboard's Cost card shows roughly
+**minus one annual bill** for that hour. So the recorder moves them:
+`_import_cost_rows` (`backfill_cost.py`) reads a live row of the cycle at the
+window's end (`_live_anchor`: the sensor's last hour before it, or, for a sensor
+that started after it, its first five minutes) and queues
+`async_adjust_statistics` from the first imported hour, by the distance between
+the two chains, ahead of the import. Within a cycle the compile adds to `sum`
+exactly what the state moves by, so every live row stands the same distance from
+its state and one shift moves them all, short-term and hourly, the rows of a new
+cycle after New Year's midnight included; the import then writes its hours over
+the live ones. A row compiled before the adjustment reaches the recorder's queue
+is moved with the rest, and one compiled after it resumes from a moved one, so
+no compile can fall between a read and a write. Read and written back from the
+integration, one that did stayed on the old chain, and the next hour fell by the
+whole year's bill. A sensor with no live row yet has nothing to move, and one
+compiled after the import would start a chain of its own, so nothing is imported
+until there is one: a new sensor's first five minutes are compiled within five
+minutes, the automatic backfill runs again an hour later, and the service
+response says so under `skipped` (`UNJOINED`). A sensor the recorder never
+compiles, disabled or excluded from it, is left out (`_compiled`), since no run
+would find the row. The shift is relative, so two joins that read before either
+was written, the automatic backfill's and a service call's, moved the live rows
+twice: one join per sensor runs at a time (`_join_lock`), and it holds until the
+recorder has committed what it queued (`async_block_till_done`).
+`tests/recorder/test_backfill_seam.py` pins the wait for the first live row, a
+compile before the backfill and two joins on a busy recorder against a real
+recorder, `tests/recorder/test_backfill_slow_run.py` a run that crosses an hour
+and New Year's midnight.
 
 `_backfill_cost_sensor` runs one running total per hour (`backfill_cost.py`)
 rather than one end-of-day number, so the recorder draws a smoothly growing YTD

@@ -245,12 +245,14 @@ def ytd_window_reset(entry: ConfigEntry, when: datetime | None = None) -> dateti
     """Local midnight of the day ``current_year_cost`` accumulates from.
 
     The datetime form of :func:`ytd_billed_from`, and a cross-file invariant
-    rather than a convenience: ``_seed_short_term_sum`` must hand the recorder
-    the SAME instant the sensor publishes as ``last_reset``, or the cost
-    compiler takes the meter-reset branch and adds the whole window's reading
-    on top of the resumed sum. Both sides call this, which is what keeps them
-    from drifting apart. The same goes for a reset that moves while the bill
-    does not, which is why a recorded switch must not move it.
+    rather than a convenience: the backfill tells a recorded row of this cycle
+    from one of the cycle before by this instant (``_chain_before``), and the
+    cost compiler tells them apart by the ``last_reset`` the sensor publishes.
+    They must be the SAME instant, or a row of one cycle is joined as one of
+    the other and the imported year lands a whole bill off the live chain.
+    Both sides call this, which is what keeps them from drifting apart. The
+    same goes for a reset that moves while the bill does not, which is why a
+    recorded switch must not move it.
 
     Local 1 January 00:00 for every entry that has not opted into billing from
     its contract start date, which is all of them by default. Deliberately a

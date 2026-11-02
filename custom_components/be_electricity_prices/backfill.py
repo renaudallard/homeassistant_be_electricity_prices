@@ -613,9 +613,9 @@ async def _backfill_range(
         hass, entry, coordinator, hours, spots, quarters
     )
     gaps: dict[str, int] = {}
-    # What the recorder did not answer for, the cost series then left as it
-    # was. The price series read none of it.
-    unanswered: set[str] = set()
+    # Why the cost series was left as it was, with the sensors each reason
+    # names. The price series read none of it.
+    held: dict[str, set[str]] = {}
     if not skip_cost:
         counts.update(
             await _backfill_cost_sensor(
@@ -627,11 +627,11 @@ async def _backfill_range(
                 quarters,
                 emit_from=cost_emit_from,
                 gaps=gaps,
-                unanswered=unanswered,
+                held=held,
             )
         )
     if retry_later:
-        if unanswered and retry_from is None:
+        if held and retry_from is None:
             # Every retry writes the running cost whole, and the price series
             # wants none of its days again.
             retry_from = dt_util.as_local(end_utc - timedelta(hours=1)).date()
@@ -659,8 +659,11 @@ async def _backfill_range(
             "that boundary, because the recorder ignores last_reset on "
             "imported statistics"
         )
-    elif unanswered:
-        why = f"the recorder did not answer for {', '.join(sorted(unanswered))}"
+    elif held:
+        why = "; ".join(
+            f"{reason} {', '.join(sorted(sids))}"
+            for reason, sids in sorted(held.items())
+        )
         if retry_later:
             result["skipped"] = f"cost: {why}, written when the backfill runs again"
             _LOGGER.info(
@@ -722,10 +725,12 @@ async def backfill_if_missing(
     the task waiting for it, which a restart or a reload cancels. It runs
     until those days are written: the live sensor prices them on their own
     cards again once those can be read, and a stand-in written here would stay
-    in the recorder. A running cost the recorder did not answer for is
-    retried the same way. A probe it did not answer is asked again after the
-    same waits rather than taken for no statistics: on a busy database at
-    setup that rewrote the year's running cost at its fees alone.
+    in the recorder. A running cost the recorder did not answer for, or held
+    no live row of the sensor to join to, is retried the same way: a new
+    sensor's first is compiled within five minutes, so the hour's wait covers
+    a backfill that finished before it. A probe it did not answer is asked
+    again after the same waits rather than taken for no statistics: on a busy
+    database at setup that rewrote the year's running cost at its fees alone.
 
     Tolerates entry removal mid-flight: this runs as a fire-and-forget
     background task, and the user can delete the entry between scheduling

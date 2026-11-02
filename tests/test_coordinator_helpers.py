@@ -8051,15 +8051,16 @@ def test_a_running_cost_keeps_its_period_across_the_boundary() -> None:
         assert entity.last_reset == september
 
 
-def test_the_sensor_and_the_backfill_seed_resolve_the_same_reset() -> None:
+def test_the_sensor_and_the_backfill_resolve_the_same_reset() -> None:
     """The load-bearing invariant of the whole option.
 
-    ``_seed_short_term_sum`` hands the recorder a ``last_reset`` and the
-    sensor publishes one, and the cost compiler reads both: if they disagree
-    it takes the meter-reset branch and adds the whole window's reading on top
-    of the resumed sum instead of the delta. That was already true when both
-    were 1 January; making the instant per-entry is exactly the kind of change
-    that lets them drift, so pin that both sides go through the one function.
+    The backfill tells a recorded row of this cycle from one of the cycle
+    before by a reset, and the sensor publishes one, which the cost compiler
+    reads: if they disagree, a row of one cycle is joined as one of the other
+    and the imported year lands a whole bill off the live chain. That was
+    already true when both were 1 January; making the instant per-entry is
+    exactly the kind of change that lets them drift, so pin that both sides
+    go through the one function.
     """
     import inspect
 
@@ -8077,7 +8078,7 @@ def test_the_sensor_and_the_backfill_seed_resolve_the_same_reset() -> None:
     )
     desc = next(d for d in every if d.key == "current_year_cost")
     # The sensor publishes the reset the tick baked beside the figure, and the
-    # tick bakes it through the window helper, as the backfill seed does
+    # tick bakes it through the window helper, as the backfill does
     # (test_the_tick_bakes_each_cost_sensor_its_own_reset runs the tick).
     from custom_components.be_electricity_prices.coordinator_data import (
         CoordinatorData,
@@ -8086,9 +8087,9 @@ def test_the_sensor_and_the_backfill_seed_resolve_the_same_reset() -> None:
     baked = datetime(2026, 1, 1, tzinfo=ZoneInfo("Europe/Brussels"))
     assert desc.last_reset_fn is not None
     assert desc.last_reset_fn(CoordinatorData(current_year_cost_reset=baked)) == baked
-    seed_call = inspect.getsource(backfill._backfill_cost_sensor)
-    assert "ytd_window_reset(entry," in seed_call, (
-        "the backfill seed must resolve the reset through the same helper"
+    source = inspect.getsource(backfill._backfill_cost_sensor)
+    assert "ytd_window_reset(entry," in source, (
+        "the backfill must resolve the reset through the same helper"
     )
 
     # And the answer moves with the entry, which is the part that is new.

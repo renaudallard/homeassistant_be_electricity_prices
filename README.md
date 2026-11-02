@@ -1601,7 +1601,11 @@ whole total rather than one hour of it. A recorder that does not answer, a busy
 database at startup for instance, is never taken for an empty one: the
 automatic backfill waits and asks again rather than start, and the running cost
 is not written from meter or statistics reads that failed (the service result
-says so under `skipped`).
+says so under `skipped`). Nor is it written before `current_year_cost` has
+recorded its first five minutes, since the imported year joins the sensor's own
+statistics: on a fresh install whose first backfill finishes sooner, the
+automatic backfill writes it an hour later. A disabled cost sensor, or one the
+recorder excludes, is left out of the backfill.
 
 States history (the per-entity timeline shown in the **History**
 view) is append-only by design and is not affected; only the

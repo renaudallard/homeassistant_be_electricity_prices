@@ -36,7 +36,7 @@ from functools import cache
 from importlib.metadata import version
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -370,3 +370,26 @@ def make_text_session(body: str) -> Any:
             return _Resp()
 
     return _Session()
+
+
+def make_recorder(executor: Any = None) -> MagicMock:
+    """A recorder instance answering each read through ``executor``, with no
+    rows by default, but holding the cost sensor's first five minutes: the
+    cost rows join a live row, and nothing is imported before there is one."""
+    from homeassistant.components.recorder.statistics import (
+        statistics_during_period,
+    )
+
+    async def answer(fn: Any, *args: Any) -> Any:
+        if fn is statistics_during_period and args[4:6] == ("5minute", None):
+            start, ids = args[1], args[3]
+            return {
+                sid: [{"start": start.timestamp(), "state": 0.0, "sum": 0.0}]
+                for sid in ids
+            }
+        return {} if executor is None else await executor(fn, *args)
+
+    instance = MagicMock()
+    instance.async_add_executor_job = AsyncMock(side_effect=answer)
+    instance.async_block_till_done = AsyncMock()
+    return instance

@@ -62,7 +62,7 @@ from custom_components.be_electricity_prices.snapshot_resolve import (
     _resolve_snapshot,
     analog_meter,
 )
-from tests import make_entry, make_snapshot
+from tests import make_entry, make_recorder, make_snapshot
 from tests.test_config_flow_energy_defaults import _add_dsmr_monthly_peak, _shown
 
 _PEAK = "sensor.house_power"
@@ -597,7 +597,7 @@ async def test_the_backfill_bills_a_contract_on_its_own_meters_peak(
     """The backfill asks each contract's own settings too, so an analog one
     accrues the flat charge whatever peak the coordinator measures."""
     from datetime import UTC, date, datetime, timedelta
-    from unittest.mock import AsyncMock, MagicMock, patch
+    from unittest.mock import AsyncMock, patch
 
     from homeassistant.helpers import entity_registry as er
     from homeassistant.util import dt as dt_util
@@ -683,8 +683,7 @@ async def test_the_backfill_bills_a_contract_on_its_own_meters_peak(
     def fake_import(_h: Any, _meta: Any, stats: Any) -> None:
         captured.extend(stats)
 
-    instance = MagicMock()
-    instance.async_add_executor_job = AsyncMock(return_value={})
+    instance = make_recorder()
     with (
         patch.object(energy_meters, "_recorder_hourly_kwh", new=fake_hourly),
         patch.object(energy_meters, "_recorder_daily_kwh", new=fake_daily),
