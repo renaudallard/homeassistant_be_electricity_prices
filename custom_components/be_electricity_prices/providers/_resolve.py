@@ -363,12 +363,12 @@ def resolve_federal_contribution(
     month the window closed, about 7 EUR a year each.
 
     The risk that comes with that is real and is accepted: if the levy were
-    ever reinstated, this would go on striking it out, and nothing would say
-    so. A rate of zero trips no bound, and the consensus check compares cards
-    with each other rather than with the law, so a fleet that all printed the
-    reinstated figure would agree with itself and still be zeroed here. A
-    reinstated contribution would come back in article 419 beside the excise,
-    which ``excise_law`` reads and does not sum it into.
+    ever reinstated, this would go on striking it out. A rate of zero trips
+    no bound here; the live check measures the fleet's tax block against
+    what is billed, so a fleet that all printed the reinstated figure would
+    fail it (``_federal: the tax block of YYYY-MM disagrees with the law``).
+    A reinstated contribution would come back in article 419 beside the
+    excise, which ``excise_law`` reads and does not sum it into.
     """
     taxes = snapshot.taxes
     if professional or not taxes.energy_contribution:

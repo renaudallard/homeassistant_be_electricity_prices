@@ -396,6 +396,17 @@ and three did not: Ecofix and TotalEnergies in every region they sell, Cociter i
 still printing the separate energy contribution the others had folded into the excise on
 1 August 2026. It is the supplier's card that is wrong, so the check reports rather than corrects.
 
+Every card agreeing is not enough, since the integration bills the law's excise and strikes the
+contribution out from August 2026 whatever the cards print. `_check_excise_law` reads article
+419 from Justel first, as `excise_law.py` does, and holds it: `_federal: the excise law on Justel
+unreadable` fails when the page no longer reads or gives no household or protected rate for the
+running month, and `_federal: the excise law's earlier wording on Justel unreadable` when the
+archived wording or the law that ended it does not, a network failure passing for both. With
+the law held, the pair two suppliers or more print for the month is measured against what is
+billed, the law's excise at the month's VAT rate and no contribution (`_federal: the tax block
+of YYYY-MM disagrees with the law`): a fleet agreeing with itself and not with the law means the
+law was misread, or changed and was not followed, or the contribution came back.
+
 ### The VAT rate
 
 Two checks guard the rate the cards state (`TaxOverlay.card_vat_rate`). `_expect_vat_stated`
@@ -1544,8 +1555,10 @@ which is once a month in practice, when TotalEnergies republishes. On 3 October 
 five: Electricité Variable in Wallonia charges a 100,00 EUR fee in French and 94,34 in Dutch,
 and four Dutch addresses serve another product, a gas card or a formula with a comma.
 
-The tax report carries seven kinds of row: a supplier whose federal block disagrees with the
-month's consensus (`_check_federal_tax_consensus`), a card whose VREG network ceiling disagrees
+The tax report carries nine kinds of row: a supplier whose federal block disagrees with the
+month's consensus (`_check_federal_tax_consensus`), the month's consensus disagreeing with what
+the law bills (the same check), the excise law on Justel or its earlier wording no longer
+reading (`_check_excise_law`), a card whose VREG network ceiling disagrees
 with the one Fluvius's sheet prints for its year (`_check_vreg_ceiling_consensus`), the same for
 the VAT rate (`_check_vat_consensus`), the archive's VAT table no longer reading
 (`_check_vat_table`), which leaves installations on the table they held, this year's Fluvius

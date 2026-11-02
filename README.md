@@ -408,7 +408,11 @@ The daily live check compares every supplier's federal block against the rest
 and reports a card that drifts (the social tariff is left out of this and of
 the network comparison below: it bills the protected rate and no network
 rows), which is how a supplier that corrects itself
-gets noticed: Bolt and Trevion both did between August and September.
+gets noticed: Bolt and Trevion both did between August and September. It
+also reads article 419 from Justel the way the integration does, and reports
+a page that no longer reads, a running month it gives no rate for, and a
+month whose cards agree with each other but not with what the integration
+bills from the law.
 
 The network rows are compared the same way, per DSO: distribution, transport,
 metering, capacity and prosumer figures are set by the regulators, so a card

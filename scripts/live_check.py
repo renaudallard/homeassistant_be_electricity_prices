@@ -202,6 +202,12 @@ def _load_providers() -> dict[str, types.ModuleType]:
     # the copy the providers import, which _check_vat_table fills.
     global _VAT_RATES
     _VAT_RATES = importlib.import_module("be_pkg.vat_rates")
+    # And its reader of the excise law, the copy the providers bill from,
+    # which _check_excise_law fills, with the month the law struck the
+    # energy contribution from.
+    global _EXCISE_LAW, _CONTRIBUTION_ZEROED_FROM
+    _EXCISE_LAW = importlib.import_module("be_pkg.excise_law")
+    _CONTRIBUTION_ZEROED_FROM = const.FEDERAL_CONTRIBUTION_ZEROED_FROM
     loaded = {
         supplier: _load(
             f"be_pkg.providers.{supplier}", PKG / "providers" / f"{supplier}.py"
@@ -287,8 +293,10 @@ _WALLONIA_DSO_KEYS: frozenset[str] = frozenset()
 _BRUSSELS_DSO_KEYS: frozenset[str] = frozenset()
 # Filled from const.py by the loader above, like the DSO key sets.
 _VAT_RATE_REDUCED: float = 0.06
-# The package's vat_rates, bound by the loader above.
+# The package's vat_rates and excise_law, bound by the loader above.
 _VAT_RATES: Any = None
+_EXCISE_LAW: Any = None
+_CONTRIBUTION_ZEROED_FROM: tuple[int, int] = (2026, 8)
 # How many cards have to PRINT the sentence before a disagreeing majority
 # among them is read as the regulator having moved. Two is the smallest number
 # that is a fleet rather than a card. Counted on the cards seen and not on the
@@ -1592,8 +1600,10 @@ async def _check_social(
 
     The shared snapshot validation does not fit it: the network component is
     flat and carries no capacity term, and the excise is the protected
-    customer's, which the runner cannot read from the law, so the card
-    carries ``protected_excise_unread`` here for any month the law decides.
+    customer's, which the card leaves to the law and the run reads only
+    after the cards (:func:`_check_excise_law` asserts the month's rate), so
+    the card carries ``protected_excise_unread`` here for any month the law
+    decides.
     What is checked is what this run can know: the CREG card of the running
     quarter parses and prices within bounds, the feed-in of the two suppliers
     that print one is read, and the Walloon connection fee is there.
@@ -3222,6 +3232,86 @@ def _check_fluvius_sheet(
     )
 
 
+def _record_law_failure(label: str, err: BaseException) -> None:
+    """A read of the law that raised: passed with the error when the network
+    failed the way a later read recovers from, a tax row otherwise."""
+    error = (
+        str(err)
+        if isinstance(err, _EXTRACTOR_ERROR)
+        else f"{type(err).__name__}: {err}"
+    )
+    if isinstance(err, TimeoutError) or _is_transient_fetch_error(error):
+        _record(label, True, f"not fetched: {error}", kind="tax")
+        return
+    _record(label, False, f"{error}; see excise_law.py", kind="tax")
+
+
+async def _check_excise_law(
+    session: aiohttp.ClientSession, today: date | None = None
+) -> bool:
+    """Assert Justel's article 419 still reads the way the integration reads
+    it, and hold it for the federal tax block to be measured against.
+
+    The integration bills every residential month's excise from it, and the
+    social tariff's protected rate, so a page it no longer reads leaves each
+    card billed on the excise it prints, a stale card's included, and the
+    social tariff unpriced, with nothing else saying the reader broke. The
+    wording before the current one is read the same way, with the law that
+    ended it: when they no longer read, a card standing in for one of their
+    months is billed the levies it prints. Tax rows, like the Fluvius sheet:
+    they file in the federal block's thread and fail no pull request, and a
+    fetch that failed the way a later one recovers from passes.
+
+    True when the current wording was read and held, which the federal check
+    then measures the fleet against.
+    """
+    law = _EXCISE_LAW
+    if law is None:
+        return False
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    label = "_federal: the excise law on Justel unreadable"
+    try:
+        page = await _fetch_with_retry(
+            partial(_fetch_text, session, law.EXCISE_LAW_URL)
+        )
+        table = law.parse(page)
+    except Exception as err:
+        _record_law_failure(label, err)
+        return False
+    law.hold_read(table)
+    missing = [
+        kind
+        for kind, rate in (
+            ("household", law.standard_excise(today)),
+            ("protected customer's", law.protected_excise(today)),
+        )
+        if rate is None
+    ]
+    _record(
+        label,
+        not missing,
+        f"no {' or '.join(missing)} rate for {today:%Y-%m}; see excise_law.py"
+        if missing
+        else "",
+        kind="tax",
+    )
+    label = "_federal: the excise law's earlier wording on Justel unreadable"
+    try:
+        archived = await _fetch_with_retry(
+            partial(_fetch_text, session, law.EXCISE_LAW_ARCHIVE_URL)
+        )
+        schedule, dossier = law.parse_archive(archived)
+        amending = await _fetch_with_retry(
+            partial(_fetch_text, session, law.law_url(dossier))
+        )
+        law.after_transitions(schedule, dossier, amending)
+    except Exception as err:
+        _record_law_failure(label, err)
+        return True
+    _record(label, True, kind="tax")
+    return True
+
+
 # The pages the operators publish the hours on that day_night.is_offpeak and
 # pricing.dso_impact_band bill by. sibelga.be answers 403, so Brussels is not
 # watched.
@@ -3364,9 +3454,10 @@ async def _check_dso_schedules(
 
 
 def _check_federal_tax_consensus(
-    archive: Path | None, today: date | None = None
+    archive: Path | None, today: date | None = None, *, law_read: bool = False
 ) -> None:
-    """Assert every supplier prints the same federal tax block for a month.
+    """Assert every supplier prints the same federal tax block for a month,
+    and the one the integration bills.
 
     The federal excise and the federal energy contribution are set by law, so
     for one month and one region every card in the country carries the same
@@ -3400,6 +3491,14 @@ def _check_federal_tax_consensus(
     The majority is the answer, and a tie is not reported: with two suppliers
     disagreeing there is no consensus to measure against, and guessing which
     is right is how a check starts filing issues against the wrong card.
+
+    Every card agreeing is not enough. With the law read (``law_read``,
+    :func:`_check_excise_law`), the pair two suppliers or more print is
+    measured against what the integration bills each of them
+    (:func:`_billed_tax_block`): a fleet agreeing with itself and not with
+    the law means the law was misread or changed and was not followed, or
+    the contribution the integration strikes out came back, and every
+    residential month is billed on it.
     """
     if archive is None:
         return
@@ -3444,13 +3543,21 @@ def _check_federal_tax_consensus(
         by_pair = seen.setdefault(region, {})
         if supplier not in by_pair.setdefault(pair, []):
             by_pair[pair].append(supplier)
+    billed = _billed_tax_block(month) if law_read else None
+    measured: list[str] = []
+    apart: list[str] = []
     for region, by_pair in sorted(seen.items()):
-        if len(by_pair) < 2:
-            continue
         ranked = sorted(by_pair.items(), key=lambda kv: (-len(kv[1]), kv[0]))
-        (top_pair, top_suppliers), (_, runner_up) = ranked[0], ranked[1]
-        if len(top_suppliers) == len(runner_up):
+        top_pair, top_suppliers = ranked[0]
+        if len(ranked) > 1 and len(top_suppliers) == len(ranked[1][1]):
             continue
+        if billed is not None and len(top_suppliers) >= 2:
+            measured.append(region)
+            if any(abs(a - b) >= 5e-6 for a, b in zip(top_pair, billed, strict=True)):
+                apart.append(
+                    f"{region}: excise {top_pair[0]} + contribution {top_pair[1]} "
+                    f"on {', '.join(sorted(top_suppliers))}"
+                )
         # One row per supplier, each judged on its own allowance: several
         # suppliers can print the same stale pair, and naming the row after the
         # first of them let an allowance granted to one cover the others.
@@ -3470,6 +3577,33 @@ def _check_federal_tax_consensus(
                     detail,
                     kind="tax",
                 )
+    if billed is not None and measured:
+        _record(
+            f"_federal: the tax block of {month} disagrees with the law",
+            not apart,
+            f"{'; '.join(apart)}, where the integration bills excise "
+            f"{billed[0]} + contribution {billed[1]}"
+            if apart
+            else "",
+            kind="tax",
+        )
+
+
+def _billed_tax_block(month: str) -> tuple[float, float] | None:
+    """What the integration bills a residential card of ``month``
+    (``YYYY-MM``) for the federal excise and the energy contribution,
+    including VAT at the month's rate, whatever the card prints: the law's
+    household excise, as :func:`_check_excise_law` held it, and no
+    contribution from the month the law struck it
+    (``providers/_resolve.py``). None for a month either is billed as the
+    card prints it."""
+    parsed = label_month(month)
+    if _EXCISE_LAW is None or parsed is None or parsed < _CONTRIBUTION_ZEROED_FROM:
+        return None
+    excise = _EXCISE_LAW.standard_excise(date(parsed[0], parsed[1], 1))
+    if excise is None:
+        return None
+    return round(excise * (1.0 + _residential_vat(month)), 7), 0.0
 
 
 def _residential_vat(month: str) -> float:
@@ -5851,8 +5985,19 @@ async def _run(texts: Path | None = None) -> int:
                     False,
                     f"{type(err).__name__}: {err}",
                 )
+            # The law the federal block is measured against, read as the
+            # integration reads it.
             try:
-                _check_federal_tax_consensus(texts)
+                law_read = await _check_excise_law(session)
+            except Exception as err:
+                law_read = False
+                _record(
+                    "_federal: excise law check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                )
+            try:
+                _check_federal_tax_consensus(texts, law_read=law_read)
             except Exception as err:
                 _record(
                     "_federal: consensus check crashed",

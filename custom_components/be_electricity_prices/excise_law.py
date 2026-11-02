@@ -568,6 +568,12 @@ def hold(table: Mapping[str, Any]) -> None:
         _SCHEDULES[SCHEDULE] = schedule
 
 
+def hold_read(table: Mapping[str, tuple[tuple[date, float], ...]]) -> None:
+    """Hold what :func:`parse` read off the law, replacing what was held for
+    each kind it carries."""
+    _HELD.update(table)
+
+
 def restore(table: Mapping[str, Any]) -> None:
     """Hold ``table`` from an entry's store, for a kind nothing holds yet.
 
@@ -636,7 +642,7 @@ async def ensure_excise_law(session: aiohttp.ClientSession) -> None:
         )
         _failed_at = now
         return
-    _HELD.update(table)
+    hold_read(table)
     _fetched_at = now
     _failed_at = None
     if SCHEDULE in _SCHEDULES:

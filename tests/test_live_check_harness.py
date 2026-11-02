@@ -2016,12 +2016,16 @@ def test_the_drift_issue_is_fingerprinted_on_the_budget_not_the_measurement() ->
     assert "--fingerprint tmp/report/drift_fingerprint.txt" in drift
 
 
-def _sync_no_op(*_args: Any) -> None:
+def _sync_no_op(*_args: Any, **_kwargs: Any) -> None:
     return None
 
 
 async def _async_no_op(*_args: Any) -> None:
     return None
+
+
+async def _async_no_law(*_args: Any) -> bool:
+    return False
 
 
 async def _async_no_sheets(*_args: Any) -> tuple[dict[Any, Any], dict[Any, Any]]:
@@ -2046,6 +2050,7 @@ def _drive_run(
         "_check_fluvius_analog": _sync_no_op,
         "_check_dso_schedules": _async_no_op,
         "_check_vreg_ceiling_consensus": _sync_no_op,
+        "_check_excise_law": _async_no_law,
         "_check_federal_tax_consensus": _sync_no_op,
         "_check_vat_consensus": _sync_no_op,
         "_check_network_consensus": _sync_no_op,
@@ -2078,7 +2083,7 @@ def test_the_products_and_tax_issues_are_fingerprinted_on_what_failed(
             )
             lc._record(f"luminus/catalog: {luminus}", True, kind="catalog")
 
-        def _consensus(*_args: Any) -> None:
+        def _consensus(*_args: Any, **_kwargs: Any) -> None:
             lc._record(
                 f"{tax}/federal tax block disagrees for 2026-09",
                 False,
@@ -2133,11 +2138,11 @@ def test_the_products_and_tax_issues_are_fingerprinted_on_what_failed(
     )
 
 
-def _crash(*_args: Any) -> None:
+def _crash(*_args: Any, **_kwargs: Any) -> None:
     raise AttributeError("renamed by a refactor")
 
 
-async def _async_crash(*_args: Any) -> None:
+async def _async_crash(*_args: Any, **_kwargs: Any) -> None:
     _crash()
 
 
@@ -2157,6 +2162,7 @@ async def _async_crash(*_args: Any) -> None:
             _crash,
             "_federal: VREG ceiling consensus check crashed",
         ),
+        ("_check_excise_law", _async_crash, "_federal: excise law check crashed"),
         ("_check_federal_tax_consensus", _crash, "_federal: consensus check crashed"),
         ("_check_network_consensus", _crash, "_network: consensus check crashed"),
         ("_check_card_freshness", _async_crash, "_freshness: probe crashed"),
@@ -3016,6 +3022,156 @@ def test_a_supplier_printing_last_quarters_federal_tax_block_is_caught(
     assert "0.0503288" in check.detail and "0.04876" in check.detail
 
 
+def _justel(name: str) -> str:
+    """A Justel page as the fixtures keep it."""
+    path = Path(__file__).resolve().parent / "fixtures" / name
+    return path.read_bytes().decode("iso-8859-1")
+
+
+async def test_the_excise_law_is_read_as_the_integration_reads_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The integration bills every residential month's excise and the social
+    tariff's protected rate from Justel's article 419, and a card standing in
+    for a month before it from the archived wording. A page that no longer
+    reads is a tax row, one the network did not serve passes, and only a law
+    read and held is measured against."""
+    from custom_components.be_electricity_prices import excise_law
+    from custom_components.be_electricity_prices.providers import _pdf, base
+
+    pages = {
+        excise_law.EXCISE_LAW_URL: _justel("justel_loi_programme_2004_fr.html"),
+        excise_law.EXCISE_LAW_ARCHIVE_URL: _justel(
+            "justel_loi_programme_2004_fr_arch070.html"
+        ),
+    }
+    amending = _justel("justel_loi_2023_03_19_fr.html")
+
+    async def _fetch(_session: Any, url: str) -> str:
+        return pages.get(url, amending)
+
+    monkeypatch.setattr(lc, "_EXCISE_LAW", excise_law)
+    monkeypatch.setattr(lc, "_fetch_text", _fetch)
+    monkeypatch.setattr(lc, "_EXTRACTOR_ERROR", base.ExtractorError)
+    monkeypatch.setattr(lc, "_is_transient_fetch_error", _pdf.is_transient_fetch_error)
+    monkeypatch.setattr(lc, "_RETRY_BACKOFF_S", (0.0,))
+    excise_law._HELD.clear()
+    today = date(2026, 11, 2)
+    assert await lc._check_excise_law(None, today) is True
+    assert [(c.label, c.ok, c.kind) for c in lc.CHECKS] == [
+        ("_federal: the excise law on Justel unreadable", True, "tax"),
+        (
+            "_federal: the excise law's earlier wording on Justel unreadable",
+            True,
+            "tax",
+        ),
+    ]
+    assert excise_law.standard_excise(today) is not None
+
+    # A month before the wording in force has no household rate to bill.
+    lc.CHECKS.clear()
+    assert await lc._check_excise_law(None, date(2025, 1, 2)) is True
+    assert not lc.CHECKS[0].ok
+    assert lc.CHECKS[0].detail == "no household rate for 2025-01; see excise_law.py"
+
+    lc.CHECKS.clear()
+    pages[excise_law.EXCISE_LAW_ARCHIVE_URL] = "<html>maintenance</html>"
+    assert await lc._check_excise_law(None, today) is True
+    assert [c.ok for c in lc.CHECKS] == [True, False]
+    assert lc.CHECKS[1].detail.endswith("; see excise_law.py")
+
+    lc.CHECKS.clear()
+    pages[excise_law.EXCISE_LAW_URL] = "<html>maintenance</html>"
+    assert await lc._check_excise_law(None, today) is False
+    (row,) = lc.CHECKS
+    assert not row.ok and row.detail.endswith("; see excise_law.py")
+
+    lc.CHECKS.clear()
+
+    async def _down(_session: Any, url: str) -> str:
+        raise base.ExtractorError(f"HTTP 503 fetching {url}")
+
+    monkeypatch.setattr(lc, "_fetch_text", _down)
+    assert await lc._check_excise_law(None, today) is False
+    (row,) = lc.CHECKS
+    assert row.ok and row.detail.startswith("not fetched: HTTP 503")
+
+
+def test_the_fleet_s_tax_block_is_measured_against_the_law(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every card agreeing is not enough: the excise is billed from the law and
+    the contribution struck out since August 2026, so a fleet printing
+    another pair means the law was misread or changed, or the contribution
+    came back. Only measured once the law has been read."""
+    from custom_components.be_electricity_prices import excise_law, vat_rates
+
+    monkeypatch.setattr(lc, "_EXCISE_LAW", excise_law)
+    monkeypatch.setattr(lc, "_VAT_RATES", vat_rates)
+    monkeypatch.setattr(
+        lc,
+        "_CONTRACTS_BY_ID",
+        {f"{s}_fixed": SimpleNamespace(professional=False) for s in ("a", "b", "c")},
+    )
+    label = "_federal: the tax block of 2026-09 disagrees with the law"
+
+    def _fleet(name: str, pair: tuple[float, float]) -> Path:
+        rows = {(s, f"{s}_fixed", "flanders"): pair for s in ("a", "b", "c")}
+        return _federal_archive(tmp_path / name, rows)
+
+    billed = _fleet("billed", (0.04876, 0.0))
+    lc._check_federal_tax_consensus(billed, date(2026, 9, 30))
+    assert lc.CHECKS == []
+    lc._check_federal_tax_consensus(billed, date(2026, 9, 30), law_read=True)
+    (row,) = lc.CHECKS
+    assert (row.label, row.ok, row.kind) == (label, True, "tax")
+    for name, pair in (("stale", (0.0503288, 0.0020417)), ("back", (0.04876, 0.0021))):
+        lc.CHECKS.clear()
+        lc._check_federal_tax_consensus(
+            _fleet(name, pair), date(2026, 9, 30), law_read=True
+        )
+        (row,) = lc.CHECKS
+        assert row.label == label and not row.ok
+        assert row.detail == (
+            f"flanders: excise {pair[0]} + contribution {pair[1]} on a, b, c, "
+            "where the integration bills excise 0.04876 + contribution 0.0"
+        )
+    # Grossed at the month's rate, as the integration grosses the law's.
+    lc.CHECKS.clear()
+    vat_rates.hold({"residential": {"2026-09": {"rate": 0.21}}})
+    grossed = _fleet("grossed", (round(0.046 * 1.21, 7), 0.0))
+    lc._check_federal_tax_consensus(grossed, date(2026, 9, 30), law_read=True)
+    (row,) = lc.CHECKS
+    assert row.ok
+    # One card is no fleet to measure the law against.
+    lc.CHECKS.clear()
+    alone = _federal_archive(
+        tmp_path / "alone", {("a", "a_fixed", "flanders"): (0.0503288, 0.0020417)}
+    )
+    lc._check_federal_tax_consensus(alone, date(2026, 9, 30), law_read=True)
+    assert lc.CHECKS == []
+
+
+def test_the_run_measures_the_fleet_on_the_law_it_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    read: list[bool] = []
+
+    async def _law(*_args: Any) -> bool:
+        return True
+
+    def _consensus(*_args: Any, law_read: bool = False) -> None:
+        read.append(law_read)
+
+    _drive_run(
+        monkeypatch,
+        tmp_path,
+        _check_excise_law=_law,
+        _check_federal_tax_consensus=_consensus,
+    )
+    assert read == [True]
+
+
 def test_a_tax_block_printed_excluding_vat_agrees_with_the_fleet(
     tmp_path: Path,
 ) -> None:
@@ -3636,7 +3792,7 @@ def test_the_vat_table_is_held_before_the_checks_that_gross_at_it(
     order: list[str] = []
 
     def _phase(name: str) -> Callable[..., None]:
-        def _stub(*_args: Any) -> None:
+        def _stub(*_args: Any, **_kwargs: Any) -> None:
             order.append(name)
 
         return _stub
