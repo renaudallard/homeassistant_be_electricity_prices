@@ -2175,7 +2175,8 @@ integration reads it once a day to price what a card leaves without a rate
 and the last month they agreed on stands.
 It also writes `law.json`: for each month from October 2022, the household
 and the protected customer's excise the integration bills from the law,
-read from Justel as an installation reads it. Justel prints only the
+read from Justel as an installation reads it, a dropped connection tried
+again. Justel prints only the
 wording in force, so a month it no longer gives keeps what was written,
 and the integration bills it only for a month the law it read does not
 give.

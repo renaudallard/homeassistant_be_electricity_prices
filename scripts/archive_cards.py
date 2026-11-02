@@ -142,6 +142,7 @@ from custom_components.be_electricity_prices.providers import (  # noqa: E402
 )
 from custom_components.be_electricity_prices.providers._pdf import (  # noqa: E402
     _MIN_TEXT_LAYER_CHARS,
+    fetch_text,
     is_transient_fetch_error,
     memoise_text_fetches,
     render_through,
@@ -1521,7 +1522,8 @@ async def _fetch_card[T](
     fetch: Callable[[], Awaitable[T]],
     sleep: Callable[[float], Any] = asyncio.sleep,
 ) -> T:
-    """One card, retrying the transient failures the live check retries.
+    """One card, or the law's article, retrying the transient failures the
+    live check retries.
 
     ``fetch`` builds a fresh awaitable per attempt, since one can only be
     awaited once.
@@ -2287,10 +2289,17 @@ async def archive(
             )
         else:
             stamp.write_text(f"{parser}\n", encoding="utf-8")
-        # The law the months are billed on, read as an installation reads
-        # it, for law.json. A read that raised must not cost the cards.
+        # The law the months are billed on, for law.json: article 419
+        # fetched the way a card is, a network failure tried again after a
+        # pause, and read with the integration's reader. A read that failed
+        # all the same costs the cards nothing, and law.json keeps what it
+        # held.
         try:
-            await excise_law.ensure_excise_law(session)
+            page = await _fetch_card(
+                functools.partial(fetch_text, session, excise_law.EXCISE_LAW_URL),
+                sleep,
+            )
+            excise_law.hold_read(excise_law.parse(page))
         except Exception as err:
             print(f"the excise law could not be read: {type(err).__name__}: {err}")
     cards.file_the_rest()

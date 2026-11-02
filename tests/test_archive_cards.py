@@ -126,11 +126,19 @@ def _card_fetch(
     return fetch
 
 
+# Article 419 as Justel served it on 2026-10-09.
+_JUSTEL = (
+    (Path(__file__).resolve().parent / "fixtures" / "justel_loi_programme_2004_fr.html")
+    .read_bytes()
+    .decode("iso-8859-1")
+)
+
+
 @pytest.fixture(autouse=True)
 def law_read() -> Iterator[AsyncMock]:
-    """The run reads the excise law from Justel; tests see the article as it
-    was published (conftest) and reach no network."""
-    with patch.object(excise_law, "ensure_excise_law", AsyncMock()) as read:
+    """The run reads article 419 off Justel; tests are served the article as
+    it was published and reach no network."""
+    with patch.object(ac, "fetch_text", AsyncMock(return_value=_JUSTEL)) as read:
         yield read
 
 
@@ -261,6 +269,8 @@ async def test_the_run_reads_the_law_and_writes_its_table(
     extractors = [_extractor(_card_fetch("september 2026"))]
     await ac.archive(tmp_path, extractors=extractors, now=NOW, sleep=_no_sleep)
     law_read.assert_awaited_once()
+    assert law_read.await_args is not None
+    assert law_read.await_args.args[1] == excise_law.EXCISE_LAW_URL
     table = json.loads((tmp_path / "law.json").read_text())["residential"]
     assert (min(table), max(table)) == ("2022-10", "2026-09")
     law_read.side_effect = RuntimeError("a bug in the reader")
@@ -269,6 +279,25 @@ async def test_the_run_reads_the_law_and_writes_its_table(
     )
     assert summary.failed == []
     assert json.loads((tmp_path / "law.json").read_text())["residential"] == table
+
+
+async def test_a_dropped_connection_to_justel_is_tried_again(
+    tmp_path: Path, law_read: AsyncMock
+) -> None:
+    """A reset connection on its one read cost the run of 2 November every
+    month of the law in force: the article is fetched again after a pause,
+    as a card is."""
+    excise_law._HELD.clear()
+    reset = ExtractorError(
+        f"network error fetching {excise_law.EXCISE_LAW_URL}: "
+        "[Errno 104] Connection reset by peer"
+    )
+    law_read.side_effect = [reset, _JUSTEL]
+    extractors = [_extractor(_card_fetch("september 2026"))]
+    await ac.archive(tmp_path, extractors=extractors, now=NOW, sleep=_no_sleep)
+    assert law_read.await_count == 2
+    table = json.loads((tmp_path / "law.json").read_text())["residential"]
+    assert table["2026-09"] == {"standard": 0.046, "protected": 0.001}
 
 
 async def test_a_card_is_filed_under_the_month_its_label_names(tmp_path: Path) -> None:

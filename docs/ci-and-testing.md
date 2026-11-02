@@ -1257,8 +1257,10 @@ state (`taxes.card_vat_rate`), `residential` from the residential contracts and 
 the professional ones. A month gets a `rate` only when at least three suppliers state one and
 none states another; a disagreement is written as `disputed` and a lone rate as `too_few`, and
 an installation reads neither (`vat_rates.py` keeps the last month that agreed).
-`_write_law` writes `law.json` after the walk has read the law (`excise_law.ensure_excise_law`,
-a read that raises costing the run nothing): per month from `excise_law.FIRST_MONTH`, October
+`_write_law` writes `law.json` after the walk has read the law (article 419 fetched the way a
+card is, `_fetch_card`, so a network failure is tried again after a pause, then read with
+`excise_law.parse`; a read that failed all the same costs the run nothing): per month from
+`excise_law.FIRST_MONTH`, October
 2022, up to the current one, the `standard` and `protected` excise `excise_law.py` bills. A month
 it still gives is written again, rate by rate, and one it no longer gives keeps what was written,
 which `law_archive.py` reads for a month the law an installation holds does not give.
