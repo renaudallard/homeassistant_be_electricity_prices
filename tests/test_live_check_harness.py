@@ -3537,6 +3537,124 @@ def test_the_network_check_stays_quiet_without_a_consensus(tmp_path: Path) -> No
     assert lc.CHECKS == []
 
 
+def test_the_archive_s_vat_table_is_held_for_the_checks_that_gross_at_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A card stating no rate is grossed at the month's rate in the card
+    archive's VAT table, as the integration grosses it. A fork's run has no
+    archive and holds nothing; a table that does not read is a tax row."""
+    from custom_components.be_electricity_prices import vat_rates
+
+    monkeypatch.setattr(lc, "_VAT_RATES", vat_rates)
+    lc._check_vat_table(None)
+    assert lc.CHECKS == []
+    for broken in (None, "{", json.dumps({"standard": {}})):
+        if broken is not None:
+            (tmp_path / "vat.json").write_text(broken, encoding="utf-8")
+        lc._check_vat_table(tmp_path)
+        (row,) = lc.CHECKS
+        assert row.label == "_federal: the archive's VAT table unreadable"
+        assert not row.ok and row.kind == "tax"
+        lc.CHECKS.clear()
+    assert lc._residential_vat("2026-09") == 0.06
+    table = {"residential": {"2026-09": {"rate": 0.21}}, "standard": {}}
+    (tmp_path / "vat.json").write_text(json.dumps(table), encoding="utf-8")
+    lc._check_vat_table(tmp_path)
+    (row,) = lc.CHECKS
+    assert row.ok
+    assert lc._residential_vat("2026-09") == 0.21
+
+
+def test_a_card_stating_no_rate_is_put_ex_vat_at_the_month_s_rate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On a fixed 6 % the residential cards of a month the archive's table
+    puts at 21 % would read as another figure than the professional card's,
+    which the integration bills the same."""
+    from custom_components.be_electricity_prices import vat_rates
+
+    monkeypatch.setattr(lc, "_VAT_RATES", vat_rates)
+    archive = _network_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "wallonia"): (0.0, {"distribution_medium": 0.123662}),
+            ("b", "b_fixed", "wallonia"): (0.0, {"distribution_medium": 0.123662}),
+            ("c", "c_fixed", "wallonia"): (0.0, {"distribution_medium": 0.123662}),
+            ("d", "d_pro", "wallonia"): (0.21, {"distribution_medium": 0.1022}),
+        },
+    )
+    lc._check_network_consensus(archive, date(2026, 9, 25))
+    assert [c.label for c in lc.CHECKS] == [
+        "d/ores distribution_medium 0.1022 disagrees for 2026-09"
+    ]
+    lc.CHECKS.clear()
+    vat_rates.hold({"residential": {"2026-09": {"rate": 0.21}}})
+    lc._check_network_consensus(archive, date(2026, 9, 25))
+    assert lc.CHECKS == []
+
+
+def test_the_vreg_ceiling_is_grossed_at_the_month_s_rate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The integration grosses the sheet's ceiling at the month's rate, so a
+    fleet printing it on 21 % agrees with the sheet in a 21 % month."""
+    from custom_components.be_electricity_prices import vat_rates
+
+    monkeypatch.setattr(lc, "_VAT_RATES", vat_rates)
+    texts = tmp_path / "texts" / "2026-09"
+    texts.mkdir(parents=True)
+    names = ("luminus", "frank", "eneco")
+    for name in names:
+        (texts / f"{name}.txt").write_text(
+            "Un tarif maximal de 0,3964163 € s'applique", encoding="utf-8"
+        )
+        row = tmp_path / "cards" / name / f"{name}_fix" / "flanders" / "2026-09.json"
+        row.parent.mkdir(parents=True)
+        row.write_text(
+            json.dumps({"_sources": [{"text": f"texts/2026-09/{name}.txt"}]}),
+            encoding="utf-8",
+        )
+    monkeypatch.setattr(
+        lc,
+        "_CONTRACTS_BY_ID",
+        {f"{name}_fix": SimpleNamespace(professional=False) for name in names},
+    )
+    monkeypatch.setattr(lc, "_parse_vreg_ceiling", _read_ceiling)
+    lc._check_vreg_ceiling_consensus(tmp_path, FLUVIUS_CEILINGS, date(2026, 9, 21))
+    assert "_federal: Fluvius's VREG ceiling disagrees with the fleet" in [
+        c.label for c in lc.CHECKS
+    ]
+    lc.CHECKS.clear()
+    vat_rates.hold({"residential": {"2026-09": {"rate": 0.21}}})
+    lc._check_vreg_ceiling_consensus(tmp_path, FLUVIUS_CEILINGS, date(2026, 9, 21))
+    assert lc.CHECKS == []
+
+
+def test_the_vat_table_is_held_before_the_checks_that_gross_at_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    order: list[str] = []
+
+    def _phase(name: str) -> Callable[..., None]:
+        def _stub(*_args: Any) -> None:
+            order.append(name)
+
+        return _stub
+
+    grossing = (
+        "_check_vreg_ceiling_consensus",
+        "_check_federal_tax_consensus",
+        "_check_network_consensus",
+    )
+    _drive_run(
+        monkeypatch,
+        tmp_path,
+        **{name: _phase(name) for name in ("_check_vat_table", *grossing)},
+    )
+    assert order[0] == "_check_vat_table"
+    assert sorted(order[1:]) == sorted(grossing)
+
+
 def test_a_network_disagreement_files_apart_from_the_tax_block(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

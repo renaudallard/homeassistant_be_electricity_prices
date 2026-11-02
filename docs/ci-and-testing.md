@@ -411,7 +411,11 @@ count (`test_every_expected_marker_is_counted_and_listed`). `_check_vat_consensu
 month most residential cards are filed under, the supplier as the voter, the majority as the
 answer and a tie unreported, a supplier stating another rate filed under the tax kind. A month
 they disagree on is also the month the archive's `vat.json` leaves out, so installations keep
-the last one that agreed.
+the last one that agreed. `_check_vat_table` holds that table from the checkout before the
+VREG ceiling, federal and network checks run, so a figure on a card stating no rate is
+grossed at the month's rate there as the integration grosses it (`_residential_vat`, 6%
+without a checkout); a table that does not read is a tax row, `_federal: the archive's VAT
+table unreadable`.
 
 ### Network figures
 
@@ -419,7 +423,8 @@ the last one that agreed.
 network rows. Distribution (every band, Impact included), transport, metering, capacity,
 prosumer and the Brussels power term above 13 kVA are set per DSO, so for one month and one DSO
 every card carries the same figure once put on one VAT basis: a residential card stores it
-including 6% and a professional card the regulator's ex-VAT figure. Figures within 1% of each
+including VAT, at the rate it states or else the month's in the archive's `vat.json`, and a
+professional card the regulator's ex-VAT figure. Figures within 1% of each
 other count as one (the round trip moves the last digit; the smallest real disagreement in the
 September 2026 archive is 2%), the supplier is the voter, a tie is not reported, and the month is
 the one most cards are filed under, as for the federal check. A zero votes like any other figure,
@@ -1539,10 +1544,12 @@ which is once a month in practice, when TotalEnergies republishes. On 3 October 
 five: Electricité Variable in Wallonia charges a 100,00 EUR fee in French and 94,34 in Dutch,
 and four Dutch addresses serve another product, a gas card or a formula with a comma.
 
-The tax report carries six kinds of row: a supplier whose federal block disagrees with the
+The tax report carries seven kinds of row: a supplier whose federal block disagrees with the
 month's consensus (`_check_federal_tax_consensus`), a card whose VREG network ceiling disagrees
 with the one Fluvius's sheet prints for its year (`_check_vreg_ceiling_consensus`), the same for
-the VAT rate (`_check_vat_consensus`), this year's Fluvius sheet no longer reading
+the VAT rate (`_check_vat_consensus`), the archive's VAT table no longer reading
+(`_check_vat_table`), which leaves installations on the table they held, this year's Fluvius
+sheet no longer reading
 (`_check_fluvius_sheet`), which the integration would otherwise survive silently by billing each
 card's own ceiling, an area sheet's analog kWh rate no longer reading
 (`_check_fluvius_analog`), which leaves analog meters on the peak-metered rate, and an

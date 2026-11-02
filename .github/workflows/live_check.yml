@@ -125,7 +125,9 @@ jobs:
         # it, and takes the render from what the archive stored. The archive
         # lives in the cards repository, which is public, so this needs no
         # token and works on a fork's pull request too; a clone that fails
-        # renders everything, as before.
+        # renders everything, as before. Its VAT table is the rate a figure
+        # on a card stating none is grossed at, as installations gross it,
+        # and 6% without the clone.
         run: |
           if git clone -q --depth=1 \
               https://github.com/renaudallard/be_price_cards.git tmp/cards; then

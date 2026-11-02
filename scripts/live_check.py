@@ -198,6 +198,10 @@ def _load_providers() -> dict[str, types.ModuleType]:
     global _DAY_NIGHT, _IMPACT_BAND
     _DAY_NIGHT = _load("be_pkg.day_night", PKG / "day_night.py")
     _IMPACT_BAND = _load("be_pkg.pricing", PKG / "pricing.py").dso_impact_band
+    # And the VAT table it grosses a figure on a card stating no rate with,
+    # the copy the providers import, which _check_vat_table fills.
+    global _VAT_RATES
+    _VAT_RATES = importlib.import_module("be_pkg.vat_rates")
     loaded = {
         supplier: _load(
             f"be_pkg.providers.{supplier}", PKG / "providers" / f"{supplier}.py"
@@ -283,6 +287,8 @@ _WALLONIA_DSO_KEYS: frozenset[str] = frozenset()
 _BRUSSELS_DSO_KEYS: frozenset[str] = frozenset()
 # Filled from const.py by the loader above, like the DSO key sets.
 _VAT_RATE_REDUCED: float = 0.06
+# The package's vat_rates, bound by the loader above.
+_VAT_RATES: Any = None
 # How many cards have to PRINT the sentence before a disagreeing majority
 # among them is read as the regulator having moved. Two is the smallest number
 # that is a fleet rather than a card. Counted on the cards seen and not on the
@@ -2977,7 +2983,8 @@ def _check_vreg_ceiling_consensus(
     resolver already bills the regulator's figure either way.
 
     Either VAT basis is accepted, because a professional card prints the
-    regulator's ex-VAT figure and a residential one the same figure grossed.
+    regulator's ex-VAT figure and a residential one the same figure grossed,
+    at the month's rate (:func:`_residential_vat`).
     """
     if archive is None:
         return
@@ -3016,7 +3023,7 @@ def _check_vreg_ceiling_consensus(
             break
     if not printed:
         return
-    tvac = sheet * (1.0 + _VAT_RATE_REDUCED)
+    tvac = sheet * (1.0 + _residential_vat(month))
     agree = {
         name
         for name, value in printed.items()
@@ -3465,6 +3472,38 @@ def _check_federal_tax_consensus(
                 )
 
 
+def _residential_vat(month: str) -> float:
+    """The rate the integration grosses a figure on a card of ``month``
+    (``YYYY-MM``) that states none at: the month's in the card archive's VAT
+    table once :func:`_check_vat_table` has held it, else const.py's."""
+    parsed = label_month(month)
+    if _VAT_RATES is None or parsed is None:
+        return _VAT_RATE_REDUCED
+    return float(_VAT_RATES.residential_vat(date(parsed[0], parsed[1], 1)))
+
+
+def _check_vat_table(archive: Path | None) -> None:
+    """Hold the card archive's VAT table, as installations read it, so the
+    checks after it gross a figure on a card stating no rate at the month's
+    rate, as the integration does: run before them. Without the archive,
+    which is a fork's run, they gross at const.py's rate. A table that does
+    not read is a tax row, like the Fluvius sheet: every installation then
+    keeps the table it held before."""
+    if archive is None or _VAT_RATES is None:
+        return
+    label = "_federal: the archive's VAT table unreadable"
+    path = archive / "vat.json"
+    try:
+        table = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(table, Mapping) or "residential" not in table:
+            raise ValueError("no residential rates")
+    except (OSError, ValueError) as err:
+        _record(label, False, f"{path.name}: {type(err).__name__}: {err}", kind="tax")
+        return
+    _VAT_RATES.hold(table)
+    _record(label, True, kind="tax")
+
+
 def _check_vat_consensus(archive: Path | None) -> None:
     """Assert every residential card of a month states the same VAT rate.
 
@@ -3676,8 +3715,9 @@ def _check_network_consensus(archive: Path | None, today: date | None = None) ->
 
     Read from the card archive like the federal check, and on the month most
     cards are filed under, for the same reasons. Each row is put on the
-    ex-VAT basis first: a residential card stores the figure including 6% VAT
-    and a professional one the regulator's ex-VAT figure. Figures within
+    ex-VAT basis first: a residential card stores the figure including VAT,
+    at the rate it states or else the month's (:func:`_residential_vat`), and
+    a professional one the regulator's ex-VAT figure. Figures within
     ``_NETWORK_TOLERANCE`` of each other are one figure, the supplier is the
     voter, and a tie is not reported.
     """
@@ -3704,7 +3744,9 @@ def _check_network_consensus(archive: Path | None, today: date | None = None) ->
         try:
             snap = json.loads(row.read_text(encoding="utf-8"))
             vat = float(snap["taxes"].get("vat_rate") or 0.0)
-            stated = float(snap["taxes"].get("card_vat_rate") or _VAT_RATE_REDUCED)
+            stated = float(
+                snap["taxes"].get("card_vat_rate") or _residential_vat(month)
+            )
             dsos = snap.get("dsos") or {}
         except (KeyError, TypeError, ValueError, AttributeError):
             continue
@@ -5781,6 +5823,15 @@ async def _run(texts: Path | None = None) -> int:
             except Exception as err:
                 _record(
                     "_federal: Fluvius analog rate check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                )
+            # The VAT table the checks below gross a card stating no rate at.
+            try:
+                _check_vat_table(texts)
+            except Exception as err:
+                _record(
+                    "_federal: VAT table check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                 )
