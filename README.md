@@ -1255,11 +1255,16 @@ missing from its address, while Luminus's other November cards were priced on
 September's index, as its cards of 1 October had been on August's.
 
 The integration expects this. The last card read keeps pricing until the new
-one is out, a month billed on an index stays provisional until the supplier's
-next card or index table settles it, and an `extractor_card_missing` Repairs
-card in the first days of a month usually means the supplier is late rather
-than that anything is broken; it clears on the next successful refresh. A
-card missing for more than a few days may have moved instead: Engie's Empty
+one is out, and a month billed on an index stays provisional until the
+supplier's next card or index table settles it. From the 1st to the 5th of a
+month, a card that is missing or does not parse raises no Repairs card while
+the entry still prices on a card: suppliers are often late then, or change
+their cards, and the project's daily checks flag such a failure on their
+next run, so a fix can be out before the 6th. From the 6th the
+`extractor_card_missing` or `extractor_failed` card appears as below, and it
+clears on the next successful refresh. An entry with no card at all raises
+it at once, since its sensors have nothing to price with. A card missing for
+more than a few days may have moved instead: Engie's Empty
 House card went to a new address on 1 November 2026, when the product became
 a three-year contract, and only an update of the integration could follow it.
 What happens when a card stays missing is under *Failure mode* below.
@@ -1290,8 +1295,10 @@ successful refresh:
   withdrawn-product notice says so.
 - **`extractor_failed_<entry>`** — the supplier extractor could not parse
   the tariff card (typically a layout drift on the supplier's PDF/HTML).
-  Raised on the first failure, since a parse error will not self-heal;
-  cached prices keep serving, including a card stored by an earlier version
+  Raised on the first failure, since a parse error will not self-heal,
+  except from the 1st to the 5th of a month while a card still prices the
+  entry (see *Suppliers are often late*); cached prices keep serving,
+  including a card stored by an earlier version
   that an upgrade would otherwise drop. With no card at all, the newest card
   the project's card archive holds stands in, and only with the archive box
   unticked or nothing there do the sensors stay unavailable.
@@ -1300,7 +1307,8 @@ successful refresh:
   404 or 410, or a web page where the card should be): the card for the
   month is not out yet, the product was withdrawn, or the supplier moved its
   cards. Raised on the first failure instead of `extractor_failed`, since
-  nothing on the card changed; cached prices keep serving, and with no card
+  nothing on the card changed, and held back from the 1st to the 5th as
+  `extractor_failed` is; cached prices keep serving, and with no card
   at all the archive's newest card stands in as for `extractor_failed`.
   Worth an issue only if it lasts while the supplier still offers the
   product.

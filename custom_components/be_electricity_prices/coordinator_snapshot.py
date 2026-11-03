@@ -102,6 +102,14 @@ from .vat_rates import residential_vat, standard_vat
 # for a breakage that outlives every threshold.
 _EXTRACTOR_ISSUE_THRESHOLD = 2
 
+# From the 1st to the 5th of a month a card that is missing or does not
+# parse raises no Repairs card while the entry still prices on a card.
+# Suppliers are often late then and change their cards then, and the daily
+# live check files such a failure on its next run, so a fix can be out
+# before the 6th. An entry with no card at all says why at once, since its
+# sensors are unavailable.
+_MONTH_START_HOLD_DAYS = 5
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -760,16 +768,22 @@ class _SnapshotMixin:
             self._replay_stale_snapshot("publishes its tariff card as page images")
         elif self._snapshot is None:
             await self._serve_stand_in_card(result.error_message)
+        held = (
+            not unreadable
+            and self._snapshot is not None
+            and dt_util.now().day <= _MONTH_START_HOLD_DAYS
+        )
         if not transient:
             # A 404 or 410, or a web page where the card should be, says the
             # supplier has no card at that address, which is a late card, a
             # withdrawn product or a moved one, never a layout to report.
-            self._sync_extractor_issue(
-                result.error_message,
-                transient=False,
-                unreadable=unreadable,
-                missing=missing,
-            )
+            if not held:
+                self._sync_extractor_issue(
+                    result.error_message,
+                    transient=False,
+                    unreadable=unreadable,
+                    missing=missing,
+                )
         elif result.fail_count >= _EXTRACTOR_ISSUE_THRESHOLD:
             self._sync_extractor_issue(result.error_message, transient=True)
         # An error no extractor raises on purpose is a parser meeting a layout

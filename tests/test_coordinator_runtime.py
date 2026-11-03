@@ -3795,8 +3795,9 @@ async def test_a_parser_crash_keeps_the_cached_card_pricing(
     card, an IndexError off a table that lost a row, used to escape the tick:
     every entity went unavailable on each refetch although the cached card
     could still price them. The tick now succeeds on the held card, and the
-    failure still reaches the Repairs card."""
-    freezer.move_to("2026-10-04 10:00:00+00:00")
+    failure still reaches the Repairs card (past the 5th, before which a
+    card in hand holds it back)."""
+    freezer.move_to("2026-10-14 10:00:00+00:00")
     entry = make_entry(supplier="engie", contract="x", region="wallonia")
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry, defer_meter_reads=True)
@@ -3827,7 +3828,7 @@ async def test_a_parser_crash_keeps_the_cached_card_pricing(
         assert coord.last_update_success
         crash = True
         # Past the 24 h TTL, so the tick asks the supplier again.
-        freezer.move_to("2026-10-05 11:00:00+00:00")
+        freezer.move_to("2026-10-15 11:00:00+00:00")
         await coord.async_refresh()
 
     assert coord.last_update_success
@@ -3899,6 +3900,69 @@ async def test_transient_failure_defers_extractor_issue_until_threshold(
         await coord._maybe_refresh_snapshot()
     assert key not in _shared_failed_fetches(hass)
     assert registry.async_get_issue(DOMAIN, unreachable_id) is None
+
+
+@pytest.mark.parametrize(
+    ("error", "issue"),
+    [
+        ("could not parse energie.be energy formula", "extractor_failed"),
+        ("HTTP 404 fetching https://www.engie.be/x.pdf", "extractor_card_missing"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("moment", "card_held", "raised"),
+    [
+        # In the month's first days, with a card still pricing: held back.
+        ("2026-11-03 14:00:00+01:00", True, False),
+        ("2026-11-05 23:30:00+01:00", True, False),
+        # From the 6th, local time: raised as before.
+        ("2026-11-06 00:30:00+01:00", True, True),
+        # No card at all: the sensors are unavailable, so it says why at once.
+        ("2026-11-03 14:00:00+01:00", False, True),
+    ],
+)
+async def test_a_month_start_failure_holds_its_card_while_a_card_prices(
+    hass: HomeAssistant,
+    freezer: Any,
+    error: str,
+    issue: str,
+    moment: str,
+    card_held: bool,
+    raised: bool,
+) -> None:
+    """From the 1st to the 5th a card that is missing or does not parse raises
+    no Repairs card while the entry still prices on a card. On 3 November 2026
+    energie.be's new template reached a user 33 minutes after it went up,
+    before the daily live check could see it (#154). A second failure in those
+    days raises the network card instead neither."""
+    await hass.config.async_set_time_zone("Europe/Brussels")
+    freezer.move_to(moment)
+    # A product still on sale: a withdrawn one's 404 is expected and raises
+    # nothing while it has a card (_keep_withdrawn_card).
+    entry = make_entry(contract="power_fix_one")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    if card_held:
+        coord._snapshot = _fake_snapshot()
+    registry = ir.async_get(hass)
+
+    async def _broken(*_args: object, **_kwargs: object) -> SupplierSnapshot:
+        raise ExtractorError(error)
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_broken),
+    ):
+        for _ in range(2):
+            coord._force_refresh = True
+            await coord._maybe_refresh_snapshot()
+    shown = registry.async_get_issue(DOMAIN, f"{issue}_{entry.entry_id}") is not None
+    assert shown is raised
+    assert (
+        registry.async_get_issue(DOMAIN, f"extractor_unreachable_{entry.entry_id}")
+        is None
+    )
+    assert coord._last_error == error
 
 
 async def test_actionable_failure_raises_extractor_failed_immediately(
@@ -9301,15 +9365,18 @@ async def _fail_with_archive(
 
 
 async def test_an_entry_with_no_card_is_priced_off_the_archives_newest(
-    hass: HomeAssistant,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """An entry set up while its supplier's card cannot be read holds no card
     at all, and every entity was unavailable. The card archive's newest row,
-    this month's first, stands in. The failure's Repairs card stays up, and
-    the card is dated to its own month with no probe key, so it reads as old
-    and the next refresh still asks the supplier."""
+    this month's first, stands in. The failure's Repairs card stays up (past
+    the 5th, before which a card in hand holds it back), and the card is
+    dated to its own month with no probe key, so it reads as old and the next
+    refresh still asks the supplier."""
     from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 
+    await hass.config.async_set_time_zone("Europe/Brussels")
+    freezer.move_to("2026-11-10 12:00:00+01:00")
     entry = _entry()
     entry.add_to_hass(hass)
     coord = BePricesCoordinator(hass, entry)
