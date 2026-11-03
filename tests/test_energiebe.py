@@ -33,7 +33,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from custom_components.be_electricity_prices.const import FLUVIUS_KEYS, REGION_FLANDERS
+from custom_components.be_electricity_prices.const import (
+    DSO_FLUVIUS_WEST,
+    FLUVIUS_KEYS,
+    REGION_FLANDERS,
+)
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
@@ -46,6 +50,7 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.providers.energiebe import (
     _publication_label,
+    _residential,
     parse_snapshot,
 )
 from tests import fixture_text
@@ -1321,3 +1326,102 @@ async def test_archive_is_flanders_only_and_per_product(
         )
         assert asked[-1].endswith(f"tariffType={word}")
     assert EXTRACTORS["energiebe"].fetch_for_month is energiebe.fetch_for_month
+
+
+# ---- the November 2026 template --------------------------------------------
+
+
+def _nov(name: str) -> tuple[str, str]:
+    """A November 2026 card's layout reading and plain reading."""
+    return fixture_text(name, layout=True), fixture_text(name)
+
+
+def test_the_november_2026_dynamic_card_is_read() -> None:
+    """From November 2026 the prices sit in one row under their column heads
+    and the formulas run in three columns, which the layout reading runs
+    together: "formule vervullen van onze verplichtingen ... (excl. BTW): (
+    1,02 x Belpex + 0,34)". The formulas come off the plain reading. The
+    feed-in sentence now comes before the energy one there, and the heading
+    the older reader anchored the feed-in on heads the price row, where it
+    read the energy formula as the feed-in. The card bundles a professional
+    block (1,04 x Belpex + 0,50), which is cut off."""
+    layout, plain = _nov("energiebe_dynamic_nov.pdf")
+    # Both readings carry "Tariefkaart november 2026 - Professioneel".
+    for reading in (layout, plain):
+        assert "Professioneel" in reading
+        assert "Professioneel" not in _residential(reading)
+    snap = parse_snapshot(layout, "t://x", plain=plain)
+    assert snap.publication_label == "november 2026"
+    energy = snap.energy
+    assert isinstance(energy, DynamicRates)
+    assert energy.factor == pytest.approx(1.02 * 1.06)
+    assert energy.base == pytest.approx(0.34 / 100.0 * 1.06)
+    assert energy.yearly_fixed_fee == pytest.approx(15.0)
+    injection = snap.injection
+    assert injection is not None
+    assert injection.factor == pytest.approx(1.01)
+    assert injection.base == pytest.approx(-0.0098)
+    # "GSC 1,17" and "WKK 0,39" are the row's last two values.
+    assert snap.taxes.flanders_renewables == pytest.approx(0.0156)
+    assert snap.taxes.federal_excise == pytest.approx(0.044732)
+    # "Fluvius (West)" is printed on the line under its figures.
+    assert set(snap.dsos) == set(FLUVIUS_KEYS)
+    west = snap.dsos[DSO_FLUVIUS_WEST]
+    assert west.distribution_single == pytest.approx(0.067)
+    assert west.capacity_eur_per_kw_year == pytest.approx(60.53)
+
+
+def test_the_november_2026_variable_card_is_read() -> None:
+    """The variable card's formula breaks across the layout reading's lines
+    ("(1,12 x Belpex_RLP + groene stroom en WKK, ...", its "0,80)" two lines
+    on), and its feed-in indicative moved from the Zonnestroom row to the
+    price row."""
+    layout, plain = _nov("energiebe_variable_nov.pdf")
+    snap = parse_snapshot(layout, "t://x", "energiebe_variable", plain=plain)
+    assert snap.publication_label == "november 2026"
+    energy = snap.energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.rlp_indexed
+    assert energy.factor == pytest.approx(1.12 * 1.06)
+    assert energy.base == pytest.approx(0.80 / 100.0 * 1.06)
+    assert energy.yearly_fixed_fee == pytest.approx(35.0)
+    injection = snap.injection
+    assert injection is not None and injection.spp_indexed
+    assert injection.factor == pytest.approx(0.60)
+    assert injection.base == pytest.approx(-0.008)
+    assert injection.current == pytest.approx(0.0483)
+    assert snap.taxes.flanders_renewables == pytest.approx(0.0156)
+    assert set(snap.dsos) == set(FLUVIUS_KEYS)
+
+
+def test_a_november_2026_card_without_its_plain_text_is_refused() -> None:
+    layout, _plain = _nov("energiebe_dynamic_nov.pdf")
+    with pytest.raises(ExtractorError, match="plain text"):
+        parse_snapshot(layout, "t://x")
+
+
+@pytest.mark.parametrize(
+    ("name", "plain_read"),
+    [("energiebe_dynamic_nov.pdf", True), ("energiebe_dynamic_oct.pdf", False)],
+)
+async def test_the_plain_text_is_fetched_for_the_november_2026_template_only(
+    monkeypatch: pytest.MonkeyPatch, name: str, plain_read: bool
+) -> None:
+    """The plain reading is a second download of the card, so it is asked for
+    only when the layout reading shows the November price row."""
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    asked: list[str] = []
+
+    async def layout(_session: Any, _url: str, **_kw: Any) -> str:
+        return fixture_text(name, layout=True)
+
+    async def plain(_session: Any, url: str, **_kw: Any) -> str:
+        asked.append(url)
+        return fixture_text(name)
+
+    monkeypatch.setattr(energiebe, "fetch_pdf_text_layout", layout)
+    monkeypatch.setattr(energiebe, "fetch_pdf_text", plain)
+    snap = await energiebe.fetch(None, "energiebe_dynamic", REGION_FLANDERS)  # type: ignore[arg-type]
+    assert bool(asked) is plain_read
+    assert snap.publication_label == ("november 2026" if plain_read else "oktober 2026")

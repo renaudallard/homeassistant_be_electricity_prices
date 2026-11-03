@@ -82,6 +82,7 @@ from ._parse import (
 from ._pdf import (
     NL_MONTHS,
     NUM_NO_THOUSANDS,
+    fetch_pdf_text,
     fetch_pdf_text_layout,
     fetch_text,
     is_transient_fetch_error,
@@ -169,10 +170,12 @@ _VAT_MULT = 1.0 + VAT_RATE_REDUCED
 # until September 2026 and drops "tarief" from October. It is matched with
 # its month: the residential page's list of current products also names
 # "Elektriciteit dynamisch professioneel online", and cutting there would
-# lose nothing today but would hang on a list nobody keeps in order.
+# lose nothing today but would hang on a list nobody keeps in order. From
+# November 2026 the block opens "Tariefkaart november 2026 - Professioneel".
 _PROF_HEADER_RE = re.compile(
     r"Elektriciteit\s+dynamisch\s+(?:tarief\s+)?professioneel(?:\s+online)?"
-    r"\s*[–\-]\s*[A-Za-z]+\s*20\d{2}",
+    r"\s*[–\-]\s*[A-Za-z]+\s*20\d{2}"
+    r"|Tariefkaart\s+[A-Za-z]+\s+20\d{2}\s*[–\-]\s*Professioneel",
     re.IGNORECASE,
 )
 
@@ -218,6 +221,38 @@ _INJECTION_RE = re.compile(
     rf"Terugleveringsvergoeding.*?"
     rf"(\(\s*{_NUM}\s*x\s*Belpex(?P<spp>_SPP)?\s*([{SIGN_CHARS}])\s*{_NUM}\))",
     re.IGNORECASE | re.DOTALL,
+)
+# From November 2026 the card prints its prices in one row, the values on
+# the line under their column heads, and its formulas in three columns of
+# running text. pdfplumber's layout reading runs those columns together line
+# by line and breaks the formulas apart, so on that card they are read off
+# the plain reading, where each sentence is whole: ``fetch`` reads it when
+# the row is there. The feed-in value is signed, as _INJECTION_CURRENT_RE's.
+_ROW_HEADS = (
+    r"Energieprijs\s+Vaste\s+vergoeding\s+Terugleveringsvergoeding\s+GSC\s+WKK"
+    r"[ \t]*\n\s*"
+)
+_ROW_VALUE = r"\d+(?:[.,]\d+)?"
+_PRICE_ROW_RE = re.compile(
+    _ROW_HEADS + rf"{_NUM}\s+{_NUM}\s+([{SIGN_CHARS}]?)\s*{_NUM}\s+{_NUM}\s+{_NUM}"
+)
+# The row's two levies for the shared tax reader, which takes one pattern
+# per levy: GSC is the fourth value and WKK the fifth. On that row the
+# older _WKK_RE would read the energy price under its heading.
+_ROW_LEVY = (
+    _ROW_HEADS + rf"{_ROW_VALUE}\s+{_ROW_VALUE}\s+[{SIGN_CHARS}]?\s*{_ROW_VALUE}\s+"
+)
+_ROW_GSC_RE = re.compile(_ROW_LEVY + _NUM)
+_ROW_WKK_RE = re.compile(_ROW_LEVY + rf"{_ROW_VALUE}\s+{_NUM}")
+# That card's feed-in formula, by its own sentence: "injectievergoeding op
+# kwartierbasis volgens de formule: (1,01 x Belpex – 0,98)" on the dynamic
+# card, "terugleververgoeding volgens de formule: (0,60 x Belpex_SPP –
+# 0,80)" on the variable one. The heading _INJECTION_RE starts from now
+# heads the price row, above the energy formula. Same groups.
+_INJECTION_SENTENCE_RE = re.compile(
+    r"(?:injectievergoeding|terugleververgoeding)[^()]*?volgens\s+de\s+formule\s*:\s*"
+    rf"(\(\s*{_NUM}\s*x\s*Belpex(?P<spp>_SPP)?\s*([{SIGN_CHARS}])\s*{_NUM}\))",
+    re.IGNORECASE,
 )
 # The fixed card prints a rate where the other two print a formula. The column
 # label is identical on all three, so the rate alone cannot say which card this
@@ -269,6 +304,11 @@ _LABEL_RE = re.compile(
     r"(?:particulier\s+)?online\s*[–\-]\s*([A-Za-z]+)\s*(20\d{2})",
     re.IGNORECASE,
 )
+# From November 2026 the month has a title line of its own,
+# "Tariefkaart november 2026 - Particulier".
+_TITLE_RE = re.compile(
+    r"Tariefkaart\s+([A-Za-z]+)\s+(20\d{2})\s*[–\-]\s*Particulier", re.IGNORECASE
+)
 
 
 # ---- public entry points -----------------------------------------------------
@@ -287,7 +327,9 @@ async def fetch(
     if contract_id in _TARIFF_TYPE:
         url = await _resolve_card_url(session, _TARIFF_TYPE[contract_id])
     text = await fetch_pdf_text_layout(session, url)
-    snap = parse_snapshot(text, url, contract_id)
+    snap = parse_snapshot(
+        text, url, contract_id, plain=await _plain(session, url, text)
+    )
     # Here and not in the reader: a past month's card keeps a short table.
     require_every_area("energie.be", snap, FLUVIUS_KEYS)
     return snap
@@ -406,7 +448,9 @@ async def fetch_for_month(
         if url is None:
             return None
         text = await fetch_pdf_text_layout(session, url)
-        snap = parse_snapshot(text, url, contract_id)
+        snap = parse_snapshot(
+            text, url, contract_id, plain=await _plain(session, url, text)
+        )
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
         # so the month cache retries it instead of caching it as absent.
@@ -421,21 +465,55 @@ async def fetch_for_month(
 # ---- snapshot parser ---------------------------------------------------------
 
 
+async def _plain(session: aiohttp.ClientSession, url: str, text: str) -> str | None:
+    """The plain reading of the card at ``url`` when ``text``, its layout
+    reading, is of the November 2026 template, else None."""
+    if _PRICE_ROW_RE.search(_residential(text)) is None:
+        return None
+    return await fetch_pdf_text(session, url)
+
+
 def parse_snapshot(
     text: str,
     source_url: str,
     contract_id: str = _CONTRACT_ID,
     publication_label: str = "",
+    plain: str | None = None,
 ) -> SupplierSnapshot:
+    """Parse a card from ``text``, its layout reading. A card of the November
+    2026 template also needs ``plain``, its plain reading, for the formulas
+    (see _PRICE_ROW_RE); the fixed card, whose rate is no formula, is read
+    the older way until one of that template is seen."""
     section = _residential(text)
     variable = contract_id == _VARIABLE_ID
     fixed = contract_id == _FIXED_ID
+    row = None if fixed else _PRICE_ROW_RE.search(section)
+    formulas, levies = section, (_GSC_RE, _WKK_RE)
+    if row is not None:
+        if plain is None:
+            raise ExtractorError("energie.be: card read without its plain text")
+        formulas, levies = _residential(plain), (_ROW_GSC_RE, _ROW_WKK_RE)
     if fixed:
         energy: EnergyRates = _extract_fixed_energy(section)
-    elif variable:
-        energy = _extract_variable_energy(section)
     else:
-        energy = _extract_energy(section)
+        fee = _yearly_fee(section) if row is None else to_float(row.group(2))
+        if variable:
+            energy = _extract_variable_energy(formulas, fee)
+        else:
+            energy = _extract_energy(formulas, fee)
+    if row is None:
+        injection = (
+            _extract_monthly_injection(section)
+            if (variable or fixed)
+            else _extract_injection(section)
+        )
+    elif variable:
+        indicative = parse_sign(row.group(3)) * to_float(row.group(4))
+        injection = _extract_monthly_injection(
+            formulas, _INJECTION_SENTENCE_RE, indicative
+        )
+    else:
+        injection = _extract_sentence_injection(formulas)
     # The card states no residential rate, so the dynamic and variable
     # formulas were grossed on an assumed one; the fixed rate is printed.
     card_vat, assumed_vat = vat_basis(None, energy)
@@ -445,18 +523,14 @@ def parse_snapshot(
         energy=energy,
         dsos=_extract_dsos(section),
         taxes=replace(
-            _extract_taxes(section),
+            _extract_taxes(section, levies),
             card_vat_rate=card_vat,
             assumed_vat_rate=assumed_vat,
         ),
         source_url=source_url,
         publication_label=publication_label or _publication_label(section),
         valid_until=parse_valid_until(section),
-        injection=(
-            _extract_monthly_injection(section)
-            if (variable or fixed)
-            else _extract_injection(section)
-        ),
+        injection=injection,
     )
 
 
@@ -467,11 +541,11 @@ def _residential(text: str) -> str:
 
 
 def _publication_label(text: str) -> str:
-    m = _LABEL_RE.search(text)
+    m = _LABEL_RE.search(text) or _TITLE_RE.search(text)
     return f"{m.group(1).lower()} {m.group(2)}" if m else ""
 
 
-def _extract_energy(text: str) -> DynamicRates:
+def _extract_energy(text: str, fee: float) -> DynamicRates:
     m = _ENERGY_RE.search(text)
     if not m:
         raise ExtractorError("could not parse energie.be energy formula")
@@ -494,12 +568,12 @@ def _extract_energy(text: str) -> DynamicRates:
     return DynamicRates(
         factor=factor,
         base=base,
-        yearly_fixed_fee=_yearly_fee(text),
+        yearly_fixed_fee=fee,
         quarter_hourly=True,
     )
 
 
-def _extract_variable_energy(text: str) -> SpotMonthlyRates:
+def _extract_variable_energy(text: str, fee: float) -> SpotMonthlyRates:
     """The variable card's monthly-indexed energy leg.
 
     The card prices a delivery month at ``factor x Belpex_RLP + base``, where
@@ -534,7 +608,7 @@ def _extract_variable_energy(text: str) -> SpotMonthlyRates:
     return SpotMonthlyRates(
         factor=factor_pdf * _VAT_MULT,
         base=base_cents / 100.0 * _VAT_MULT,
-        yearly_fixed_fee=_yearly_fee(text),
+        yearly_fixed_fee=fee,
         rlp_indexed=True,
         rlp_blend="columns",
     )
@@ -571,7 +645,11 @@ def _extract_fixed_energy(text: str) -> FixedRates:
     )
 
 
-def _extract_monthly_injection(text: str) -> InjectionRates:
+def _extract_monthly_injection(
+    text: str,
+    formula_re: re.Pattern[str] = _INJECTION_RE,
+    indicative: float | None = None,
+) -> InjectionRates:
     """The variable and fixed cards' injection row. Both print the same
     formula and both settle on it.
 
@@ -594,15 +672,20 @@ def _extract_monthly_injection(text: str) -> InjectionRates:
     from the VNR forecast rather than the realized month (2,77 printed against
     3,00 realized for July 2026), so it is the fallback, not the answer - used
     only for the cold start and whenever the Synergrid profile is unavailable,
-    where it beats both no credit at all and a wrong-index one.
+    where it beats both no credit at all and a wrong-index one. The November
+    2026 template prints it in its price row, which the caller passes as
+    ``indicative`` in c€/kWh.
     """
-    formula = _INJECTION_RE.search(text)
-    current = _INJECTION_CURRENT_RE.search(text)
+    formula = formula_re.search(text)
+    if indicative is None:
+        current = _INJECTION_CURRENT_RE.search(text)
+        if current is not None:
+            indicative = parse_sign(current.group(1)) * to_float(current.group(2))
     if formula and not formula.group("spp"):
         raise ExtractorError(
             "energie.be: variable injection is not indexed on Belpex_SPP"
         )
-    if not formula or not current:
+    if not formula or indicative is None:
         # Every card prints a terugleveringsvergoeding; a miss is a layout
         # drift, not a fee-free contract. Raise rather than silently credit
         # a solar user 0 EUR/kWh.
@@ -614,7 +697,7 @@ def _extract_monthly_injection(text: str) -> InjectionRates:
     factor_pdf = to_float(formula.group(2))
     base_cents = parse_sign(formula.group(4)) * to_float(formula.group(5))
     rates: dict[str, object] = {
-        "current": parse_sign(current.group(1)) * to_float(current.group(2)) / 100.0,
+        "current": indicative / 100.0,
         "formula": formula.group(1),
     }
     rates["factor"] = factor_pdf
@@ -657,7 +740,25 @@ def _extract_injection(text: str) -> InjectionRates:
     )
 
 
-def _extract_taxes(text: str) -> TaxOverlay:
+def _extract_sentence_injection(text: str) -> InjectionRates:
+    """The dynamic card's feed-in formula on the November 2026 template, off
+    its plain reading, where the feed-in sentence comes before the energy
+    one, so _extract_injection's order guard would refuse it. Nor is it
+    needed: the formula is taken right after "volgens de formule:", and the
+    energy one follows "formule (excl. BTW):", which that cannot match."""
+    m = _INJECTION_SENTENCE_RE.search(text)
+    if not m:
+        raise ExtractorError("energie.be: injection formula row not found")
+    return InjectionRates(
+        factor=to_float(m.group(2)),
+        base=parse_sign(m.group(4)) * to_float(m.group(5)) / 100.0,
+        formula=m.group(1),
+    )
+
+
+def _extract_taxes(
+    text: str, levies: tuple[re.Pattern[str], ...] = (_GSC_RE, _WKK_RE)
+) -> TaxOverlay:
     """Every value on the card is VAT-inclusive.
 
     The contribution row was mandatory here while Frank and EnergyVision had
@@ -670,10 +771,21 @@ def _extract_taxes(text: str) -> TaxOverlay:
         supplier="energie.be",
         region=REGION_FLANDERS,
         excise=(_EXCISE_RE,),
-        renewables=(_GSC_RE, _WKK_RE),
+        renewables=levies,
         contribution=_CONTRIB_RE,
         fund=_FUND_RE,
     )
+
+
+# A row whose whole label pdfplumber prints on the line under its eight
+# figures, as the November 2026 cards' Fluvius (West): the label is moved in
+# front of them before the rows are read. A label wrapped mid-word, whose
+# tail sits under the figures ("Vilvoorde)"), is no whole label.
+_LABEL_BELOW_RE = re.compile(
+    r"^((?:\d+(?:[.,]\d+)?[ \t]+){7}\d+(?:[.,]\d+)?)[ \t]*\n"
+    r"(Fluvius \([^()\n]*\))[ \t]*$",
+    re.MULTILINE,
+)
 
 
 def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
@@ -693,7 +805,9 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     # maximumtarief HTVA (0,3276168 against the residential 0,3472738). A
     # whole-document search hands a residential entry a ceiling 6% low.
     nxt = text.find("Nettarieven", start + 1)
-    section = text[start:] if nxt < 0 else text[start:nxt]
+    section = _LABEL_BELOW_RE.sub(
+        r"\2 \1", text[start:] if nxt < 0 else text[start:nxt]
+    )
     # "Voor digitale meters geldt een maximumtarief van 0,3472738 EUR/kWh
     # (excl. databeheer)." pdfplumber renders it "maxi mumtarief" on the two
     # August cards and "maximumtarief" on the July dynamic one, so the space

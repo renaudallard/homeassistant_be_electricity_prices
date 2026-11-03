@@ -149,8 +149,11 @@ The kind is also what makes the config flow collect an ENTSO-E key
 card URL for the contract (`_CARD_URL` for the dynamic one, the contracts API for the
 variable one), calls `fetch_pdf_text_layout` to download and layout-extract the PDF (the
 layout extractor keeps column alignment, important for the DSO table), then
-`parse_snapshot`. Validation is by `%PDF` magic bytes in the shared helper
-(`_pdf.py`), not Content-Type, so the JSON-style API URL and its blob redirect work.
+`parse_snapshot`. When that text shows the November 2026 price row (see below), `_plain`
+also reads the card's plain text with `fetch_pdf_text`, a second download, for the
+formulas; `fetch_for_month` does the same. Validation is by `%PDF` magic bytes in the
+shared helper (`_pdf.py`), not Content-Type, so the JSON-style API URL and its blob
+redirect work.
 
 ### Probe and archive
 
@@ -201,7 +204,9 @@ The header read "Elektriciteit dynamisch tarief professioneel online - september
 September 2026 and "Elektriciteit dynamisch professioneel online - oktober 2026" from October;
 the pattern takes both, with or without "online". It is matched with the month that follows it,
 because the residential page's "Overzicht actief aanbod" list also mentions "Elektriciteit
-dynamisch professioneel online", with no month, and must not trip the slice.
+dynamisch professioneel online", with no month, and must not trip the slice. From November
+2026 the block opens "Tariefkaart november 2026 - Professioneel", which the pattern takes
+too; it is cut the same way from the plain text.
 
 ## Parsing
 
@@ -221,6 +226,33 @@ only the energy and injection legs branch on the contract id.
 `test_variable_shares_the_regulated_overlays_with_the_dynamic_card` pins that shared half
 against the August 2026 values, since the two PDFs are published independently and a drift
 in one would show up there.
+
+### The November 2026 template
+
+On 3 November 2026 energie.be replaced its dynamic and variable cards with a new template
+("Tariefkaart november 2026 - Particulier"). The prices sit in one row under their column
+heads (`_PRICE_ROW_RE`), "Energieprijs Vaste vergoeding Terugleveringsvergoeding GSC WKK"
+over "19,83 15 8,49 1,17 0,39" on the dynamic card, and the formulas run in three columns of
+text, which the layout reading interleaves line by line: the dynamic formula follows
+"formule vervullen van onze verplichtingen ...", and the variable one's "0,80)" lands two
+lines after its "(1,12 x Belpex_RLP +". On that template:
+
+- the energy formula is read from the plain text, where each sentence is whole, by the same
+  `_ENERGY_RE`;
+- the feed-in formula is found by its own sentence (`_INJECTION_SENTENCE_RE`,
+  "injectievergoeding op kwartierbasis volgens de formule:" or "terugleververgoeding
+  volgens de formule:"). `_INJECTION_RE` anchors on "Terugleveringsvergoeding", which
+  now heads the price row above the energy formula, so on the dynamic card it read the
+  energy formula as the feed-in;
+- the standing charge, the variable card's feed-in indicative and GSC and WKK come from
+  the price row (`_ROW_GSC_RE`, `_ROW_WKK_RE` for the shared tax reader); `_WKK_RE` would
+  read the energy price there;
+- the month comes from the title (`_TITLE_RE`), and a DSO row whose label is printed under
+  its figures, Fluvius (West), is joined to them (`_LABEL_BELOW_RE`).
+
+A card of the older template parses as before: replaying the archive's 33 energie.be rows
+through the new code gave identical snapshots. The fixed card was still on the older
+template on 3 November and keeps its reading until a card of the new one is seen.
 
 `_NUM = r"([\d]+(?:[.,][\d]+)?)"` accepts both decimal separators; a dot-decimal re-render
 must not truncate a mandatory value to its integer part.
@@ -585,9 +617,12 @@ The fixtures live under `tests/fixtures/`:
 | `energiebe_dynamic_oct.pdf` | the same document for October 2026, the first under the shorter "Elektriciteit dynamisch online" title |
 | `energiebe_variable_aug.pdf` | the residential variable card named by the contracts API, August 2026 |
 | `energiebe_fixed_aug.pdf` | the residential fixed card named by the contracts API, August 2026 |
+| `energiebe_dynamic_nov.pdf` | the `?key=DynamicTariffs` PDF of November 2026, the first of the new template, with its professional block |
+| `energiebe_variable_nov.pdf` | the residential variable card of November 2026, new template |
 
 Tests load them through `fixture_text(..., layout=True)`, matching the layout-preserving
-extraction used in production. The dynamic fixture is from a different month on purpose: the
+extraction used in production, and the November ones through `fixture_text(...)` as well
+for their plain text. The dynamic fixture is from a different month on purpose: the
 August card is the one that prints the post-2026-08-01 tax block (excise 4,8760, federal
 contribution 0), so the pair covers both sides of that change.
 
@@ -610,6 +645,8 @@ contribution 0), so the pair covers both sides of that change.
 | Solar credit slightly off (a few tenths of a cent) on the variable contract | expected while the Synergrid profile is unavailable | the card's printed indicative is a VNR forecast; it is the deliberate fallback, and the credit firms up once the profile loads |
 | Tax under/over-billing or "tax block"/"GSC/WKK" errors | `_extract_taxes` regexes (-221) | a levy row label or unit changed; energy fund is the only optional one |
 | Professional rows leaking into the snapshot | `_PROF_HEADER_RE` / `_residential` | the professional section header wording changed |
-| Empty publication label, live check flags the month | `_LABEL_RE` | the residential card title was reworded again |
+| Empty publication label, live check flags the month | `_LABEL_RE`, `_TITLE_RE` | the residential card title was reworded again |
+| "energie.be: card read without its plain text" | `fetch` / `_plain` | a caller parsed a November 2026 card from its layout text alone |
+| Several rows fail at once on a new month's card | `_PRICE_ROW_RE`, `_INJECTION_SENTENCE_RE` | the template changed again, as it did in November 2026 |
 | A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row regex in `_extract_dsos`; the "Nettarieven" anchor | a label renamed, a new wrap artifact, or the section header changed |
 | Coordinator never refreshes | none - there is no probe; the time-based TTL drives refetch | expected for this supplier |
