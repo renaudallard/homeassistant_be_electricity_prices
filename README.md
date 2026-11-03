@@ -1301,7 +1301,9 @@ successful refresh:
   including a card stored by an earlier version
   that an upgrade would otherwise drop. With no card at all, the newest card
   the project's card archive holds stands in, and only with the archive box
-  unticked or nothing there do the sensors stay unavailable.
+  unticked or nothing there do the sensors stay unavailable. The card asks
+  to update first, since a newer version may already read the new layout,
+  and to check the open issues before opening one.
 - **`extractor_card_missing_<entry>`** — the supplier's site answered
   that there is no tariff card at the address the integration reads (HTTP
   404 or 410, or a web page where the card should be): the card for the
@@ -1310,8 +1312,8 @@ successful refresh:
   nothing on the card changed, and held back from the 1st to the 5th as
   `extractor_failed` is; cached prices keep serving, and with no card
   at all the archive's newest card stands in as for `extractor_failed`.
-  Worth an issue only if it lasts while the supplier still offers the
-  product.
+  Worth an issue only if it lasts on the latest version while the supplier
+  still offers the product, and none is open for it yet.
 - **`extractor_unreachable_<entry>`** — the tariff card could not be
   downloaded (network timeout, reset, a transient server error, or the
   supplier's own file store refusing the download). Raised only after
