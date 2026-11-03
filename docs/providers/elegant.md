@@ -19,23 +19,26 @@ this alongside the framework and pricing references:
 | Label | `Elegant` | `elegant.py` |
 | Region(s) served | Flanders only | `EXTRACTOR`, `elegant.py` |
 | Publication form | One text PDF of two pages per product, read with pdfplumber (`fetch_pdf_text_layout`) | `fetch` |
-| Current card | `https://cdn.elegant.be/Pricing/TariffCharts/Current/<key>_Residential.pdf`, overwritten in place | `_current_url` |
+| Current card | `https://cdn.elegant.be/Pricing/TariffCharts/Current/<file>_Residential.pdf`, overwritten in place, the file named with spaces ("Zeker & Vast Electricity") since 2 November 2026 and percent-encoded | `_current_url` |
 | Archive | The card in force on the first day of each month, from November 2025 (the launch day, 8 November, for that month), through the site's tariff archive | `fetch_for_month` |
 | Probe | The card's `Last-Modified` | `probe` |
 | Catalog | The residential electricity links on `https://www.elegant.be/tariefkaarten` | `discover` |
 
 The listing at `elegant.be/tariefkaarten` links the same stable addresses for
 the gas cards and for the non-residential edition of each product, which this
-extractor does not read. `discover` keeps the `<Product>Electricity_Residential`
-links alone and names a product it does not know by Elegant's own key.
+extractor does not read. It carries them in the page's JSON, where `&` is
+`\u0026`. `discover` keeps the `<Product> Electricity_Residential` links alone,
+takes the spaces and the `&` out of the product, which gives the archive's key
+whichever way the listing spells it (the names ran together until 2 November
+2026), and names a product it does not know by that key.
 
 ## Contracts
 
-| Contract id | Label | Kind | Card key | Injection shape |
-| --- | --- | --- | --- | --- |
-| `elegant_flex` | Flex | `variable`, `month_indexed` | `FlexElectricity` | EPEXDAMSPP formula plus the printed figure (`spp_indexed`) |
-| `elegant_comfortflex` | ComfortFlex | `variable`, `month_indexed` | `ComfortFlexElectricity` | same |
-| `elegant_zeker_vast` | Zeker & Vast | `fixed` | `ZekerVastElectricity` | same |
+| Contract id | Label | Kind | Archive key | Card file | Injection shape |
+| --- | --- | --- | --- | --- | --- |
+| `elegant_flex` | Flex | `variable`, `month_indexed` | `FlexElectricity` | `Flex Electricity` | EPEXDAMSPP formula plus the printed figure (`spp_indexed`) |
+| `elegant_comfortflex` | ComfortFlex | `variable`, `month_indexed` | `ComfortFlexElectricity` | `ComfortFlex Electricity` | same |
+| `elegant_zeker_vast` | Zeker & Vast | `fixed` | `ZekerVastElectricity` | `Zeker & Vast Electricity` | same |
 
 Flex runs for an indefinite term and ComfortFlex for a year; their cards print
 the same figures and differ in the heading and in the fixed fee's notice

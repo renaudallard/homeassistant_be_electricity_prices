@@ -27,9 +27,13 @@
 
 Elegant sells electricity in Flanders only. Each of its three residential
 products has one card at a stable address, overwritten in place when the
-prices move:
+prices move. Since 2 November 2026 the file names the product as the
+listing spells it, spaces and all ("Zeker & Vast Electricity"):
 
-    https://cdn.elegant.be/Pricing/TariffCharts/Current/<Product>Electricity_Residential.pdf
+    https://cdn.elegant.be/Pricing/TariffCharts/Current/<Product> Electricity_Residential.pdf
+
+Before, the name ran together ("ZekerVastElectricity"), as the tariff
+archive's offer keys still do.
 
 Flex (open-ended) and ComfortFlex (one year) print the same figures: one
 formula per meter register, "(1,0800 x EPEXDAMREK + 1,850) x 1,06" in
@@ -128,18 +132,33 @@ class _ContractDef:
     # The product as the card's second line names it, which is also the
     # label the config flow shows.
     name: str
-    # The product's key, as the current card's file name and the listing's
-    # links spell it, "<key>_Residential.pdf", and as the archive's offers
-    # start, "<key>_<YYYYMMDD>".
+    # The product's key, as the archive's offers start, "<key>_<YYYYMMDD>",
+    # and as the listing's links spell it with the spaces and the "&" taken
+    # out.
     key: str
+    # The current card's file name as the listing links it,
+    # "<file>_Residential.pdf".
+    file: str
 
 
 _CONTRACTS: tuple[_ContractDef, ...] = (
-    _ContractDef("elegant_flex", "variable", "Flex", "FlexElectricity"),
     _ContractDef(
-        "elegant_comfortflex", "variable", "ComfortFlex", "ComfortFlexElectricity"
+        "elegant_flex", "variable", "Flex", "FlexElectricity", "Flex Electricity"
     ),
-    _ContractDef("elegant_zeker_vast", "fixed", "Zeker & Vast", "ZekerVastElectricity"),
+    _ContractDef(
+        "elegant_comfortflex",
+        "variable",
+        "ComfortFlex",
+        "ComfortFlexElectricity",
+        "ComfortFlex Electricity",
+    ),
+    _ContractDef(
+        "elegant_zeker_vast",
+        "fixed",
+        "Zeker & Vast",
+        "ZekerVastElectricity",
+        "Zeker & Vast Electricity",
+    ),
 )
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
@@ -242,8 +261,9 @@ _FUND_RE = re.compile(
     rf"Bijdrage\s+energiefonds\s+Residenti\w*\s+{_NUM}\s*€", re.IGNORECASE
 )
 
-# A residential electricity card the listing links: "<Product>Electricity".
-_LISTED_RE = re.compile(r"/Current/([A-Za-z]+Electricity)_Residential\.pdf")
+# A residential electricity card the listing links, as it spells the product:
+# with spaces since 2 November 2026, run together before.
+_LISTED_RE = re.compile(r"/Current/([^\"'<>/]+?Electricity)_Residential\.pdf")
 
 # The indices the card's printed rates were computed on, "namelijk de waarde
 # van september 2026. Deze bedroeg 15,641 c€/kWh voor afname en 10,053
@@ -268,7 +288,7 @@ def _contract(contract_id: str, region: str) -> _ContractDef:
 
 
 def _current_url(contract: _ContractDef) -> str:
-    return f"{_CURRENT_URL}/{contract.key}_Residential.pdf"
+    return f"{_CURRENT_URL}/{quote(contract.file)}_Residential.pdf"
 
 
 async def fetch(
@@ -492,8 +512,13 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
         html = await fetch_text(session, _LISTING_URL)
     except ExtractorError:
         return set()
+    # The links sit in the page's JSON, where "&" is "\u0026", or in its
+    # markup, where it is "&amp;"; spaces and "&" taken out, the product is
+    # its archive key whichever way the listing spells it.
+    html = html.replace("\\u0026", "&").replace("&amp;", "&")
     known = {c.key: c.contract_id for c in _CONTRACTS}
-    return {known.get(key, key) for key in _LISTED_RE.findall(html)}
+    keys = {re.sub(r"[\s&]", "", name) for name in _LISTED_RE.findall(html)}
+    return {known.get(key, key) for key in keys}
 
 
 # ---- snapshot parser ---------------------------------------------------------

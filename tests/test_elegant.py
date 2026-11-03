@@ -338,7 +338,7 @@ async def test_fetch_reads_the_product_card(monkeypatch: pytest.MonkeyPatch) -> 
     render = AsyncMock(return_value=_card("elegant_zeker_vast_2026-10.pdf"))
     monkeypatch.setattr(elegant, "fetch_pdf_text_layout", render)
     snap = await elegant.fetch(make_text_session(""), _VAST, REGION_FLANDERS)
-    url = f"{_CURRENT}/ZekerVastElectricity_Residential.pdf"
+    url = f"{_CURRENT}/Zeker%20%26%20Vast%20Electricity_Residential.pdf"
     assert render.call_args.args[1] == url
     assert snap.source_url == url
     with pytest.raises(ExtractorError, match="not sold in region"):
@@ -354,18 +354,27 @@ async def test_probe_asks_the_product_card(monkeypatch: pytest.MonkeyPatch) -> N
     assert await elegant.probe(session, _FLEX, REGION_FLANDERS) == (
         "Thu, 01 Oct 2026 04:22:19 GMT"
     )
-    assert freshness.call_args.args[1] == f"{_CURRENT}/FlexElectricity_Residential.pdf"
+    assert (
+        freshness.call_args.args[1] == f"{_CURRENT}/Flex%20Electricity_Residential.pdf"
+    )
     assert await elegant.probe(session, _FLEX, "brussels") is None
     assert await elegant.probe(session, "elegant_other", REGION_FLANDERS) is None
 
 
 async def test_discover_names_the_residential_electricity_cards() -> None:
     """The listing links gas and professional cards beside them, which are
-    not products here."""
+    not products here. It names the products with spaces, in its JSON with
+    "&" as "\\u0026", since 2 November 2026, and ran them together before:
+    both give the archive's key, which also names a product not known."""
     html = (FIXTURES / "discover" / "elegant.html").read_text(encoding="utf-8")
+    assert "Zeker \\u0026 Vast Electricity_Residential" in html
     assert await elegant.discover(make_text_session(html)) == {_FLEX, _COMFORT, _VAST}
-    new = html + f'<a href="{_CURRENT}/GroenFlexElectricity_Residential.pdf">x</a>'
+    new = html + f'href=\\"{_CURRENT}/Groen Flex Electricity_Residential.pdf\\"'
     assert "GroenFlexElectricity" in await elegant.discover(make_text_session(new))
+    before = f'<a href="{_CURRENT}/ZekerVastElectricity_Residential.pdf">x</a>'
+    assert await elegant.discover(make_text_session(before)) == {_VAST}
+    markup = f'<a href="{_CURRENT}/Zeker &amp; Vast Electricity_Residential.pdf">x</a>'
+    assert await elegant.discover(make_text_session(markup)) == {_VAST}
 
 
 # ---- the tariff archive ------------------------------------------------------
