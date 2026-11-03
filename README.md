@@ -1250,17 +1250,19 @@ back a contract you left before the year began.
 Suppliers do not all publish on the 1st. A new month's card can arrive days
 later, a product's card can go missing for a while, and a card put up on the
 1st can still be priced on the month before. On 1 November 2026
-TotalEnergies' cards were still October's, Engie had put up no Empty House
-card for November, and Luminus's BasicFlex card was missing from its address,
-while Luminus's other November cards were priced on September's index, as its
-cards of 1 October had been on August's.
+TotalEnergies' cards were still October's and Luminus's BasicFlex card was
+missing from its address, while Luminus's other November cards were priced on
+September's index, as its cards of 1 October had been on August's.
 
 The integration expects this. The last card read keeps pricing until the new
 one is out, a month billed on an index stays provisional until the supplier's
 next card or index table settles it, and an `extractor_card_missing` Repairs
 card in the first days of a month usually means the supplier is late rather
-than that anything is broken; it clears on the next successful refresh. What
-happens when a card stays missing is under *Failure mode* below.
+than that anything is broken; it clears on the next successful refresh. A
+card missing for more than a few days may have moved instead: Engie's Empty
+House card went to a new address on 1 November 2026, when the product became
+a three-year contract, and only an update of the integration could follow it.
+What happens when a card stays missing is under *Failure mode* below.
 
 ### Failure mode
 

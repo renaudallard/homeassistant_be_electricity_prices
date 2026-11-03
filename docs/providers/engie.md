@@ -30,9 +30,12 @@ Related reading:
 | `probe` | none declared (TTL-only, see below) |
 | `fetch_for_month` | the same endpoint with `monthOffset=N`, N months back from the current card (see below) |
 
-Engie has no single card and no listing page of PDFs. Each (contract, region)
-tuple maps to a document slug, and the current month's PDF for that slug is
-served by a REST endpoint (`engie.py`):
+Engie has no single card. Each (contract, region) tuple maps to a document
+slug, and the current month's PDF for that slug is served by a REST endpoint
+(`engie.py`). The prices page (`/fr/energie/electricite-gaz/prix-conditions/`,
+`/nl/energie/elektriciteit-gas/prijzen-voorwaarden/` in Dutch) links every
+residential card through it and so names every current code; the extractor
+builds the codes itself rather than reading that page:
 
 ```
 https://www.engie.be/api/engie/be/ms/pricing/v1/public/pricesAndConditionsPDF
@@ -84,7 +87,7 @@ them, matching the framework note at `_rates.py`.
 | `engie_empower_variable` | Engie Empower Variable | variable | V, W, B | GREEN, I. 7-price Consommation row (bi-horaire + Flextime triplet + excl. night). |
 | `engie_empower_flextime` | Engie Empower Flextime | tou | V, W, B | GREEN, I. SMR3-only TOU billing of the Empower Variable card (same PDF). Month-indexed on EPEXDAM per Flextime band, energy and feed-in alike, hence `spot_indexed_injection=True`. |
 | `engie_flow` | Engie Flow | variable | V, W, B | GREEN, I. 24-month (V/W), 48-month (B). |
-| `engie_empty_house` | Engie Empty House | variable | V, W, B | GREY, I. Mono-only card for vacant homes; bills the `sans domicile` energy fund. |
+| `engie_empty_house` | Engie Empty House | variable | V, W, B | GREY, I. Mono-only card for vacant homes; bills the `sans domicile` energy fund. Duration slug `36` since November 2026, `00` before (see `renumbered` below). |
 | `engie_pro_easy_fixed` | Engie Easy Fixed (pro) | fixed | V, W, B | GREEN, F, `segment=P`. 12-month in every region, including Brussels. |
 | `engie_pro_easy_variable` | Engie Easy Variable (pro) | variable | V, W, B | GREEN, I, `segment=P`. |
 | `engie_pro_dynamic` | Engie Dynamic (pro) | dynamic | V, W, B | GREY, I, `segment=P`. Formula not grossed at parse time (the card is ex-VAT throughout). |
@@ -92,7 +95,7 @@ them, matching the framework note at `_rates.py`.
 | `engie_pro_empower_variable` | Engie Empower Variable (pro) | variable | V, W, B | GREEN, I, `segment=P`. |
 | `engie_pro_empower_flextime` | Engie Empower Flextime (pro) | tou | V, W, B | GREEN, I, `segment=P`. Same PDF as the pro Empower Variable; month-indexed like the residential edition. |
 | `engie_pro_flow` | Engie Flow (pro) | variable | V, W, B | GREEN, I, `segment=P`. 24-month in every region, including Brussels. |
-| `engie_pro_empty_house` | Engie Empty House (pro) | variable | V, W, B | GREY, I, `segment=P`. Bills the professional energy-fund row, not `sans domicile`. |
+| `engie_pro_empty_house` | Engie Empty House (pro) | variable | V, W, B | GREY, I, `segment=P`. Bills the professional energy-fund row, not `sans domicile`. Duration slug `36` since November 2026, `00` before, like the residential card. |
 
 Region availability is expressed only through the presence of a region letter in
 `months_per_region`. Basic Online omits `_B` (`engie.py`), so
@@ -215,6 +218,21 @@ against 17,73 c/kWh on Empower Variable in Wallonia). An ENDEX101 card has nothi
 to settle and costs no download.
 `EXTRACTOR.settles_on_next_card` is set, so a closed month the card archive caught
 live is asked again until it is settled.
+
+Every card is asked under the code of its own month (`_slug`, `engie.py`). Engie
+renumbers a product's duration slug when it changes the term, and the document
+API files each card under the code it carried that month only. Empty House
+became a three-year product in November 2026 ("durée de 3 ans") and moved from
+`00` to `36`, residential and pro: on 3 November 2026 the `36` code answered
+November at offset 0 and 404 at offsets 1, 2, 3 and 12, while the `00` code
+answered 404 at offset 0, October at 1 and November 2025 at 12. A contract that
+was renumbered carries `renumbered`, the first month under the new code and the
+code each region had before, so `fetch` (today's month), `fetch_for_month` (the
+month asked) and the settlement read (the month after it) each pick their own.
+October 2026 settles on November's card under `36`. `fetch` takes Home
+Assistant's date for the same reason the archive does: the card archive replays
+a row with the clock on the day it was read, and a card read before the change
+is found again at the address it was read from.
 
 ### `discover(session)` (`engie.py`)
 
@@ -630,6 +648,8 @@ re-index monthly, so they are frozen snapshots, not forever-facts.
 | `engie_empower_flextime_w.pdf` | Empower Flextime, Wallonia (7-price TOU triplet, per-slot injection). |
 | `engie_empower_variable_v.pdf` | Empower Variable, Flanders (7-price row, Flextime columns skipped). |
 | `engie_empty_house_v.pdf` | Empty House, Flanders (mono-only, `sans domicile` energy fund). |
+| `engie_empty_house_w_2026-10.pdf` | Empty House, Wallonia, **October 2026**, the last card under the `00` slug, printed at September's EPEXDAM (156,41). |
+| `engie_empty_house_w_2026-11.pdf` | Empty House, Wallonia, **November 2026**, the first under `36` ("durée de 3 ans"), naming October's EPEXDAM (174,40). |
 | `engie_easy_fixed_w_2025-11.pdf` | Easy Fixed, Wallonia, **November 2025**. The seven-column Walloon table printed before the Impact bands. |
 | `engie_dynamic_w_2025-12.pdf` | Dynamic, Wallonia, **December 2025**. The same table in six columns, without the prosumer tariff. |
 

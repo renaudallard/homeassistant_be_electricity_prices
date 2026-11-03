@@ -53,7 +53,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import date, timedelta
 
 import aiohttp
 from homeassistant.util import dt as dt_util
@@ -97,6 +97,7 @@ from ._rates import (
 from ._settle import settled_energy, settled_injection
 from ._validity import (
     archive_validity_check,
+    end_of_month,
     parse_valid_until,
 )
 from .base import (
@@ -138,11 +139,20 @@ class _ContractDef:
     # different card: same layout, but priced excluding VAT, with the
     # degressive excise schedule and the professional energy-fund row.
     segment: str = "R"
+    # A term Engie renumbered: the first month under the code above, and
+    # the code each region's cards carried before it. The document API
+    # files a card under the code of its own month only.
+    renumbered: tuple[date, dict[str, str]] | None = None
 
     @property
     def professional(self) -> bool:
         return self.segment == "P"
 
+
+# Empty House became a three-year product in November 2026 and its code
+# moved from the open-ended "00" to "36". October's card and every one
+# before it are served under "00" only.
+_EMPTY_HOUSE_OPEN_ENDED = (date(2026, 11, 1), {_V: "00", _W: "00", _B: "00"})
 
 # Catalogue of every electricity contract Engie publishes on the public
 # pricing page. Each entry maps to one of Engie's document slugs; the
@@ -243,7 +253,8 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         family="EMPTYHOUSE",
         color="GREY",
         rate="I",
-        months_per_region={_V: "00", _W: "00", _B: "00"},
+        months_per_region={_V: "36", _W: "36", _B: "36"},
+        renumbered=_EMPTY_HOUSE_OPEN_ENDED,
     ),
     # Engie's Tarif Social is not a product here: the social tariff is the
     # CREG's, the same at every supplier, and is priced by the social tariff
@@ -330,29 +341,36 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         family="EMPTYHOUSE",
         color="GREY",
         rate="I",
-        months_per_region={_V: "00", _W: "00", _B: "00"},
+        months_per_region={_V: "36", _W: "36", _B: "36"},
         segment="P",
+        renumbered=_EMPTY_HOUSE_OPEN_ENDED,
     ),
 )
 
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 
 
-def _slug(c: _ContractDef, region_code: str) -> str:
+def _slug(c: _ContractDef, region_code: str, month: date) -> str:
+    """The document code of ``c``'s card for ``month`` in ``region_code``."""
     months = c.months_per_region[region_code]
+    if c.renumbered is not None and month < c.renumbered[0]:
+        months = c.renumbered[1][region_code]
     return f"E_{c.family}_{c.segment}_{c.color}_C_{c.rate}_{months}_{region_code}_F"
 
 
-def _document_url(c: _ContractDef, region_code: str, month_offset: int = 0) -> str:
-    """The document API URL for ``c`` in ``region_code``.
+def _document_url(
+    c: _ContractDef, region_code: str, month: date, month_offset: int
+) -> str:
+    """The document API URL of ``c``'s card for ``month`` in ``region_code``.
 
-    ``month_offset`` counts months back from the current card: 0 is the card
-    ``fetch`` reads, 1 the previous month's, and so on. The API keeps them
-    well past two years, so this is also the archive (see
-    :func:`fetch_for_month`).
+    ``month_offset`` counts months back from the current card, which makes
+    it the distance from today's month to ``month``: 0 is the card ``fetch``
+    reads, 1 the previous month's, and so on. The API keeps them well past
+    two years, so this is also the archive (see :func:`fetch_for_month`).
+    The month also picks the document code, since a renumbered term moves it.
     """
     return (
-        f"{_API_URL}?document={_slug(c, region_code)}"
+        f"{_API_URL}?document={_slug(c, region_code, month)}"
         f"&monthOffset={month_offset}&segment={c.segment}&language=F"
     )
 
@@ -447,7 +465,10 @@ async def fetch(
     if region_code not in contract.months_per_region:
         raise ExtractorError(f"Engie {contract_id}: not available in region {region!r}")
 
-    url = _document_url(contract, region_code)
+    # Home Assistant's date, as in fetch_for_month: the card archive
+    # replays a card with the clock on the day it was read, so a card read
+    # before a term was renumbered is asked under its old code again.
+    url = _document_url(contract, region_code, dt_util.now().date(), 0)
     text = await fetch_pdf_text(session, url)
     return parse_snapshot(contract_id, {region: text}, url)
 
@@ -492,7 +513,7 @@ async def fetch_for_month(
     offset = (today.year - first.year) * 12 + (today.month - first.month)
     if offset < 0:
         return None
-    url = _document_url(contract, region_code, month_offset=offset)
+    url = _document_url(contract, region_code, first, offset)
     try:
         text = await fetch_pdf_text(session, url)
         snap = parse_snapshot(contract_id, {region: text}, url)
@@ -528,9 +549,10 @@ async def _settle_on_published_index(
     with a formula behind it is rebuilt at that index, energy and feed-in,
     mono, bi-hourly, night circuit and the three Flextime slots alike.
 
-    The next card is the one the API serves one month closer to today. While
-    it is not out, which is the running month, the printed estimate stands
-    and the month is flagged ``provisional`` so the month cache asks again.
+    The next card is the one the API serves one month closer to today, under
+    the code of its own month. While it is not out, which is the running
+    month, the printed estimate stands and the month is flagged
+    ``provisional`` so the month cache asks again.
     So is a "next card" naming any other month than this one: an earlier one
     is this month's own card still served, and a later one is a card further
     on than the next, which says nothing about this month either. Kept as
@@ -547,9 +569,11 @@ async def _settle_on_published_index(
         return snap
     if offset == 0:
         return replace(snap, provisional=True)
+    following_month = end_of_month(first.year, first.month) + timedelta(days=1)
     try:
         following = await fetch_pdf_text(
-            session, _document_url(contract, region_code, month_offset=offset - 1)
+            session,
+            _document_url(contract, region_code, following_month, offset - 1),
         )
     except ExtractorError as err:
         if is_transient_fetch_error(str(err)):

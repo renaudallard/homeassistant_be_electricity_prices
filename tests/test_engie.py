@@ -1013,16 +1013,46 @@ def test_pro_document_url_switches_segment() -> None:
         _document_url,
     )
 
-    res = _document_url(_CONTRACTS_BY_ID["engie_easy_variable"], "V")
-    pro = _document_url(_CONTRACTS_BY_ID["engie_pro_easy_variable"], "V")
+    month = date(2026, 11, 1)
+    res = _document_url(_CONTRACTS_BY_ID["engie_easy_variable"], "V", month, 0)
+    pro = _document_url(_CONTRACTS_BY_ID["engie_pro_easy_variable"], "V", month, 0)
     assert "document=E_EASY_R_GREEN_C_I_12_V_F" in res
     assert "segment=R" in res
     assert "document=E_EASY_P_GREEN_C_I_12_V_F" in pro
     assert "segment=P" in pro
     # Brussels runs 12 months on the pro card, not the residential 36.
     assert "E_EASY_P_GREEN_C_I_12_B_F" in _document_url(
-        _CONTRACTS_BY_ID["engie_pro_easy_variable"], "B"
+        _CONTRACTS_BY_ID["engie_pro_easy_variable"], "B", month, 0
     )
+
+
+def test_a_renumbered_term_keeps_its_old_code_for_the_months_before() -> None:
+    """Empty House moved from "00" to "36" in November 2026, residential and
+    pro alike, and only the months from November are filed under "36". A
+    product Engie never renumbered keeps one code whatever the month."""
+    from custom_components.be_electricity_prices.providers.engie import (
+        _CONTRACTS_BY_ID,
+        _document_url,
+    )
+
+    for contract_id, segment in (
+        ("engie_empty_house", "R"),
+        ("engie_pro_empty_house", "P"),
+    ):
+        contract = _CONTRACTS_BY_ID[contract_id]
+        for region in ("V", "W", "B"):
+            code = f"E_EMPTYHOUSE_{segment}_GREY_C_I_{{}}_{region}_F&"
+            assert code.format("00") in _document_url(
+                contract, region, date(2026, 10, 31), 1
+            )
+            assert code.format("36") in _document_url(
+                contract, region, date(2026, 11, 1), 0
+            )
+    easy = _CONTRACTS_BY_ID["engie_easy_variable"]
+    for month in (date(2024, 9, 1), date(2026, 11, 1)):
+        assert "document=E_EASY_R_GREEN_C_I_12_V_F&" in _document_url(
+            easy, "V", month, 0
+        )
 
 
 def test_pro_card_is_parsed_ex_vat_with_the_excise_schedule() -> None:
@@ -1572,6 +1602,91 @@ async def test_a_month_whose_next_card_is_not_out_stays_provisional(
         snap.energy
         == parse_snapshot("engie_empower_variable", {REGION_FLANDERS: text}).energy
     )
+
+
+async def test_empty_house_cards_are_asked_under_the_code_of_their_month(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """Empty House became a three-year product in November 2026 and its code
+    moved from "00" to "36". The new code serves November's card and nothing
+    before it, the old one every month up to October and nothing after.
+    Asked under "00", the current card answered 404, and October could never
+    settle, since the card naming the EPEXDAM it closed at is November's."""
+    from custom_components.be_electricity_prices.providers import engie
+
+    october = fixture_text("engie_empty_house_w_2026-10.pdf")
+    november = fixture_text("engie_empty_house_w_2026-11.pdf")
+    asked: list[str] = []
+
+    def _serving(cards: dict[str, str]) -> Any:
+        async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
+            asked.append(url.split("document=")[1].split("&segment=")[0])
+            for key, text in cards.items():
+                if f"document={key}&" in url:
+                    return text
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+
+        return _fake_pdf
+
+    freezer.move_to("2026-11-03 12:00:00+01:00")
+    monkeypatch.setattr(
+        engie,
+        "fetch_pdf_text",
+        _serving(
+            {
+                "E_EMPTYHOUSE_R_GREY_C_I_36_W_F&monthOffset=0": november,
+                "E_EMPTYHOUSE_R_GREY_C_I_00_W_F&monthOffset=1": october,
+            }
+        ),
+    )
+    current = await engie.fetch(
+        None,  # type: ignore[arg-type]
+        "engie_empty_house",
+        REGION_WALLONIA,
+    )
+    assert current.publication_label == "Novembre 2026"
+    assert asked == ["E_EMPTYHOUSE_R_GREY_C_I_36_W_F&monthOffset=0"]
+
+    asked.clear()
+    closed = await engie.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        "engie_empty_house",
+        REGION_WALLONIA,
+        date(2026, 10, 1),
+    )
+    assert asked == [
+        "E_EMPTYHOUSE_R_GREY_C_I_00_W_F&monthOffset=1",
+        "E_EMPTYHOUSE_R_GREY_C_I_36_W_F&monthOffset=0",
+    ]
+    assert closed is not None and not closed.provisional
+    assert closed.publication_label == "Octobre 2026"
+    # Printed at September's 156,41 EUR/MWh, settled at the 174,40 that
+    # November's card names for October.
+    energy, injection = closed.energy, closed.injection
+    assert isinstance(energy, VariableRates) and injection is not None
+    assert energy.formula_factor is not None and energy.formula_base is not None
+    assert energy.index_realised == pytest.approx(0.1744)
+    assert energy.current == pytest.approx(
+        energy.formula_factor * 0.1744 + energy.formula_base
+    )
+    assert injection.index_realised == pytest.approx(0.1744)
+
+    # The card archive replays a card with the clock on the day it was read,
+    # so one read in October is asked where it was read.
+    freezer.move_to("2026-10-29 12:00:00+01:00")
+    asked.clear()
+    monkeypatch.setattr(
+        engie,
+        "fetch_pdf_text",
+        _serving({"E_EMPTYHOUSE_R_GREY_C_I_00_W_F&monthOffset=0": october}),
+    )
+    replayed = await engie.fetch(
+        None,  # type: ignore[arg-type]
+        "engie_empty_house",
+        REGION_WALLONIA,
+    )
+    assert replayed.publication_label == "Octobre 2026"
+    assert asked == ["E_EMPTYHOUSE_R_GREY_C_I_00_W_F&monthOffset=0"]
 
 
 def test_the_two_epexdam_sets_are_two_objects() -> None:
