@@ -68,7 +68,14 @@ be a draft. Since 30 October 2026 the tariefkaart listing
 `providers/energyvision.py`) links no card: its script,
 `/sites/default/files/ftp/tariefkaarten.min.js`, builds the names for the month and
 shows the newest upload that answers. The fetch finds the current card the same way, by
-name, and reads Brusol's cards off the pages that link them.
+name, and reads Brusol's cards off the pages that link them. Since the script's version
+of 2 November 2026 it asks Drupal's upload folders first, the delivery month's and then
+the month before's, and `inline-files` last, taking the first folder that holds an
+upload: on 3 November the inline copy of the Flemish 1.800 kWh card was gone, and the
+card corrected on 2 November (a 35 EUR welcome credit where the 30 October drafts say
+50) sat in `2026-11` alone. The fetch asks the same folders in the same order from
+November 2026 (`_UPLOAD_FOLDERS_FROM`); the months before were sold off `inline-files`,
+and the upload folders hold their drafts too, so they are still asked there alone.
 
 ```
 config (contract_id) -> fetch(): HEAD EV-<MMYY>-<CODE>-<token>.pdf, _0, _1, ...
@@ -135,9 +142,10 @@ leg pays for the key, not about whether the index is hourly.
 `fetch` (`providers/energyvision.py`) looks the contract's card up by region, refusing a
 region it is not sold in. A card with no `index_url`, every card on the EnergyVision site,
 is found by name as the listing's script finds it. `_current_upload` asks `_newest_upload`
-for this month's plain name (from `_archive_card_urls`), `_0` and `_1` with HEAD requests
-and keeps the newest that answers, then from `_1` on each next one while it answers, up to
-`_MAX_SUFFIX` (`_9`, the script's limit). With none for this month it takes last month's
+for this month's plain name in each folder `_archive_card_urls` names, in turn, until one
+holds an upload: the name, `_0` and `_1` with HEAD requests, keeping the newest that
+answers, then from `_1` on each next one while it answers, up to `_MAX_SUFFIX` (`_9`,
+the script's limit). With none for this month it takes last month's
 card, which the listing shows until the new one is up, and with neither the fetch fails.
 The month is Home Assistant's, where the script takes Brussels'. A HEAD failing for another
 reason than a 404 or a 410 raises, so a site that is down fails the fetch as transient
@@ -197,7 +205,8 @@ Brusol's archive page would report every product it has ever sold as a new SKU.
 
 | card | layout | candidates tried |
 | --- | --- | --- |
-| EnergyVision (`nl`, `WAL-fr`) | one flat folder | `inline-files/EV-<MMYY>-<CODE>-<token>.pdf` |
+| EnergyVision (`nl`, `WAL-fr`), from November 2026 | upload folders, then the flat folder | `<delivery month>/…`, `<delivery month - 1>/…`, then `inline-files/…` |
+| EnergyVision (`nl`, `WAL-fr`), before | one flat folder | `inline-files/EV-<MMYY>-<CODE>-<token>.pdf` |
 | Brusol (`BXL-nl`) | filed by UPLOAD month | `<delivery month>/…` then `<delivery month - 1>/…` |
 
 Brusol's upload month is usually the month before delivery and sometimes the delivery month
@@ -746,6 +755,7 @@ The fixtures live under `tests/fixtures/`:
 | `energyvision_tiered_1800_wal_sep.pdf` | the GS1800V card for Wallonia, same month: the French publication of the tiered shape |
 | `energyvision_laadpunt_nov.pdf` | the GSLP card for November 2026: the levy row spelled "GSC en WKK" |
 | `energyvision_tiered_1800_wal_nov.pdf` | the Walloon GS1800V card for November 2026: the tranche bound grouped with a space, "<1 800 kWh" |
+| `energyvision_tiered_1800_nov.pdf` | the Flemish GS1800V card for November 2026 as corrected on 2 November, filed in `2026-11` only: 12,72 c EUR/kWh for the first 1.800 kWh, a 35 EUR welcome credit |
 
 Tests load them through `fixture_text("energyvision_<...>.pdf", layout=True)`, matching
 the layout-preserving extraction used in production. Both Walloon fixtures are kept on

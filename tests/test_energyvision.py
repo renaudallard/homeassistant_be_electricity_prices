@@ -1479,15 +1479,17 @@ _EV_FILES = "https://www.energyvision.be/sites/default/files/inline-files/"
 class _Uploads:
     """A HEAD answering for the EnergyVision files ``names``, each with a
     Last-Modified of its own, failing for ``down`` as a site that is down
-    fails, and 404 for any other; it keeps the names it was asked."""
+    fails, and 404 for any other; it keeps the names it was asked. A name
+    is the part of the URL after ``root``."""
 
-    def __init__(self, *names: str, down: str = "") -> None:
+    def __init__(self, *names: str, down: str = "", root: str = _EV_FILES) -> None:
         self.names = names
         self.down = down
+        self.root = root
         self.asked: list[str] = []
 
     async def __call__(self, _session: Any, url: str, **_kw: Any) -> str:
-        name = url.removeprefix(_EV_FILES)
+        name = url.removeprefix(self.root)
         self.asked.append(name)
         if name == self.down:
             raise ExtractorError(f"network error fetching {url}: reset")
@@ -1550,6 +1552,78 @@ async def test_a_card_is_found_by_its_name(
     assert head.asked == [name, f"{stem}_0.pdf", f"{stem}_1.pdf"]
     assert read == [_EV_FILES + name]
     assert snap.source_url == _EV_FILES + name
+
+
+def test_from_november_2026_a_card_is_asked_in_the_upload_folders_first() -> None:
+    """EnergyVision's listing has asked the delivery month's upload folder,
+    then the month before's, then ``inline-files`` since its script of 2
+    November 2026. The months before were sold off ``inline-files``, and the
+    folders also hold their drafts, so they are asked there alone."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    contract = ev._CONTRACTS_BY_ID[_TIERED_1800]
+    card = contract.cards["flanders"]
+    files = "https://www.energyvision.be/sites/default/files/"
+    assert ev._archive_card_urls(contract, card, date(2026, 11, 1)) == (
+        f"{files}2026-11/EV-1126-GS1800V-nl.pdf",
+        f"{files}2026-10/EV-1126-GS1800V-nl.pdf",
+        f"{files}inline-files/EV-1126-GS1800V-nl.pdf",
+    )
+    assert ev._archive_card_urls(contract, card, date(2026, 10, 1)) == (
+        f"{files}inline-files/EV-1026-GS1800V-nl.pdf",
+    )
+
+
+async def test_the_november_card_is_read_from_its_upload_folder(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """On 3 November 2026 the inline copy of the Flemish 1.800 kWh card
+    answered 404 and the fetch, asking ``inline-files`` alone, fell back to
+    October's card: 10,6 c EUR/kWh for the first 1.800 kWh where November's
+    prints 12,72. The listing showed the card corrected on 2 November, filed
+    in 2026-11 only, beside the drafts of 30 October in 2026-10."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    files = "https://www.energyvision.be/sites/default/files/"
+    head = _Uploads(
+        "2026-11/EV-1126-GS1800V-nl.pdf",
+        "2026-10/EV-1126-GS1800V-nl.pdf",
+        "2026-10/EV-1126-GS1800V-nl_0.pdf",
+        "inline-files/EV-1026-GS1800V-nl.pdf",
+        "inline-files/EV-1026-GS1800V-nl_0.pdf",
+        "inline-files/EV-1026-GS1800V-nl_1.pdf",
+        "inline-files/EV-1026-GS1800V-nl_2.pdf",
+        root=files,
+    )
+    read: list[str] = []
+
+    async def text(_session: Any, url: str) -> str:
+        if url.removeprefix(files) not in head.names:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+        read.append(url)
+        return fixture_text("energyvision_tiered_1800_nov.pdf", layout=True)
+
+    monkeypatch.setattr(ev, "head_or_raise", head)
+    monkeypatch.setattr(ev, "fetch_pdf_text_layout", text)
+    freezer.move_to("2026-11-03 12:00:00+01:00")
+    snap = await ev.fetch(None, _TIERED_1800, "flanders")  # type: ignore[arg-type]
+    assert read == [f"{files}2026-11/EV-1126-GS1800V-nl.pdf"]
+    assert snap.publication_label == "november 2026"
+    assert isinstance(snap.energy, SpotMonthlyRates)
+    assert snap.energy.tier_rate == pytest.approx(0.1272)
+    assert snap.welcome_credit_eur == pytest.approx(35.0)
+
+    # A month on, the archive finds it in the same folder.
+    freezer.move_to("2026-12-10 12:00:00+01:00")
+    read.clear()
+    past = await ev.fetch_for_month(
+        None,  # type: ignore[arg-type]
+        _TIERED_1800,
+        "flanders",
+        date(2026, 11, 1),
+    )
+    assert past is not None and past.publication_label == "november 2026"
+    assert read == [f"{files}2026-11/EV-1126-GS1800V-nl.pdf"]
 
 
 @pytest.mark.parametrize(

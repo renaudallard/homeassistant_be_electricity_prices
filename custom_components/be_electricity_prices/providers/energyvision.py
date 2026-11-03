@@ -34,7 +34,9 @@ so the plain name can be a draft. Since 30 October 2026 the tariefkaart
 listing links no card: its script
 (``/sites/default/files/ftp/tariefkaarten.min.js``) builds the names for
 the month and shows the newest upload that answers, else last month's
-card, and the fetch finds the current card the same way.
+card, and the fetch finds the current card the same way. From 2 November
+2026 it asks the month's upload folder and the month before's ahead of
+``inline-files`` (``_archive_card_urls``).
 
 A product is published per region, one card each: the Flemish cards are
 ``-nl``, the Walloon ones ``-WAL-fr`` and the Brussels ones ``-BXL-nl``.
@@ -195,9 +197,9 @@ class _CardDef:
     # card is found by its name, as EnergyVision's own listing finds it.
     index_url: str | None = None
     # How an archived card is located under <site>/sites/default/files/.
-    # False is EnergyVision's flat "inline-files" folder, where the filename
-    # alone locates every month; True is Brusol, which files each card under
-    # the month it uploaded it.
+    # False is EnergyVision's "inline-files" folder, asked after the upload
+    # folders from November 2026; True is Brusol, which files each card
+    # under the month it uploaded it.
     archive_by_upload_month: bool = False
 
 
@@ -723,29 +725,39 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     return found
 
 
+# EnergyVision's listing has asked the upload folders before ``inline-files``
+# since its script of 2 November 2026, when the corrected Flemish 1.800 kWh
+# card sat in 2026-11 alone. The folders also hold drafts of earlier months,
+# which were sold off ``inline-files``.
+_UPLOAD_FOLDERS_FROM = date(2026, 11, 1)
+
+
 def _archive_card_urls(
     contract: _ContractDef, card: _CardDef, first: date
 ) -> tuple[str, ...]:
-    """The plain URLs an archived card for ``first`` could sit at, newest
-    upload first. Each is then walked for its reissues.
+    """The plain URLs an archived card for ``first`` could sit at, in the
+    order to ask them. Each is then walked for its reissues.
 
-    EnergyVision keeps every month in one ``inline-files`` folder, so the
-    filename locates the card on its own. Brusol files each card under the
-    month it UPLOADED it, which is usually the month before delivery and
-    sometimes the delivery month itself, so both are tried; measured over
-    March to September 2026, the pair covers every card published. The
-    delivery month's folder goes first: a card in both is one uploaded again,
-    and the August 2026 cards in the July folder are the drafts.
+    Brusol files each card under the month it UPLOADED it, which is usually
+    the month before delivery and sometimes the delivery month itself, so
+    both are tried; measured over March to September 2026, the pair covers
+    every card published. The delivery month's folder goes first: a card in
+    both is one uploaded again, and the August 2026 cards in the July folder
+    are the drafts. From ``_UPLOAD_FOLDERS_FROM`` EnergyVision's cards are
+    asked in the same two folders, then in ``inline-files``; before it, in
+    ``inline-files`` alone.
     """
     stamp = f"{first.month:02d}{first.year % 100:02d}"
     name = f"EV-{stamp}-{contract.code}-{card.token}.pdf"
-    if not card.archive_by_upload_month:
-        return (f"{card.site}/sites/default/files/inline-files/{name}",)
+    inline = f"{card.site}/sites/default/files/inline-files/{name}"
+    if not card.archive_by_upload_month and first < _UPLOAD_FOLDERS_FROM:
+        return (inline,)
     previous = date(first.year, first.month, 1) - timedelta(days=1)
-    return tuple(
+    folders = tuple(
         f"{card.site}/sites/default/files/{folder:%Y-%m}/{name}"
         for folder in (first, previous)
     )
+    return folders if card.archive_by_upload_month else (*folders, inline)
 
 
 # The last re-upload the listing's script asks for ("maxSuffix": 9). The
