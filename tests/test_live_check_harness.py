@@ -3888,7 +3888,12 @@ class _EditionCard:
 
 
 def _editions(
-    french: Any, dutch: Any, transient: bool = False, french_arrives: bool = True
+    french: Any,
+    dutch: Any,
+    transient: bool = False,
+    french_arrives: bool = True,
+    contract: Any = None,
+    region: str = "wallonia",
 ) -> list[tuple[str, bool, str]]:
     """Run the edition comparison over two stand-in cards and return the rows
     it recorded. ``french`` and ``dutch`` are a card, or an exception the
@@ -3910,13 +3915,14 @@ def _editions(
         fetch_pdf_text_layout=_text,
         parse_snapshot=_parse,
     )
-    contract = SimpleNamespace(contract_id="te", slug="TE")
+    if contract is None:
+        contract = SimpleNamespace(contract_id="te", slug="TE")
     lc.CHECKS.clear()
     original = lc._is_transient_fetch_error
     lc._is_transient_fetch_error = lambda _message: transient  # type: ignore[assignment]
     try:
         asyncio.run(
-            lc._compare_totalenergies_editions(None, module, contract, "wallonia")  # type: ignore[arg-type]
+            lc._compare_totalenergies_editions(None, module, contract, region)  # type: ignore[arg-type]
         )
     finally:
         lc._is_transient_fetch_error = original  # type: ignore[assignment]
@@ -5426,6 +5432,29 @@ def test_a_known_card_defect_is_reported_apart_until_it_expires(
     lc._record(label, False, detail)
     (row,) = lc.CHECKS
     assert not row.expected
+    lc.CHECKS.clear()
+
+
+def test_te_s_french_mydynamic_brussels_card_is_a_known_defect(freezer: Any) -> None:
+    """Issue #153: in November 2026 the French myDynamic address in Brussels
+    serves myDrive's November card, which the extractor refuses, and the
+    Dutch card stands in. That failure, as the extractor and the edition
+    check word it, is reported apart until 1 December 2026."""
+    te = lc._load_providers()["totalenergies"]
+    with pytest.raises(te.ExtractorError) as refused:
+        te.parse_snapshot(
+            "totalenergies_mydynamic", "TotalEnergies myDrive", "brussels"
+        )
+    contract = te._CONTRACTS_BY_ID["totalenergies_mydynamic"]
+    dutch = _EditionCard(100.0, _EditionTaxes(0.0, 0.06), "nl")
+    for day, expected in (("2026-11-03", True), ("2026-12-01", False)):
+        freezer.move_to(f"{day} 08:00:00+01:00")
+        ((_label, ok, _detail),) = _editions(
+            refused.value, dutch, contract=contract, region="brussels"
+        )
+        (row,) = lc.CHECKS
+        assert not ok
+        assert row.expected is expected
     lc.CHECKS.clear()
 
 

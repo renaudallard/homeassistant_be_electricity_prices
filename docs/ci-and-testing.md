@@ -636,8 +636,10 @@ sees them, and its Dutch edition still has the stray comma, so neither reads; th
 repeats the figures of the card it replaced, which entries keep pricing on until the November
 card. TotalEnergies had published no November card by 1 November, so these TotalEnergies
 entries run to 6 November (`_TOTALENERGIES_OCTOBER_UNTIL`), the day after the period check's
-grace, which flags a card a month behind from then on. The report gives these rows their own
-section.
+grace, which flags a card a month behind from then on. In November the French myDynamic
+address in Brussels serves myDrive's November 2026 card (issue #153); the Dutch edition is
+myDynamic's and is billed, and the entry runs to 1 December. The report gives these rows their
+own section.
 
 An unreadable label is reported but does not fail: unknown is not evidence of staleness. The label
 parser is unicode-aware on purpose - a character class that forgets the `u` in `août` silently

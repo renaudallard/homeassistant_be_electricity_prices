@@ -849,6 +849,16 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "Dutch card is billed",
     ),
     (
+        "totalenergies/totalenergies_mydynamic/brussels: French and Dutch cards agree",
+        "the French card does not read: ExtractorError: TotalEnergies: the card "
+        "is not myDynamic; the Dutch card stands in",
+    ): (
+        date(2026, 12, 1),
+        "the French Brussels address serves myDrive's November 2026 card "
+        "(B2C_myDrive_ELEC_FR_RBXL); the Dutch card is myDynamic's and is "
+        "billed",
+    ),
+    (
         "totalenergies/totalenergies_mycomfort/brussels: fetch",
         "ExtractorError: TotalEnergies: yearly fee + renewables row not found",
     ): (
