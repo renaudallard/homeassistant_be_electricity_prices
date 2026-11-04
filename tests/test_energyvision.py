@@ -1724,14 +1724,21 @@ async def test_last_months_card_is_read_until_this_months_is_up(
 async def test_no_card_this_month_or_the_month_before_fails_the_fetch(
     monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:
+    """Every name answered 404, so the failure reads as a card missing: the
+    entry is told its card is not out, and a withdrawn product keeps its last
+    card, rather than either being taken for a layout change."""
     from custom_components.be_electricity_prices.providers import energyvision as ev
+    from custom_components.be_electricity_prices.providers._pdf import (
+        is_missing_card_error,
+    )
 
     freezer.move_to("2026-07-15 12:00:00+02:00")
     monkeypatch.setattr(ev, "head_or_raise", _Uploads("EV-0526-GSDYN-nl.pdf"))
     with pytest.raises(
         ExtractorError, match=r"no card GSDYN \(nl\) for 2026-07 or the month before"
-    ):
+    ) as caught:
         await ev.fetch(None, _DYNAMIC, "flanders")  # type: ignore[arg-type]
+    assert is_missing_card_error(str(caught.value))
 
 
 async def test_a_site_that_does_not_answer_fails_the_fetch_as_transient(

@@ -147,8 +147,9 @@ for this month's plain name in each folder `_archive_card_urls` names, in turn, 
 holds an upload: the name, `_0` and `_1` with HEAD requests, keeping the newest that
 answers, then from `_1` on each next one while it answers, up to `_MAX_SUFFIX` (`_9`,
 the script's limit). With none for this month it takes last month's
-card, which the listing shows until the new one is up, and with neither the fetch fails.
-The month is Home Assistant's, where the script takes Brussels'. A HEAD failing for another
+card, which the listing shows until the new one is up, and with neither the fetch fails
+as the 404 every name answered, which reads as a card missing: the entry is told its card is
+not out, and one on a withdrawn product keeps its last card. The month is Home Assistant's, where the script takes Brussels'. A HEAD failing for another
 reason than a 404 or a 410 raises, so a site that is down fails the fetch as transient
 rather than as a month without a card.
 
@@ -782,5 +783,5 @@ parser, and it will fail the day the two publications diverge.
 | "EnergyVision: vaste vergoeding row not found" | `_FEE_RE` | the "Vaste vergoeding ... €/jaar" label reworded |
 | Tax under/over-billing or "could not parse tax block" | `_extract_taxes` regexes (-209) | a levy row label or unit changed; energy fund is the only optional one |
 | A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row lookup in `_extract_dsos`; the "Digitale Meter" anchor | a label renamed or the section header changed |
-| "EnergyVision: no card ... for ... or the month before" | `_current_upload` | no card answers for this month or the last: the product was withdrawn, or the listing's script (`/sites/default/files/ftp/tariefkaarten.min.js`) builds its names another way |
+| "HTTP 404 fetching ...: EnergyVision has no card ... for ... or the month before" | `_current_upload` | no card answers for this month or the last: the product was withdrawn, or the listing's script (`/sites/default/files/ftp/tariefkaarten.min.js`) builds its names another way |
 | "EnergyVision: no listing entry for card ..." | `_resolve_card_url` | Brusol's signup page markup or the `EV-<MMYY>-<CODE>-BXL-nl` filename scheme changed |

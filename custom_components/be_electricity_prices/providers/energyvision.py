@@ -608,6 +608,11 @@ async def _current_upload(
 
     The month is Home Assistant's, which the coordinator holds a card's
     validity to; the listing's script takes the one in Brussels.
+
+    With no upload at all every name answered 404, which is how the failure
+    reads, so it is a card missing rather than a layout change: an entry is
+    told its card is not out yet, and one on a withdrawn product keeps the
+    last card it holds.
     """
     first = dt_util.now().date().replace(day=1)
     for month in (first, (first - timedelta(days=1)).replace(day=1)):
@@ -616,7 +621,8 @@ async def _current_upload(
             if found is not None:
                 return found
     raise ExtractorError(
-        f"EnergyVision: no card {contract.code} ({card.token}) for "
+        f"HTTP 404 fetching {_archive_card_urls(contract, card, first)[0]}: "
+        f"EnergyVision has no card {contract.code} ({card.token}) for "
         f"{first:%Y-%m} or the month before"
     )
 
