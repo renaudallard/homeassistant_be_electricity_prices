@@ -32,7 +32,8 @@ from typing import Any
 # source of a row names what rendered its text, and a stored text is served
 # again only to the same versions and code: a reader upgrade, a render fix or
 # a change to the bound reads every card afresh, in the archive and in the
-# live check alike.
+# live check alike. The render code is its own module so that a change to how
+# a card is downloaded (``_pdf.py``) renders nothing again.
 _READERS = ("pypdf", "pdfplumber")
 _PROVIDERS = (
     Path(__file__).resolve().parent.parent
@@ -41,7 +42,7 @@ _PROVIDERS = (
     / "providers"
 )
 _RENDER_CODE = (
-    _PROVIDERS / "_pdf.py",
+    _PROVIDERS / "_pdf_render.py",
     _PROVIDERS / "_pdf_bound.py",
     _PROVIDERS / "_pdf_bound_pdfminer.py",
 )

@@ -79,10 +79,12 @@ from ..const import (
 )
 from ._parse import SIGN_CHARS, excise_tier_bands, numeric_row, parse_sign, to_float
 from ._pdf import (
-    extract_pdf_text_layout,
     fetch_pdf_text_layout,
     head_ok,
     is_missing_card_error,
+)
+from ._pdf_render import (
+    extract_pdf_text_layout,
 )
 from ._rates import (
     Contract,

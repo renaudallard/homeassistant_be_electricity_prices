@@ -603,8 +603,10 @@ so it files a moved card at the month it names.
 ## The PDF toolkit (providers/_pdf.py)
 
 Every PDF-based provider builds on `providers/_pdf.py`. It centralises fetching,
-PDF text extraction (three strategies), Belgian number parsing, VAT and validity
-parsing, and a couple of Belgium-specific table parsers. Concentrating the
+PDF text extraction (three strategies, which live in `providers/_pdf_render.py`
+so that the card archive's render stamp hashes them and not the download code),
+Belgian number parsing, VAT and validity parsing, and a couple of
+Belgium-specific table parsers. Concentrating the
 network and error handling here keeps roughly six lines of boilerplate out of
 every provider and makes the transient-vs-permanent error distinction
 consistent.
@@ -911,9 +913,9 @@ downstream regex would miss silently.
 
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
-| `extract_pdf_text` | `extract_pdf_text(payload: bytes) -> str` | Default pypdf extraction. Logs and skips pages pypdf returns `None` for (undecodable fonts); raises only if every page fails (`_pdf.py`). |
-| `extract_pdf_text_layout` | `extract_pdf_text_layout(payload: bytes) -> str` | pdfplumber's default `extract_text()`, which rebuilds each row from glyph coordinates (it is not called with `layout=True`), for cards with rotated DSO/tax columns that pypdf drops (TotalEnergies). Runs `dedupe_chars()` first to drop stacked duplicate glyphs (for example `55,,09` rendered instead of `5,09`) (`_pdf.py`). |
-| `extract_pdf_text_aligned` | `extract_pdf_text_aligned(payload, y_tolerance=3, x_join_threshold=0.0) -> str` | Re-groups `extract_words()` output into visual rows by y-coordinate for column-major cards (OCTA+). `x_join_threshold` is opt-in: leave `0.0` to keep words separate; pass ~1.0pt to glue sub-point-gap glyphs (`5 ,0 3 2 9` into `5,0329`). Pages joined with form-feeds (`_pdf.py`). |
+| `extract_pdf_text` | `extract_pdf_text(payload: bytes) -> str` | Default pypdf extraction. Logs and skips pages pypdf returns `None` for (undecodable fonts); raises only if every page fails (`_pdf_render.py`). |
+| `extract_pdf_text_layout` | `extract_pdf_text_layout(payload: bytes) -> str` | pdfplumber's default `extract_text()`, which rebuilds each row from glyph coordinates (it is not called with `layout=True`), for cards with rotated DSO/tax columns that pypdf drops (TotalEnergies). Runs `dedupe_chars()` first to drop stacked duplicate glyphs (for example `55,,09` rendered instead of `5,09`) (`_pdf_render.py`). |
+| `extract_pdf_text_aligned` | `extract_pdf_text_aligned(payload, y_tolerance=3, x_join_threshold=0.0) -> str` | Re-groups `extract_words()` output into visual rows by y-coordinate for column-major cards (OCTA+). `x_join_threshold` is opt-in: leave `0.0` to keep words separate; pass ~1.0pt to glue sub-point-gap glyphs (`5 ,0 3 2 9` into `5,0329`). Pages joined with form-feeds (`_pdf_render.py`). |
 
 ### Number, sign and VAT parsing
 

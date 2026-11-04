@@ -141,11 +141,13 @@ from custom_components.be_electricity_prices.providers import (  # noqa: E402
     is_professional,
 )
 from custom_components.be_electricity_prices.providers._pdf import (  # noqa: E402
-    _MIN_TEXT_LAYER_CHARS,
     fetch_text,
     is_transient_fetch_error,
     memoise_text_fetches,
     render_through,
+)
+from custom_components.be_electricity_prices.providers._pdf_render import (  # noqa: E402
+    _MIN_TEXT_LAYER_CHARS,
 )
 from custom_components.be_electricity_prices.providers._settle import (  # noqa: E402
     is_settled,

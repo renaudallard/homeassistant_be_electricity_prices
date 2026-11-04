@@ -94,10 +94,12 @@ from ._ecopower_overlays import (
 )
 from ._parse import require_every_area, running_month_short_of_an_area
 from ._pdf import (
-    extract_pdf_text_layout,
     fetch_pdf_text_layout,
     fetch_text,
     is_transient_fetch_error,
+)
+from ._pdf_render import (
+    extract_pdf_text_layout,
 )
 from ._rates import Contract, VariableRates
 from ._settle import settled_energy, settled_injection

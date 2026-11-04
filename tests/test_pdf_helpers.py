@@ -28,9 +28,11 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import re
 from collections.abc import Callable, Iterator, Sequence
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -48,12 +50,8 @@ from custom_components.be_electricity_prices.providers._parse import (
     parse_sign,
 )
 from custom_components.be_electricity_prices.providers._pdf import (
-    _MIN_TEXT_LAYER_CHARS,
     MAX_RESPONSE_BYTES,
     _fetch_validated_pdf_bytes,
-    extract_pdf_text,
-    extract_pdf_text_aligned,
-    extract_pdf_text_layout,
     fetch_pdf_text,
     fetch_text,
     head_freshness_key,
@@ -62,6 +60,12 @@ from custom_components.be_electricity_prices.providers._pdf import (
     is_missing_card_error,
     is_transient_fetch_error,
     vat_multiplier,
+)
+from custom_components.be_electricity_prices.providers._pdf_render import (
+    _MIN_TEXT_LAYER_CHARS,
+    extract_pdf_text,
+    extract_pdf_text_aligned,
+    extract_pdf_text_layout,
 )
 from custom_components.be_electricity_prices.providers._rates import FixedRates
 from custom_components.be_electricity_prices.providers._validity import (
@@ -76,6 +80,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
+from scripts import card_texts
 from tests import FakeBody
 
 
@@ -2516,24 +2521,26 @@ def test_dedupe_finds_each_glyph_kept_at_once() -> None:
     assert [id(glyph) for glyph in kept] == [id(glyph) for glyph in expected]
 
 
-def test_the_ci_text_cache_key_moves_with_the_extractor() -> None:
-    """fixture_text keys what it read on providers/_pdf.py and the decode
-    bound beside it, and the CI cache key named only the first: a change to
-    the bound restored the old texts under a key that did not move, none of
-    them of use, and saved none of the new ones."""
+def test_the_ci_text_cache_key_moves_with_the_render_code() -> None:
+    """fixture_text keys what it read on the render code the card archive
+    stamps (``card_texts._RENDER_CODE``), and the CI cache key once named only
+    part of it: a change to the decode bound restored the old texts under a
+    key that did not move, none of them of use, and saved none of the new
+    ones."""
     import yaml  # type: ignore[import-untyped]
 
     from tests import PACKAGE
 
-    workflow = PACKAGE.parent.parent / ".github" / "workflows" / "test.yml"
+    root = PACKAGE.parent.parent.resolve()
+    workflow = root / ".github" / "workflows" / "test.yml"
     steps = yaml.safe_load(workflow.read_text())["jobs"]["test"]["steps"]
     (key,) = (
         step["with"]["key"]
         for step in steps
         if step.get("with", {}).get("path") == "tmp/fixture_text"
     )
-    for code in sorted((PACKAGE / "providers").glob("_pdf*.py")):
-        assert str(code.relative_to(PACKAGE.parent.parent)) in key, code.name
+    for code in card_texts._RENDER_CODE:
+        assert str(code.resolve().relative_to(root)) in key, code.name
 
 
 def test_text_mentions_month_tolerates_split_whitespace() -> None:
@@ -3074,3 +3081,16 @@ def test_the_redirect_guard_holds_whatever_scheme_the_chain_starts_on() -> None:
     )
     with pytest.raises(ExtractorError, match="redirected off https"):
         _pdf.guard_redirect("http://trevion.be/a.pdf", resp)  # type: ignore[arg-type]
+
+
+def test_the_render_stamp_covers_every_reader_and_no_download_code() -> None:
+    """A stored text is served again only to the render code that made it
+    (``card_texts._RENDER_CODE``): every reader must live in a module the
+    stamp hashes, and the download code must not, or a change to how a card
+    is fetched would render the whole archive again."""
+    hashed = {path.resolve() for path in card_texts._RENDER_CODE}
+    for reader in (extract_pdf_text, extract_pdf_text_layout, extract_pdf_text_aligned):
+        source = inspect.getsourcefile(reader)
+        assert source is not None and Path(source).resolve() in hashed, reader.__name__
+    source = inspect.getsourcefile(fetch_pdf_text)
+    assert source is not None and Path(source).resolve() not in hashed

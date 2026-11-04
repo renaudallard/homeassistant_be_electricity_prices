@@ -33,7 +33,6 @@ import os
 from collections.abc import AsyncIterator
 from datetime import date
 from functools import cache
-from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -44,7 +43,7 @@ from custom_components.be_electricity_prices.const import (
     DOMAIN,
     WELCOME_CREDIT_PRO_RATA,
 )
-from custom_components.be_electricity_prices.providers._pdf import (
+from custom_components.be_electricity_prices.providers._pdf_render import (
     extract_pdf_text,
     extract_pdf_text_aligned,
     extract_pdf_text_layout,
@@ -60,6 +59,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
+from scripts.card_texts import readers_line
 
 FIXTURES = Path(__file__).parent / "fixtures"
 # The maximumtarief each year's Fluvius tariff sheet prints, EUR/kWh excl. VAT,
@@ -75,19 +75,15 @@ PACKAGE = (
 def _text_cache_dir() -> Path:
     """Where ``fixture_text`` keeps what it extracted, across runs.
 
-    One directory per extractor: the digest covers ``providers/_pdf.py``,
-    the decode bound in ``providers/_pdf_bound.py`` and
-    ``providers/_pdf_bound_pdfminer.py`` and the pypdf and pdfplumber
-    versions, so a change to any of them reads every card afresh instead of
-    serving text the current code would not produce, or would refuse. Under
-    ``tmp/`` by default, which git ignores; ``BE_FIXTURE_TEXT_CACHE`` moves
-    it, which the gate does so its throwaway worktree reuses the main one's.
+    One directory per extractor, named by what the card archive stamps a
+    stored text with (``card_texts.readers_line``): the pypdf and pdfplumber
+    versions and a digest of the render code, so a change to any of them
+    reads every card afresh instead of serving text the current code would
+    not produce, or would refuse. Under ``tmp/`` by default, which git
+    ignores; ``BE_FIXTURE_TEXT_CACHE`` moves it, which the gate does so its
+    throwaway worktree reuses the main one's.
     """
-    extractor = hashlib.sha256()
-    for code in ("_pdf.py", "_pdf_bound.py", "_pdf_bound_pdfminer.py"):
-        extractor.update((PACKAGE / "providers" / code).read_bytes())
-    for dist in ("pypdf", "pdfplumber"):
-        extractor.update(f"{dist} {version(dist)}".encode())
+    extractor = hashlib.sha256(readers_line().encode())
     base = os.environ.get("BE_FIXTURE_TEXT_CACHE") or (
         Path(__file__).resolve().parent.parent / "tmp" / "fixture_text"
     )

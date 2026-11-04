@@ -127,7 +127,7 @@ machinery.
 | `tests/test_discover.py` | Every supplier's `discover()` against a frozen listing snippet |
 | `tests/test_archive_errors.py` | Every provider's archive lookup (`fetch_for_month`) raises on a transient failure |
 | `tests/test_window_service.py` | The window search behind the `cheapest_window` and `most_expensive_window` services |
-| `tests/test_pdf_helpers.py` | Shared PDF text extraction (`providers/_pdf.py`) |
+| `tests/test_pdf_helpers.py` | Shared PDF fetching and text extraction (`providers/_pdf.py`, `providers/_pdf_render.py`) |
 | `tests/test_module_size.py` | Every module of the integration stays under a thousand lines |
 | `tests/test_manifest.py` | The Home Assistant floor `hacs.json` declares, and the README and `docs/architecture.md` repeat, is the release `requirements-dev.txt` pins for the suite |
 | `tests/test_live_check_harness.py` | The live check (`scripts/live_check.py`): its failure containment, the expectations it holds cards to, and the workflow's retry loop |
@@ -150,7 +150,8 @@ Shared helpers live in `tests/__init__.py`:
   `extract_pdf_text_aligned` with OCTA+'s word joining when `aligned=True` (`tests/__init__.py`).
   Reading the cards is most of what the suite spends, so the text is kept on disk across runs
   under `tmp/fixture_text/`, one directory per extractor: the directory is named by a digest of
-  `providers/_pdf.py`, the decode bound in `providers/_pdf_bound.py` and
+  what the card archive stamps a stored text with (`card_texts.readers_line`): the render code in
+  `providers/_pdf_render.py`, the decode bound in `providers/_pdf_bound.py` and
   `providers/_pdf_bound_pdfminer.py` and the pypdf and pdfplumber versions, and each file by the PDF's own
   digest and the mode, so a changed card, extractor or reader is read afresh rather than served
   stale. `BE_FIXTURE_TEXT_CACHE` moves it; `scripts/gate.sh` points its throwaway worktree at the
@@ -1016,7 +1017,7 @@ is where the collateral rows in those issues came from.
 `_record` (`scripts/live_check.py`) marks such a check `expected`, and `_extractor_regressions`
 (`scripts/live_check.py`) is the single definition of what gates CI. The classification reads
 the exception type the fetch sites already write into the detail string
-(`CardNotReadableError`, raised by `providers/_pdf.py`), so it follows the card actually
+(`CardNotReadableError`, raised by `providers/_pdf_render.py`), so it follows the card actually
 published rather than a hardcoded supplier list: a supplier that goes back to publishing text
 starts gating again by itself, with no edit here. The rows still appear in the report, under their
 own heading and counted separately in the headline, so a green run never hides them.
@@ -1197,7 +1198,7 @@ and every later month's row names that copy (`test_prune_keeps_a_pdf_a_kept_row_
 A parser fix reaches the stored months on its own. After the live walk the script compares a
 digest of the parser sources (`providers/*.py`, `const.py` and the codec in `snapshot_codec.py`,
 plus the installed `pypdf` and `pdfplumber` versions with a digest of the render code in
-`providers/_pdf.py` and the decode bound in `providers/_pdf_bound.py` and
+`providers/_pdf_render.py` and the decode bound in `providers/_pdf_bound.py` and
 `providers/_pdf_bound_pdfminer.py`, and the OCR engine's
 version, with the git commit it was installed from and
 beside the `pypdfium2`, `numpy` and `pdfplumber` it reads a card through, since a reader release lays a card out

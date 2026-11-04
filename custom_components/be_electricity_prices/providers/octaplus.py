@@ -88,8 +88,6 @@ from ._pdf import (
     FR_MONTHS,
     _is_pdf_payload,
     _strip_pdf_prefix,
-    extract_pdf_text,
-    extract_pdf_text_aligned,
     fetch_pdf_text_aligned,
     fetch_text,
     head_freshness_key,
@@ -97,6 +95,10 @@ from ._pdf import (
     printed_vat_rate,
     render_pdf,
     vat_multiplier,
+)
+from ._pdf_render import (
+    extract_pdf_text,
+    extract_pdf_text_aligned,
 )
 from ._rates import (
     Contract,
