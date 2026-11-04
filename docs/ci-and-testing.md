@@ -451,6 +451,16 @@ households the card's figure. That is what nothing reported before the check exi
 professional card prints the Pic rate in the Medium column for ORES, RESA, REW and AIESH, which
 bills every Medium hour of an Impact entry at Pic.
 
+`_check_archive_row_months` (`scripts/live_check.py`) asks the archive whether every row it
+caught live holds a card of its own month. The walk files a live card under the month its
+title names (`_card_month`, `scripts/archive_cards.py`) and the integration bills a closed
+month on that row, so a live row naming another month was written over: the replay of 3
+November 2026 put November's cards into four October rows (issue #156), which only the
+federal check above happened to catch, comparing October rows that day. Each such row fails
+under the extractor kind. A row mirrored from a supplier's archive answers for the month asked
+whatever its title says (Ecopower's dynamic card stays in force across months), and a title
+naming no month (the social tariff's "Q4 2026") says nothing, so neither is held to it.
+
 Three figures differ from the fleet by the card's structure and are left out of the vote
 (`_NETWORK_STRUCTURAL`): Bolt's
 Brussels metering term (the Brugel power term is added by the resolver), and the single rate and

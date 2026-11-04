@@ -5746,3 +5746,39 @@ def test_a_page_the_runner_could_not_reach_passes(monkeypatch: Any) -> None:
         "_schedule: Fluvius early day hours no longer match",
     ]
     assert all(check.ok and dns in check.detail for check in lc.CHECKS)
+
+
+def test_an_archive_row_holding_another_months_card_is_reported(
+    tmp_path: Path,
+) -> None:
+    """The replay of 3 November 2026 put November's cards into four October
+    rows of the card archive (issue #156). A live row is filed under the
+    month its card names, so one naming another month is reported, a row
+    with no mark being a live one. A row mirrored from a supplier's archive
+    answers for its month whatever its title says, as Ecopower's dynamic card
+    does across months, and a title naming no month says nothing."""
+
+    def row(path: str, label: str, via: str | None = None) -> None:
+        target = tmp_path / "cards" / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        data = {"publication_label": label, **({"_via": via} if via else {})}
+        target.write_text(json.dumps(data), encoding="utf-8")
+
+    row("elegant/elegant_flex/flanders/2026-10.json", "november 2026", "live")
+    row("elegant/elegant_flex/flanders/2026-11.json", "november 2026", "live")
+    row("acme/acme_fix/flanders/2026-10.json", "november 2026")
+    row("ecopower/ecopower_dbs/flanders/2025-02.json", "2025-01", "archive")
+    row("social/social_engie/flanders/2026-10.json", "Q4 2026", "live")
+    lc._check_archive_row_months(tmp_path)
+    assert sorted(c.label for c in lc.CHECKS if not c.ok) == [
+        "_archive: acme/acme_fix/flanders/2026-10 holds its month's card",
+        "_archive: elegant/elegant_flex/flanders/2026-10 holds its month's card",
+    ]
+    assert all(c.kind == "extractor" for c in lc.CHECKS)
+    lc.CHECKS.clear()
+    for name in ("elegant/elegant_flex", "acme/acme_fix"):
+        (tmp_path / "cards" / name / "flanders" / "2026-10.json").unlink()
+    lc._check_archive_row_months(tmp_path)
+    assert [(c.ok, c.label) for c in lc.CHECKS] == [
+        (True, "_archive: every live row holds its month's card")
+    ]

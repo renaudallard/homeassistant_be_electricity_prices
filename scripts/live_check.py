@@ -3846,6 +3846,47 @@ def _network_allowance(
     return known[1]
 
 
+def _check_archive_row_months(archive: Path | None) -> None:
+    """Assert every live row of the card archive holds a card of its month.
+
+    The archive files a card it caught live under the month its title names
+    (``_card_month``, scripts/archive_cards.py), and the integration bills a
+    closed month on that row. A live row naming another month was written
+    over: the replay of 3 November 2026 put November's cards into four
+    October rows (issue #156), found only because the federal tax check
+    happened to compare October rows that day. A row mirrored from a
+    supplier's archive answers for the month it was asked for, whatever its
+    title says, so it is left out: Ecopower's dynamic card stays in force
+    across months.
+    """
+    if archive is None:
+        return
+    rows = sorted(archive.glob("cards/*/*/*/????-??.json"))
+    wrong = 0
+    for row in rows:
+        try:
+            data = json.loads(row.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, Mapping) or data.get("_via", "live") != "live":
+            continue
+        label = str(data.get("publication_label") or "")
+        named = label_month(label)
+        if named is None or f"{named[0]:04d}-{named[1]:02d}" == row.stem:
+            continue
+        wrong += 1
+        supplier, contract, region = row.parts[-4:-1]
+        _record(
+            f"_archive: {supplier}/{contract}/{region}/{row.stem} holds its month's card",
+            False,
+            f"the row holds the card of {named[0]:04d}-{named[1]:02d} ({label!r})",
+        )
+    if not wrong:
+        _record(
+            "_archive: every live row holds its month's card", True, f"{len(rows)} rows"
+        )
+
+
 def _check_network_consensus(archive: Path | None, today: date | None = None) -> None:
     """Assert every supplier prints the same regulated network figures.
 
@@ -6027,6 +6068,14 @@ async def _run(texts: Path | None = None) -> int:
             except Exception as err:
                 _record(
                     "_network: consensus check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                )
+            try:
+                _check_archive_row_months(texts)
+            except Exception as err:
+                _record(
+                    "_archive: row month check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                 )
