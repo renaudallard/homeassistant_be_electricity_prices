@@ -1214,7 +1214,15 @@ for a reason unrelated to the card (a network error, a 5xx, a 429, a 408 or a 40
 `parser.txt` as it was, so the next run replays the rows again: stamping over them had them
 never looked at again until an unrelated parser
 edit, while the integration reads a closed month from here first. A row whose parse came out differently is rewritten,
-keeping its capture day; `_cached_at` moves. The replay is a regex pass per row, no download
+keeping its capture day; `_cached_at` moves. A live row whose replay reads another month's card
+is not: the walk files a live card under the month it names (`_card_month`), so that card is
+one the row never held, asked at an address it never named by a resolver fixed since the
+capture day and answered from the next month's row. Elegant's renamed files and EnergyVision's
+upload folders put November's cards into four October rows that way on 3 November 2026 (issue
+#156); such a row is reported as not replayable and keeps its own card, as `_retry_unparsed`
+never files a card over another month's row. A row mirrored from a supplier's archive is not
+held to it: Ecopower's dynamic card stays in force across months, so its rows name the month
+it was published. The replay is a regex pass per row, no download
 and no render, so it is minutes for the whole branch, and a day without a code change replays
 nothing. `--reparse` forces it; `--rerender` also leaves the PDF texts out of the seed, so every
 card is fetched back from its kept copy and rendered afresh, at the cost of downloading every

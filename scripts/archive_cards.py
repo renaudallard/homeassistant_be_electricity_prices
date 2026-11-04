@@ -1845,6 +1845,19 @@ async def _replay_row(
     if snap is None or snap.provisional:
         summary.unreplayable.append(f"{label}: the archive path no longer settles it")
         return
+    named = _card_month(snap, seen_on)
+    if row.get("_via", "live") == "live" and named != path.stem:
+        # The walk files a live card under the month it names, so a replay
+        # reading another month's card read one the row never held: a resolver
+        # fixed since the capture day asked an address the row never named,
+        # and the next month's row answered it. Elegant's renamed files and
+        # EnergyVision's upload folders put November's cards into four
+        # October rows that way on 3 November 2026 (issue #156). The row
+        # keeps its own card, as _retry_unparsed never files over a month.
+        summary.unreplayable.append(
+            f"{label}: reads {named}'s card now, kept as it was"
+        )
+        return
     seen_month = _month_id(seen_on.year, seen_on.month)
     sources = _sources_of(memo, cards, out, seen_month)
     # A card the row had never named (OCTA+'s, before its archive path went

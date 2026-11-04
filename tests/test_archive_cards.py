@@ -3550,6 +3550,94 @@ async def test_the_next_months_text_never_shadows_a_rows_own_card(
     assert after["publication_label"] == before["publication_label"]
 
 
+async def test_a_fixed_resolver_never_files_the_next_card_over_a_closed_month(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Elegant renamed its files for November 2026, so the walk of 1
+    November still read October's card under the old name and filed it under
+    October. Once the resolver was fixed, the replay of that row asked the new
+    name, which the row never held, and the November row answered it: three
+    October rows came out as November's cards, prices and all (issue #156).
+    A replay that reads another month's card keeps the row as it was."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    old_url, new_url = (
+        "https://acme.test/FlexCard.pdf",
+        "https://acme.test/Flex%20Card.pdf",
+    )
+    session = _PdfSession({old_url: b"%PDF oktober"})
+    renders: list[bytes] = []
+    address = [old_url]
+
+    def render(payload: bytes) -> str:
+        renders.append(payload)
+        return f"card text for {payload.decode()}"
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        replaying = isinstance(_session, ac._ReplaySession)
+        text = await _pdf._pdf_text(
+            _session if replaying else session,  # type: ignore[arg-type]
+            address[0],
+            variant="plain",
+            timeout=5,
+            render=render,
+        )
+        october = "oktober" in text
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.1987 if october else 0.219),
+            publication_label="oktober 2026" if october else "november 2026",
+            source_url=address[0],
+        )
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=fetch,
+    )
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-a")
+    await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        now=datetime(2026, 11, 1, 10, 0, tzinfo=UTC),
+        sleep=_no_sleep,
+    )
+    october = out / "cards/acme/acme_fix/wallonia/2026-10.json"
+    before = json.loads(october.read_text())
+    assert before["publication_label"] == "oktober 2026"
+    # The supplier serves November under its new name and the resolver now
+    # asks that name, which is also a parser change: every row is replayed.
+    session.pdfs = {new_url: b"%PDF november"}
+    address[0] = new_url
+    monkeypatch.setattr(ac, "_parser_digest", lambda: "digest-b")
+    summary = await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        now=datetime(2026, 11, 3, 12, 0, tzinfo=UTC),
+        sleep=_no_sleep,
+    )
+    november = json.loads(
+        (out / "cards/acme/acme_fix/wallonia/2026-11.json").read_text()
+    )
+    assert november["publication_label"] == "november 2026"
+    after = json.loads(october.read_text())
+    assert after == before, "October was filed over with November's card"
+    assert any(
+        line.startswith("acme/acme_fix/wallonia/2026-10: reads 2026-11's card")
+        for line in summary.unreplayable
+    )
+
+
 async def test_a_reader_upgrade_reads_a_rows_own_card_not_the_next_months(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
