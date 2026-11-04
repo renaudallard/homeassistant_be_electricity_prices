@@ -7872,6 +7872,61 @@ async def test_a_formula_only_leg_still_bakes_to_none_without_a_mean(
     assert data.injection_price_eur_per_kwh is None
 
 
+async def test_a_custom_fixed_entry_credits_its_feed_in_on_the_month_mean(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A custom entry with a fixed consumption price and a feed-in formula on
+    the month's average spot (discussion #157), built from the entry as every
+    tick builds it. The credit is the formula at the month's mean, floored at
+    zero, not at the hour's spot the energy leg never asks for."""
+    from unittest.mock import MagicMock
+
+    freezer.move_to("2026-07-22 10:30:00+02:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "custom",
+            "contract": "custom_fixed",
+            "region": "brussels",
+            "dso": "sibelga",
+            "meter": "mono",
+            "solar_regime": "injection",
+            "api_key": "TESTKEY",
+            "custom_energy_single": 0.12,
+            "custom_injection_mode": "formula",
+            "custom_injection_factor": 0.9,
+            "custom_injection_base": -0.012,
+            "custom_injection_floor": True,
+        },
+        title="custom fixed, month-indexed feed-in",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    # This hour's spot is 0,30 EUR/kWh and the month's mean 0,08: a credit
+    # priced per hour would show 0,258.
+    coord._fetch_spot_prices = AsyncMock(  # type: ignore[method-assign]
+        return_value={datetime(2026, 7, 22, h, tzinfo=UTC): 0.30 for h in range(24)}
+    )
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    coord._ensure_spp_weights = AsyncMock()  # type: ignore[method-assign]
+    coord._monthly_spot_mean = MagicMock(return_value=0.08)  # type: ignore[method-assign]
+
+    with (
+        patch(
+            "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
+            AsyncMock(return_value=0.0),
+        ),
+        patch.object(coord, "_save_persistent", AsyncMock()),
+    ):
+        data = await coord._async_update_data()
+
+    assert coord._snapshot is not None and coord._snapshot.injection is not None
+    assert coord._snapshot.injection.month_indexed
+    assert data.injection_price_eur_per_kwh == pytest.approx(0.9 * 0.08 - 0.012)
+
+
 async def test_live_tick_never_bakes_an_spp_formula_against_the_energy_mean(
     hass: HomeAssistant,
 ) -> None:

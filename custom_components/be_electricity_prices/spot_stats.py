@@ -47,6 +47,7 @@ from .const import (
     CONF_KEYLESS_SPOTS,
     CONF_SOLAR_REGIME,
     CONF_SUPPLIER,
+    CUSTOM_CONTRACT_FIXED,
     CUSTOM_CONTRACT_MONTHLY,
     CUSTOM_INJECTION_MODE_FORMULA,
     DAY_START,
@@ -692,20 +693,21 @@ def _spp_weighting_enabled(
       * the CARD indexes its injection on Belpex_SPP (energie.be Variabel).
         Not optional: resolving that formula against any other mean roughly
         doubles the credit in a sunny month.
-      * the expert custom monthly-average contract opted in by hand.
+      * the expert custom monthly-average or fixed contract opted in by hand.
 
     For the custom route the contract + injection-mode conditions matter:
-    without them a stale flag left after switching a monthly entry to
-    fixed/dynamic (the options flow reseeds it), or a monthly entry on
-    flat-rate injection, would trigger the download even though the weights
-    are then discarded."""
+    without them a stale flag left after switching a monthly or fixed entry
+    to dynamic (the options flow reseeds it), or an entry on flat-rate
+    injection, would trigger the download even though the weights are then
+    discarded."""
     if entry.data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
         return False
     if _injection_is_spp_indexed(snapshot):
         return True
     return (
         entry.data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM
-        and entry.data.get(CONF_CONTRACT) == CUSTOM_CONTRACT_MONTHLY
+        and entry.data.get(CONF_CONTRACT)
+        in (CUSTOM_CONTRACT_MONTHLY, CUSTOM_CONTRACT_FIXED)
         and bool(entry.data.get(CONF_CUSTOM_INJECTION_SPP_WEIGHTED))
         and entry.data.get(CONF_CUSTOM_INJECTION_MODE) == CUSTOM_INJECTION_MODE_FORMULA
     )

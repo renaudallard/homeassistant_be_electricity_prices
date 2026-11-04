@@ -88,7 +88,6 @@ from .const import (
     CUSTOM_CONTRACT_DYNAMIC,
     CUSTOM_CONTRACT_FIXED,
     CUSTOM_CONTRACT_MONTHLY,
-    CUSTOM_INJECTION_MODE_CURRENT,
     CUSTOM_INJECTION_MODES,
     DSO_MODE_IMPACT,
     METER_BI,
@@ -185,19 +184,14 @@ def _custom_energy_schema(defaults: dict[str, Any]) -> vol.Schema:
 def _custom_injection_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Injection formula fields (shown only on the injection regime).
 
-    A fixed-rate contract can only quote a flat ``current`` credit; the
-    spot-indexed modes also accept a ``factor``/``base`` formula applied to
-    the live spot (dynamic) or the monthly mean (monthly-average).
+    Every mode quotes either a flat ``current`` credit or a ``factor``/``base``
+    formula, applied to the live spot (dynamic) or the delivery month's mean
+    (monthly-average and fixed): a fixed price for consumption often comes
+    with a feed-in credit on the month's average spot, as Mega's Wikipower
+    contract does (discussion #157).
     """
     contract = defaults.get(CONF_CONTRACT)
-    modes = (
-        [CUSTOM_INJECTION_MODE_CURRENT]
-        if contract == CUSTOM_CONTRACT_FIXED
-        else list(CUSTOM_INJECTION_MODES)
-    )
-    # Clamp the default to the narrowed list: a formula mode stored under a
-    # wider contract kind must not be pre-selected once the contract narrows
-    # to current-only (mirrors the guard in _dso_schema / _meter_schema).
+    modes = list(CUSTOM_INJECTION_MODES)
     mode_default = defaults.get(CONF_CUSTOM_INJECTION_MODE, modes[0])
     if mode_default not in modes:
         mode_default = modes[0]
@@ -214,13 +208,8 @@ def _custom_injection_schema(defaults: dict[str, Any]) -> vol.Schema:
         ),
     }
     _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_CURRENT)
-    if contract != CUSTOM_CONTRACT_FIXED:
-        # A fixed contract offers the flat rate alone, so a formula typed
-        # there would be stored and never read.
-        _add_custom_num(
-            fields, defaults, CONF_CUSTOM_INJECTION_FACTOR, 1.0, negative=True
-        )
-        _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_BASE, negative=True)
+    _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_FACTOR, 1.0, negative=True)
+    _add_custom_num(fields, defaults, CONF_CUSTOM_INJECTION_BASE, negative=True)
     fields[
         vol.Optional(
             CONF_CUSTOM_INJECTION_FLOOR,
@@ -232,9 +221,9 @@ def _custom_injection_schema(defaults: dict[str, Any]) -> vol.Schema:
             ),
         )
     ] = BooleanSelector()
-    # SPP-weighting only applies to the monthly-average mode's formula
-    # injection (weighting the month-mean by the Synergrid solar profile).
-    if contract == CUSTOM_CONTRACT_MONTHLY:
+    # SPP-weighting only applies to a formula on the month's mean (weighting
+    # it by the Synergrid solar profile), which the dynamic mode has not.
+    if contract in (CUSTOM_CONTRACT_MONTHLY, CUSTOM_CONTRACT_FIXED):
         fields[
             vol.Optional(
                 CONF_CUSTOM_INJECTION_SPP_WEIGHTED,

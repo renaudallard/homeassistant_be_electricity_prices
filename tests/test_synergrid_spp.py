@@ -278,11 +278,13 @@ def test_spp_weighting_enabled_gating() -> None:
         const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_FORMULA,
     }
     assert _spp_weighting_enabled(SimpleNamespace(data=base))  # type: ignore[arg-type]
+    fixed = {**base, const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED}
+    assert _spp_weighting_enabled(SimpleNamespace(data=fixed))  # type: ignore[arg-type]
     for override in (
         {const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
         {const.CONF_CUSTOM_INJECTION_SPP_WEIGHTED: False},
         {const.CONF_SUPPLIER: "mega"},
-        # tightened gate: not the monthly contract, or flat-rate injection
+        # tightened gate: not a month-mean contract, or flat-rate injection
         {const.CONF_CONTRACT: const.CUSTOM_CONTRACT_DYNAMIC},
         {const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_CURRENT},
     ):
@@ -819,10 +821,12 @@ def _has_spp_toggle(contract: str) -> bool:
     )
 
 
-def test_spp_toggle_only_on_monthly() -> None:
+def test_spp_toggle_only_on_a_month_mean_formula() -> None:
+    """The monthly mode's formula and the fixed mode's both settle on the
+    month's mean, which the profile weights; the dynamic one runs per hour."""
     assert _has_spp_toggle(const.CUSTOM_CONTRACT_MONTHLY)
+    assert _has_spp_toggle(const.CUSTOM_CONTRACT_FIXED)
     assert not _has_spp_toggle(const.CUSTOM_CONTRACT_DYNAMIC)
-    assert not _has_spp_toggle(const.CUSTOM_CONTRACT_FIXED)
 
 
 # ---- YTD dual-mean: energy flat, injection SPP-weighted ----------------------

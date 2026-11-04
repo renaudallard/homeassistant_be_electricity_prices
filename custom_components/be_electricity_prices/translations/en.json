@@ -191,7 +191,7 @@
       },
       "custom_injection": {
         "title": "Custom injection formula",
-        "description": "How your solar feed-in is paid. A flat rate is a fixed EUR/kWh credit; a formula is factor x index + base against the live spot (dynamic) or the monthly mean (monthly-average). The index and the base are both in EUR/kWh, and the base keeps its sign: a card's (0,07 x Belpex - 2) c€/kWh, on a Belpex in EUR/MWh, is a factor of 0.7 and a base of -0.02. Tick the floor if the contract guarantees the injection price is never negative. Tick 'weight injection by the solar profile' to weight the monthly injection mean by the Synergrid solar production profile (fetched live; an ex-ante forecast, so close to but not exactly the settled SPP value).",
+        "description": "How your solar feed-in is paid. A flat rate is a fixed EUR/kWh credit; a formula is factor x index + base against the live spot (dynamic) or the monthly mean (monthly-average and fixed). The index and the base are both in EUR/kWh, and the base keeps its sign: a card's (0,07 x Belpex - 2) c€/kWh, on a Belpex in EUR/MWh, is a factor of 0.7 and a base of -0.02. Tick the floor if the contract guarantees the injection price is never negative. Tick 'weight injection by the solar profile' to weight the monthly injection mean by the Synergrid solar production profile (fetched live; an ex-ante forecast, so close to but not exactly the settled SPP value).",
         "data": {
           "custom_injection_mode": "Injection pricing",
           "custom_injection_current": "Flat injection rate (EUR/kWh)",
@@ -558,7 +558,7 @@
       },
       "custom_injection": {
         "title": "Custom injection formula",
-        "description": "How your solar feed-in is paid. A flat rate is a fixed EUR/kWh credit; a formula is factor x index + base against the live spot (dynamic) or the monthly mean (monthly-average). The index and the base are both in EUR/kWh, and the base keeps its sign: a card's (0,07 x Belpex - 2) c€/kWh, on a Belpex in EUR/MWh, is a factor of 0.7 and a base of -0.02. Tick the floor if the contract guarantees the injection price is never negative. Tick 'weight injection by the solar profile' to weight the monthly injection mean by the Synergrid solar production profile (fetched live; an ex-ante forecast, so close to but not exactly the settled SPP value).",
+        "description": "How your solar feed-in is paid. A flat rate is a fixed EUR/kWh credit; a formula is factor x index + base against the live spot (dynamic) or the monthly mean (monthly-average and fixed). The index and the base are both in EUR/kWh, and the base keeps its sign: a card's (0,07 x Belpex - 2) c€/kWh, on a Belpex in EUR/MWh, is a factor of 0.7 and a base of -0.02. Tick the floor if the contract guarantees the injection price is never negative. Tick 'weight injection by the solar profile' to weight the monthly injection mean by the Synergrid solar production profile (fetched live; an ex-ante forecast, so close to but not exactly the settled SPP value).",
         "data": {
           "custom_injection_mode": "Injection pricing",
           "custom_injection_current": "Flat injection rate (EUR/kWh)",

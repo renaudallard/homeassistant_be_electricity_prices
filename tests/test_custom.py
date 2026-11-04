@@ -120,6 +120,68 @@ def test_build_snapshot_monthly_with_injection() -> None:
     assert energy_eur_per_kwh(snap.energy, WHEN, 0.08) == pytest.approx(1.0834 * 0.08)
 
 
+def test_build_snapshot_fixed_with_a_month_indexed_injection() -> None:
+    """A fixed consumption price whose feed-in credit is a formula on the
+    month's mean: the leg says it is month-indexed, which is what makes the
+    engine fetch spots for it, settle it on the month's mean and never on the
+    hour's spot, while the energy leg needs none. A flat credit stays flat,
+    and the monthly mode's formula rides its energy leg's mean as before."""
+    from custom_components.be_electricity_prices.injection import (
+        _injection_is_spot_formula,
+        _injection_needs_month_spot,
+    )
+    from custom_components.be_electricity_prices.spot_stats import (
+        _injection_on_month_mean,
+    )
+    from tests import make_entry
+
+    data = {
+        const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+        const.CONF_CUSTOM_ENERGY_SINGLE: 0.12,
+        const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
+        const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_FORMULA,
+        const.CONF_CUSTOM_INJECTION_FACTOR: 0.9,
+        const.CONF_CUSTOM_INJECTION_BASE: -0.012,
+        const.CONF_CUSTOM_INJECTION_FLOOR: True,
+    }
+    snap = build_snapshot(data, const.REGION_BRUSSELS, const.DSO_SIBELGA)
+    assert isinstance(snap.energy, FixedRates)
+    inj = snap.injection
+    assert inj is not None
+    assert (inj.factor, inj.base, inj.current) == (0.9, -0.012, None)
+    assert inj.floor_at_zero and inj.month_indexed and not inj.spp_indexed
+    entry = make_entry(solar_regime=const.SOLAR_REGIME_INJECTION)
+    assert _injection_on_month_mean(snap)
+    assert _injection_needs_month_spot(snap, entry)
+    assert not _injection_is_spot_formula(inj, snap.energy)
+
+    flat = build_snapshot(
+        {
+            **data,
+            const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_CURRENT,
+            const.CONF_CUSTOM_INJECTION_CURRENT: 0.04,
+        },
+        const.REGION_BRUSSELS,
+        const.DSO_SIBELGA,
+    )
+    assert flat.injection is not None
+    assert flat.injection.current == 0.04 and flat.injection.factor is None
+    assert not flat.injection.month_indexed
+
+    monthly = build_snapshot(
+        {
+            **data,
+            const.CONF_CONTRACT: const.CUSTOM_CONTRACT_MONTHLY,
+            const.CONF_CUSTOM_ENERGY_FACTOR: 1.0,
+            const.CONF_CUSTOM_ENERGY_BASE: 0.0,
+        },
+        const.REGION_BRUSSELS,
+        const.DSO_SIBELGA,
+    )
+    assert monthly.injection is not None and not monthly.injection.month_indexed
+    assert _injection_on_month_mean(monthly)
+
+
 def test_build_snapshot_fixed_routes_regional_renewables() -> None:
     data = {
         const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
@@ -1118,9 +1180,12 @@ def test_custom_taxes_book_the_connection_fee_in_wallonia_only() -> None:
     assert _build_taxes(data, const.REGION_FLANDERS).flanders_renewables == 0.0156
 
 
-def test_a_fixed_contract_is_not_offered_an_injection_formula() -> None:
-    """A fixed custom contract offers the flat feed-in rate alone, so factor
-    and base boxes there were stored and never read."""
+def test_every_custom_contract_is_offered_an_injection_formula() -> None:
+    """A fixed price for consumption can come with a feed-in credit on the
+    month's average spot (discussion #157), so the fixed mode is offered the
+    formula as the two spot modes are, and the solar-profile weighting the
+    monthly mode has. Only the dynamic mode's formula runs on the live spot,
+    which no profile weights."""
     from custom_components.be_electricity_prices import const
     from custom_components.be_electricity_prices.flow_schemas_custom import (
         _custom_injection_schema,
@@ -1130,10 +1195,25 @@ def test_a_fixed_contract_is_not_offered_an_injection_formula() -> None:
         schema = _custom_injection_schema({const.CONF_CONTRACT: contract})
         return {getattr(key, "schema", key) for key in schema.schema}
 
+    def modes(contract: str) -> list[str]:
+        schema = _custom_injection_schema({const.CONF_CONTRACT: contract})
+        for key, selector in schema.schema.items():
+            if getattr(key, "schema", key) == const.CONF_CUSTOM_INJECTION_MODE:
+                return list(selector.config["options"])
+        raise AssertionError(f"no injection pricing selector for {contract}")
+
     formula = {const.CONF_CUSTOM_INJECTION_FACTOR, const.CONF_CUSTOM_INJECTION_BASE}
-    assert not formula & keys(const.CUSTOM_CONTRACT_FIXED)
-    assert formula <= keys(const.CUSTOM_CONTRACT_DYNAMIC)
-    assert formula <= keys(const.CUSTOM_CONTRACT_MONTHLY)
+    spp = const.CONF_CUSTOM_INJECTION_SPP_WEIGHTED
+    for contract in (
+        const.CUSTOM_CONTRACT_FIXED,
+        const.CUSTOM_CONTRACT_DYNAMIC,
+        const.CUSTOM_CONTRACT_MONTHLY,
+    ):
+        assert formula <= keys(contract)
+        assert modes(contract) == list(const.CUSTOM_INJECTION_MODES)
+    assert spp in keys(const.CUSTOM_CONTRACT_FIXED)
+    assert spp in keys(const.CUSTOM_CONTRACT_MONTHLY)
+    assert spp not in keys(const.CUSTOM_CONTRACT_DYNAMIC)
 
 
 def test_a_per_kwh_figure_typed_in_cents_is_refused() -> None:

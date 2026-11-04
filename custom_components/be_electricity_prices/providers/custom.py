@@ -251,18 +251,21 @@ def _build_taxes(data: Mapping[str, Any], region: str) -> TaxOverlay:
     )
 
 
-def _build_injection(data: Mapping[str, Any]) -> InjectionRates | None:
+def _build_injection(data: Mapping[str, Any], contract: str) -> InjectionRates | None:
     if data.get(CONF_SOLAR_REGIME) != SOLAR_REGIME_INJECTION:
         return None
     floor = bool(data.get(CONF_CUSTOM_INJECTION_FLOOR, False))
     if data.get(CONF_CUSTOM_INJECTION_MODE) == CUSTOM_INJECTION_MODE_FORMULA:
         # factor/base are applied against the live spot (dynamic) or the
-        # delivery month's mean (monthly-average); the coordinator threads
-        # the right value in and applies the floor.
+        # delivery month's mean (monthly-average and fixed); the coordinator
+        # threads the right value in and applies the floor. A fixed energy leg
+        # names no mean, so the credit says it settles on the month's, the way
+        # energie.be Vast's and Eneco Fix's cards are read.
         return InjectionRates(
             factor=_num(data, CONF_CUSTOM_INJECTION_FACTOR),
             base=_num(data, CONF_CUSTOM_INJECTION_BASE),
             floor_at_zero=floor,
+            month_indexed=contract == CUSTOM_CONTRACT_FIXED,
         )
     return InjectionRates(
         current=_num(data, CONF_CUSTOM_INJECTION_CURRENT),
@@ -294,5 +297,5 @@ def build_snapshot(data: Mapping[str, Any], region: str, dso: str) -> SupplierSn
         taxes=_build_taxes(data, region),
         source_url="custom formula (config entry)",
         publication_label="Custom formula",
-        injection=_build_injection(data),
+        injection=_build_injection(data, contract),
     )
