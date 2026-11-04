@@ -244,15 +244,17 @@ lines after its "(1,12 x Belpex_RLP +". On that template:
   volgens de formule:"). `_INJECTION_RE` anchors on "Terugleveringsvergoeding", which
   now heads the price row above the energy formula, so on the dynamic card it read the
   energy formula as the feed-in;
-- the standing charge, the variable card's feed-in indicative and GSC and WKK come from
-  the price row (`_ROW_GSC_RE`, `_ROW_WKK_RE` for the shared tax reader); `_WKK_RE` would
-  read the energy price there;
+- the standing charge, the fixed card's rate, the variable and fixed cards' feed-in
+  indicative and GSC and WKK come from the price row (`_ROW_GSC_RE`, `_ROW_WKK_RE` for the
+  shared tax reader); `_WKK_RE` would read the energy price there;
 - the month comes from the title (`_TITLE_RE`), and a DSO row whose label is printed under
   its figures, Fluvius (West), is joined to them (`_LABEL_BELOW_RE`).
 
 A card of the older template parses as before: replaying the archive's 33 energie.be rows
-through the new code gave identical snapshots. The fixed card was still on the older
-template on 3 November and keeps its reading until a card of the new one is seen.
+through the new code gave identical snapshots. The fixed card took the new template at
+17:18 UTC the same day, "Energieprijs Vaste vergoeding ..." over "23,12 35 4,83 1,17
+0,39", and failed until it was read the same way (issue #155); its formula check then
+reads the plain text as well (see the guard below).
 
 `_NUM = r"([\d]+(?:[.,][\d]+)?)"` accepts both decimal separators; a dot-decimal re-render
 must not truncate a mandatory value to its integer part.
@@ -370,7 +372,9 @@ All three cards use the identical `Energieprijs` column label, so the number alo
 say which card this is. The guard is twofold: the fixed parser refuses a card that carries
 an indexation formula at all (`_ENERGY_RE`), and requires the card's own "de energieprijs
 is een vaste prijs" wording. Without it, a fixed entry served the variable card would bill
-that month's 15,98 c€/kWh as though it were locked for a year.
+that month's 15,98 c€/kWh as though it were locked for a year. On the November 2026
+template the formula check reads the plain text: the layout reading breaks an indexed
+card's formula apart, which would leave the wording as the only check standing.
 
 None of the three prints a dag / nacht column either, so a bi-hourly meter meets the same
 energy rate on both registers whichever product is configured. The `FixedRates` note under
@@ -619,6 +623,7 @@ The fixtures live under `tests/fixtures/`:
 | `energiebe_fixed_aug.pdf` | the residential fixed card named by the contracts API, August 2026 |
 | `energiebe_dynamic_nov.pdf` | the `?key=DynamicTariffs` PDF of November 2026, the first of the new template, with its professional block |
 | `energiebe_variable_nov.pdf` | the residential variable card of November 2026, new template |
+| `energiebe_fixed_nov.pdf` | the residential fixed card of November 2026, new template, put up on 3 November at 17:18 UTC |
 
 Tests load them through `fixture_text(..., layout=True)`, matching the layout-preserving
 extraction used in production, and the November ones through `fixture_text(...)` as well

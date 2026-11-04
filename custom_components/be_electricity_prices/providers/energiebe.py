@@ -481,20 +481,19 @@ def parse_snapshot(
     plain: str | None = None,
 ) -> SupplierSnapshot:
     """Parse a card from ``text``, its layout reading. A card of the November
-    2026 template also needs ``plain``, its plain reading, for the formulas
-    (see _PRICE_ROW_RE); the fixed card, whose rate is no formula, is read
-    the older way until one of that template is seen."""
+    2026 template also needs ``plain``, its plain reading, where its sentences
+    and formulas come out whole (see _PRICE_ROW_RE)."""
     section = _residential(text)
     variable = contract_id == _VARIABLE_ID
     fixed = contract_id == _FIXED_ID
-    row = None if fixed else _PRICE_ROW_RE.search(section)
+    row = _PRICE_ROW_RE.search(section)
     formulas, levies = section, (_GSC_RE, _WKK_RE)
     if row is not None:
         if plain is None:
             raise ExtractorError("energie.be: card read without its plain text")
         formulas, levies = _residential(plain), (_ROW_GSC_RE, _ROW_WKK_RE)
     if fixed:
-        energy: EnergyRates = _extract_fixed_energy(section)
+        energy: EnergyRates = _extract_fixed_energy(formulas, row)
     else:
         fee = _yearly_fee(section) if row is None else to_float(row.group(2))
         if variable:
@@ -507,7 +506,7 @@ def parse_snapshot(
             if (variable or fixed)
             else _extract_injection(section)
         )
-    elif variable:
+    elif variable or fixed:
         indicative = parse_sign(row.group(3)) * to_float(row.group(4))
         injection = _extract_monthly_injection(
             formulas, _INJECTION_SENTENCE_RE, indicative
@@ -614,7 +613,7 @@ def _extract_variable_energy(text: str, fee: float) -> SpotMonthlyRates:
     )
 
 
-def _extract_fixed_energy(text: str) -> FixedRates:
+def _extract_fixed_energy(text: str, row: re.Match[str] | None) -> FixedRates:
     """The fixed card's flat rate.
 
     One rate for every meter type: the card prints no peak / offpeak or
@@ -626,6 +625,11 @@ def _extract_fixed_energy(text: str) -> FixedRates:
     labelled "(excl. btw)" and have to be grossed; this column is not, and the
     card's header says every price on it is VAT-inclusive unless marked. The
     same 18,26 read through _VAT_MULT would bill 19,36.
+
+    On the November 2026 template ``row`` is the price row, which carries
+    the rate and the standing charge, and ``text`` the plain reading: the
+    layout one breaks an indexed card's formula apart, and the formula
+    check would find none on it.
     """
     if _ENERGY_RE.search(text):
         # An indexation formula means this is the variable or dynamic card.
@@ -635,6 +639,11 @@ def _extract_fixed_energy(text: str) -> FixedRates:
     if not _VASTE_PRIJS_RE.search(text):
         raise ExtractorError(
             "energie.be: fixed contract card does not print a 'vaste prijs'"
+        )
+    if row is not None:
+        return FixedRates(
+            single=to_float(row.group(1)) / 100.0,
+            yearly_fixed_fee=to_float(row.group(2)),
         )
     m = _FIXED_ENERGY_RE.search(text)
     if not m:

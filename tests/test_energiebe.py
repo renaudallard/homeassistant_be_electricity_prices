@@ -1394,6 +1394,58 @@ def test_the_november_2026_variable_card_is_read() -> None:
     assert set(snap.dsos) == set(FLUVIUS_KEYS)
 
 
+def test_the_november_2026_fixed_card_is_read() -> None:
+    """The fixed card took the new template at 17:18 UTC on 3 November 2026,
+    hours after the other two. Its rate and standing charge sit in the price
+    row, where the older reader looked for "Energieprijs 23,12" and met the
+    column heads (issue #155). The rate stays VAT inclusive: the card says so
+    of every price it does not mark."""
+    layout, plain = _nov("energiebe_fixed_nov.pdf")
+    snap = parse_snapshot(layout, "t://x", "energiebe_fixed", plain=plain)
+    assert snap.publication_label == "november 2026"
+    energy = snap.energy
+    assert isinstance(energy, FixedRates)
+    assert energy.single == pytest.approx(0.2312)
+    assert energy.yearly_fixed_fee == pytest.approx(35.0)
+    injection = snap.injection
+    assert injection is not None and injection.spp_indexed
+    assert injection.factor == pytest.approx(0.60)
+    assert injection.base == pytest.approx(-0.008)
+    assert injection.current == pytest.approx(0.0483)
+    assert snap.taxes.flanders_renewables == pytest.approx(0.0156)
+    assert snap.taxes.federal_excise == pytest.approx(0.044732)
+    assert set(snap.dsos) == set(FLUVIUS_KEYS)
+
+
+@pytest.mark.parametrize(
+    ("name", "contract", "match"),
+    [
+        (
+            "energiebe_variable_nov.pdf",
+            "energiebe_fixed",
+            "indexed \\(variable/dynamic\\) card",
+        ),
+        (
+            "energiebe_dynamic_nov.pdf",
+            "energiebe_fixed",
+            "indexed \\(variable/dynamic\\) card",
+        ),
+        ("energiebe_fixed_nov.pdf", "energiebe_variable", "variable energy formula"),
+        ("energiebe_fixed_nov.pdf", "energiebe_dynamic", "energie.be energy formula"),
+    ],
+)
+def test_november_2026_fixed_and_indexed_cards_are_not_interchangeable(
+    name: str, contract: str, match: str
+) -> None:
+    """The guard of test_a_fixed_card_and_an_indexed_card_are_not_interchangeable
+    on the new template. Its formula check reads the plain text there: the
+    layout reading breaks an indexed card's formula apart, which would leave
+    the "vaste prijs" wording as the only check refusing such a card."""
+    layout, plain = _nov(name)
+    with pytest.raises(ExtractorError, match=match):
+        parse_snapshot(layout, "t://x", contract, plain=plain)
+
+
 def test_a_november_2026_card_without_its_plain_text_is_refused() -> None:
     layout, _plain = _nov("energiebe_dynamic_nov.pdf")
     with pytest.raises(ExtractorError, match="plain text"):
