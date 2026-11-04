@@ -133,6 +133,7 @@ machinery.
 | `tests/test_live_check_harness.py` | The live check (`scripts/live_check.py`): its failure containment, the expectations it holds cards to, and the workflow's retry loop |
 | `tests/test_archive_cards.py` | `scripts/archive_cards.py`, the daily writer behind the card archive |
 | `tests/test_card_finder.py` | `scripts/card_finder.py`, the live check's search for a card that moved, replayed on November 2026's moves |
+| `tests/test_moved.py` | `providers/_moved.py`, the registry reading a moved card where its supplier lists it, on the same moves |
 | `tests/test_card_texts.py` | `scripts/card_texts.py`, the card archive's texts as a render cache |
 | `tests/test_file_ci_issue.py` | `scripts/file_ci_issue.sh`: one issue per problem, one comment per cooldown |
 | `tests/test_autorelease.py` | The release job of `autorelease.yml` against a scratch origin and a fake `gh`, and every workflow's token permissions |
@@ -1091,14 +1092,20 @@ finder covers and a row not already expected to fail (`card_finder.annotate`).
 The finder reads the pages the supplier itself lists its cards on, keeps the
 addresses that name the product, downloads up to four and appends to the row's
 detail which of them names the running month and where each came from. It only
-reports: no row changes between failing and passing, and nothing it finds is
-read by the integration until a person adopts the address in the extractor. The
-issue's fingerprint is the failing labels, so the note does not refile it.
+reports: no row changes between failing and passing. The integration reads a
+moved card by itself only for Elegant, Engie and Luminus, and only the
+product's own card for the month; anything else it finds waits for a person to
+adopt the address in the extractor. The issue's fingerprint is the failing
+labels, so the note does not refile it.
 
 A card that moved stood on the supplier's own list before any extractor read
 it, every time in November 2026, and a sitemap is no such list (it names
 product families, which is how Engie Empty House was read as unpublished for two
-days). Each covered supplier has a short function naming its candidates:
+days). For Elegant, Engie and Luminus the candidates are the integration's own
+(`providers/_moved.py`, see [provider-framework.md](provider-framework.md)),
+which it reads a moved card from by itself when the card is the product's own
+for the month; EnergyVision's are the finder's alone. The finder reports every
+candidate, marked ones included:
 
 | Supplier | Where it looks | November 2026 |
 | --- | --- | --- |

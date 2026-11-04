@@ -469,8 +469,16 @@ async def fetch(
     # replays a card with the clock on the day it was read, so a card read
     # before a term was renumbered is asked under its old code again.
     url = _document_url(contract, region_code, dt_util.now().date(), 0)
-    text = await fetch_pdf_text(session, url)
-    return parse_snapshot(contract_id, {region: text}, url)
+    return await _read_at(session, contract_id, region, url)
+
+
+async def _read_at(
+    session: aiohttp.ClientSession, contract_id: str, region: str, url: str
+) -> SupplierSnapshot:
+    """The product's card at ``url``, read as ``fetch`` reads it."""
+    return parse_snapshot(
+        contract_id, {region: await fetch_pdf_text(session, url)}, url
+    )
 
 
 async def fetch_for_month(

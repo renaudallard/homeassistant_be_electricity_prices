@@ -36,6 +36,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..const import CONF_CONTRACT, CONF_QUARTER_HOURLY, CONF_SUPPLIER
+from ._moved import with_moved_fallbacks
 from ._rates import (
     Contract,
     DynamicRates,
@@ -73,31 +74,35 @@ from .social import EXTRACTOR as _SOCIAL
 from .totalenergies import EXTRACTOR as _TOTALENERGIES
 from .trevion import EXTRACTOR as _TREVION
 
-EXTRACTORS: dict[str, SupplierExtractor] = {
-    _ENECO.id: _ENECO,
-    _ENGIE.id: _ENGIE,
-    _TOTALENERGIES.id: _TOTALENERGIES,
-    _TREVION.id: _TREVION,
-    _LUMINUS.id: _LUMINUS,
-    _MEGA.id: _MEGA,
-    _BOLT.id: _BOLT,
-    _COCITER.id: _COCITER,
-    _DATS24.id: _DATS24,
-    _EBEM.id: _EBEM,
-    _ECOFIX.id: _ECOFIX,
-    _ECOPOWER.id: _ECOPOWER,
-    _FRANK.id: _FRANK,
-    _ENERGIEBE.id: _ENERGIEBE,
-    _ENERGYVISION.id: _ENERGYVISION,
-    _ENERGYKNIGHTS.id: _ENERGYKNIGHTS,
-    _OCTAPLUS.id: _OCTAPLUS,
-    _ASPIRAVI.id: _ASPIRAVI,
-    _SOCIAL.id: _SOCIAL,
-    _ELEGANT.id: _ELEGANT,
-    # Expert escape hatch, listed last so it sorts to the bottom of the
-    # supplier dropdown.
-    _CUSTOM.id: _CUSTOM,
-}
+# Elegant, Engie, EnergyVision and Luminus read a card that left its usual
+# address where their own pages list it (see _moved.py).
+EXTRACTORS: dict[str, SupplierExtractor] = with_moved_fallbacks(
+    {
+        _ENECO.id: _ENECO,
+        _ENGIE.id: _ENGIE,
+        _TOTALENERGIES.id: _TOTALENERGIES,
+        _TREVION.id: _TREVION,
+        _LUMINUS.id: _LUMINUS,
+        _MEGA.id: _MEGA,
+        _BOLT.id: _BOLT,
+        _COCITER.id: _COCITER,
+        _DATS24.id: _DATS24,
+        _EBEM.id: _EBEM,
+        _ECOFIX.id: _ECOFIX,
+        _ECOPOWER.id: _ECOPOWER,
+        _FRANK.id: _FRANK,
+        _ENERGIEBE.id: _ENERGIEBE,
+        _ENERGYVISION.id: _ENERGYVISION,
+        _ENERGYKNIGHTS.id: _ENERGYKNIGHTS,
+        _OCTAPLUS.id: _OCTAPLUS,
+        _ASPIRAVI.id: _ASPIRAVI,
+        _SOCIAL.id: _SOCIAL,
+        _ELEGANT.id: _ELEGANT,
+        # Expert escape hatch, listed last so it sorts to the bottom of the
+        # supplier dropdown.
+        _CUSTOM.id: _CUSTOM,
+    }
+)
 
 
 def get(supplier_id: str) -> SupplierExtractor:

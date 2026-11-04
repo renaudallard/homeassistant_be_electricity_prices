@@ -38,15 +38,16 @@ new product id, and each new address stood on the supplier's own list
 before any extractor read it. A sitemap is no such list: it names product
 families, not cards.
 
-Each supplier publishes its own way, so each has a short function naming
-its candidates, with where each came from:
-
-* Elegant's listing links every product's card by name;
-* Engie's prices page names every residential document code;
-* EnergyVision's tariefkaart page links its files, and its uploads sit in
-  the month's folder, the month before's or ``inline-files``;
-* Luminus's price-list archive gives each month's product id, so the
-  month's id and the month before's are asked for the month's card.
+For Elegant, Engie and Luminus the candidates are the integration's own
+(``providers/_moved.py``), which it reads a moved card from by itself; this
+reports every one of them, with where it came from, including an address
+that is not the product's own card for the month by construction (a sibling
+product, the month before's product id), which the integration never reads.
+EnergyVision's are searched here alone: its tariefkaart page links its
+files, and its uploads sit in the month's folder, the month before's or
+``inline-files``. The live check asks each module's own ``fetch``, so it
+keeps failing at the usual address until the extractor reads the card
+there.
 
 Usage: python scripts/card_finder.py <supplier> <contract> <region> [YYYY-MM]
 """
@@ -60,12 +61,12 @@ import re
 import sys
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from html import unescape
 from pathlib import Path
 from types import ModuleType
 from typing import Any
-from urllib.parse import quote, urljoin
+from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -82,30 +83,14 @@ _SEARCH_TIMEOUT_S = 120.0
 # A link as markup carries it.
 _HREF_RE = re.compile(r"""(?:href|src)\s*=\s*["']([^"'<>]+)["']""", re.IGNORECASE)
 
-# Elegant's listing spells each card "/Current/<product> Electricity_
-# Residential.pdf", with its gas cards beside them.
-_ELEGANT_LISTED_RE = re.compile(r"/Current/([^\"'<>/]+?)_Residential\.pdf")
-
-# Engie's residential prices pages, which name every document code the
-# document API serves, "E_EMPTYHOUSE_R_GREY_C_I_36_V_F". The sitemap names
-# product families only.
-_ENGIE_PAGES = (
-    "https://www.engie.be/fr/energie/electricite-gaz/prix-conditions/",
-    "https://www.engie.be/nl/energie/elektriciteit-gas/prijzen-voorwaarden/",
-)
-_ENGIE_CODE_RE = re.compile(
-    r"\bE_([A-Z0-9]+)_([RP])_([A-Z]+)_C_([A-Z])_(\d{2})_([VWB])_F\b"
-)
-
 # EnergyVision's page that links its files, where the tariefkaart listing
 # builds them in a script.
 _ENERGYVISION_PAGE = "/nl-be/tariefkaart-2"
 
-Candidates = list[tuple[str, str]]
-Finder = Callable[
-    [aiohttp.ClientSession, Mapping[str, ModuleType], str, str, date],
-    Awaitable[Candidates],
-]
+# An address, where it came from, and whether it is the product's card for
+# the month by construction, as ``providers/_moved.py`` gives them.
+Candidates = list[tuple[str, str, bool]]
+Search = Callable[[aiohttp.ClientSession, str, str, date], Awaitable[Candidates]]
 
 
 def _pdf() -> ModuleType:
@@ -113,78 +98,16 @@ def _pdf() -> ModuleType:
     return importlib.import_module("be_pkg.providers._pdf")
 
 
-def _squash(name: str) -> str:
-    """A product name with its spaces, signs and case taken out."""
-    return re.sub(r"[^a-z0-9]", "", name.lower())
-
-
-def _previous(month: date) -> date:
-    return (month.replace(day=1) - timedelta(days=1)).replace(day=1)
-
-
-async def _elegant(
-    session: aiohttp.ClientSession,
-    modules: Mapping[str, ModuleType],
-    contract_id: str,
-    region: str,
-    month: date,
-) -> Candidates:
-    elegant = modules["elegant"]
-    contract = elegant._CONTRACTS_BY_ID[contract_id]
-    page = await _pdf().fetch_text(session, elegant._LISTING_URL)
-    page = page.replace("\\u0026", "&").replace("&amp;", "&")
-    # The key is the listed name with its spaces and "&" taken out.
-    wanted = _squash(contract.key)
-    return [
-        (f"{elegant._CURRENT_URL}/{quote(name)}_Residential.pdf", "Elegant's listing")
-        for name in dict.fromkeys(_ELEGANT_LISTED_RE.findall(page))
-        if _squash(name) == wanted
-    ]
-
-
-async def _engie(
-    session: aiohttp.ClientSession,
-    modules: Mapping[str, ModuleType],
-    contract_id: str,
-    region: str,
-    month: date,
-) -> Candidates:
-    engie = modules["engie"]
-    contract = engie._CONTRACTS_BY_ID[contract_id]
-    area = engie._REGION_TO_CODE[region]
-    exact: dict[str, None] = {}
-    family: dict[str, None] = {}
-    for url in _ENGIE_PAGES:
-        try:
-            page = await _pdf().fetch_text(session, url)
-        except _pdf().ExtractorError:
-            continue
-        for m in _ENGIE_CODE_RE.finditer(page):
-            name, segment, color, rate, _months, where = m.groups()
-            if (name, segment, where) != (contract.family, contract.segment, area):
-                continue
-            # The same colour and rate is the same product under a new term;
-            # another is a sibling product, offered only when nothing closer is.
-            same = (color, rate) == (contract.color, contract.rate)
-            (exact if same else family)[m.group(0)] = None
-    return [
-        (
-            f"{engie._API_URL}?document={code}&monthOffset=0"
-            f"&segment={contract.segment}&language=F",
-            "Engie's prices page",
-        )
-        for code in exact or family
-    ]
+def _moved() -> ModuleType:
+    """The candidates the integration reads a moved card from, as the live
+    check loaded them (``providers/_moved.py``)."""
+    return importlib.import_module("be_pkg.providers._moved")
 
 
 async def _energyvision(
-    session: aiohttp.ClientSession,
-    modules: Mapping[str, ModuleType],
-    contract_id: str,
-    region: str,
-    month: date,
+    session: aiohttp.ClientSession, contract_id: str, region: str, month: date
 ) -> Candidates:
-    ev = modules["energyvision"]
+    ev = importlib.import_module("be_pkg.providers.energyvision")
     contract = ev._CONTRACTS_BY_ID[contract_id]
     card = contract.cards[region]
     stamp = f"{month.month:02d}{month.year % 100:02d}"
@@ -206,38 +129,18 @@ async def _energyvision(
     # Where its listing's script looks for the month's name.
     for url in ev._archive_card_urls(contract, card, month):
         found.setdefault(url, "its upload folders")
-    return list(found.items())
+    return [(url, where, True) for url, where in found.items()]
 
 
-async def _luminus(
-    session: aiohttp.ClientSession,
-    modules: Mapping[str, ModuleType],
-    contract_id: str,
-    region: str,
-    month: date,
-) -> Candidates:
-    luminus = modules["luminus"]
-    contract = luminus._CONTRACTS_BY_ID[contract_id]
-    found: dict[str, str] = {}
-    for signing in (month, _previous(month)):
-        try:
-            product_id = await luminus._resolve_archive_product_id(
-                session, contract, region, signing
-            )
-        except _pdf().ExtractorError:
-            continue
-        if product_id is not None:
-            url = luminus._archive_pdf_url(product_id, month, region)
-            found.setdefault(url, f"the product id of {signing:%Y-%m}")
-    return list(found.items())
-
-
-FINDERS: dict[str, Finder] = {
-    "elegant": _elegant,
-    "engie": _engie,
-    "energyvision": _energyvision,
-    "luminus": _luminus,
-}
+def _searches() -> dict[str, Search]:
+    """Where to look for each covered supplier's card: the integration's
+    candidates, and this script's own for EnergyVision."""
+    searches: dict[str, Search] = {
+        supplier: candidates
+        for supplier, (_read_at, candidates) in _moved().FALLBACKS.items()
+    }
+    searches["energyvision"] = _energyvision
+    return searches
 
 
 def _month_re(month: date) -> re.Pattern[str]:
@@ -277,10 +180,14 @@ async def find(
 ) -> list[tuple[str, str, str | None]]:
     """Each candidate address for ``month``'s card, where it came from and
     why it is not that card, None when it is, best first."""
-    candidates = await FINDERS[supplier](session, modules, contract_id, region, month)
+    found = await _searches()[supplier](session, contract_id, region, month)
     return [
-        (url, where, await _reason(session, url, month))
-        for url, where in candidates[:_MAX_TRIED]
+        (
+            url,
+            where if exact else f"{where}, not the product's own card",
+            await _reason(session, url, month),
+        )
+        for url, where, exact in found[:_MAX_TRIED]
     ]
 
 
@@ -289,7 +196,7 @@ def _covered(
 ) -> bool:
     module = modules.get(supplier)
     return (
-        supplier in FINDERS
+        supplier in _searches()
         and module is not None
         and contract_id in getattr(module, "_CONTRACTS_BY_ID", {})
     )

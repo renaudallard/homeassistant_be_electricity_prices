@@ -521,7 +521,7 @@ The registry is the single list of suppliers the integration knows about
 (`providers/__init__.py`).
 
 ```python
-EXTRACTORS: dict[str, SupplierExtractor] = {
+EXTRACTORS: dict[str, SupplierExtractor] = with_moved_fallbacks({
     _ENECO.id: _ENECO,
     _ENGIE.id: _ENGIE,
     _TOTALENERGIES.id: _TOTALENERGIES,
@@ -545,7 +545,7 @@ EXTRACTORS: dict[str, SupplierExtractor] = {
     # Expert escape hatch, listed last so it sorts to the bottom of the
     # supplier dropdown.
     _CUSTOM.id: _CUSTOM,
-}
+})
 ```
 
 Each value's `EXTRACTOR` is imported under a private alias and keyed by its own
@@ -567,6 +567,38 @@ convenient importing from `providers`.
 Registering a new supplier is two edits: add the module (`providers/foo.py`
 exposing a top-level `EXTRACTOR`), then add `_FOO.id: _FOO` to `EXTRACTORS`
 (with the matching `from .foo import EXTRACTOR as _FOO`).
+
+### A card that moved (providers/_moved.py)
+
+`EXTRACTORS` wraps the `fetch` of Elegant, Engie and Luminus
+(`with_moved_fallbacks`). When the usual address answers that it has no card
+(`is_missing_card_error`: a 404 or 410, or a web page in its place), or with
+a card of a month before the running one, the wrapper asks the supplier's own
+pages for the product's card of the running month (`FALLBACKS`: Elegant's
+listing, Engie's prices pages, Luminus's product id for the month) and reads
+each address with the module's `_read_at`, the read step its `fetch` uses. The first card that names
+the running month (`card_month`, by its title or else its stated last day) is
+kept and the address logged; with none the usual answer stands, the error or
+the older card. A parse error or a network failure is no sign of a move and
+is never searched for.
+
+Only an address that is the product's own card for the month by construction
+is read: an Engie sibling under the same family code and Luminus's product
+id of the month before are offered by the candidates but marked, and the
+wrapper skips them. The October id served a card titled November that
+carried October's prices on 1 November 2026 (#147).
+
+EnergyVision is not wrapped: its `fetch` already asks every folder its
+listing's script asks, newest upload first, and its card page linked the
+first edition of a card a corrected upload had replaced in November 2026.
+
+The wrapper keeps the module's own `fetch` as `__wrapped__`, with its name
+and module (`functools.wraps`, so `inspect.getmodule` still finds the
+supplier). Each module's own `fetch` stays unwrapped, and the live check asks
+that, so it keeps failing at the usual address until the extractor reads the
+card there; `scripts/card_finder.py` reports from the same candidates where
+the card went, the marked ones included. The card archive reads the registry,
+so it files a moved card at the month it names.
 
 ## The PDF toolkit (providers/_pdf.py)
 

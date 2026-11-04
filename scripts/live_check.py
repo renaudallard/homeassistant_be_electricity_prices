@@ -215,6 +215,10 @@ def _load_providers() -> dict[str, types.ModuleType]:
         )
         for supplier in _SUPPLIERS
     }
+    # The candidates the integration reads a moved card from, bound to the
+    # suppliers just loaded: the card finder reports from them, and a copy
+    # left from an earlier load would read that load's registries.
+    _load("be_pkg.providers._moved", PKG / "providers" / "_moved.py")
     # Every module must be the supplier it is filed under. The old positional
     # unpack could bind a module to the wrong name and still report green, so
     # make that impossible rather than merely unlikely: the extractor knows its

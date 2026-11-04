@@ -1264,9 +1264,16 @@ next run, so a fix can be out before the 6th. From the 6th the
 `extractor_card_missing` or `extractor_failed` card appears as below, and it
 clears on the next successful refresh. An entry with no card at all raises
 it at once, since its sensors have nothing to price with. A card missing for
-more than a few days may have moved instead: Engie's Empty
-House card went to a new address on 1 November 2026, when the product became
-a three-year contract, and only an update of the integration could follow it.
+more than a few days may have moved instead: Engie's Empty House card went to
+a new address on 1 November 2026, when the product became a three-year
+contract, and Elegant renamed its files the next day. For Elegant, Engie and
+Luminus the integration follows such a move by itself: when the usual address
+has no card, or only the month before's, it looks where the supplier's own
+pages list the product's card and reads it there, as long as that card names
+the running month, and logs where it found it. It never reads another
+product's card or one filed under another month's product id, which is how
+Luminus served an early copy titled November with October's prices. Other
+suppliers still need an update of the integration to follow a move.
 What happens when a card stays missing is under *Failure mode* below.
 
 ### Failure mode

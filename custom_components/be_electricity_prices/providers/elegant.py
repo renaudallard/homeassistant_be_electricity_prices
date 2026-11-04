@@ -295,8 +295,16 @@ async def fetch(
     session: aiohttp.ClientSession, contract_id: str, region: str
 ) -> SupplierSnapshot:
     """The card at the product's stable address."""
-    contract = _contract(contract_id, region)
-    url = _current_url(contract)
+    return await _read_at(
+        session, contract_id, region, _current_url(_contract(contract_id, region))
+    )
+
+
+async def _read_at(
+    session: aiohttp.ClientSession, contract_id: str, region: str, url: str
+) -> SupplierSnapshot:
+    """The product's card at ``url``, read as ``fetch`` reads it."""
+    _contract(contract_id, region)
     snap = parse_snapshot(contract_id, await fetch_pdf_text_layout(session, url), url)
     # Here and not in the reader: a past month's card keeps a short table.
     require_every_area("Elegant", snap, _AREAS.values())

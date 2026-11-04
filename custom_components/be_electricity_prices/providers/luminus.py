@@ -235,7 +235,17 @@ async def fetch(
         raise ExtractorError(
             f"Luminus {contract_id}: not available in region {region!r}"
         )
-    url = _document_url(contract.slug, region)
+    return await _read_at(
+        session, contract_id, region, _document_url(contract.slug, region)
+    )
+
+
+async def _read_at(
+    session: aiohttp.ClientSession, contract_id: str, region: str, url: str
+) -> SupplierSnapshot:
+    """The product's card at ``url``, read as ``fetch`` reads it, its
+    network and prosumer rows filled from a sibling's current card."""
+    contract = require_contract(_CONTRACTS_BY_ID, contract_id, "Luminus")
     text = await fetch_pdf_text(session, url)
 
     async def _current(sibling: _ContractDef) -> str | None:

@@ -90,6 +90,8 @@ def _serve(
         return str(pdf.extract_pdf_text(pdf._strip_pdf_prefix(payload)))
 
     monkeypatch.setattr(pdf, "fetch_text", fetch_text)
+    # The candidates read their pages through their own import of it.
+    monkeypatch.setattr(cf._moved(), "fetch_text", fetch_text)
     monkeypatch.setattr(pdf, "fetch_pdf_text", fetch_pdf_text)
     # Luminus reads its product list through its own import of the helper.
     monkeypatch.setattr(modules["luminus"], "fetch_text", fetch_text)
@@ -216,7 +218,7 @@ async def test_luminus_names_the_product_id_each_card_came_from(
     )
     assert [(where, reason is None) for _url, where, reason in found] == [
         ("the product id of 2026-11", False),
-        ("the product id of 2026-10", True),
+        ("the product id of 2026-10, not the product's own card", True),
     ]
     assert "expected a PDF" in str(found[0][2])
 
