@@ -202,6 +202,29 @@ def test_fixed_energy_is_fixed_rates() -> None:
     assert snap.energy.single == pytest.approx(13.57 / 100.0)
 
 
+def test_the_november_2026_fixed_card_drops_tarief_from_its_energy_row() -> None:
+    """From November 2026 the 3-year card prints "Groene stroom - vast 18,40
+    €cent/kWh" where every card before printed "vast tarief", and the parser
+    refused it. It reads now, and the rest of the card with it."""
+    snap = parse_snapshot(
+        _FIXED,
+        fixture_text("energyvision_fixed_3y_nov.pdf", layout=True),
+        "test://ev-fixed-nov",
+    )
+    assert snap.publication_label == "november 2026"
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(0.184)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(75.0)
+    inj = snap.injection
+    assert inj is not None
+    assert inj.current == pytest.approx(0.0413)
+    assert inj.factor == pytest.approx(0.6)
+    assert inj.base == pytest.approx(-0.015)
+    assert inj.minimum == pytest.approx(0.01)
+    assert inj.spp_indexed is True
+    assert set(snap.dsos) == set(FLUVIUS_KEYS)
+
+
 def test_fixed_yearly_fixed_fee() -> None:
     """Vaste vergoeding 75 EUR/jaar on the 3-year fixed card."""
     snap = _fixed()

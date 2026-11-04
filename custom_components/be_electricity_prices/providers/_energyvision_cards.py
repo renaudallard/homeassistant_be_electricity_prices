@@ -336,8 +336,10 @@ def _fee(text: str) -> float:
 # The card header prints "Alle prijzen en tarieven zijn inclusief 6% BTW".
 _VAT_RE = re.compile(r"(\d+)\s*%\s*BTW", re.IGNORECASE)
 # Fixed card energy + its printed monthly injection indicative (page 1).
+# "Groene stroom - vast tarief 13,57" until October 2026, "Groene stroom -
+# vast 18,40" from November.
 _FIXED_ENERGY_RE = re.compile(
-    rf"Groene\s+stroom\s*[{SIGN_CHARS}]\s*vast\s+tarief\s+{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    rf"Groene\s+stroom\s*[{SIGN_CHARS}]\s*vast(?:\s+tarief)?\s+{_NUM}\s*€?\s*cent\s*/\s*kWh",
     re.IGNORECASE,
 )
 _FEE_RE = re.compile(rf"Vaste\s+vergoeding\s+{_NUM}\s*€\s*/\s*jaar", re.IGNORECASE)

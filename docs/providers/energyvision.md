@@ -273,7 +273,9 @@ vergoeding.
 13,57 €cent/kWh" row with `_FIXED_ENERGY_RE` (`providers/_energyvision_cards.py`). The fixed
 rate is printed VAT-inclusive, so it is used as-is (`single = 13,57 / 100`), with the 75
 EUR/jaar vaste vergoeding as `yearly_fixed_fee`. `test_fixed_energy_is_fixed_rates` and
-`test_fixed_yearly_fixed_fee` pin both.
+`test_fixed_yearly_fixed_fee` pin both. From November 2026 the row drops the word "tarief"
+("Groene stroom - vast 18,40 €cent/kWh"), which the pattern takes either way
+(`test_the_november_2026_fixed_card_drops_tarief_from_its_energy_row`).
 
 ## Injection
 
@@ -772,7 +774,7 @@ parser, and it will fail the day the two publications diverge.
 | --- | --- | --- |
 | "could not parse dynamic afname formula" | `_DYN_FORMULA_RE` | the "formule (exclusief btw): ... x Belpex per kwartier ... EUR/MWh" wording or sign chars changed |
 | Wrong dynamic per-kWh price | the EUR/MWh conversion in `_extract_dynamic` | EnergyVision switched Belpex units or the VAT treatment changed |
-| "could not parse fixed energy price" | `_FIXED_ENERGY_RE` | the "Groene stroom - vast tarief ... €cent/kWh" label reworded |
+| "could not parse fixed energy price" | `_FIXED_ENERGY_RE` | the "Groene stroom - vast [tarief] ... €cent/kWh" label reworded |
 | Solar credit wrong (dynamic) | `_DYN_FORMULA_RE` injection row | the "injectietarief" wording or sign dropped |
 | Solar credit wrong (fixed) | `_SPP_FORMULA_RE`, then `_FIXED_INJECTION_RE` | the "x Belpex-SPP-M ... EUR/MWh" prose or the "Injectie – variabel ... €cent/kWh" fallback label reworded |
 | Solar credit floored at the wrong value (fixed) | `_GUARANTEE_RE` | the "garanderen wij in elk geval ... €cent/kWh" clause reworded, so `minimum` goes unset |
