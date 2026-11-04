@@ -37,6 +37,7 @@ import re
 
 from ..const import DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW
 from ._energyvision_cards import _TIER_BOUND, _spp_injection, _tiered_legs
+from ._energyvision_contracts import _CONTRACTS_BY_ID
 from ._parse import SIGN_CHARS, excise_tier_bands, to_float
 from ._pdf import NUM_NO_THOUSANDS, printed_vat_rate
 from ._rates import EnergyRates, FixedRates, InjectionRates, SpotMonthlyRates
@@ -64,10 +65,6 @@ def _parse_wallonia(
     formula. Both carry a yearly standing charge and a monthly-indexed
     injection indicative, and both share the Walloon DSO and tax blocks.
     """
-    # Local: energyvision.py imports this module, so the registry cannot be
-    # imported at the top without closing a cycle.
-    from .energyvision import _CONTRACTS_BY_ID
-
     contract = _CONTRACTS_BY_ID[contract_id]
     energy: EnergyRates
     if contract.kind == "spot_monthly":

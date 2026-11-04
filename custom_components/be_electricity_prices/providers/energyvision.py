@@ -87,8 +87,6 @@ the model.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin
@@ -100,7 +98,6 @@ from homeassistant.util import dt as dt_util
 from ..const import (
     DSO_SIBELGA,
     REGION_BRUSSELS,
-    REGION_FLANDERS,
     REGION_WALLONIA,
     WELCOME_CREDIT_ANNIVERSARY,
     WELCOME_CREDIT_PRO_RATA,
@@ -111,6 +108,14 @@ from ._energyvision_cards import (
     _extract_dynamic,
     _extract_fixed,
     _extract_tiered,
+)
+from ._energyvision_contracts import (
+    _CONTRACTS,
+    _CONTRACTS_BY_ID,
+    _SITE_BASE,
+    DISCOVER_IDS,
+    _CardDef,
+    _ContractDef,
 )
 from ._energyvision_overlays import (
     _DSO_ROWS,
@@ -140,7 +145,6 @@ from ._pdf import (
 from ._rates import (
     Contract,
     EnergyRates,
-    TariffKind,
 )
 from ._validity import (
     archive_validity_check,
@@ -154,7 +158,6 @@ from .base import (
 )
 from .energiebe import _NUM
 
-_SITE_BASE = "https://www.energyvision.be"
 # The supplier's months end at midnight in Brussels, whatever zone Home
 # Assistant runs in.
 _BRUSSELS = ZoneInfo("Europe/Brussels")
@@ -162,204 +165,6 @@ _BRUSSELS = ZoneInfo("Europe/Brussels")
 # alike. Since 30 October 2026 its script draws the cards and the page
 # links none.
 _LISTING_URL = f"{_SITE_BASE}/nl-be/tariefkaart"
-
-# EnergyVision sells in Brussels under the Brusol brand, off its own site.
-# Nothing on energyvision.be links to it.
-_BRUSOL_SITE = "https://www.brusol.be"
-# Brusol has no equivalent of the tariefkaart listing: each product's current
-# card is advertised on the page you sign up for it from. It does publish an
-# archive page, but that one stopped being updated in May 2026 and lists every
-# product it has ever sold, so it is the wrong page to read for either job.
-# The FR path segment on the NL page is Brusol's own alias, not a typo.
-_BRUSOL_GS1800V_URL = (
-    f"{_BRUSOL_SITE}/nl/%C3%A9lectricit%C3%A9-et-gaz"
-    "/schrijf-je-in-voor-goedkope-stroom-van-brusol"
-)
-_BRUSOL_GRS_URL = f"{_BRUSOL_SITE}/nl/schrijf-je-in-voor-groene-stroom-van-brusol"
-
-
-@dataclass(frozen=True)
-class _CardDef:
-    """Where one product's card for one region is published.
-
-    A product is published per region, and the publication is not one
-    catalogue: the region decides the filename token, the site and the page
-    the current card is resolved off.
-    """
-
-    # Filename language / region token, the part between the product code and
-    # the Drupal dedup suffix: "nl" for the Flemish cards, "WAL-fr" for the
-    # Walloon ones.
-    token: str
-    # Site the card and the page that advertises it live on.
-    site: str = _SITE_BASE
-    # Page whose HTML carries the current card's href, or None where the
-    # card is found by its name, as EnergyVision's own listing finds it.
-    index_url: str | None = None
-    # How an archived card is located under <site>/sites/default/files/.
-    # False is EnergyVision's "inline-files" folder, asked after the upload
-    # folders from November 2026; True is Brusol, which files each card
-    # under the month it uploaded it.
-    archive_by_upload_month: bool = False
-
-
-@dataclass(frozen=True)
-class _ContractDef:
-    contract_id: str
-    label: str
-    kind: TariffKind
-    code: str  # EV filename product code (GSDYN, GS3JV, ...)
-    # One card per region this product is sold in. Most products are sold in
-    # one region only, but not all: GS1800V is published for Flanders and,
-    # under the Brusol brand, for Brussels, off two different sites. The
-    # mapping makes this class unhashable, which nothing needs it to be.
-    cards: Mapping[str, _CardDef]
-    # Whether a spot_monthly card bills a first tranche of the year at a flat
-    # rate before the indexed remainder. Declared rather than discovered: a
-    # tiered card whose tranche row went missing has drifted and must fail
-    # loud, not quietly bill every kWh at the indexed rate.
-    tranche: bool = True
-
-    @property
-    def regions(self) -> frozenset[str]:
-        return frozenset(self.cards)
-
-    def card(self, region: str) -> _CardDef | None:
-        return self.cards.get(region)
-
-
-_FLANDERS_CARD = _CardDef(token="nl")
-
-
-_CONTRACTS: tuple[_ContractDef, ...] = (
-    _ContractDef(
-        "energyvision_dynamic",
-        "EnergyVision Dynamisch",
-        "dynamic",
-        "GSDYN",
-        {REGION_FLANDERS: _FLANDERS_CARD},
-    ),
-    _ContractDef(
-        "energyvision_fixed_3y",
-        "EnergyVision 3 jaar vast",
-        "fixed",
-        "GS3JV",
-        {REGION_FLANDERS: _FLANDERS_CARD},
-    ),
-    # Wallonia's own fixed product, on a French card. It is a 1-year lock
-    # where Flanders gets 3, so it is a distinct contract rather than the same
-    # one in another region.
-    #
-    # It used to say here that this is where DATS 24's Walloon customers land
-    # after the 2026-08-31 transfer. Nothing sourced that: DATS 24's own site
-    # named EnergyVision and no product. Issue #100's reporter, who was
-    # actually transferred, landed on the legacy DATS 24 card continued under
-    # EnergyVision's name, and that card covers Wallonia on its face, so the
-    # Walloon customers plausibly went the same way. Unknown either way, and
-    # the Repairs card no longer tells anyone which product to pick.
-    _ContractDef(
-        "energyvision_fixed_1y",
-        "EnergyVision 1 an fixe",
-        "fixed",
-        "GS1JV",
-        {REGION_WALLONIA: _CardDef(token="WAL-fr")},
-    ),
-    # The tiered range. All three share one shape and differ only in the
-    # tranche, the flat rate, the coefficient, the standing charge and how the
-    # feed-in is priced, so one parser reads the three of them.
-    # The one product sold in all three regions. The Dutch Brussels card is
-    # worded exactly like the Flemish one and prints the same energy leg
-    # figure for figure, so it goes through the same parser; only the network
-    # and tax blocks are the region's own. The Walloon card is the separate
-    # French publication and needs the *_fr anchors, but the same body behind
-    # them, and its standing charge is its own: none on the April to
-    # September 2026 cards and 70 from October, where the other two charge 50.
-    #
-    # Who may take it differs too, which the config flow cannot express and
-    # the README says instead: Flanders and Wallonia sell it to any
-    # residential customer, Brussels only to roofs already carrying
-    # EnergyVision/Brusol panels.
-    _ContractDef(
-        "energyvision_tiered_1800",
-        "EnergyVision 1.800 kWh vast",
-        "spot_monthly",
-        "GS1800V",
-        {
-            REGION_FLANDERS: _FLANDERS_CARD,
-            REGION_WALLONIA: _CardDef(token="WAL-fr"),
-            REGION_BRUSSELS: _CardDef(
-                token="BXL-nl",
-                site=_BRUSOL_SITE,
-                index_url=_BRUSOL_GS1800V_URL,
-                archive_by_upload_month=True,
-            ),
-        },
-    ),
-    _ContractDef(
-        "energyvision_fixed_injection_3y",
-        "EnergyVision vaste injectieprijs 3 jaar",
-        "spot_monthly",
-        "GSVI3",
-        {REGION_FLANDERS: _FLANDERS_CARD},
-    ),
-    _ContractDef(
-        "energyvision_laadpunt",
-        "EnergyVision Laadpunt",
-        "spot_monthly",
-        "GSLP",
-        {REGION_FLANDERS: _FLANDERS_CARD},
-    ),
-    # Brusol's other Brussels product, and the one any household can sign:
-    # GS1800V is sold only to roofs carrying EnergyVision/Brusol panels,
-    # while this card's condition 3 asks for nothing but a residential
-    # connection. Same monthly RLP index as the tiered range with no tranche
-    # in front of it, so it is a spot_monthly card that bills the formula
-    # from the first kWh.
-    #
-    # It names Belpex-RLP-M and Belpex-SPP-M without defining either, where
-    # the GS1800V card spells out that the weighting is the mean of the
-    # Flemish DSOs' profiles. Same supplier, same index names, same published
-    # parameter page, so the blend is read off that card rather than guessed;
-    # if EnergyVision ever defines a Brussels profile, this is what changes.
-    _ContractDef(
-        "energyvision_groene_stroom",
-        "EnergyVision Groene stroom",
-        "spot_monthly",
-        "GRS",
-        {
-            REGION_BRUSSELS: _CardDef(
-                token="BXL-nl",
-                site=_BRUSOL_SITE,
-                index_url=_BRUSOL_GRS_URL,
-                archive_by_upload_month=True,
-            )
-        },
-        tranche=False,
-    ),
-)
-_CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
-
-# Every residential product code EnergyVision and Brusol currently list, so
-# discover() flags only a genuinely new SKU. All of them are implemented
-# except the catalogued-but-declined ones: GSEZ / GSEZLP price self-consumed
-# solar as a third energy leg, and GSG / GS1JVG are gas. The listing names
-# its group buys apart, by partner rather than by product code (the iChoosr
-# GRSO cards of May to July 2026 among them), and discover() reads none.
-DISCOVER_IDS: frozenset[str] = frozenset(
-    {
-        "GSDYN",
-        "GS3JV",
-        "GS1JV",
-        "GSVI3",
-        "GRS",
-        "GS1800V",
-        "GSLP",
-        "GSEZ",
-        "GSEZLP",
-        "GSG",
-        "GS1JVG",
-    }
-)
 
 
 # "Eenmalige welkomstkorting  200 €", the one-off first-year credit, printed

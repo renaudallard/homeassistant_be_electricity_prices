@@ -46,6 +46,9 @@ from custom_components.be_electricity_prices.const import (
     WELCOME_CREDIT_PRO_RATA,
 )
 from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers._energyvision_contracts import (
+    _BRUSOL_GRS_URL,
+)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
@@ -1793,7 +1796,7 @@ async def test_the_brussels_probe_heads_brusols_page(
 
     monkeypatch.setattr(ev, "head_freshness_key", head)
     assert await ev.probe(None, _GRS, "brussels") is None  # type: ignore[arg-type]
-    assert headed == [ev._BRUSOL_GRS_URL]
+    assert headed == [_BRUSOL_GRS_URL]
 
 
 # ---- Brussels (Brusol) card: GRS "Groene stroom" -----------------------------

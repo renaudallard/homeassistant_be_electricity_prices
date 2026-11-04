@@ -44,7 +44,8 @@ integration tracks these:
   EnergyVision/Brusol panels on the roof.
 
 A product is published once per region, one card each (`-nl` for the Flemish cards,
-`-WAL-fr` for the Walloon one, `-BXL-nl` for the Brussels ones), so `_ContractDef` carries a
+`-WAL-fr` for the Walloon one, `-BXL-nl` for the Brussels ones), so `_ContractDef`
+(`providers/_energyvision_contracts.py`, the registry) carries a
 `_CardDef` per region and derives `regions` from its keys; `fetch` rejects a region the
 contract is not sold in, naming the regions it is. Most products are sold in one region,
 but GS1800V is sold in two. The Flemish and Walloon publications share no wording, so the
@@ -54,7 +55,7 @@ needs no parser of its own for the energy leg - see
 [Brussels](#brussels-is-published-as-brusol-on-another-site) below. Gas (GSG / GS1JVG) stays out
 of scope, and so do GSEZ / GSEZLP: they are tiered like the three above but also price
 self-consumed solar ("Groene stroom uit zonnepanelen op je dak 20 €cent/kWh"), a third
-energy leg with no representation in the model. `DISCOVER_IDS` (`providers/energyvision.py`) lists all of
+energy leg with no representation in the model. `DISCOVER_IDS` (`providers/_energyvision_contracts.py`) lists all of
 them so `discover()` only flags a genuinely new code. Group buys are not in it: the listing
 names them apart, by partner rather than by product code (the iChoosr GRSO cards of May to
 July 2026 among them), and `discover()` reads none.
