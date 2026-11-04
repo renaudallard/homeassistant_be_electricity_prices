@@ -458,6 +458,18 @@ def test_frank_is_registered() -> None:
     }
 
 
+def test_the_vt_tier_is_withdrawn_in_november_2026() -> None:
+    """Frank published no November 2026 card for VT while its five other
+    tiers had theirs on 30 October, and its conditions page lists those five
+    alone from 4 November: households on VT keep its last card and the
+    picker marks it withdrawn."""
+    withdrawn = {c.id: c.withdrawn for c in EXTRACTORS["frank"].contracts}
+    assert withdrawn["frank_dynamic_korting"] == date(2026, 11, 1)
+    assert {cid for cid, day in withdrawn.items() if day is not None} == {
+        "frank_dynamic_korting"
+    }
+
+
 def test_all_contracts_are_dynamic_and_flanders_only() -> None:
     for c in EXTRACTORS["frank"].contracts:
         assert c.kind == "dynamic"

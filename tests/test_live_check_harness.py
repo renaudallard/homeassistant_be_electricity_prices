@@ -4037,12 +4037,14 @@ def test_a_dutch_edition_standing_in_is_reported() -> None:
 
 
 def test_every_frank_tier_is_checked_and_gets_its_own_freshness_row(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:
     """Frank prints one card per tier with its own fee and coefficients, but
     the check fetched the base tier only. The freshness block resolved every
     tier in one try, so a tier whose card was not found passed the whole
-    block as an unreadable CMS and the tiers after it got no row."""
+    block as an unreadable CMS and the tiers after it got no row. In October
+    2026, before VT was withdrawn, so that every tier has its row."""
+    freezer.move_to("2026-10-15 12:00:00+02:00")
     frank = lc._load_providers()["frank"]
     tiers = [t[0] for t in frank._TIERS]
     # As the CMS would read if Frank renamed the Plus token.
@@ -4100,8 +4102,10 @@ def test_a_frank_tier_on_the_running_month_s_card_is_current(
     monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:
     """On 30 October 2026 Frank uploaded the November cards of five tiers and
-    not VT's. VT, on the running month's card, is current; once November has
-    begun it is a month behind and fails."""
+    not VT's. VT, on the running month's card, is current. Once November has
+    begun VT is withdrawn, so it has no next card to wait for and no row,
+    while a tier still sold that misses the month is a month behind and
+    fails."""
     frank = lc._load_providers()["frank"]
     rows = [
         {
@@ -4133,8 +4137,20 @@ def test_a_frank_tier_on_the_running_month_s_card_is_current(
     lc.CHECKS.clear()
     asyncio.run(lc._check_card_freshness(None, {"frank": frank}))
     fresh = {c.label: c for c in _rows("frank/freshness")}
-    assert not fresh[vt].ok
-    assert all(c.ok for label, c in fresh.items() if label != vt)
+    assert vt not in fresh
+    assert all(c.ok for c in fresh.values())
+
+    hv = "frank/freshness: newest advertised frank_dynamic_hv card"
+    rows[:] = [
+        r
+        for r in rows
+        if r["originalFilename"] != "Frank Energie Dynamisch HV November 2026.pdf"
+    ]
+    lc.CHECKS.clear()
+    asyncio.run(lc._check_card_freshness(None, {"frank": frank}))
+    fresh = {c.label: c for c in _rows("frank/freshness")}
+    assert not fresh[hv].ok
+    assert all(c.ok for label, c in fresh.items() if label != hv)
 
 
 # ---- the workflow's retry loop -----------------------------------------------

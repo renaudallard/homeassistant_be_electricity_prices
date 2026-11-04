@@ -4232,6 +4232,11 @@ async def _check_card_freshness(
             running = today.year * 100 + today.month
             for tier_id, _tier_label, _suffix in frank._TIERS:
                 label = f"frank/freshness: newest advertised {tier_id} card"
+                gone = _WITHDRAWN_CONTRACTS.get(tier_id)
+                if gone is not None and today >= gone:
+                    # A tier Frank no longer sells has no next card to wait
+                    # for; its fetch and card rows are marked withdrawn.
+                    continue
                 try:
                     _url, card_label = await frank._resolve_pdf_url(session, tier_id)
                 except _EXTRACTOR_ERROR as err:

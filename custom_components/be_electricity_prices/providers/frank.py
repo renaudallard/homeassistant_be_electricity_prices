@@ -163,6 +163,11 @@ _TIERS: tuple[tuple[str, str, str | None], ...] = (
     ("frank_dynamic_slim", "Frank Energie Dynamisch Slim", "SL"),
     ("frank_dynamic_plus", "Frank Energie Dynamisch Plus", "Plus"),
 )
+# The first day Frank no longer sold a tier (``Contract.withdrawn``). VT had
+# no November 2026 card while the five others had theirs on 30 October, and
+# Frank's conditions page, which still linked VT's October card on 3 November,
+# lists the five others alone from 4 November.
+_WITHDRAWN: dict[str, date] = {"frank_dynamic_korting": date(2026, 11, 1)}
 _TIER_SUFFIX: dict[str, str | None] = {t[0]: t[2] for t in _TIERS}
 _VALID_IDS: frozenset[str] = frozenset(_TIER_SUFFIX)
 
@@ -730,6 +735,7 @@ EXTRACTOR = SupplierExtractor(
             # customer picks the grid in Frank's app, so the entry answers
             # for the card. Set on every tier because every tier prints it.
             quarter_hourly_option=True,
+            withdrawn=_WITHDRAWN.get(cid),
         )
         for cid, clabel, _ in _TIERS
     ),

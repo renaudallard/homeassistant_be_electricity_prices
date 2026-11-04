@@ -7763,8 +7763,9 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # adds one more, a monthly card like Groene Stroom Flex, and takes
         # out the LifePowr it replaced. Frank's Dynamisch Plus adds one more
         # residential tier at the 28,4 s the other five already cost, so it
-        # sorts with them at the tail of the sweep.
-        ("flanders", "spot", False): 38,
+        # sorts with them at the tail of the sweep. Its Dynamisch VT tier,
+        # withdrawn on 1 November 2026, comes out.
+        ("flanders", "spot", False): 37,
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,
