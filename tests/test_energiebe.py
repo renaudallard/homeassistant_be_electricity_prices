@@ -1140,6 +1140,38 @@ async def test_archive_resolves_the_months_card_from_the_listing(
     assert len(snap.dsos) == 8
 
 
+async def test_a_november_card_is_downloaded_once_for_its_two_readings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The November 2026 template is read laid out for its tables and plain
+    for its sentences, and each reading downloaded the card again, about a
+    megabyte more on every fetch (live check #159). One download serves
+    both now. The readings are served through the render hook, as the card
+    archive serves them, so the test spends no time laying the card out."""
+    from custom_components.be_electricity_prices.providers import _pdf, energiebe
+    from tests import FIXTURES
+
+    name = "energiebe_variable_nov.pdf"
+    payload = (FIXTURES / name).read_bytes()
+    url = "https://blob/November_Variabel.pdf"
+    downloads: list[str] = []
+
+    async def _download(_session: Any, asked: str, **_kw: Any) -> bytes:
+        downloads.append(asked)
+        return payload
+
+    async def _render(variant: str, _url: str, data: bytes, _renderer: Any) -> str:
+        assert data is payload
+        return fixture_text(name, layout=variant == "layout")
+
+    monkeypatch.setattr(_pdf, "_fetch_validated_pdf_bytes", _download)
+    monkeypatch.setattr(energiebe, "_resolve_card_url", AsyncMock(return_value=url))
+    with _pdf.render_through(_render):
+        snap = await energiebe.fetch(None, "energiebe_variable", REGION_FLANDERS)  # type: ignore[arg-type]
+    assert downloads == [url]
+    assert snap.publication_label.lower().startswith("november 2026")
+
+
 async def test_a_past_month_keeps_a_short_network_table(
     monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:

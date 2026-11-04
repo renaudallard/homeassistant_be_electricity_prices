@@ -150,8 +150,10 @@ card URL for the contract (`_CARD_URL` for the dynamic one, the contracts API fo
 variable one), calls `fetch_pdf_text_layout` to download and layout-extract the PDF (the
 layout extractor keeps column alignment, important for the DSO table), then
 `parse_snapshot`. When that text shows the November 2026 price row (see below), `_plain`
-also reads the card's plain text with `fetch_pdf_text`, a second download, for the
-formulas; `fetch_for_month` does the same. Validation is by `%PDF` magic bytes in the
+also reads the card's plain text with `fetch_pdf_text`, for the formulas; `fetch_for_month`
+does the same. Both readings sit inside `download_each_card_once` (`_pdf.py`), so the
+second one takes the bytes the first downloaded instead of downloading the card again,
+which had cost about a megabyte on every fetch. Validation is by `%PDF` magic bytes in the
 shared helper (`_pdf.py`), not Content-Type, so the JSON-style API URL and its blob
 redirect work.
 

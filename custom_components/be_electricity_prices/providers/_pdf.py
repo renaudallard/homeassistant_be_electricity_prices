@@ -337,7 +337,12 @@ async def _pdf_text(
     key = f"{variant}\0{url}"
     if memo is not None and key in memo:
         return memo[key]
-    payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
+    downloads = _DOWNLOADS.get()
+    payload = None if downloads is None else downloads.get(url)
+    if payload is None:
+        payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
+        if downloads is not None:
+            downloads[url] = payload
     text = await render_pdf(variant, url, payload, render)
     if memo is not None:
         memo[key] = text
@@ -756,6 +761,30 @@ def memoise_text_fetches(store: dict[str, str]) -> Iterator[None]:
         yield
     finally:
         _TEXT_MEMO.reset(token)
+
+
+# The bytes of each card downloaded inside a ``download_each_card_once``
+# block, by URL: opt-in and scoped like the memo above.
+_DOWNLOADS: ContextVar[dict[str, bytes] | None] = ContextVar("_DOWNLOADS", default=None)
+
+
+@contextmanager
+def download_each_card_once() -> Iterator[None]:
+    """Download each card once inside this block, however many ways it is
+    read.
+
+    energie.be's November 2026 template needs two readings of every card,
+    laid out for its tables and plain for its sentences, and each reading
+    downloaded the card again, about a megabyte more on every fetch. The
+    text memo above cannot spare that: it holds text, not bytes, and a
+    coordinator tick runs outside it. A reading the memo serves downloads
+    nothing, as before.
+    """
+    token = _DOWNLOADS.set({})
+    try:
+        yield
+    finally:
+        _DOWNLOADS.reset(token)
 
 
 # How a downloaded card becomes text, when someone other than the readers

@@ -171,6 +171,46 @@ async def test_render_hook_sees_the_bytes_and_decides_the_text() -> None:
     assert rendered == [b"%PDF-1.4 card"]
 
 
+async def test_a_card_read_two_ways_in_one_block_is_downloaded_once() -> None:
+    """energie.be's November 2026 cards are read laid out for their tables
+    and plain for their sentences. Inside download_each_card_once the second
+    reading takes the bytes the first one downloaded; outside it, each
+    reading downloads the card, and a reading the memo holds downloads
+    nothing, inside or not."""
+    asked: list[str] = []
+
+    class _CountingSession(_PdfSession):
+        def get(self, _url: str, **_kw: object) -> _PdfResponse:
+            asked.append(_url)
+            return super().get(_url, **_kw)
+
+    session = _CountingSession(b"%PDF-1.4 card")
+    url = "https://acme.test/card.pdf"
+
+    async def read(variant: str) -> str:
+        return await _pdf._pdf_text(
+            session,  # type: ignore[arg-type]
+            url,
+            variant=variant,
+            timeout=5,
+            render=lambda _payload: variant,
+        )
+
+    with _pdf.download_each_card_once():
+        assert await read("layout") == "layout"
+        assert await read("plain") == "plain"
+    assert asked == [url]
+    assert await read("layout") == "layout"
+    assert await read("plain") == "plain"
+    assert asked == [url] * 3
+    with (
+        _pdf.memoise_text_fetches({f"plain\0{url}": "kept"}),
+        _pdf.download_each_card_once(),
+    ):
+        assert await read("plain") == "kept"
+    assert asked == [url] * 3
+
+
 def test_parse_valid_until_dutch_geldig_van_tem() -> None:
     """Eneco / Mega Dutch wording -- date inside a 'Geldig...' window."""
     text = "Geldig van 1 april 2026 t.e.m 30 april 2026."

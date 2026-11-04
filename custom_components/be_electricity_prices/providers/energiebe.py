@@ -82,6 +82,7 @@ from ._parse import (
 from ._pdf import (
     NL_MONTHS,
     NUM_NO_THOUSANDS,
+    download_each_card_once,
     fetch_pdf_text,
     fetch_pdf_text_layout,
     fetch_text,
@@ -326,10 +327,13 @@ async def fetch(
     url = _CARD_URL
     if contract_id in _TARIFF_TYPE:
         url = await _resolve_card_url(session, _TARIFF_TYPE[contract_id])
-    text = await fetch_pdf_text_layout(session, url)
-    snap = parse_snapshot(
-        text, url, contract_id, plain=await _plain(session, url, text)
-    )
+    # One download for the two readings a card of the November 2026 template
+    # needs.
+    with download_each_card_once():
+        text = await fetch_pdf_text_layout(session, url)
+        snap = parse_snapshot(
+            text, url, contract_id, plain=await _plain(session, url, text)
+        )
     # Here and not in the reader: a past month's card keeps a short table.
     require_every_area("energie.be", snap, FLUVIUS_KEYS)
     return snap
@@ -447,10 +451,11 @@ async def fetch_for_month(
         )
         if url is None:
             return None
-        text = await fetch_pdf_text_layout(session, url)
-        snap = parse_snapshot(
-            text, url, contract_id, plain=await _plain(session, url, text)
-        )
+        with download_each_card_once():
+            text = await fetch_pdf_text_layout(session, url)
+            snap = parse_snapshot(
+                text, url, contract_id, plain=await _plain(session, url, text)
+            )
     except ExtractorError as err:
         # A timeout, a reset or a 5xx says nothing about the month: raise,
         # so the month cache retries it instead of caching it as absent.

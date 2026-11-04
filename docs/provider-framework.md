@@ -637,6 +637,13 @@ Internals worth knowing:
   payload; the key carries the variant (and the aligned threshold) because the
   same document read two ways is two different strings and handing one back for
   the other would feed a parser a shape it has no regexes for.
+- `download_each_card_once` (`_pdf.py`) is the bytes' counterpart, scoped the
+  same way: inside the block a card read two ways is downloaded once, the
+  second reading taking the first one's bytes, and a reading the memo holds
+  still downloads nothing. energie.be's November 2026 cards are read laid out
+  for their tables and plain for their sentences, and each reading had
+  downloaded the card again; a coordinator tick runs outside the memo, so only
+  this spares it.
 - `_fetch_validated_pdf_bytes` (`_pdf.py`) is shared by the three
   `fetch_pdf_text*` variants. It catches both `aiohttp.ClientError` and
   `TimeoutError` (aiohttp's `ClientTimeout` fires `asyncio.TimeoutError`, which
