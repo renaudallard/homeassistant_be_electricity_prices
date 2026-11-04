@@ -2134,8 +2134,9 @@ another way gets the kept PDF back.
 The integration reads that archive first for any closed month, one small
 JSON per month straight from `raw.githubusercontent.com` against a PDF
 download and a parse from the supplier; the supplier's own archive answers
-for a month the project's does not hold, and the current card stands in when
-neither has it, with the federal levies of the month it stands in for. A
+for a month the project's does not hold, or holds a card of another month
+for, and the current card stands in when neither has it, with the federal
+levies of the month it stands in for. A
 card indexed on its own month at Aspiravi (Eco Plus Flex, energy and
 feed-in), Cociter (Variable and Trihoraire), Elegant (Flex and ComfortFlex,
 energy and feed-in, and the feed-in credit of Zeker & Vast), Eneco

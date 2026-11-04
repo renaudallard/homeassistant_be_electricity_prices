@@ -284,12 +284,20 @@ def card_valid_until(valid_until: date | None, label: str) -> date | None:
     title ("Septembre 2026"), so their cards have no ``valid_until`` and
     anything asking whether they still cover a day had no answer: a
     September card advertised October's prices as tomorrow's. The title is
-    as good an answer for a monthly card. A label naming its month only as
-    "2026-08" is not taken: Ecopower dates its card by the month the index
-    settled, which is not the month the card is used in.
+    as good an answer for a monthly card.
     """
     if valid_until is not None:
         return valid_until
+    return label_month_end(label)
+
+
+def label_month_end(label: str) -> date | None:
+    """The last day of the month a publication label names, or None.
+
+    A label naming its month only as "2026-08" is not taken: Ecopower dates
+    its card by the month the index settled, which is not the month the card
+    is used in.
+    """
     folded = fold_accents(label)
     named = scan_month_end(folded, _MONTH_NAMES, limit=len(folded))
     if named is not None:
@@ -298,3 +306,9 @@ def card_valid_until(valid_until: date | None, label: str) -> date | None:
     if match is None:
         return None
     return end_of_month(int(match.group(2)), int(match.group(1)))
+
+
+def names_other_month(label: str, month: date) -> bool:
+    """Whether a publication label names a month, and not ``month``'s."""
+    end = label_month_end(label)
+    return end is not None and (end.year, end.month) != (month.year, month.month)

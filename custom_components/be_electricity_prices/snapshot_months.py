@@ -63,6 +63,7 @@ from .const import (
 )
 from .providers._pdf import fetch_text, is_transient_fetch_error
 from .providers._settle import indexed_energy, is_settled
+from .providers._validity import names_other_month
 from .providers.base import (
     ArchivedSnapshotFetcher,
     ExtractorError,
@@ -478,8 +479,8 @@ async def _archived_card_from_github(
     a month the project's archive does not hold.
 
     None on a 404, which is a month the archive predates, a contract it does
-    not cover or a row never written, and on a row that no longer
-    decodes. A transient failure propagates so the caller's negative cache
+    not cover or a row never written, on a row that no longer decodes, and
+    on a live row whose card names another month. A transient failure propagates so the caller's negative cache
     treats it like a supplier archive blip and asks again later.
     """
     url = (
@@ -499,6 +500,12 @@ async def _archived_card_from_github(
         )
     except (KeyError, TypeError, ValueError) as err:
         _LOGGER.debug("card archive row %s does not decode: %s", url, err)
+        return None
+    # A live row is filed under the month its card names, so one naming
+    # another was written over (issue #156): the month is asked elsewhere.
+    if row.get("_via", "live") == "live" and names_other_month(
+        snapshot.publication_label, year_month
+    ):
         return None
     parsed_before = row.get("_schema_version", 1) < _SNAPSHOT_SCHEMA_VERSION
     if parsed_before:

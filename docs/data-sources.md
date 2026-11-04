@@ -597,6 +597,11 @@ archives into), then the extractor's `fetch_for_month` archive for a month the p
 hold or holds only as the estimate a month-indexed card printed while it ran (see
 [provider-framework.md](provider-framework.md)), and falls back to the current live snapshot only
 when neither holds the month, with the federal levies that month owes (`_proxy_for_month`).
+A live row whose card names another month than the one asked counts as a row the archive does
+not hold (`names_other_month`, `providers/_validity.py`): the archive files a live card under
+the month its title names, so such a row was written over, as the replay of 3 November 2026
+did to four October rows with November's cards (issue #156). A row mirrored from a supplier's
+archive is not held to it, since Ecopower's dynamic card stays in force across months.
 A month's card whose network table lacks the entry's area while printing
 others (`_short_of`) keeps its own energy, taxes and fees and takes that one
 area's overlay from the nearest card of the same calendar year that prints it

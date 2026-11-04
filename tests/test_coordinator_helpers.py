@@ -5318,6 +5318,41 @@ async def test_an_archive_row_says_whether_it_was_caught_live(
     assert card.captured_live is live
 
 
+@pytest.mark.parametrize(
+    ("label", "via", "taken"),
+    [
+        ("november 2026", {"_via": "live"}, False),
+        ("november 2026", {}, False),
+        ("oktober 2026", {"_via": "live"}, True),
+        # A card mirrored from a supplier's archive answers for the month it
+        # was asked for: Ecopower's dynamic card stays in force across months.
+        ("november 2026", {"_via": "archive"}, True),
+        # A title naming no month says nothing either way.
+        ("Q4 2026", {"_via": "live"}, True),
+    ],
+)
+async def test_an_archive_row_naming_another_month_is_not_taken(
+    label: str, via: dict[str, str], taken: bool
+) -> None:
+    """The archive files a live card under the month its title names, so a
+    live row naming another month was written over, and would bill its month
+    on that month's card: the replay of 3 November 2026 put Elegant's
+    November card, 21,90 c€/kWh, in its October rows, where October's card
+    printed 19,87 (issue #156). Such a row reads as one never written, so
+    the supplier's own archive answers for the month instead."""
+    row = _snapshot_to_dict(_archive_snapshot(label), dt_util.utcnow())
+    row.update(via)
+
+    async def _body(*_args: object, **_kw: object) -> str:
+        return json.dumps(row)
+
+    with patch.object(snapshot_months, "fetch_text", _body):
+        card = await _archived_card_from_github(
+            MagicMock(), "elegant", "elegant_flex", "flanders", date(2026, 10, 1)
+        )
+    assert (card is not None) is taken
+
+
 def _month_indexed_card(current: float, label: str) -> SupplierSnapshot:
     return make_snapshot(
         energy=VariableRates(
