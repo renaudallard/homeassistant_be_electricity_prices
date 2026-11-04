@@ -222,6 +222,13 @@ def cached_network_ceiling(year: int) -> float | None:
     return sheets[max(held)].ceiling if held else None
 
 
+def tariff_sheet_held(year: int) -> bool:
+    """Whether ``year``'s own sheet is held, read or restored, so that what
+    :func:`cached_network_ceiling` answers for it is the year's figure and
+    not an earlier year's standing in."""
+    return year in _sheets()
+
+
 def capacity_floor_kw(year: int | None = None) -> float:
     """The minimum monthly peak the capacity term is billed on, in kW.
 

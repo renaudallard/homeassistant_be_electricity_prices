@@ -1396,9 +1396,12 @@ heals once the sheet is read, and quietly for a closed year that has none.
 `cached_network_ceiling` answers the ceiling of the year's sheet, else of the
 latest earlier sheet held, never a later one: the 2025 and 2026 sheets print
 the same figure, so the year before stands in from 1 January until the new
-sheet is read, and for a year whose sheet no longer reads. Only before any
-sheet is held does `resolve_vreg_network_ceiling` leave the card exactly as
-printed, which is what the integration did before the sheet was read.
+sheet is read, and for a year whose sheet no longer reads. `tariff_sheet_held`
+says whether the year's own sheet is held; while it is not, a card printing a
+higher ceiling than the one standing in keeps its own, its year's, and a card
+printing a lower one or none is given the stand-in. Only before any sheet is
+held does `resolve_vreg_network_ceiling` leave the card exactly as printed,
+which is what the integration did before the sheet was read.
 `capacity_floor_kw` answers the floor of the year's sheet, else of the latest
 earlier sheet held, else `VREG_CAPACITY_FLOOR_KW` (`const.py`), for the billed
 peak (`coordinator_peak.py`), the minimum the ceiling cannot cut below

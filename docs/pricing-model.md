@@ -366,7 +366,12 @@ sheet has not been read stands on the latest earlier sheet held, never a later
 one, as the capacity floor and the analog kWh rate do: from 1 January until
 Fluvius lists the new year's sheet, and for a year whose sheet no longer
 reads, the cards that print no ceiling would otherwise bill capacity uncapped.
-Only before any sheet has been read does the card keep the figure it prints.
+While an earlier year's figure stands in, a card printing a higher ceiling
+keeps its own, since the cards whose figure is read print their own year's
+and the ceiling has never fallen; a lower one, as Mega's and Bolt's 2023 and
+2024 figure, gives way to the stand-in (`tariff_sheet_held` tells the two
+apart). Only before any sheet has been read does the card keep the figure it
+prints whatever it is.
 
 Five suppliers read it correctly and are unaffected: Luminus, Frank and
 energie.be print 0,3472738 including the 6%, and energie.be's professional

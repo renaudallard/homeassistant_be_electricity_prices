@@ -631,7 +631,11 @@ def without_welcome_credit(snapshot: SupplierSnapshot) -> SupplierSnapshot:
 
 
 def resolve_vreg_network_ceiling(
-    snapshot: SupplierSnapshot, delivery_month: date, ceiling: float | None
+    snapshot: SupplierSnapshot,
+    delivery_month: date,
+    ceiling: float | None,
+    *,
+    stand_in: bool = False,
 ) -> SupplierSnapshot:
     """Bill the VREG's maximumtarief, not a stale card's copy of it.
 
@@ -660,9 +664,18 @@ def resolve_vreg_network_ceiling(
     all. Identity too on a card already stating the figure, which four
     suppliers do (energie.be, EnergyVision, Frank and Luminus); it fills the
     figure for the ten that print none. Counted over the September 2026
-    Flanders cards. The two that print a DIFFERENT figure, Mega and Bolt, are
-    a third case and are overwritten rather than filled: they print the
-    ceiling of 2023 and 2024 (0,1920264, or 0,2035480 with VAT).
+    Flanders cards. Mega and Bolt print a third figure, the ceiling of 2023
+    and 2024 (0,1920264, or 0,2035480 with VAT), which their readers leave
+    unread, so they are filled like the ten; a different figure read off a
+    card is overwritten.
+
+    ``stand_in`` says ``ceiling`` is an earlier year's, held until Fluvius
+    lists the delivery year's sheet. A card printing a higher one then keeps
+    its own: the cards whose figure is read print the ceiling of their own
+    year, so a January card can carry the new year's before the sheet is
+    out, and the ceiling has never fallen (0,1920264 in 2023 and 2024,
+    0,3276168 since), so a lower figure is an older year's, as Mega's and
+    Bolt's is, and gives way to the stand-in like no figure at all.
 
     It moves a bill only where the cap binds, which is a low-volume connection
     on a high peak, and never at the 2,5 kW floor: see
@@ -682,7 +695,10 @@ def resolve_vreg_network_ceiling(
         if key in FLUVIUS_KEYS
         and (
             overlay.network_ceiling_eur_per_kwh is None
-            or abs(overlay.network_ceiling_eur_per_kwh - ceiling) > 5e-7
+            or (
+                abs(overlay.network_ceiling_eur_per_kwh - ceiling) > 5e-7
+                and not (stand_in and overlay.network_ceiling_eur_per_kwh > ceiling)
+            )
         )
     }
     if not changed:

@@ -510,6 +510,63 @@ def test_the_entry_resolver_applies_the_vreg_ceiling() -> None:
     assert _resolved(vat_rate=0.21, include_vat=False) == pytest.approx(sheet)
 
 
+def test_a_card_ahead_of_the_stand_in_ceiling_keeps_its_own() -> None:
+    """From 1 January until Fluvius lists the year's sheet, the year before's
+    ceiling stands in. A card printing a higher one prints its own year's and
+    keeps it; one printing a lower one, as Mega's and Bolt's 2023 and 2024
+    figure, gets the stand-in, as a card printing none does. Once the year's
+    sheet is held it wins over every card, higher or lower."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices import fluvius
+    from custom_components.be_electricity_prices.const import DSO_FLUVIUS_ANTWERPEN
+
+    january = date(2027, 1, 1)
+
+    def _resolved(printed: float | None) -> float | None:
+        card = make_snapshot(
+            taxes=TaxOverlay(
+                federal_excise=0.05, energy_contribution=0.0, vat_rate=0.0
+            ),
+            dsos={
+                DSO_FLUVIUS_ANTWERPEN: DsoOverlay(
+                    distribution_single=0.0535,
+                    transport=0.0,
+                    capacity_eur_per_kw_year=52.37,
+                    network_ceiling_eur_per_kwh=printed,
+                )
+            },
+        )
+        entry = SimpleNamespace(
+            data={
+                "supplier": "test",
+                "contract": "test",
+                "region": "flanders",
+                "dso": DSO_FLUVIUS_ANTWERPEN,
+                "include_vat": True,
+            }
+        )
+        out = snapshot_resolve._resolve_snapshot(
+            entry,  # type: ignore[arg-type]
+            card,
+            delivery_month=january,
+        )
+        return out.dsos[DSO_FLUVIUS_ANTWERPEN].network_ceiling_eur_per_kwh
+
+    # The harness holds the sheets of 2023 to 2026, so 2027 stands on 2026's.
+    assert not fluvius.tariff_sheet_held(2027)
+    stood_in = _resolved(None)
+    assert stood_in is not None
+    vat = stood_in / FLUVIUS_CEILINGS[2026]
+    assert vat == pytest.approx(1.06)
+    ahead = 0.36 * vat
+    assert _resolved(ahead) == pytest.approx(ahead)
+    assert _resolved(0.2035480) == pytest.approx(stood_in)
+    fluvius._cache[2027] = fluvius.SheetTerms(0.35, 2.5)
+    assert _resolved(ahead) == pytest.approx(0.35 * vat)
+    assert _resolved(0.2035480) == pytest.approx(0.35 * vat)
+
+
 def test_the_fluvius_sheets_ceiling_is_what_the_fleet_prints() -> None:
     """The regulator's figure as Fluvius's 2026 sheet prints it, held against
     two suppliers that read the ceiling off their own footnote: they must

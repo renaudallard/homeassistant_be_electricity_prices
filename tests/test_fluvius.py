@@ -461,6 +461,19 @@ def test_the_ceiling_is_the_years_or_the_last_sheet_before_it() -> None:
     assert fluvius.cached_network_ceiling(2022) is None
 
 
+def test_a_years_sheet_is_held_once_read_or_restored() -> None:
+    """Whether a year's ceiling is its own or an earlier year's standing in:
+    a sheet read in this process or restored from an entry's store counts,
+    an earlier year's does not."""
+    assert not fluvius.tariff_sheet_held(2026)
+    fluvius._cache[2025] = fluvius.SheetTerms(0.3276168, 2.5)
+    assert fluvius.tariff_sheet_held(2025)
+    assert not fluvius.tariff_sheet_held(2026)
+    fluvius.restore({"sheets": {"2026": {"ceiling": 0.3276168, "floor_kw": 2.5}}})
+    assert fluvius.tariff_sheet_held(2026)
+    assert not fluvius.tariff_sheet_held(2027)
+
+
 def test_a_card_printing_no_ceiling_stays_capped_into_the_next_year() -> None:
     """On 1 January the resolver asks for the new year's ceiling, which Fluvius
     lists only once it publishes that sheet. Answered for the year alone, a

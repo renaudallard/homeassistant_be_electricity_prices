@@ -79,7 +79,7 @@ from .const import (
     SUPPLIER_SOCIAL,
 )
 from .excise_law import household_schedule
-from .fluvius import cached_analog_surcharge, cached_network_ceiling
+from .fluvius import cached_analog_surcharge, cached_network_ceiling, tariff_sheet_held
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
 from .providers._resolve import (
     apply_vat,
@@ -515,9 +515,13 @@ def _resolve_snapshot(
     # Before apply_vat for the same reason, and the month decides it the way
     # it decides the two federal levies below: the VREG sets one ceiling for
     # all of Flanders per calendar year, so a card stating another one is out
-    # of date rather than different.
+    # of date rather than different. Until the year's sheet is held, a card
+    # stating a higher one is ahead of the year before's standing in.
     resolved = resolve_vreg_network_ceiling(
-        resolved, month, cached_network_ceiling(month.year)
+        resolved,
+        month,
+        cached_network_ceiling(month.year),
+        stand_in=not tariff_sheet_held(month.year),
     )
     # After the ceiling, which an analog meter does not have, and before
     # apply_vat for the reason Brugel's term goes first.
