@@ -59,14 +59,19 @@ The residential electricity products supported:
   dimensionless Belpex multiplier (NOT scaled by ten the way Frank's
   cents-output coefficient is), the base goes EUR/MWh to EUR/kWh, and 6%
   VAT is baked into both. The injection coefficient is exactly 1,0.
-* ``GS3JV`` (Goedkope stroom 3 jaar vast, Flanders): a flat fixed rate for
-  3 years; its injection is indexed monthly (Belpex-SPP-M, known at
-  month-end), so the credit is resolved against the delivery month's own
-  SPP-weighted mean, and the printed monthly indicative is only the
-  fallback for a month whose mean is not available.
-* ``GS1JV`` (Électricité bon marché 1 an fixe, Wallonia): the same fixed
-  shape on a 1-year lock, off a French card that shares no wording with the
-  Dutch ones. Parsed by the ``*_fr`` helpers below.
+* ``GS3JV`` (Goedkope stroom 3 jaar vast, Flanders, and from November 2026
+  Wallonia): a flat fixed rate for 3 years; its injection is indexed
+  monthly (Belpex-SPP-M, known at month-end), so the credit is resolved
+  against the delivery month's own SPP-weighted mean, and the printed
+  monthly indicative is only the fallback for a month whose mean is not
+  available.
+* ``GS5JV`` (Goedkope stroom 5 jaar vast, Flanders and Wallonia, from
+  November 2026): the same fixed shape on a 5-year lock.
+* ``GS1JV`` (Électricité bon marché 1 an fixe, Wallonia, withdrawn from
+  November 2026): the same fixed shape on a 1-year lock, off a French card
+  that shares no wording with the Dutch ones. Parsed by the ``*_fr``
+  helpers of ``_energyvision_wallonia``, which also read the Walloon cards
+  of GS3JV and GS5JV.
 
 * ``GS1800V`` (all three regions) / ``GSVI3`` / ``GSLP`` (Flanders):
   the tiered range, which bills a first tranche of the YEAR at a flat rate
@@ -758,7 +763,9 @@ def _welcome_credit_rule(text: str) -> tuple[str, bool]:
 # flow has to offer the optional key or the formula can never resolve and every
 # path falls back to the card's printed figure. See
 # ``Contract.spot_indexed_injection``.
-_MONTH_INDEXED_INJECTION = frozenset({"energyvision_fixed_3y", "energyvision_fixed_1y"})
+_MONTH_INDEXED_INJECTION = frozenset(
+    {"energyvision_fixed_3y", "energyvision_fixed_5y", "energyvision_fixed_1y"}
+)
 
 # Contracts whose card prices a direct-debit payer differently, so the config
 # flow asks how the household pays. Only Brusol's Groene stroom does, at
@@ -789,6 +796,7 @@ EXTRACTOR = SupplierExtractor(
             regions=c.regions,
             spot_indexed_injection=c.contract_id in _MONTH_INDEXED_INJECTION,
             direct_debit_discount=c.contract_id in _DIRECT_DEBIT,
+            withdrawn=c.withdrawn,
         )
         for c in _CONTRACTS
     ),

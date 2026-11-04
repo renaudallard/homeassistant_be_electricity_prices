@@ -26,9 +26,15 @@ EnergyVision sells a "Goedkope stroom" family of residential electricity cards; 
 integration tracks these:
 
 - **GSDYN** ("Goedkope Stroom Dynamisch", Flanders) - a quarter-hourly spot-indexed dynamic product.
-- **GS3JV** ("Goedkope stroom 3 jaar vast", Flanders) - a flat 3-year fixed rate.
+- **GS3JV** ("Goedkope stroom 3 jaar vast", Flanders, and from November 2026 "Électricité
+  bon marché 3 ans fixe", Wallonia) - a flat 3-year fixed rate.
+- **GS5JV** ("Goedkope stroom 5 jaar vast" / "Électricité bon marché 5 ans fixe", Flanders
+  and Wallonia, from November 2026) - the same fixed shape on a 5-year lock, on the same
+  cards.
 - **GS1JV** ("Électricité bon marché 1 an fixe", Wallonia) - the same fixed shape on a
-  1-year lock, off a French card.
+  1-year lock, off a French card. The listing's script ends it with October 2026, so the
+  contract is withdrawn from 1 November 2026 (`withdrawn`): households on it keep its last
+  card and the picker marks it †.
 - **GS1800V** ("Goedkope stroom met 1.800 kWh vast", all three regions) - the tiered
   shape: the year's first 1.800 kWh at 10,60 c€/kWh and the remainder on
   `1,12 x Belpex-RLP-M + 20 EUR/MWh`. All three cards price that leg identically; only
@@ -100,8 +106,9 @@ token, which site and which archive layout that region's publication uses:
 | contract id | label | TariffKind | code | region → token | quarter_hourly |
 | --- | --- | --- | --- | --- | --- |
 | `energyvision_dynamic` | EnergyVision Dynamisch | dynamic | GSDYN | flanders → `nl` | True |
-| `energyvision_fixed_3y` | EnergyVision 3 jaar vast | fixed | GS3JV | flanders → `nl` | n/a |
-| `energyvision_fixed_1y` | EnergyVision 1 an fixe | fixed | GS1JV | wallonia → `WAL-fr` | n/a |
+| `energyvision_fixed_3y` | EnergyVision 3 jaar vast | fixed | GS3JV | flanders → `nl`, wallonia → `WAL-fr` | n/a |
+| `energyvision_fixed_5y` | EnergyVision 5 jaar vast | fixed | GS5JV | flanders → `nl`, wallonia → `WAL-fr` | n/a |
+| `energyvision_fixed_1y` | EnergyVision 1 an fixe (withdrawn 2026-11-01) | fixed | GS1JV | wallonia → `WAL-fr` | n/a |
 | `energyvision_tiered_1800` | EnergyVision 1.800 kWh vast | spot_monthly | GS1800V | flanders → `nl`, wallonia → `WAL-fr`, brussels → `BXL-nl` | n/a |
 | `energyvision_fixed_injection_3y` | EnergyVision vaste injectieprijs 3 jaar | spot_monthly | GSVI3 | flanders → `nl` | n/a |
 | `energyvision_laadpunt` | EnergyVision Laadpunt | spot_monthly | GSLP | flanders → `nl` | n/a |
@@ -748,6 +755,10 @@ The fixtures live under `tests/fixtures/`:
 | --- | --- |
 | `energyvision_dynamic_jul.pdf` | the GSDYN "Goedkope Stroom Dynamisch" card, July 2026 |
 | `energyvision_fixed_3y_jul.pdf` | the GS3JV "Goedkope stroom 3 jaar vast" card, July 2026 |
+| `energyvision_fixed_3y_nov.pdf` | the same card for November 2026, its energy row without "tarief" |
+| `energyvision_fixed_3y_wal_nov.pdf` | the GS3JV Walloon card, November 2026, its first month |
+| `energyvision_fixed_5y_nov.pdf` | the GS5JV "Goedkope stroom 5 jaar vast" card, November 2026, its first month |
+| `energyvision_fixed_5y_wal_nov.pdf` | the GS5JV Walloon card, November 2026 |
 | `energyvision_fixed_1y_wal_jul.pdf` | the GS1JV "Électricité bon marché 1 an fixe" Walloon card, July 2026 |
 | `energyvision_fixed_1y_wal_aug.pdf` | the same card for August 2026, carrying the rewritten tax block |
 | `energyvision_tiered_1800_sep.pdf` | the GS1800V card for Flanders, September 2026 |

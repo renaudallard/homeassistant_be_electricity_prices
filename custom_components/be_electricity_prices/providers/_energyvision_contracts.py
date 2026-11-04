@@ -35,6 +35,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 
 from ..const import REGION_BRUSSELS, REGION_FLANDERS, REGION_WALLONIA
 from ._rates import TariffKind
@@ -97,6 +98,9 @@ class _ContractDef:
     # tiered card whose tranche row went missing has drifted and must fail
     # loud, not quietly bill every kWh at the indexed rate.
     tranche: bool = True
+    # The first day the product is no longer sold, as the listing's script
+    # says by an end month; None while it is.
+    withdrawn: date | None = None
 
     @property
     def regions(self) -> frozenset[str]:
@@ -117,12 +121,23 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "GSDYN",
         {REGION_FLANDERS: _FLANDERS_CARD},
     ),
+    # Sold in Wallonia too from November 2026 (GS3JV-WAL, "Électricité bon
+    # marché 3 ans fixe"), on the French card the 1-year product had.
     _ContractDef(
         "energyvision_fixed_3y",
         "EnergyVision 3 jaar vast",
         "fixed",
         "GS3JV",
-        {REGION_FLANDERS: _FLANDERS_CARD},
+        {REGION_FLANDERS: _FLANDERS_CARD, REGION_WALLONIA: _CardDef(token="WAL-fr")},
+    ),
+    # New in November 2026 in both regions, on the same cards as the 3-year
+    # product.
+    _ContractDef(
+        "energyvision_fixed_5y",
+        "EnergyVision 5 jaar vast",
+        "fixed",
+        "GS5JV",
+        {REGION_FLANDERS: _FLANDERS_CARD, REGION_WALLONIA: _CardDef(token="WAL-fr")},
     ),
     # Wallonia's own fixed product, on a French card. It is a 1-year lock
     # where Flanders gets 3, so it is a distinct contract rather than the same
@@ -141,6 +156,9 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "fixed",
         "GS1JV",
         {REGION_WALLONIA: _CardDef(token="WAL-fr")},
+        # The listing's script ends it with October 2026 (end:"2026-10"),
+        # when the 3-year and 5-year products came to Wallonia.
+        withdrawn=date(2026, 11, 1),
     ),
     # The tiered range. All three share one shape and differ only in the
     # tranche, the flat rate, the coefficient, the standing charge and how the
@@ -227,7 +245,7 @@ DISCOVER_IDS: frozenset[str] = frozenset(
     {
         "GSDYN",
         "GS3JV",
-        "GS1JV",
+        "GS5JV",
         "GSVI3",
         "GRS",
         "GS1800V",

@@ -192,7 +192,7 @@ def test_energyvision_discover_reads_the_products_the_script_sells() -> None:
     buy are not sold to a household, and a Walloon code drops its "-WAL"."""
     listed = _run(energyvision_mod.discover(_UrlFakeSession(_EV_LISTING)))
     assert listed == set(energyvision_mod.DISCOVER_IDS) - {"GRS"}
-    assert not listed & {"GS1000V", "ZEE", "GGS1800V-PRO", "GRSO", "GS1JV-WAL"}
+    assert not listed & {"GS1000V", "ZEE", "GGS1800V-PRO", "GRSO", "GS1JV", "GS5JV-WAL"}
 
 
 def test_energyvision_discover_reads_the_script_the_listing_names() -> None:

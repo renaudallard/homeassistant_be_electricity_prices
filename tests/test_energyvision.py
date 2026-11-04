@@ -66,6 +66,7 @@ from tests import fixture_text
 
 _DYNAMIC = "energyvision_dynamic"
 _FIXED = "energyvision_fixed_3y"
+_FIXED_5Y = "energyvision_fixed_5y"
 _FIXED_WAL = "energyvision_fixed_1y"
 
 
@@ -82,7 +83,9 @@ def _dyn() -> SupplierSnapshot:
 
 
 def _fixed() -> SupplierSnapshot:
-    return parse_snapshot(_FIXED, _fixed_text(), "test://ev-fixed-jul")
+    return parse_snapshot(
+        _FIXED, _fixed_text(), "test://ev-fixed-jul", region="flanders"
+    )
 
 
 class _Card(str):
@@ -213,6 +216,7 @@ def test_the_november_2026_fixed_card_drops_tarief_from_its_energy_row() -> None
         _FIXED,
         fixture_text("energyvision_fixed_3y_nov.pdf", layout=True),
         "test://ev-fixed-nov",
+        region="flanders",
     )
     assert snap.publication_label == "november 2026"
     assert isinstance(snap.energy, FixedRates)
@@ -499,7 +503,7 @@ def test_missing_dynamic_injection_is_fatal() -> None:
 def test_missing_fixed_energy_is_fatal() -> None:
     text = _fixed_text().replace("vast tarief", "XXX")
     with pytest.raises(ExtractorError, match="fixed energy"):
-        parse_snapshot(_FIXED, text, "test://ev")
+        parse_snapshot(_FIXED, text, "test://ev", region="flanders")
 
 
 # ---- registration -----------------------------------------------------------
@@ -512,6 +516,7 @@ def test_energyvision_is_registered() -> None:
     assert contract_ids == {
         _DYNAMIC,
         _FIXED,
+        _FIXED_5Y,
         _FIXED_WAL,
         _TIERED_1800,
         _TIERED_VI3,
@@ -527,7 +532,8 @@ def test_each_contract_is_offered_exactly_where_a_card_exists() -> None:
     # brusol.be.
     regions = {c.id: c.regions for c in EXTRACTORS["energyvision"].contracts}
     assert regions[_DYNAMIC] == frozenset({"flanders"})
-    assert regions[_FIXED] == frozenset({"flanders"})
+    assert regions[_FIXED] == frozenset({"flanders", "wallonia"})
+    assert regions[_FIXED_5Y] == frozenset({"flanders", "wallonia"})
     assert regions[_FIXED_WAL] == frozenset({"wallonia"})
     assert regions[_TIERED_1800] == frozenset({"flanders", "wallonia", "brussels"})
     for tiered in (_TIERED_VI3, _TIERED_LP):
@@ -538,6 +544,7 @@ def test_contract_kinds() -> None:
     kinds = {c.id: c.kind for c in EXTRACTORS["energyvision"].contracts}
     assert kinds[_DYNAMIC] == "dynamic"
     assert kinds[_FIXED] == "fixed"
+    assert kinds[_FIXED_5Y] == "fixed"
     assert kinds[_FIXED_WAL] == "fixed"
     # The tiered range settles on a monthly index once the tranche is spent,
     # so the flow collects the ENTSO-E key the way it does for a dynamic card.
@@ -546,7 +553,52 @@ def test_contract_kinds() -> None:
 
 
 def test_discover_ids_superset_of_supported() -> None:
-    assert {"GSDYN", "GS3JV", "GS1JV"} <= DISCOVER_IDS
+    """The codes the listing names now: GS5JV came in November 2026, and
+    GS1JV, ended with October, is no longer listed."""
+    assert {"GSDYN", "GS3JV", "GS5JV"} <= DISCOVER_IDS
+    assert "GS1JV" not in DISCOVER_IDS
+
+
+def test_the_walloon_1_year_fixed_product_is_withdrawn_in_november_2026() -> None:
+    """EnergyVision's listing ends it with October 2026, when the 3-year and
+    5-year products came to Wallonia: households on it keep its last card and
+    the setup offers it marked withdrawn."""
+    withdrawn = {c.id: c.withdrawn for c in EXTRACTORS["energyvision"].contracts}
+    assert withdrawn[_FIXED_WAL] == date(2026, 11, 1)
+    assert {key for key, day in withdrawn.items() if day is not None} == {_FIXED_WAL}
+
+
+@pytest.mark.parametrize(
+    ("contract", "region", "fixture", "price", "fee", "areas"),
+    [
+        (_FIXED, "wallonia", "energyvision_fixed_3y_wal_nov.pdf", 0.184, 95.0, 5),
+        (_FIXED_5Y, "flanders", "energyvision_fixed_5y_nov.pdf", 0.169, 75.0, 8),
+        (_FIXED_5Y, "wallonia", "energyvision_fixed_5y_wal_nov.pdf", 0.169, 95.0, 5),
+    ],
+)
+def test_the_fixed_cards_new_in_november_2026_read(
+    contract: str, region: str, fixture: str, price: float, fee: float, areas: int
+) -> None:
+    """The 3-year product's Walloon card and the 5-year product's two, all
+    from November 2026, read with the readers of the cards before them: the
+    price, the standing charge, the solar-weighted feed-in formula with its
+    1 c€ minimum and every area of the region."""
+    snap = parse_snapshot(
+        contract,
+        fixture_text(fixture, layout=True),
+        f"test://{fixture}",
+        region=region,
+    )
+    assert snap.valid_until == date(2026, 11, 30)
+    assert isinstance(snap.energy, FixedRates)
+    assert snap.energy.single == pytest.approx(price)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(fee)
+    inj = snap.injection
+    assert inj is not None and inj.spp_indexed is True
+    assert inj.factor == pytest.approx(0.6)
+    assert inj.base == pytest.approx(-0.015)
+    assert inj.minimum == pytest.approx(0.01)
+    assert len(snap.dsos) == areas
 
 
 # ---- Wallonia fixed card (GS1JV) --------------------------------------------
@@ -707,7 +759,7 @@ def test_flanders_parsers_are_not_used_for_the_walloon_card() -> None:
     """The two cards share no wording, so a Walloon card fed through the
     Dutch path must fail rather than silently produce a partial snapshot."""
     with pytest.raises(ExtractorError):
-        parse_snapshot(_FIXED, _wal_text(), "test://ev-wal-jul")
+        parse_snapshot(_FIXED, _wal_text(), "test://ev-wal-jul", region="flanders")
 
 
 def test_august_2026_flat_excise_replaces_the_tier_table() -> None:

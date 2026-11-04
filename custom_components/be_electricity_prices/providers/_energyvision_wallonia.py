@@ -60,7 +60,7 @@ def _parse_wallonia(
     """Parse the French Walloon card.
 
     Same snapshot shape as the Flemish cards, off an entirely separate
-    publication. Two energy shapes now: the 1-year fixed product's flat
+    publication. Two energy shapes now: the fixed products' flat
     VAT-inclusive rate, and the 1.800 kWh product's tranche plus monthly
     formula. Both carry a yearly standing charge and a monthly-indexed
     injection indicative, and both share the Walloon DSO and tax blocks.

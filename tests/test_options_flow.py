@@ -7743,8 +7743,12 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # each region's static cell, and Eneco Zon & Wind Vast, withdrawn the
         # same day, out of Flanders' and Wallonia's. The professional
         # Off-peak Fixed, withdrawn on 1 November 2026, comes out of each
-        # region's professional static cell.
-        ("flanders", "static", False): 57,
+        # region's professional static cell. EnergyVision's November 2026
+        # range adds its 5-year fixed card in Flanders and Wallonia and its
+        # 3-year one in Wallonia, and takes out the Walloon 1-year card it
+        # withdrew. The three read in the time its older 3-year card took,
+        # well inside the supplier's 9,1 s reservation.
+        ("flanders", "static", False): 58,
         ("flanders", "static", True): 20,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land
@@ -7764,7 +7768,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,
-        ("wallonia", "static", False): 50,
+        ("wallonia", "static", False): 51,
         ("wallonia", "static", True): 20,
         # 13 before EnergyVision's 1.800 kWh contract gained Wallonia, on
         # the French publication of the same card. Monthly-indexed, so the

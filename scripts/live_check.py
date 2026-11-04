@@ -4672,6 +4672,7 @@ _INJECTION_SHAPE: dict[str, str] = {
     # at month-end, so the printed figure is a placeholder and the formula is
     # the contract.
     "energyvision_fixed_3y": "spp",
+    "energyvision_fixed_5y": "spp",
     "energyvision_fixed_1y": "spp",
     # The two tiered cards that index their credit monthly, same Belpex-SPP-M
     # formula as the fixed pair above. Pinned rather than derived: their kind
