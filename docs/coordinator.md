@@ -537,7 +537,7 @@ that ask whether a month is still running (`_hour_spot`,
 asks for: a change of supplier splits the compensation year and each part nets
 its own injection (CWaPE CD-14d03, section 5.1.2).
 
-The card each earlier contract stands on (`period_card`) is the one its
+The card each earlier contract stands on (`period_card`, `period_cards.py`) is the one its
 supplier publishes today, through `fetch_shared`; each month still bills on
 its own archived card through the walk. A card that downloads with no text
 layer (`CardNotReadableError`, Ecofix's every day) is the archive's OCR row for

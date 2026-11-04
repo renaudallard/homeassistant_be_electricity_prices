@@ -30,6 +30,7 @@ from custom_components.be_electricity_prices import (
     cohort,
     contract_periods,
     energy_meters,
+    period_cards,
     snapshot_months,
     ytd_cost,
     ytd_energy,
@@ -1191,12 +1192,12 @@ async def test_pricing_closes_each_window_on_the_day_before_the_switch(
 
     with (
         patch.object(
-            contract_periods,
+            period_cards,
             "_current_card",
             AsyncMock(return_value=(None, False, False)),
         ),
         patch.object(
-            contract_periods,
+            period_cards,
             "_latest_archived_card",
             AsyncMock(return_value=(None, False)),
         ),
@@ -1267,12 +1268,12 @@ async def test_a_stand_in_card_grants_the_old_contract_no_welcome_credit(
         with (
             patch.object(energy_meters, "_recorder_daily_kwh", new=_daily),
             patch.object(
-                contract_periods,
+                period_cards,
                 "_current_card",
                 AsyncMock(return_value=(None, False, False)),
             ),
             patch.object(
-                contract_periods,
+                period_cards,
                 "_latest_archived_card",
                 AsyncMock(return_value=(None, False)),
             ),
@@ -1332,7 +1333,7 @@ async def test_an_old_card_published_as_page_images_prices_on_the_archive_readin
 
     ecofix = dataclasses.replace(EXTRACTORS["ecofix"], fetch=images)
     with (
-        patch.object(contract_periods, "get_extractor", lambda _id: ecofix),
+        patch.object(period_cards, "get_extractor", lambda _id: ecofix),
         patch.object(snapshot_months, "_archived_card_from_github", new=archive),
         patch.object(contract_periods, "_compute_current_year_cost", new=cost),
     ):
@@ -1809,7 +1810,7 @@ async def test_the_automatic_backfill_imports_the_year_once(
     runs = AsyncMock(side_effect=bf.backfill_range)
     with (
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
-        patch.object(contract_periods, "get_extractor", extractors.__getitem__),
+        patch.object(period_cards, "get_extractor", extractors.__getitem__),
         patch.object(backfill_window, "get_extractor", extractors.__getitem__),
         patch.object(snapshot_months, "_archived_card_from_github", new=blocked),
         patch.object(bf.asyncio, "sleep", answers_again),
@@ -1852,7 +1853,7 @@ async def test_a_stand_in_says_whether_a_read_failed_or_the_cards_are_gone(
             raise ExtractorError(message)
 
         te = dataclasses.replace(EXTRACTORS["totalenergies"], fetch=fetch)
-        with patch.object(contract_periods, "get_extractor", lambda _id: te):
+        with patch.object(period_cards, "get_extractor", lambda _id: te):
             got = await contract_periods.period_card(
                 hass,
                 None,  # type: ignore[arg-type]
@@ -2185,7 +2186,7 @@ async def test_an_earlier_contracts_months_bill_their_own_federal_levies(
     with (
         patch.object(energy_meters, "_read_deltas", new=fake_deltas),
         patch.object(energy_meters, "_live_today_kwh", AsyncMock(return_value=None)),
-        patch.object(contract_periods, "fetch_shared", AsyncMock(return_value=fetched)),
+        patch.object(period_cards, "fetch_shared", AsyncMock(return_value=fetched)),
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
@@ -2586,12 +2587,12 @@ async def test_an_earlier_mono_contract_stays_mono_after_the_entry_moves_to_bi(
         with (
             patch.object(energy_meters, "_recorder_daily_kwh", new=daily),
             patch.object(
-                contract_periods,
+                period_cards,
                 "_current_card",
                 AsyncMock(return_value=(card, False, False)),
             ),
             patch.object(
-                contract_periods, "get_extractor", lambda _s: make_stub_extractor()
+                period_cards, "get_extractor", lambda _s: make_stub_extractor()
             ),
         ):
             rows = await contract_periods.price_previous_periods(

@@ -73,7 +73,6 @@ from .contract_periods import (
     current_period_start,
     ensure_period_analog_rates,
     keep_settled,
-    period_card,
     periods_key,
     periods_need_rlp,
     periods_need_spots,
@@ -95,6 +94,7 @@ from .fees import (
     last_credited_day,
 )
 from .first_year import first_year_volume
+from .period_cards import period_card
 from .projected_cost import _compute_projected_year_cost
 from .projected_volume import _compute_projected_year_kwh, _compute_rolling_year_kwh
 from .providers import (

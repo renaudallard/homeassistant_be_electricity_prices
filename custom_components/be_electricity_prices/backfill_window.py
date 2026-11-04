@@ -75,7 +75,6 @@ from .contract_periods import (
     ContractPeriod,
     current_period_start,
     ensure_period_analog_rates,
-    period_card,
     previous_periods,
 )
 from .coordinator import BePricesCoordinator
@@ -84,6 +83,7 @@ from .fees import FirstYearVolume
 from .first_year import first_year_volume
 from .fluvius import ensure_analog_surcharge, ensure_tariff_sheet
 from .injection import _injection_hourly_on_cohort
+from .period_cards import period_card
 from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
 from .providers._rates import InjectionRates
