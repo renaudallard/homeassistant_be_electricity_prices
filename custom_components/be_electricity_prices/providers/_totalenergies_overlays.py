@@ -46,7 +46,13 @@ from ..const import (
     REGION_BRUSSELS,
     REGION_FLANDERS,
 )
-from ._parse import excise_tier_bands, numeric_row, parse_brussels_osp, to_float
+from ._parse import (
+    TIER_BOUND,
+    excise_tier_bands,
+    numeric_row,
+    parse_brussels_osp,
+    to_float,
+)
 from .base import (
     DsoOverlay,
     ExtractorError,
@@ -163,7 +169,7 @@ def _extract_fee_and_renewables(text: str, columns: int = 4) -> tuple[float, flo
 
 
 def _extract_federal_excise(text: str) -> float:
-    """First excise tier (0-3000 kWh).
+    """First excise tier, the one from 0 kWh.
 
     Mandatory on every Belgian residential card with no fallback; a miss
     is a layout drift that would silently undercount the bill by ~5
@@ -172,12 +178,17 @@ def _extract_federal_excise(text: str) -> float:
     match = _FIRST_EXCISE_TIER_RE.search(text)
     if match is None:
         raise ExtractorError(
-            "TotalEnergies: federal excise (0-3.000 kWh tier) not found"
+            "TotalEnergies: federal excise (the tier from 0 kWh) not found"
         )
     return to_float(match.group(1)) / 100.0
 
 
-_FIRST_EXCISE_TIER_RE = re.compile(r"Consommation entre 0 et 3\.000 kWh\s+([\d.,]+)")
+# The row from 0 kWh whatever its upper bound: 3.000 kWh on every card so
+# far, where Ecopower's November 2026 card, on the table the law of 25 October
+# 2026 set, starts at 0 to 20.000 kWh.
+_FIRST_EXCISE_TIER_RE = re.compile(
+    rf"Consommation entre 0 et {TIER_BOUND} kWh\s+([\d.,]+)"
+)
 
 
 def _extract_excise_bands(text: str) -> tuple[tuple[float, float], ...] | None:

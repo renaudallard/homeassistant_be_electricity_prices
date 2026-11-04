@@ -40,7 +40,7 @@ from __future__ import annotations
 import re
 
 from ..const import FLUVIUS_CARD_TOKENS, REGION_FLANDERS
-from ._parse import regional_tax_overlay, to_float
+from ._parse import TIER_BOUND, regional_tax_overlay, to_float
 from ._pdf import NUM_NO_THOUSANDS
 from .base import DsoOverlay, ExtractorError, TaxOverlay
 
@@ -79,9 +79,11 @@ _DSO_ROWS = FLUVIUS_CARD_TOKENS
 # Excise, taken from the first consumption band. The card prints three bands
 # and they have not always been equal: every month from 2024-06 to 2026-07 read
 # 5,0329 / 5,0329 / 4,8188, and only the August 2026 card is flat at 4,8760.
-# regional_tax_overlay reads the table this row opens into bands.
+# regional_tax_overlay reads the table this row opens into bands. The band is
+# the one from 0 kWh whatever its upper bound, 3.000 kWh so far, where the
+# table the law of 25 October 2026 set starts at 0 to 20.000 kWh.
 _EXCISE_RE = re.compile(
-    rf"Verbruik\s+tussen\s+0\s+en\s+3\.000\s+kWh\s+{_NUM}", re.IGNORECASE
+    rf"Verbruik\s+tussen\s+0\s+en\s+{TIER_BOUND}\s+kWh\s+{_NUM}", re.IGNORECASE
 )
 _GSC_RE = re.compile(rf"Bijdrage\s+groene\s+stroom\s+{_NUM}", re.IGNORECASE)
 _WKK_RE = re.compile(rf"Bijdrage\s+WKK\s+{_NUM}", re.IGNORECASE)

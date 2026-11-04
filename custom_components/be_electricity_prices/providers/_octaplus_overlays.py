@@ -44,7 +44,7 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_WALLONIA,
 )
-from ._parse import excise_tier_bands, ores_sub_areas_split, to_float
+from ._parse import TIER_BOUND, excise_tier_bands, ores_sub_areas_split, to_float
 from ._rates import TariffKind
 from .base import DsoOverlay, ExtractorError, walloon_dso_overlay
 
@@ -84,8 +84,9 @@ def _extract_taxes(
 
       ``Consommation entre 0 & 3.000 kWh 5,0329 0,2042``
 
-    The first tier (0-3.000 kWh) is the excise and energy contribution the
-    card bills; until July 2026 the excise falls further on the tiers below
+    The first tier, the one from 0 kWh whatever its upper bound (3.000 kWh so
+    far, 20.000 kWh on the table the law of 25 October 2026 set), is the
+    excise and energy contribution the card bills; until July 2026 the excise falls further on the tiers below
     it, which are read into bands. Wallonia adds a one-line connection fee
     (``Redevance raccordement Wallonie (c€/kWh) 0,075``).
     """
@@ -93,14 +94,14 @@ def _extract_taxes(
     # mangled on Flanders cards where the federal column shares its row
     # bucket with the Fonds Energie sidebar (e.g. "CCCConsommaaaation").
     tier1 = re.search(
-        r"0\s*&\s*3\.000\s*kWh\s+([\d.,]+)\s+([\d.,]+)",
+        rf"0\s*&\s*{TIER_BOUND}\s*kWh\s+([\d.,]+)\s+([\d.,]+)",
         text,
     )
     if tier1 is None:
         # Mandatory federal charges; a miss is a layout drift that would
         # silently under-price every kWh. Fail loud (matching
         # _extract_yearly_fee) rather than default to 0.
-        raise ExtractorError("OCTA+: federal tax tier (0-3.000 kWh) not found")
+        raise ExtractorError("OCTA+: federal tax tier (the one from 0 kWh) not found")
     federal_excise = to_float(tier1.group(1)) / 100.0
     energy_contribution = to_float(tier1.group(2)) / 100.0
 

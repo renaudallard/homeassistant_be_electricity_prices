@@ -387,6 +387,20 @@ def test_may_card_predates_the_flat_excise() -> None:
     assert _agilior().taxes.energy_contribution == 0.0
 
 
+def test_an_excise_table_from_0_to_20000_kwh_is_read() -> None:
+    """The law of 25 October 2026 set the household excise as one rate over
+    tranches from 0 to 20.000 kWh, a table Ecopower's November card prints
+    where every earlier one started at 0 to 3.000 kWh. The August card
+    rewritten on that table reads the same rate."""
+    text = _agilior_text()
+    new = text.replace("Verbruik tussen 0 en 3.000 kWh 4,8760\n", "", 1).replace(
+        "Verbruik tussen 3.000 en 20.000 kWh", "Verbruik tussen 0 en 20.000 kWh", 1
+    )
+    assert "0 en 3.000" not in new and "0 en 20.000 kWh 4,8760" in new
+    snap = parse_snapshot(_AGILIOR, new, "test://ek-agilior-aug")
+    assert snap.taxes.federal_excise == pytest.approx(0.048760)
+
+
 def test_may_card_period() -> None:
     snap = _may()
     assert snap.publication_label == "2026-05"

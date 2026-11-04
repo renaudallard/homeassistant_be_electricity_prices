@@ -475,7 +475,9 @@ Walloon keys, ORES among them, are all required, the same rule as in Flanders.
 ## Tax overlay
 
 `_extract_federal_taxes` (`ecofix.py`) reads the residential federal excise
-from the 0-3.000 kWh band (`Verbruik tussen 0 & 3.000 kWh`) and the single-rate
+from the band from 0 kWh (`Verbruik tussen 0 & 3.000 kWh`, whatever its upper
+bound, which is 20.000 kWh on the table the law of 25 October 2026 set) and the
+single-rate
 `Energiebijdrage`. The four bands from that row on go to `federal_excise_bands`
 (`excise_tier_bands`, `_parse.py`) while they fall by volume, so a month before
 August 2026 is blended over the household's volume; the August and September

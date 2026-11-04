@@ -607,9 +607,9 @@ SIGN_CHARS = r"+\-‐‑‒–—−"
 # Trevion's plain layout prints its rows and then their rates apart.
 # The unit is read by its first letter and tolerates the two ways OCTA+'s
 # aligned text mangles it on the rows after the first, "kWhW" and "k h".
-_TIER_BOUND = r"\d+(?:[. ]\d{3})*"
+TIER_BOUND = r"\d+(?:[. ]\d{3})*"
 _EXCISE_TIER_RE = re.compile(
-    rf"(?<![\d.,])({_TIER_BOUND})\s*(?:[km]wh\s*)?(?:&|en|et|[{SIGN_CHARS}])\s*"
-    rf"({_TIER_BOUND})\s*([km])[^\S\n]?w?h\w?\b(?:[^\S\n]*:\s*|[^\S\n]+)(\d+(?:[.,]\d+)?)",
+    rf"(?<![\d.,])({TIER_BOUND})\s*(?:[km]wh\s*)?(?:&|en|et|[{SIGN_CHARS}])\s*"
+    rf"({TIER_BOUND})\s*([km])[^\S\n]?w?h\w?\b(?:[^\S\n]*:\s*|[^\S\n]+)(\d+(?:[.,]\d+)?)",
     re.IGNORECASE,
 )

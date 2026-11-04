@@ -438,6 +438,20 @@ def test_a_flat_excise_row_wins_over_the_degressive_table() -> None:
     assert snap.taxes.federal_excise_bands is None
 
 
+def test_an_excise_table_from_0_to_20000_kwh_is_read() -> None:
+    """The law of 25 October 2026 set the household excise as one rate over
+    tranches from 0 to 20.000 kWh, a table Ecopower's November card prints
+    where every earlier one started at 0 to 3.000 kWh. The card rewritten
+    on that table reads its first row's rate."""
+    text = _layout(_MOTION)
+    new = text.replace("Verbruik tussen 0 & 3.000 kWh 5,03288\n", "", 1).replace(
+        "Verbruik tussen 3.000 & 20.000 kWh", "Verbruik tussen 0 & 20.000 kWh", 1
+    )
+    assert "0 & 3.000" not in new and "0 & 20.000 kWh 5,03288" in new
+    snap = parse_snapshot("ecofix_motion", new, "flanders", "x")
+    assert snap.taxes.federal_excise == pytest.approx(0.0503288)
+
+
 def test_the_degressive_table_is_still_read_into_bands() -> None:
     snap = parse_snapshot("ecofix_motion", _layout(_MOTION), "flanders", "x")
     assert snap.taxes.federal_excise_bands is not None

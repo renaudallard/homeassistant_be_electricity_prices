@@ -577,6 +577,22 @@ def test_missing_federal_tax_tier_raises() -> None:
         _extract_taxes(text, "wallonia")
 
 
+def test_an_excise_table_from_0_to_20000_kwh_is_read() -> None:
+    """The law of 25 October 2026 set the household excise as one rate over
+    tranches from 0 to 20.000 kWh, a table Ecopower's November card prints
+    where every earlier one started at 0 to 3.000 kWh. The November card,
+    which prints the new rate on the old rows, rewritten on that table reads
+    the same rate and contribution."""
+    text = _text("octaplus_boostflex_w_nov.pdf")
+    new = text.replace("Consommation entre 0 & 3.000 kWh 4,4732 0,00\n", "", 1).replace(
+        "Consommation entre 3.000 & 20.000 kWh", "Consommation entre 0 & 20.000 kWh", 1
+    )
+    assert "0 & 3.000" not in new and "0 & 20.000 kWh 4,4732 0,00" in new
+    snap = parse_snapshot("octaplus_boostflex", new, "wallonia")
+    assert snap.taxes.federal_excise == pytest.approx(0.044732)
+    assert snap.taxes.energy_contribution == 0.0
+
+
 def test_missing_bihourly_rates_raises() -> None:
     # OCTA+ always prints the bi-hourly table; a missing Heures pleines /
     # Heures creuses row is a drift that must fail loud rather than

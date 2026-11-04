@@ -1303,6 +1303,23 @@ def test_a_flat_excise_table_is_one_rate() -> None:
     assert snap.taxes.federal_excise_bands is None
 
 
+def test_an_excise_table_from_0_to_20000_kwh_is_read() -> None:
+    """The law of 25 October 2026 set the household excise as one rate over
+    tranches from 0 to 20.000 kWh, a table Ecopower's November card prints
+    where every earlier one started at 0 to 3.000 kWh. The October card
+    rewritten on that table reads the same rate, one rate and no bands."""
+    text = fixture_text("totalenergies_electricite_variable_v_2026-10.pdf", layout=True)
+    new = text.replace("Consommation entre 0 et 3.000 kWh 4,88\n", "", 1).replace(
+        "Consommation entre 3.000 et 20.000 kWh",
+        "Consommation entre 0 et 20.000 kWh",
+        1,
+    )
+    assert "0 et 3.000" not in new and "0 et 20.000 kWh 4,88" in new
+    snap = parse_snapshot("totalenergies_electricite_variable", new, "flanders")
+    assert snap.taxes.federal_excise == pytest.approx(0.0488)
+    assert snap.taxes.federal_excise_bands is None
+
+
 def test_the_walloon_cards_say_their_day_night_split_is_off_under_impact() -> None:
     """Both editions of the Walloon cards print it, and nothing else does:
     "Le tarif bihoraire n'est pas compatible avec la structure tarifaire

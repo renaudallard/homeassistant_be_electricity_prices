@@ -230,7 +230,7 @@ Fields pulled and their helpers:
 | Energy rates | `_extract_energy` | `_totalenergies_cards.py` |
 | Injection | `_extract_injection` | `_totalenergies_cards.py` |
 | Publication label | `_extract_publication_month` | `_totalenergies_cards.py` |
-| Federal excise (0-3000 kWh tier) | `_extract_federal_excise` | `_totalenergies_overlays.py` |
+| Federal excise (the tier from 0 kWh) | `_extract_federal_excise` | `_totalenergies_overlays.py` |
 | Federal excise schedule (every tier, until July 2026) | `_extract_excise_bands` | `_totalenergies_overlays.py` |
 | Federal energy contribution | `_extract_energy_contribution` + `_energy_contribution_from_table` | `_totalenergies_overlays.py` |
 | Yearly fee + regional renewables | `_extract_fee_and_renewables` | `_totalenergies_overlays.py` |
@@ -574,7 +574,9 @@ Region specifics:
 
 `TaxOverlay` is built in `parse_snapshot` (`totalenergies.py`):
 
-- `federal_excise`: first excise tier (0-3000 kWh), mandatory, raises on a miss
+- `federal_excise`: first excise tier, the one from 0 kWh whatever its upper bound
+  (3.000 kWh so far, 20.000 kWh on the table the law of 25 October 2026 set),
+  mandatory, raises on a miss
   (`_totalenergies_overlays.py`). Illustrative pinned value 0.0503 EUR/kWh across all
   three regions (`tests/test_totalenergies.py`).
 - `federal_excise_bands`: every `Consommation entre ... kWh` tier from the first
@@ -752,7 +754,8 @@ Ordered by how likely a card change is to break them:
    raises. On a card whose footnote 0 says its prices include the CEV, the fee comes
    from the consumption row and the contribution from the footnote, so a reworded
    footnote sends the card back to the old path, which then raises.
-6. **Tax anchors**: `_extract_federal_excise` ("Consommation entre 0 et 3.000 kWh"),
+6. **Tax anchors**: `_extract_federal_excise` ("Consommation entre 0 et 3.000 kWh",
+   any upper bound),
    `_extract_energy_contribution` + `_energy_contribution_from_table`,
    `_extract_connection_fee` (`_totalenergies_cards.py`), `_extract_energy_fund`
    (`_totalenergies_overlays.py`).

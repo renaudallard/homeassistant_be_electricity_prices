@@ -192,7 +192,7 @@ unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 | `energy` | `_extract_energy` | shape depends on kind (see below) |
 | `injection` | `_extract_injection` | flat current on non-dynamic, factor/base on dynamic |
 | `publication_label` | `_extract_publication_month` | MM/YYYY |
-| `taxes.federal_excise`, `taxes.energy_contribution` | `_extract_taxes` | first federal tier (0-3.000 kWh) |
+| `taxes.federal_excise`, `taxes.energy_contribution` | `_extract_taxes` | first federal tier, the one from 0 kWh |
 | `taxes.federal_excise_bands` | `_extract_taxes` | the four tiers from that row on, until July 2026 (`excise_tier_bands`, `_parse.py`), including the editions whose aligned text mangles the unit on later rows ("kWhW", "k h": Ecoflux Wallonia January to May 2026, Flux Wallonia October and December 2025, Dynamic and Eco Dynamic Flanders November 2025); None from August 2026 |
 | `taxes.region_connection_fee` | `_extract_taxes` | Wallonia only |
 | `taxes.flanders_renewables` | `_extract_flanders_renewables` | Flanders only, green + cogen |
@@ -271,8 +271,11 @@ exercises both, including accented `FÉVRIER` and `AOÛT`.
 ### Taxes (`_extract_taxes`, `_octaplus_overlays.py`)
 
 OCTA+ prints four federal-tier rows on page 2; the residential tier is the first
-(`0 & 3.000 kWh`). The regex `0\s*&\s*3\.000\s*kWh\s+<a>\s+<b>` anchors on the
-kWh range rather than the leading `Consommation` word, because that word can be
+(`0 & 3.000 kWh`). The regex `0\s*&\s*<bound>\s*kWh\s+<a>\s+<b>` takes the row
+from 0 kWh whatever its upper bound (`TIER_BOUND`, `_parse.py`): the table the law
+of 25 October 2026 set starts at 0 to 20.000 kWh, as Ecopower's November card
+prints it, while OCTA+'s November card prints the new rate on the old rows. It
+anchors on the kWh range rather than the leading `Consommation` word, because that word can be
 mangled on Flanders cards where the federal column shares its row bucket with the
 Fonds Energie sidebar (e.g. `CCCConsommaaaation`). Group 1 is `federal_excise`,
 group 2 is `energy_contribution`, both divided by 100. A miss raises
@@ -647,8 +650,8 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
 - **Tax glyph explosion**: page 2 renders each character as its own word;
   `x_join_threshold=1.0` reassembles values (`octaplus.py`,
   `test_federal_taxes_use_first_tier`).
-- **Federal-tier anchor**: match on `0 & 3.000 kWh`, not the mangleable
-  `Consommation` word.
+- **Federal-tier anchor**: match on the range from `0 &` to any bound in kWh, not
+  the mangleable `Consommation` word.
 - **PV forfait `HTVA` trap**: the regex must exclude the AMR `HTVA` rate to avoid
   binding `1,50` instead of `4,77`.
 - **Fail-loud policy**: yearly fee, federal tier, regional renewables, and the

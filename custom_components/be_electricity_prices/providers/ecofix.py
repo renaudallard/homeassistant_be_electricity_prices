@@ -69,6 +69,7 @@ from ..const import (
 )
 from ._parse import (
     SIGN_CHARS,
+    TIER_BOUND,
     excise_tier_bands,
     numeric_row,
     parse_prosumer_column,
@@ -655,13 +656,14 @@ def _extract_publication(text: str) -> tuple[str, date | None]:
 
 # Tried in order, first match wins, the policy regional_tax_overlay holds for
 # the other Flemish cards. A flat row, which the cards of the suppliers that
-# switched print since August 2026, wins over the 0-3.000 kWh row of the
-# degressive table being phased out. Ecofix's column header "Federale accijns
+# switched print since August 2026, wins over the row from 0 kWh of the
+# degressive table being phased out, whatever its upper bound: 3.000 kWh so
+# far, 20.000 kWh on the table the law of 25 October 2026 set. Ecofix's column header "Federale accijns
 # (€cent/kWh)" is followed by its unit, not a figure, so the first pattern
 # cannot read it.
 _EXCISE_ROWS = (
     re.compile(r"\b(?:Bijzondere|Federale)\s+accijns\s+(\d+,\d+)", re.IGNORECASE),
-    re.compile(r"Verbruik tussen 0\s*&\s*3\.000\s*kWh\s+([\d,]+)"),
+    re.compile(rf"Verbruik tussen 0\s*&\s*{TIER_BOUND}\s*kWh\s+([\d,]+)"),
 )
 
 

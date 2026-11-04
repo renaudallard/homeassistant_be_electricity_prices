@@ -381,7 +381,9 @@ Every value in this block is VAT-inclusive as printed, the excise included: 4,87
 the same band, which is 5,0329 / 1,06. The energy fund is the single exemption, per
 footnote (1).
 
-The excise is read from the first band. Energy Knights prints three bands and they have
+The excise is read from the first band, the one from 0 kWh whatever its upper bound:
+3.000 kWh so far, 20.000 kWh on the table the law of 25 October 2026 set, as Ecopower's
+November card prints it. Energy Knights prints three bands and they have
 **not** always been equal: every month from 2024-06 to 2026-07 read
 `5,0329 / 5,0329 / 4,8188`, and only from August 2026 is the table flat at 4,8760, after
 the federal contribution was folded into the excise. The shared `regional_tax_overlay`
