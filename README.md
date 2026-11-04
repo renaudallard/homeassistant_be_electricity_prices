@@ -1972,6 +1972,7 @@ mypy custom_components/ tests/ scripts/
 python scripts/doc_ref_check.py
 pytest tests/ -n auto --dist loadfile
 python scripts/live_check.py    # hits real supplier endpoints
+python scripts/card_finder.py elegant elegant_flex flanders   # where a card moved to
 python scripts/archive_cards.py --out tmp/archive   # stores today's cards there
 ```
 

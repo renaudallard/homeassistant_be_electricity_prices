@@ -68,6 +68,7 @@ from homeassistant.util import dt as dt_util
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # scripts/ is not a package, so it is put on sys.path above rather than
 # imported by dotted path; mypy cannot follow that.
+import card_finder  # type: ignore[import-not-found]
 from card_texts import StoredTexts  # type: ignore[import-not-found]
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -6099,6 +6100,18 @@ async def _run(texts: Path | None = None) -> int:
                     False,
                     f"{type(err).__name__}: {err}",
                 )
+            # Report only, last: where a covered card failed to fetch or is
+            # still the month before's, say where the supplier's own pages
+            # put this month's card, if anywhere (scripts/card_finder.py).
+            try:
+                await card_finder.annotate(
+                    CHECKS,
+                    session,
+                    modules,
+                    datetime.now(ZoneInfo("Europe/Brussels")).date(),
+                )
+            except Exception as err:
+                print(f"card finder: {type(err).__name__}: {err}", file=sys.stderr)
 
     extractor_checks = [c for c in CHECKS if c.kind == "extractor"]
     catalog_checks = [c for c in CHECKS if c.kind == "catalog"]

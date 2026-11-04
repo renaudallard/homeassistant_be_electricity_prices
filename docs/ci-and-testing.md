@@ -132,6 +132,7 @@ machinery.
 | `tests/test_manifest.py` | The Home Assistant floor `hacs.json` declares, and the README and `docs/architecture.md` repeat, is the release `requirements-dev.txt` pins for the suite |
 | `tests/test_live_check_harness.py` | The live check (`scripts/live_check.py`): its failure containment, the expectations it holds cards to, and the workflow's retry loop |
 | `tests/test_archive_cards.py` | `scripts/archive_cards.py`, the daily writer behind the card archive |
+| `tests/test_card_finder.py` | `scripts/card_finder.py`, the live check's search for a card that moved, replayed on November 2026's moves |
 | `tests/test_card_texts.py` | `scripts/card_texts.py`, the card archive's texts as a render cache |
 | `tests/test_file_ci_issue.py` | `scripts/file_ci_issue.sh`: one issue per problem, one comment per cooldown |
 | `tests/test_autorelease.py` | The release job of `autorelease.yml` against a scratch origin and a fake `gh`, and every workflow's token permissions |
@@ -1080,6 +1081,38 @@ when it is wrong. This is exactly the class of bug `_validate_injection` was add
 relabelled injection row that zeroed a solar credit passed CI for all but two suppliers before the
 shape gate existed, issues #31/F53). When you add a field to a snapshot, add a gate for it here;
 green does not mean covered.
+
+### Where a moved card went (`scripts/card_finder.py`)
+
+Last of all, the live check asks the card finder about every failing row that
+says a card is missing or late: a `fetch` row, `card is recent enough` or `card
+has not expired`, on a `<supplier>/<contract>/<region>` label, for a supplier the
+finder covers and a row not already expected to fail (`card_finder.annotate`).
+The finder reads the pages the supplier itself lists its cards on, keeps the
+addresses that name the product, downloads up to four and appends to the row's
+detail which of them names the running month and where each came from. It only
+reports: no row changes between failing and passing, and nothing it finds is
+read by the integration until a person adopts the address in the extractor. The
+issue's fingerprint is the failing labels, so the note does not refile it.
+
+A card that moved stood on the supplier's own list before any extractor read
+it, every time in November 2026, and a sitemap is no such list (it names
+product families, which is how Engie Empty House was read as unpublished for two
+days). Each covered supplier has a short function naming its candidates:
+
+| Supplier | Where it looks | November 2026 |
+| --- | --- | --- |
+| Elegant | the listing's `/Current/<product>_Residential.pdf` links, matched on the product's key with spaces and `&` taken out | the renamed `Flex Electricity` files |
+| Engie | the residential prices pages, French and Dutch, which name every document code; the same product under any term, else a sibling of its family | Empty House's `_36_` code for `_00_` |
+| EnergyVision | the files its `tariefkaart-2` page links, then where its listing's script looks (`_archive_card_urls`) | the month's upload folder, the page's link being dead |
+| Luminus | the price-list archive's product id for the month and for the month before, each asked for the month's card | the old id's early copy, titled November and carrying October's prices (#147), reported as coming from October's id |
+
+That last case is why it only reports: a card naming the month is not
+necessarily the month's card. The tests replay each case on the real page and
+card of that month (`tests/test_card_finder.py`), and the search is a command of
+its own too: `python scripts/card_finder.py <supplier> <contract> <region>
+[YYYY-MM]` prints each candidate, where it came from and whether it names the
+month, and exits 0 when one does.
 
 ## scripts/archive_cards.py
 
