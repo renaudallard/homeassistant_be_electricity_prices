@@ -32,9 +32,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from homeassistant.exceptions import ServiceValidationError
 
-from custom_components.be_electricity_prices import _find_window
 from custom_components.be_electricity_prices.const import RESOLUTION_QUARTER
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
+from custom_components.be_electricity_prices.services import _find_window
 
 
 def _hourly(

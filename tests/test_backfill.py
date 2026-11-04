@@ -1249,7 +1249,7 @@ async def test_backfill_service_during_reload_raises_validation() -> None:
 async def test_backfill_service_without_snapshot_raises_validation() -> None:
     """A coordinator that exists but has no snapshot yet (pre-first-refresh)
     also surfaces a localized ServiceValidationError."""
-    import custom_components.be_electricity_prices as pkg
+    from custom_components.be_electricity_prices import services
 
     coord = SimpleNamespace(_snapshot=None)
     entry = SimpleNamespace(entry_id="x", runtime_data=coord)
@@ -1258,10 +1258,10 @@ async def test_backfill_service_without_snapshot_raises_validation() -> None:
     )
     call = SimpleNamespace(hass=hass, data={})
     with (
-        patch.object(pkg, "BePricesCoordinator", SimpleNamespace),
+        patch.object(services, "BePricesCoordinator", SimpleNamespace),
         pytest.raises(ServiceValidationError, match="snapshot"),
     ):
-        await pkg._async_backfill_service(call)  # type: ignore[arg-type]
+        await services._async_backfill_service(call)  # type: ignore[arg-type]
 
 
 # ---- _ensure_dynamic_spots gate -----------------------------------------------

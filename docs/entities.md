@@ -626,10 +626,10 @@ any entry finishes loading. Names and field descriptions are declared in
 
 | Service | Handler | Response mode | Targets an entry? |
 | --- | --- | --- | --- |
-| `refresh` | `_async_refresh_service` (`__init__.py`) | none | optional `entry_id`, every loaded entry without it |
-| `cheapest_window` | `_async_cheapest_window_service` (`__init__.py`) | `ONLY` | optional `entry_id` |
-| `most_expensive_window` | `_async_most_expensive_window_service` (`__init__.py`) | `ONLY` | optional `entry_id` |
-| `backfill_statistics` | `_async_backfill_service` (`__init__.py`) | `OPTIONAL` | optional `entry_id` |
+| `refresh` | `_async_refresh_service` (`services.py`) | none | optional `entry_id`, every loaded entry without it |
+| `cheapest_window` | `_async_cheapest_window_service` (`services.py`) | `ONLY` | optional `entry_id` |
+| `most_expensive_window` | `_async_most_expensive_window_service` (`services.py`) | `ONLY` | optional `entry_id` |
+| `backfill_statistics` | `_async_backfill_service` (`services.py`) | `OPTIONAL` | optional `entry_id` |
 
 ### `refresh`
 
@@ -660,19 +660,19 @@ Same shape; one minimizes the window average, the other maximizes. Fields
 | `earliest_start` | no | datetime | earliest window start; defaults to now |
 | `latest_end` | no | datetime | latest window end; defaults to the end of the cached table |
 
-Both call `_resolve_window_inputs` (`__init__.py`) then `_find_window`
-(`__init__.py`). Key behaviors:
+Both call `_resolve_window_inputs` (`services.py`) then `_find_window`
+(`services.py`). Key behaviors:
 
 - `duration_hours` is rounded half-up and scaled to the table's slot grid:
   `duration_slots = int(duration_hours + 0.5) * slots_per_hour(resolution)`
-  (`__init__.py`). A 2-hour window is 2 slots on an hourly table, 8 on a
+  (`services.py`). A 2-hour window is 2 slots on an hourly table, 8 on a
   quarter-hourly one, so on a 15-minute (Engie Dynamic) contract the window can
   start on any quarter-hour boundary.
 - `earliest_start` is truncated down to its slot boundary
-  (`slot_start`, `__init__.py`), so 14:30 still considers the 14:00 slot
+  (`slot_start`, `services.py`), so 14:30 still considers the 14:00 slot
   (14:30 on a 15-minute contract). A naive datetime from YAML is interpreted in
   the HA time zone (typically Europe/Brussels), not the host's tz
-  (`_to_utc`, `__init__.py`).
+  (`_to_utc`, `services.py`).
 - `latest_end` filters out any slot whose end (`slot + width`) falls after it.
 - Only strictly time-contiguous runs are considered: a run must span exactly
   `delta * (duration_slots - 1)` so a gap ENTSO-E omitted cannot let the window
@@ -720,7 +720,7 @@ refused; an automation, which has no user, is not. Fields (`services.yaml`):
 | `end` | no | datetime (exclusive) | the current hour, never past the newest hour the recorder has compiled |
 | `clear` | no | boolean | false |
 
-The handler `_async_backfill_service` (`__init__.py`) resolves the target
+The handler `_async_backfill_service` (`services.py`) resolves the target
 coordinator, then raises `ServiceValidationError` translation_key
 `snapshot_not_loaded` if `coordinator._snapshot is None`, before delegating to
 `backfill_range` (see [data-sources.md](data-sources.md)). It returns

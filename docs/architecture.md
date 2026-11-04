@@ -69,7 +69,8 @@ relative to that package directory.
 
 | Module | Responsibility |
 | --- | --- |
-| `__init__.py` | Integration entry point. Registers domain services once at `async_setup`, sets up and tears down each config entry (`async_setup_entry` / `async_unload_entry` / `async_remove_entry`), owns the slot-boundary push and one-shot backfill scheduling, and implements the `refresh`, `cheapest_window`, `most_expensive_window`, and `backfill_statistics` service handlers. |
+| `__init__.py` | Integration entry point. Registers domain services once at `async_setup`, sets up and tears down each config entry (`async_setup_entry` / `async_unload_entry` / `async_remove_entry`), and owns the slot-boundary push and one-shot backfill scheduling. |
+| `services.py` | The `refresh`, `cheapest_window`, `most_expensive_window` and `backfill_statistics` service handlers `async_setup` registers, and the window helpers behind the two window services. |
 | `coordinator.py` | The `DataUpdateCoordinator` subclass. Owns `__init__`, the framework hook `_async_update_data` and the forced refresh; the eight mixins it is composed from, and the `_ProfilesMixin` that `_SpotsMixin` mixes in, carry the rest of the class, and the leaf modules under them are plain functions the tick calls. |
 | `coordinator_data.py` | `CoordinatorData`, the record every sensor reads, and the year and month window helpers that say which day a running total started from. A leaf, so a mixin that builds one can import it. |
 | `coordinator_tick.py` | `_TickMixin`: one update tick start to finish, assembling `CoordinatorData` from what the two mixins below return. |
