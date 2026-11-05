@@ -59,6 +59,7 @@ from .const import (
     CONF_CUSTOM_DSO_DISTRIBUTION_PEAK,
     CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
     CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE,
+    CONF_CUSTOM_DSO_FROM_BRUGEL,
     CONF_CUSTOM_DSO_FROM_FLUVIUS,
     CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR,
     CONF_CUSTOM_DSO_TRANSPORT,
@@ -101,6 +102,14 @@ from .const import (
 )
 from .flow_schemas import _add_manual_num, _custom_num
 from .vat_rates import residential_vat
+
+# The box that takes a region's network off its published sheet: every
+# Flemish area is Fluvius's and Brussels is Sibelga's, whose rates Brugel
+# publishes.
+_NETWORK_SOURCE: dict[str, str] = {
+    REGION_FLANDERS: CONF_CUSTOM_DSO_FROM_FLUVIUS,
+    REGION_BRUSSELS: CONF_CUSTOM_DSO_FROM_BRUGEL,
+}
 
 
 def _add_custom_num(
@@ -241,15 +250,11 @@ def _custom_dso_schema(defaults: dict[str, Any]) -> vol.Schema:
     meter = defaults.get(CONF_METER, METER_MONO)
     dso_mode = defaults.get(CONF_DSO_TARIFF_MODE)
     fields: dict[Any, Any] = {}
-    if region == REGION_FLANDERS:
-        # Every Flemish area is Fluvius's, whose sheet gives the whole overlay
-        # for each year; the boxes below then only stand in until it is read.
-        fields[
-            vol.Optional(
-                CONF_CUSTOM_DSO_FROM_FLUVIUS,
-                default=bool(defaults.get(CONF_CUSTOM_DSO_FROM_FLUVIUS, False)),
-            )
-        ] = bool
+    source = _NETWORK_SOURCE.get(str(region))
+    if source is not None:
+        # The sheet gives the whole overlay for each year; the boxes below
+        # then only stand in until it is read.
+        fields[vol.Optional(source, default=bool(defaults.get(source, False)))] = bool
     _add_custom_num(fields, defaults, CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE)
     # METER_DYNAMIC belongs here as much as METER_BI: an SMR3 meter registers
     # the bi-horaire split the same way, and pricing.network_eur_per_kwh routes

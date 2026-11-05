@@ -203,9 +203,10 @@
       },
       "custom_dso": {
         "title": "Nettarieven (DNB)",
-        "description": "Gereguleerde netkosten, gelijk voor elke leverancier op je DNB. Neem ze over van je factuur of de tariefkaart van je DNB, exclusief btw. Enkel distributie is verplicht. Laat de vakken voor dag, nacht en de tariefblokken leeg als je tarief die opsplitsing niet kent: leeg rekent het enkelvoudige distributietarief aan, 0 rekent niets aan. Laat andere kosten die je niet betaalt op 0. Het jaarlijkse veld neemt de databeheervergoeding in Vlaanderen, de vaste term (terme fixe) in Wallonie, die het Impact-tarief niet aanrekent, en de meet- en vaste kosten samen in Brussel. In Vlaanderen kun je het eerste vak aanvinken om ze in plaats daarvan van de tarieflijst van Fluvius voor je gebied te nemen: ze volgen dan vanzelf de jaarlijkse wijziging van Fluvius, en de vakken gelden alleen tot die lijst gelezen is.",
+        "description": "Gereguleerde netkosten, gelijk voor elke leverancier op je DNB. Neem ze over van je factuur of de tariefkaart van je DNB, exclusief btw. Enkel distributie is verplicht. Laat de vakken voor dag, nacht en de tariefblokken leeg als je tarief die opsplitsing niet kent: leeg rekent het enkelvoudige distributietarief aan, 0 rekent niets aan. Laat andere kosten die je niet betaalt op 0. Het jaarlijkse veld neemt de databeheervergoeding in Vlaanderen, de vaste term (terme fixe) in Wallonie, die het Impact-tarief niet aanrekent, en de meet- en vaste kosten samen in Brussel. In Vlaanderen en Brussel kun je het eerste vak aanvinken om ze in plaats daarvan van de gepubliceerde tarieflijst te nemen, die van Fluvius voor je gebied of die van Brugel: ze volgen dan vanzelf elke jaarlijkse wijziging, en de vakken gelden alleen tot die lijst gelezen is. De lijst van Brugel vermeldt de Brugel OSP-vergoeding niet, die blijft zoals ingevuld.",
         "data": {
           "custom_dso_from_fluvius": "Neem ze over van de tarieflijst van Fluvius voor mijn gebied",
+          "custom_dso_from_brugel": "Neem ze over van de tarieflijst van Brugel",
           "custom_dso_distribution_single": "Distributie (EUR/kWh)",
           "custom_dso_distribution_peak": "Distributie dag (EUR/kWh)",
           "custom_dso_distribution_offpeak": "Distributie nacht (EUR/kWh)",
@@ -571,9 +572,10 @@
       },
       "custom_dso": {
         "title": "Nettarieven (DNB)",
-        "description": "Gereguleerde netkosten, gelijk voor elke leverancier op je DNB. Neem ze over van je factuur of de tariefkaart van je DNB, exclusief btw. Enkel distributie is verplicht. Laat de vakken voor dag, nacht en de tariefblokken leeg als je tarief die opsplitsing niet kent: leeg rekent het enkelvoudige distributietarief aan, 0 rekent niets aan. Laat andere kosten die je niet betaalt op 0. Het jaarlijkse veld neemt de databeheervergoeding in Vlaanderen, de vaste term (terme fixe) in Wallonie, die het Impact-tarief niet aanrekent, en de meet- en vaste kosten samen in Brussel. In Vlaanderen kun je het eerste vak aanvinken om ze in plaats daarvan van de tarieflijst van Fluvius voor je gebied te nemen: ze volgen dan vanzelf de jaarlijkse wijziging van Fluvius, en de vakken gelden alleen tot die lijst gelezen is.",
+        "description": "Gereguleerde netkosten, gelijk voor elke leverancier op je DNB. Neem ze over van je factuur of de tariefkaart van je DNB, exclusief btw. Enkel distributie is verplicht. Laat de vakken voor dag, nacht en de tariefblokken leeg als je tarief die opsplitsing niet kent: leeg rekent het enkelvoudige distributietarief aan, 0 rekent niets aan. Laat andere kosten die je niet betaalt op 0. Het jaarlijkse veld neemt de databeheervergoeding in Vlaanderen, de vaste term (terme fixe) in Wallonie, die het Impact-tarief niet aanrekent, en de meet- en vaste kosten samen in Brussel. In Vlaanderen en Brussel kun je het eerste vak aanvinken om ze in plaats daarvan van de gepubliceerde tarieflijst te nemen, die van Fluvius voor je gebied of die van Brugel: ze volgen dan vanzelf elke jaarlijkse wijziging, en de vakken gelden alleen tot die lijst gelezen is. De lijst van Brugel vermeldt de Brugel OSP-vergoeding niet, die blijft zoals ingevuld.",
         "data": {
           "custom_dso_from_fluvius": "Neem ze over van de tarieflijst van Fluvius voor mijn gebied",
+          "custom_dso_from_brugel": "Neem ze over van de tarieflijst van Brugel",
           "custom_dso_distribution_single": "Distributie (EUR/kWh)",
           "custom_dso_distribution_peak": "Distributie dag (EUR/kWh)",
           "custom_dso_distribution_offpeak": "Distributie nacht (EUR/kWh)",

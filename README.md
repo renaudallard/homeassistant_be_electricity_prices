@@ -258,7 +258,14 @@ dropdown lets a knowledgeable user type the pricing themselves: a dynamic
 equal to `factor × the delivery month's mean spot + base`, or a plain fixed
 rate, each with an optional never-negative injection floor (on by default for
 the monthly average) — plus the regulated DSO
-and tax values, which are identical for every supplier on your grid. The two
+and tax values, which are identical for every supplier on your grid. The
+network step can take the DSO values off the published tariff sheet instead:
+tick **Take them from Fluvius's tariff sheet for my area** in Flanders or
+**Take them from Brugel's tariff sheet** in Brussels, and they follow each
+1 January change by themselves, read off the sheet of each delivery year,
+the latest one held standing in until the next is published and the figures
+typed only until a sheet is read. Brugel's sheet does not print the Brugel
+OSP fee, which stays as typed. The two
 federal levies among them follow the law as they do on every card (see
 [The federal levies come from the law](#the-federal-levies-come-from-the-law-not-from-your-card)):
 from August 2026 the energy contribution is dropped whatever you type, and
@@ -269,8 +276,9 @@ tax step and the two levies you type are billed as typed. The box also puts the
 entry in the professional segment, so the comparisons quote it against
 professional cards, excluding VAT when the VAT rate you typed is 0 and
 including it otherwise. At 0 the figures read from the regulators, the
-Flemish network ceiling and Brugel's power term, are billed excluding VAT
-too, like the ones you typed. Coefficients
+Flemish network ceiling, Brugel's power term and the network sheet the
+network step takes, are billed excluding VAT too, like the ones you typed.
+Coefficients
 are entered excluding VAT and the VAT rate grosses them up; its box starts at
 the month's residential rate. The spot and the base
 are both in EUR/kWh, so a formula printed in c€/kWh on a Belpex in EUR/MWh has to
@@ -283,8 +291,9 @@ consumption often comes with a feed-in credit on the month's average spot.
 Every per-kWh box refuses a figure no
 real one reaches, which is how a figure typed in c€/kWh shows up. This trades away the whole point of the live-extractor model: there is no
 card to refresh and no drift check, so the numbers are a static snapshot you must
-keep current yourself, and a monthly-average rate is a running estimate until the
-month closes. For injection, the monthly-average and fixed modes offer an optional
+keep current yourself, the network ones aside where the network step takes them
+off the published sheet, and a monthly-average rate is a running estimate until
+the month closes. For injection, the monthly-average and fixed modes offer an optional
 **SPP-weighted** setting: it fetches Synergrid's national solar production profile
 and weights the monthly day-ahead mean by it (as SPP-indexed contracts do) instead
 of a plain average — much closer for a solar prosumer, since the plain mean

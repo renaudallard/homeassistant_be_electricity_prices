@@ -1806,6 +1806,9 @@ accordingly:
 - `_resolve_fluvius_network` (`snapshot_resolve.py`) first puts a custom entry that
   asks for it on its area's sheet of the delivery year (`fluvius.cached_area_terms`),
   in place of the network it typed, with no transport and no day/night split.
+  `_resolve_brugel_network` does the same for a custom Brussels entry off Brugel's
+  sheet (`brugel.cached_network_terms`), on the basis the entry typed on, before
+  Brugel's power term, which the sheet's yearly charge already carries.
 - `_resolve_analog_meter` (`snapshot_resolve.py`) adds the analog surcharge, the
   analog kWh rate less the piekmeting one, to every distribution rate of the
   entry's own overlay (a custom entry's only when it takes Fluvius's), the

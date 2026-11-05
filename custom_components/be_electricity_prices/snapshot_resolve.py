@@ -46,14 +46,16 @@ from dataclasses import replace
 from datetime import date
 from typing import Any
 
+import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.util import dt as dt_util
 
-from .brugel import cached_power_term
+from .brugel import cached_network_terms, cached_power_term, ensure_power_term
 from .const import (
     CONF_ANALOG_METER,
     CONF_ANALOG_REPLACED,
     CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_CUSTOM_DSO_FROM_BRUGEL,
     CONF_CUSTOM_DSO_FROM_FLUVIUS,
     CONF_CUSTOM_PROFESSIONAL,
     CONF_CUSTOM_VAT_RATE,
@@ -74,6 +76,7 @@ from .const import (
     METER_BI,
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
+    REGION_BRUSSELS,
     REGION_FLANDERS,
     SOLAR_REGIME_INJECTION,
     SUPPLIER_CUSTOM,
@@ -84,6 +87,7 @@ from .fluvius import (
     cached_analog_surcharge,
     cached_area_terms,
     cached_network_ceiling,
+    ensure_area_terms,
     tariff_sheet_held,
 )
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
@@ -328,6 +332,75 @@ def _resolve_fluvius_network(
     return replace(snap, dsos={**snap.dsos, dso: sheet})
 
 
+def takes_brugel_network(data: Mapping[str, Any]) -> bool:
+    """Whether this entry is a custom Brussels one taking its network rates
+    off Brugel's sheet rather than the figures it typed."""
+    return (
+        data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM
+        and data.get(CONF_REGION) == REGION_BRUSSELS
+        and bool(data.get(CONF_CUSTOM_DSO_FROM_BRUGEL))
+    )
+
+
+def _resolve_brugel_network(
+    entry: ConfigEntry, snap: SupplierSnapshot, month: date
+) -> SupplierSnapshot:
+    """A custom Brussels entry's network overlay as Brugel's sheet of the
+    delivery year gives it, where the entry asks for it.
+
+    The figures typed stand while no sheet of that year or an earlier one is
+    held. The sheet is excluding VAT and put on the basis the entry typed on,
+    as Brugel's power term is. A single meter pays the day rate and an
+    exclusive-night circuit the night one. The yearly charge carries the power
+    term, with the band above 13 kVA beside it, so
+    :func:`resolve_brussels_power_term` leaves it alone; the OSP fee typed
+    stays, since the sheet does not print it.
+    """
+    if not takes_brugel_network(entry.data):
+        return snap
+    dso = str(entry.data.get(CONF_DSO, ""))
+    terms = cached_network_terms(month.year)
+    overlay = snap.dsos.get(dso)
+    if terms is None or overlay is None:
+        return snap
+
+    def basis(rate: float) -> float:
+        return on_card_basis(snap, month, rate)
+
+    sheet = replace(
+        overlay,
+        distribution_single=basis(terms.day),
+        distribution_peak=basis(terms.day),
+        distribution_offpeak=basis(terms.night),
+        distribution_exclusive_night=basis(terms.night),
+        transport=basis(terms.transport),
+        data_management_per_year=basis(terms.fixed_le13),
+        brussels_power_term_above_13kva=basis(terms.fixed_gt13),
+    )
+    return replace(snap, dsos={**snap.dsos, dso: sheet})
+
+
+async def ensure_custom_network(
+    session: aiohttp.ClientSession, data: Mapping[str, Any], year: int
+) -> None:
+    """Read the sheet a custom entry takes its network rates from for
+    ``year``, where it takes them from one: its area's off Fluvius's listing,
+    or Brugel's.
+
+    Before the card is resolved, which reads the caches synchronously and
+    cannot await. Never raises, as each reader promises.
+    """
+    if takes_fluvius_network(data):
+        await ensure_area_terms(session, year, str(data.get(CONF_DSO, "")))
+    elif takes_brugel_network(data):
+        await ensure_power_term(session, year)
+        # Brugel has no listing to find the year before on, as Fluvius does,
+        # and nothing it reads is kept over a restart, so until the year's
+        # final sheet is out the one before is read to stand in.
+        if cached_network_terms(year) is None:
+            await ensure_power_term(session, year - 1)
+
+
 def entry_analog_surcharge(
     entry: ConfigEntry, year: int, day: date | None = None
 ) -> float | None:
@@ -555,20 +628,22 @@ def _resolve_snapshot(
     toepassing op het exclusief nacht tarief". Folding it there billed a night
     circuit a share of a tranche it never receives.
     """
-    # Before apply_vat, which resolves the card's own basis away: the term
-    # Brugel publishes is stated excluding VAT and has to be put onto the
-    # basis the card printed on before anything else moves it.
     month = delivery_month or dt_util.now().date()
     professional = is_professional(snap.supplier, snap.contract)
     # First: every figure below is put onto the card's VAT basis, which is
     # the month's rate where the card's own was an assumption.
     resolved = resolve_vat_rate(snap, month, professional=professional)
+    # A custom entry's network off its region's sheet of the delivery year,
+    # where it asks for it: before Brugel's power term, which a Brussels sheet
+    # already carries, and the ceiling and the analog surcharge laid on after.
+    resolved = _resolve_fluvius_network(entry, resolved, month)
+    resolved = _resolve_brugel_network(entry, resolved, month)
+    # Before apply_vat, which resolves the card's own basis away: the term
+    # Brugel publishes is stated excluding VAT and has to be put onto the
+    # basis the card printed on before anything else moves it.
     resolved = resolve_brussels_power_term(
         resolved, terms=cached_power_term(month.year), month=month
     )
-    # A custom entry's network off Fluvius's sheet of the delivery year, where
-    # it asks for it, before the ceiling and the analog surcharge are laid on.
-    resolved = _resolve_fluvius_network(entry, resolved, month)
     # Before apply_vat for the same reason, and the month decides it the way
     # it decides the two federal levies below: the VREG sets one ceiling for
     # all of Flanders per calendar year, so a card stating another one is out

@@ -49,6 +49,13 @@ calls indicative ("fournis ici a titre indicatif"). Such a figure is flagged
 (``power_term_is_indicative``) so the Repairs card can say so, and the final
 sheet replaces it as soon as it can be read.
 
+A custom Brussels entry can take its whole network off the same final sheet
+instead of typing it (``cached_network_terms``): each register's kWh rate with
+the per-kWh charges printed below the table, transport, and the metering term
+with the power term of each band. It is read from the text already fetched for
+the power term, so it costs no request of its own, and a year whose final sheet
+is not out yet stands on the latest earlier one held.
+
 Never raises, and that is load-bearing: the fetch runs inside the coordinator
 tick, whose only handler is for ``UpdateFailed``, so anything escaping here
 takes every entity on the device unavailable and turns a first refresh into
@@ -61,6 +68,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
@@ -111,6 +119,49 @@ _GT13_RE = re.compile(
 _YEAR_RE = re.compile(r"Ann[ée]e\s+(\d{4})")
 _VALUE_ROW_RE = re.compile(r"^-\s+-\s+-\s+(\d+,\d+)\s+(\d+,\d+)\s*$", re.MULTILINE)
 
+# The rest of the network, for a custom entry that takes it off the sheet.
+# Every row ends in one figure per column, a dash where the column does not
+# pay it: MT main and backup supply, then BT with a peak meter, BT without one
+# and BT without metering. A residential connection is BT without a peak
+# meter, the fourth.
+_COLUMNS: Final = 5
+_BT_WITHOUT_PEAK: Final = 3
+_FIGURE_RE: Final = re.compile(r"-|\d+,\d+")
+_DAY_RE: Final = re.compile(r"^\s*heures pleines\b", re.IGNORECASE)
+_NIGHT_RE: Final = re.compile(r"^\s*heures creuses\b", re.IGNORECASE)
+_METERING_RE: Final = re.compile(r"mesure et de comptage", re.IGNORECASE)
+_TRANSPORT_RE: Final = re.compile(r"tarifs? de transport", re.IGNORECASE)
+# The per-kWh charges printed below the table, billed on every kWh whatever
+# the register, which the cards add into each distribution rate.
+_PER_KWH_RES: Final = (
+    re.compile(r"soldes r[ée]gulatoires", re.IGNORECASE),
+    re.compile(r"obligations de service public", re.IGNORECASE),
+    re.compile(r"pensions non capitalis[ée]es", re.IGNORECASE),
+    re.compile(r"redevance de voirie", re.IGNORECASE),
+    re.compile(r"imp[ôo]ts? des soci[ée]t[ée]s", re.IGNORECASE),
+)
+# A distribution rate is cents per kWh, so half a euro is a column misread.
+_MAX_KWH: Final = 0.5
+
+
+@dataclass(frozen=True, slots=True)
+class NetworkTerms:
+    """Sibelga's network for a connection without a peak meter, as one year's
+    sheet gives it, excluding VAT.
+
+    ``day`` and ``night`` are each register's kWh rate with every per-kWh
+    charge below the table added, the figures the cards print, the night one
+    also the exclusive-night circuit's. ``fixed_le13`` and ``fixed_gt13`` are
+    the metering term with the power term of each band added, EUR/year.
+    """
+
+    day: float
+    night: float
+    transport: float
+    fixed_le13: float
+    fixed_gt13: float
+
+
 # Successes are kept for the life of the process: the figure is annual and
 # the sheet does not change under us. A failure is kept only briefly, so a
 # blocked or slow Brugel does not cost a download every tick while a
@@ -121,6 +172,8 @@ _failed_at: dict[int, datetime] = {}
 # Years whose cached term is the grid's indicative figure. The final sheet is
 # still asked for on the failure schedule, and replaces it when it answers.
 _indicative: set[int] = set()
+# Each year's network, read off its final sheet only.
+_network: dict[int, NetworkTerms] = {}
 # One fetch per year at a time. Entries tick together and a backfill asks for
 # several years at once, so without this a cold start opens the same download
 # once per Brussels entry: the answer is identical and idempotent, but it is
@@ -154,6 +207,17 @@ def cached_power_term(year: int) -> tuple[float, float] | None:
 def power_term_is_indicative(year: int) -> bool:
     """Whether the year's cached term is Brugel's indicative figure."""
     return year in _indicative and year in _cache
+
+
+def cached_network_terms(year: int) -> NetworkTerms | None:
+    """The year's network if its final sheet has been read, else the latest
+    earlier year's held, never a later one, or ``None`` before any is.
+
+    Synchronous for the reason :func:`cached_power_term` gives;
+    :func:`ensure_power_term` reads it off the same sheet as the term.
+    """
+    held = [held_year for held_year in _network if held_year <= year]
+    return _network[max(held)] if held else None
 
 
 def any_cached_power_term() -> tuple[float, float] | None:
@@ -206,14 +270,22 @@ async def _fetch_power_term(
             return _cache.get(year)
         del _failed_at[year]
 
+    network = None
     try:
         text = await _sheet_text(session, year)
         pair = _parse(text) if text else None
+        network = _parse_network(text) if text else None
     except Exception as err:  # the docstring promises no raise
         # The backoff is recorded below whatever happened, so a failure that
         # reaches here still costs one attempt rather than one per tick.
         _LOGGER.warning("Brugel %d tariff sheet could not be read: %s", year, err)
         pair = None
+    if network is not None:
+        _network[year] = network
+    elif pair is not None:
+        # Read for the power term, so a sheet that no longer gives the rest
+        # leaves a custom entry asking for it on the figures it typed.
+        _LOGGER.warning("Brugel %d tariff sheet gives no network rates", year)
     if pair is None:
         _failed_at[year] = dt_util.utcnow()
         if year in _cache:
@@ -329,6 +401,67 @@ def _parse(text: str) -> tuple[float, float] | None:
     except ValueError:
         return None
     return _checked(low, high)
+
+
+def _parse_network(text: str) -> NetworkTerms | None:
+    """The network a connection without a peak meter pays, off the year's
+    final sheet, or ``None`` when a row is missing or a figure is out of
+    bounds.
+
+    Every row is required: one the sheet stops printing, or prints under
+    another label, refuses the sheet rather than billing a network short of a
+    charge, and the entry keeps the figures it typed.
+    """
+    pair = _parse(text)
+    day = _bt_figure(text, _DAY_RE)
+    night = _bt_figure(text, _NIGHT_RE)
+    metering = _bt_figure(text, _METERING_RE)
+    transport = _bt_figure(text, _TRANSPORT_RE)
+    charges = [_bt_figure(text, pattern) for pattern in _PER_KWH_RES]
+    if (
+        pair is None
+        or day is None
+        or night is None
+        or metering is None
+        or transport is None
+        or any(charge is None for charge in charges)
+    ):
+        return None
+    if not (
+        0.0 < night <= day <= _MAX_KWH
+        and 0.0 <= transport <= _MAX_KWH
+        and all(0.0 <= (charge or 0.0) <= _MAX_KWH for charge in charges)
+        and _MIN_EUR <= metering <= _MAX_EUR
+    ):
+        return None
+    per_kwh = sum(charge or 0.0 for charge in charges)
+    low, high = pair
+    return NetworkTerms(
+        day=day + per_kwh,
+        night=night + per_kwh,
+        transport=transport,
+        fixed_le13=metering + low,
+        fixed_gt13=metering + high,
+    )
+
+
+def _bt_figure(text: str, label: re.Pattern[str]) -> float | None:
+    """What a connection without a peak meter pays on the first row ``label``
+    names that prints a figure for it, or ``None``.
+
+    The kWh rows of the peak-metered block print that column as a dash, which
+    is how the block below them, a residential connection's, is told apart.
+    """
+    for line in text.splitlines():
+        if label.search(line) is None:
+            continue
+        tail = line.split()[-_COLUMNS:]
+        if len(tail) < _COLUMNS or not all(_FIGURE_RE.fullmatch(t) for t in tail):
+            continue
+        figure = tail[_BT_WITHOUT_PEAK]
+        if figure != "-":
+            return float(figure.replace(",", "."))
+    return None
 
 
 def _checked(low: float, high: float) -> tuple[float, float] | None:

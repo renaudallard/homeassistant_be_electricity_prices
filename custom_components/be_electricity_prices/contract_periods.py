@@ -80,7 +80,7 @@ from .energy_meters import (
 )
 from .fees import billed_peak_for
 from .flow_contracts import _contract_is_month_indexed
-from .fluvius import ensure_analog_surcharge, ensure_area_terms
+from .fluvius import ensure_analog_surcharge
 from .meter_daily import _measured_kwh
 from .meter_faults import _without_today
 from .meter_hourly import _metered_sides
@@ -91,8 +91,8 @@ from .providers.base import (
 )
 from .snapshot_resolve import (
     analog_meter,
+    ensure_custom_network,
     replaced_meter_facts,
-    takes_fluvius_network,
 )
 from .spot_stats import _energy_is_rlp_indexed, _spp_weighting_enabled, spots_available
 from .ytd_cost import _compute_current_year_cost
@@ -617,8 +617,8 @@ async def ensure_period_analog_rates(
 ) -> None:
     """Read the area's analog kWh rate for every year an earlier contract held
     on an analog meter covers, until the meter was replaced where it was, and
-    the area's network rates for every year an earlier custom contract that
-    took them off Fluvius's sheet covers.
+    the network rates for every year an earlier custom contract that took them
+    off its region's sheet covers.
 
     The tick reads it for the entry's own meter only, so a contract kept analog
     at a recorded switch found none once the entry had gone digital and was
@@ -630,11 +630,10 @@ async def ensure_period_analog_rates(
     for period in periods:
         dso = str(period.data.get(CONF_DSO, ""))
         years = range(period.start.year, period.end.year + 1)
-        # An earlier custom contract that took its network off the area's
+        # An earlier custom contract that took its network off its region's
         # sheet, for the same reason.
-        if takes_fluvius_network(period.data):
-            for year in years:
-                await ensure_area_terms(session, year, dso)
+        for year in years:
+            await ensure_custom_network(session, period.data, year)
         if not analog_meter(period.data, period.start):
             continue
         for year in years:

@@ -94,7 +94,7 @@ from .creg_ev import (
 from .energy_meters import noting_failed_reads
 from .excise_law import ensure_excise_law
 from .fees import _compute_capacity, _compute_prosumer, bills_capacity
-from .fluvius import ensure_analog_surcharge, ensure_area_terms, ensure_tariff_sheet
+from .fluvius import ensure_analog_surcharge, ensure_tariff_sheet
 from .injection import (
     _compute_injection_price,
     _injection_follows_spot,
@@ -114,7 +114,7 @@ from .providers import (
     get as get_extractor,
 )
 from .providers._rates import DynamicRates, EnergyRates, SpotMonthlyRates
-from .snapshot_resolve import analog_meter, takes_fluvius_network
+from .snapshot_resolve import analog_meter, ensure_custom_network
 from .snapshot_store import cached_month_card
 from .spot_stats import _injection_is_quarter_hourly
 from .vat_rates import ensure_vat_rates
@@ -274,11 +274,8 @@ class _TickMixin:
                 await ensure_analog_surcharge(
                     self._session, year, str(self.entry.data.get(CONF_DSO, ""))
                 )
-            # A custom entry taking its network off the area's sheet.
-            if takes_fluvius_network(self.entry.data):
-                await ensure_area_terms(
-                    self._session, year, str(self.entry.data.get(CONF_DSO, ""))
-                )
+        # A custom entry taking its network off its region's sheet.
+        await ensure_custom_network(self._session, self.entry.data, dt_util.now().year)
         # The month's VAT rate, read before the card is resolved like the term
         # above, and from the card archive, so only where the entry reads it;
         # with it what the law billed each month the law no longer gives.

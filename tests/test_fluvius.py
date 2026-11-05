@@ -479,15 +479,17 @@ def test_the_sheet_is_read_before_the_card_is_resolved() -> None:
     assert body.index("ensure_analog_surcharge(") < body.index(
         "_maybe_refresh_snapshot()"
     )
-    # And a custom entry's area rates before its card is built.
-    assert body.index("ensure_area_terms(") < body.index("_refresh_custom_snapshot()")
+    # And a custom entry's network before its card is built.
+    assert body.index("ensure_custom_network(") < body.index(
+        "_refresh_custom_snapshot()"
+    )
     resolver = inspect.getsource(snapshot_resolve._resolve_snapshot)
     assert "cached_network_ceiling(month.year)" in resolver
     # A backfill asks for every year its window prices, not just this one.
     context = inspect.getsource(backfill._build_context)
     assert "ensure_tariff_sheet(coordinator._session, year)" in context
     assert "coordinator._session, year, str(entry.data[CONF_DSO])" in context
-    assert "ensure_area_terms(" in context
+    assert "ensure_custom_network(coordinator._session, entry.data, year)" in context
 
 
 async def test_a_restart_puts_the_ceiling_on_the_stored_card(hass: Any) -> None:

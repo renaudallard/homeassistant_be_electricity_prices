@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -45,6 +46,9 @@ from custom_components.be_electricity_prices.providers.base import (
     TaxOverlay,
 )
 from tests import FakeBody, make_snapshot
+
+# Brugel's final 2026 sheet as published at its address for 2026.
+_SHEET_2026 = (Path(__file__).parent / "fixtures" / "brugel_elec_2026.pdf").read_bytes()
 
 # The two rows as the 2026 sheet prints them, under "1.2. Sans mesure de
 # pointe", which is the block a residential connection is billed on. The dashes
@@ -79,11 +83,13 @@ def _clear_brugel_cache() -> Iterator[None]:
     brugel._failed_at.clear()
     brugel._locks.clear()
     brugel._indicative.clear()
+    brugel._network.clear()
     yield
     brugel._cache.clear()
     brugel._failed_at.clear()
     brugel._locks.clear()
     brugel._indicative.clear()
+    brugel._network.clear()
 
 
 def test_the_power_term_is_read_off_the_published_sheet() -> None:
@@ -359,12 +365,7 @@ async def test_a_failure_is_only_attempted_once() -> None:
 
 async def test_a_good_sheet_is_fetched_once_and_kept() -> None:
     """A success is cached for the life of the process: the figure is annual."""
-    import pathlib as _pathlib
-
-    sheet = _pathlib.Path("tmp/audit_2026_09_19/Z/brugel_2026.pdf")
-    if not sheet.exists():
-        pytest.skip("the archived Brugel sheet is not on this machine")
-    session = _Session(sheet.read_bytes())
+    session = _Session(_SHEET_2026)
     assert await brugel.ensure_power_term(session, 2026) == (  # type: ignore[arg-type]
         pytest.approx(47.24),
         pytest.approx(94.48),
@@ -413,12 +414,7 @@ async def test_one_request_per_year_and_no_search_for_the_link() -> None:
     agent either), and charged 71 KB to the one request the setup budget can
     least afford. One address, one request.
     """
-    import pathlib as _pathlib
-
-    sheet = _pathlib.Path("tmp/audit_2026_09_19/Z/brugel_2026.pdf")
-    if not sheet.exists():
-        pytest.skip("the archived Brugel sheet is not on this machine")
-    session = _Session(sheet.read_bytes())
+    session = _Session(_SHEET_2026)
     assert await brugel.ensure_power_term(session, 2026) is not None  # type: ignore[arg-type]
     assert session.calls == 1, f"{session.calls} requests for one sheet"
 
@@ -449,6 +445,76 @@ async def test_a_backfill_fetches_the_term_for_every_year_it_prices() -> None:
     # Every year the hours span, not today's.
     assert "for hour in hours" in source
     assert "REGION_BRUSSELS" in source, "fetched for every region, not just Brussels"
+
+
+def _sheet_text() -> str:
+    from custom_components.be_electricity_prices.providers._pdf_render import (
+        extract_pdf_text,
+    )
+
+    return extract_pdf_text(_SHEET_2026)
+
+
+def test_the_network_is_read_off_the_2026_sheet() -> None:
+    """A connection without a peak meter, excluding VAT: each kWh rate with
+    the five charges below the table, transport, and the metering term with
+    each band's power term. With 6% VAT they are the 9,96 and 7,53 c/kWh and
+    the 2,27 c/kWh every commercial Brussels card prints, and the 64,80 EUR a
+    year Engie prints for the whole fixed charge."""
+    terms = brugel._parse_network(_sheet_text())
+    assert terms is not None
+    charges = 0.0 + 0.0217516 + 0.0007664 + 0.0087329 + 0.0054389
+    assert terms.day == pytest.approx(0.0572325 + charges)
+    assert terms.night == pytest.approx(0.0343395 + charges)
+    assert terms.transport == pytest.approx(0.0214403)
+    assert terms.fixed_le13 == pytest.approx(13.90 + 47.24)
+    assert terms.fixed_gt13 == pytest.approx(13.90 + 94.48)
+    assert round(terms.day * 1.06, 4) == 0.0996
+    assert round(terms.night * 1.06, 4) == 0.0753
+    assert round(terms.transport * 1.06, 4) == 0.0227
+    assert round(terms.fixed_le13 * 1.06, 1) == 64.8
+
+
+def test_the_peak_metered_rows_are_not_mistaken_for_a_household_s() -> None:
+    """The kWh rows above them carry the same labels and print the column a
+    household is billed on as a dash, so their 0,0047539 is never taken."""
+    text = _sheet_text()
+    assert "heures pleines  Y = EUR / kWh HI 0,0047539" in text
+    assert brugel._bt_figure(text, brugel._DAY_RE) == pytest.approx(0.0572325)
+
+
+@pytest.mark.parametrize(
+    "row", ["Redevance de voirie", "Tarifs de transport", "heures creuses"]
+)
+def test_a_sheet_missing_a_row_gives_no_network(row: str) -> None:
+    """A row the sheet stops printing refuses the sheet: the entry keeps what
+    it typed rather than billing a network short of a charge."""
+    text = "\n".join(line for line in _sheet_text().splitlines() if row not in line)
+    assert brugel._parse(text) is not None, "the power term still reads"
+    assert brugel._parse_network(text) is None
+
+
+async def test_the_network_comes_with_the_power_term_in_one_request() -> None:
+    """Read off the text fetched for the power term, so no request of its
+    own; a later year stands on it until its own sheet is read, an earlier
+    one does not."""
+    session = _Session(_SHEET_2026)
+    assert await brugel.ensure_power_term(session, 2026) is not None  # type: ignore[arg-type]
+    assert session.calls == 1
+    held = brugel.cached_network_terms(2026)
+    assert held is not None
+    assert held.transport == pytest.approx(0.0214403)
+    assert brugel.cached_network_terms(2027) == held
+    assert brugel.cached_network_terms(2025) is None
+
+
+async def test_the_indicative_grid_gives_no_network() -> None:
+    """Without the final sheet the power term stands on the grid's figure,
+    and the network on nothing: the entry keeps what it typed."""
+    with patch.object(brugel, "_indicative_term", return_value=(48.0, 96.0)):
+        missing = _Session(b"", status=404)
+        assert await brugel.ensure_power_term(missing, 2027) == (48.0, 96.0)  # type: ignore[arg-type]
+    assert brugel.cached_network_terms(2027) is None
 
 
 def test_both_signals_have_to_agree_before_a_card_is_touched() -> None:

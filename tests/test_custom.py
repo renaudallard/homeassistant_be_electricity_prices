@@ -1435,8 +1435,13 @@ def _flemish_network(**extra: Any) -> dict[str, Any]:
     }
 
 
-def _resolved_network(data: dict[str, Any]) -> tuple[float, Any]:
-    """The per-kWh network of November 2026 with VAT, and the overlay."""
+def _resolved_network(
+    data: dict[str, Any],
+    region: str = const.REGION_FLANDERS,
+    dso: str = "fluvius_zenne_dijle",
+) -> tuple[float, Any]:
+    """The per-kWh network of 5 November 2026 at 11:00 with VAT, and the
+    overlay."""
     from datetime import date
     from types import SimpleNamespace
 
@@ -1445,7 +1450,7 @@ def _resolved_network(data: dict[str, Any]) -> tuple[float, Any]:
         _resolve_snapshot,
     )
 
-    raw = build_snapshot(data, const.REGION_FLANDERS, "fluvius_zenne_dijle")
+    raw = build_snapshot(data, region, dso)
     snap = _resolve_snapshot(
         SimpleNamespace(data=data),  # type: ignore[arg-type]
         raw,
@@ -1454,12 +1459,12 @@ def _resolved_network(data: dict[str, Any]) -> tuple[float, Any]:
     )
     breakdown = compute_breakdown(
         snap,
-        "fluvius_zenne_dijle",
-        const.REGION_FLANDERS,
+        dso,
+        region,
         datetime(2026, 11, 5, 11, tzinfo=UTC),
         meter=data[const.CONF_METER],
     )
-    return breakdown.network, snap.dsos["fluvius_zenne_dijle"]
+    return breakdown.network, snap.dsos[dso]
 
 
 def _hold_zenne_dijle_2026() -> None:
@@ -1549,3 +1554,209 @@ def test_only_a_flemish_network_step_offers_fluvius_s_sheet() -> None:
         assert (const.CONF_CUSTOM_DSO_FROM_FLUVIUS in keys) is offered, region
         if offered:
             assert keys[0] == const.CONF_CUSTOM_DSO_FROM_FLUVIUS
+
+
+def _brussels_network(**extra: Any) -> dict[str, Any]:
+    """A Brussels custom entry whose network was typed by hand."""
+    return {
+        const.CONF_SUPPLIER: const.SUPPLIER_CUSTOM,
+        const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+        const.CONF_REGION: const.REGION_BRUSSELS,
+        const.CONF_DSO: const.DSO_SIBELGA,
+        const.CONF_METER: const.METER_MONO,
+        const.CONF_CUSTOM_ENERGY_SINGLE: 0.1,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.04,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT: 0.03,
+        const.CONF_CUSTOM_DSO_TRANSPORT: 0.01,
+        const.CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR: 15.0,
+        const.CONF_CUSTOM_VAT_RATE: 0.06,
+        **extra,
+    }
+
+
+@pytest.fixture
+def brugel_2026() -> Any:
+    """Brugel's 2026 sheet held as the tick would have read it."""
+    from pathlib import Path
+
+    from custom_components.be_electricity_prices import brugel
+    from custom_components.be_electricity_prices.providers._pdf_render import (
+        extract_pdf_text,
+    )
+
+    sheet = Path(__file__).parent / "fixtures" / "brugel_elec_2026.pdf"
+    terms = brugel._parse_network(extract_pdf_text(sheet.read_bytes()))
+    assert terms is not None
+    brugel._network[2026] = terms
+    yield terms
+    brugel._network.clear()
+
+
+def test_a_brussels_custom_entry_can_take_its_network_off_brugel_s_sheet(
+    brugel_2026: Any,
+) -> None:
+    """Ticked, the sheet of the delivery year replaces what was typed: the
+    9,96 c/kWh day rate and 2,27 c/kWh transport every commercial Brussels card
+    prints, the 7,53 c/kWh night rate on an exclusive-night circuit, and the
+    metering and power terms together, with the band above 13 kVA beside
+    them."""
+    ticked = _brussels_network(**{const.CONF_CUSTOM_DSO_FROM_BRUGEL: True})
+    network, overlay = _resolved_network(ticked, const.REGION_BRUSSELS, "sibelga")
+    assert round(network * 100, 2) == 12.23
+    assert network == pytest.approx((brugel_2026.day + brugel_2026.transport) * 1.06)
+    assert overlay.distribution_peak == pytest.approx(brugel_2026.day)
+    assert overlay.distribution_offpeak == pytest.approx(brugel_2026.night)
+    assert overlay.distribution_exclusive_night == pytest.approx(brugel_2026.night)
+    # The yearly charges with the VAT the engine grosses fees by.
+    assert overlay.data_management_per_year == pytest.approx(61.14 * 1.06)
+    assert overlay.brussels_power_term_above_13kva == pytest.approx(108.38 * 1.06)
+    night = {**ticked, const.CONF_METER: const.METER_EXCLUSIVE_NIGHT}
+    network, _overlay = _resolved_network(night, const.REGION_BRUSSELS, "sibelga")
+    assert round(network * 100, 2) == 9.80
+
+
+def test_the_typed_brussels_network_stands_unticked_or_with_no_sheet_held(
+    brugel_2026: Any,
+) -> None:
+    """Unticked, the figures typed are billed whatever sheet is held; ticked
+    with none held, they stand in."""
+    from custom_components.be_electricity_prices import brugel
+
+    typed = (0.04 + 0.01) * 1.06
+    network, overlay = _resolved_network(
+        _brussels_network(), const.REGION_BRUSSELS, "sibelga"
+    )
+    assert network == pytest.approx(typed)
+    assert overlay.data_management_per_year == pytest.approx(15.0 * 1.06)
+    brugel._network.clear()
+    network, _overlay = _resolved_network(
+        _brussels_network(**{const.CONF_CUSTOM_DSO_FROM_BRUGEL: True}),
+        const.REGION_BRUSSELS,
+        "sibelga",
+    )
+    assert network == pytest.approx(typed)
+
+
+def test_brugel_s_power_term_is_not_added_to_the_sheet_s_twice(
+    brugel_2026: Any,
+) -> None:
+    """The sheet's yearly charge already carries the power term, so the step
+    that completes a card printing the metering half alone leaves it be,
+    while a typed metering half is still completed."""
+    from custom_components.be_electricity_prices import snapshot_resolve
+
+    with patch.object(
+        snapshot_resolve, "cached_power_term", lambda year: (47.24, 94.48)
+    ):
+        _network, overlay = _resolved_network(
+            _brussels_network(**{const.CONF_CUSTOM_DSO_FROM_BRUGEL: True}),
+            const.REGION_BRUSSELS,
+            "sibelga",
+        )
+        assert overlay.data_management_per_year == pytest.approx(61.14 * 1.06)
+        _network, overlay = _resolved_network(
+            _brussels_network(), const.REGION_BRUSSELS, "sibelga"
+        )
+        assert overlay.data_management_per_year == pytest.approx((15.0 + 47.24) * 1.06)
+
+
+def test_each_region_s_network_step_offers_its_own_sheet() -> None:
+    """Flanders offers Fluvius's sheet and Brussels Brugel's, first on the
+    step and nowhere else."""
+    offered = {
+        const.REGION_FLANDERS: const.CONF_CUSTOM_DSO_FROM_FLUVIUS,
+        const.REGION_BRUSSELS: const.CONF_CUSTOM_DSO_FROM_BRUGEL,
+    }
+    boxes = {const.CONF_CUSTOM_DSO_FROM_FLUVIUS, const.CONF_CUSTOM_DSO_FROM_BRUGEL}
+    for region in (const.REGION_FLANDERS, const.REGION_BRUSSELS, const.REGION_WALLONIA):
+        keys = [
+            str(k)
+            for k in _custom_dso_schema(
+                {const.CONF_REGION: region, const.CONF_METER: const.METER_MONO}
+            ).schema
+        ]
+        expected = offered.get(region)
+        assert boxes & set(keys) == ({expected} if expected else set()), region
+        if expected:
+            assert keys[0] == expected
+
+
+async def test_the_dispatcher_reads_the_sheet_of_the_entry_s_region() -> None:
+    """One call where the tick, the backfill and an earlier contract read the
+    sheet a custom entry takes its network from: Fluvius's area sheet in
+    Flanders, Brugel's in Brussels, nothing for a typed network."""
+    from unittest.mock import AsyncMock, call
+
+    from custom_components.be_electricity_prices import brugel, snapshot_resolve
+
+    session = object()
+    area = AsyncMock()
+    power = AsyncMock()
+    with (
+        patch.object(snapshot_resolve, "ensure_area_terms", area),
+        patch.object(snapshot_resolve, "ensure_power_term", power),
+    ):
+        await snapshot_resolve.ensure_custom_network(
+            session,  # type: ignore[arg-type]
+            _flemish_network(**{const.CONF_CUSTOM_DSO_FROM_FLUVIUS: True}),
+            2026,
+        )
+        area.assert_awaited_once_with(session, 2026, "fluvius_zenne_dijle")
+        power.assert_not_awaited()
+        ticked = _brussels_network(**{const.CONF_CUSTOM_DSO_FROM_BRUGEL: True})
+        # Nothing held for 2027: the year before is read to stand in.
+        await snapshot_resolve.ensure_custom_network(
+            session,  # type: ignore[arg-type]
+            ticked,
+            2027,
+        )
+        assert power.await_args_list == [call(session, 2027), call(session, 2026)]
+        # The year's own sheet held: nothing more.
+        power.reset_mock()
+        brugel._network[2027] = brugel.NetworkTerms(0.09, 0.07, 0.02, 60.0, 100.0)
+        try:
+            await snapshot_resolve.ensure_custom_network(
+                session,  # type: ignore[arg-type]
+                ticked,
+                2027,
+            )
+        finally:
+            brugel._network.clear()
+        power.assert_awaited_once_with(session, 2027)
+        area.reset_mock()
+        power.reset_mock()
+        for data in (_flemish_network(), _brussels_network()):
+            await snapshot_resolve.ensure_custom_network(
+                session,  # type: ignore[arg-type]
+                data,
+                2026,
+            )
+        area.assert_not_awaited()
+        power.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("professional", "factor"),
+    [
+        # A 0 rate typed by a household reads as VAT-inclusive figures.
+        (False, 1.06),
+        # A business typing 0 deducts VAT: its figures are excluding it.
+        (True, 1.0),
+    ],
+)
+def test_brugel_s_sheet_is_billed_on_the_basis_the_entry_typed_on(
+    brugel_2026: Any, professional: bool, factor: float
+) -> None:
+    """The sheet is excluding VAT. An entry typing VAT-inclusive figures at a
+    0 rate takes it grossed, as it takes Brugel's power term, and a business
+    deducting VAT takes it as published."""
+    data = _brussels_network(
+        **{
+            const.CONF_CUSTOM_DSO_FROM_BRUGEL: True,
+            const.CONF_CUSTOM_VAT_RATE: 0.0,
+            const.CONF_CUSTOM_PROFESSIONAL: professional,
+        }
+    )
+    network, overlay = _resolved_network(data, const.REGION_BRUSSELS, "sibelga")
+    assert network == pytest.approx((brugel_2026.day + brugel_2026.transport) * factor)
+    assert overlay.data_management_per_year == pytest.approx(61.14 * factor)

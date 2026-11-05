@@ -203,9 +203,10 @@
       },
       "custom_dso": {
         "title": "Grid (DSO) tariffs",
-        "description": "Regulated grid costs, identical for every supplier on your DSO. Copy them from your bill or your DSO's tariff sheet, excluding VAT. Only distribution is required. Leave the day, night and band boxes blank if your tariff has no such split: blank bills the single distribution rate, while 0 bills none. Leave any other charge you don't pay at 0. The yearly box takes the data-management fee (databeheer) in Flanders, the fixed term (terme fixe) in Wallonia, which the Impact tariff does not bill, and the metering and fixed-term charges together in Brussels. In Flanders, tick the first box to take them from Fluvius's own tariff sheet for your area instead: they then follow Fluvius's yearly change by themselves, and the boxes only stand in until the sheet is read.",
+        "description": "Regulated grid costs, identical for every supplier on your DSO. Copy them from your bill or your DSO's tariff sheet, excluding VAT. Only distribution is required. Leave the day, night and band boxes blank if your tariff has no such split: blank bills the single distribution rate, while 0 bills none. Leave any other charge you don't pay at 0. The yearly box takes the data-management fee (databeheer) in Flanders, the fixed term (terme fixe) in Wallonia, which the Impact tariff does not bill, and the metering and fixed-term charges together in Brussels. In Flanders and Brussels, tick the first box to take them from the published tariff sheet instead, Fluvius's for your area or Brugel's: they then follow each yearly change by themselves, and the boxes only stand in until the sheet is read. Brugel's sheet does not print the Brugel OSP fee, which stays as typed.",
         "data": {
           "custom_dso_from_fluvius": "Take them from Fluvius's tariff sheet for my area",
+          "custom_dso_from_brugel": "Take them from Brugel's tariff sheet",
           "custom_dso_distribution_single": "Distribution (EUR/kWh)",
           "custom_dso_distribution_peak": "Distribution peak (EUR/kWh)",
           "custom_dso_distribution_offpeak": "Distribution off-peak (EUR/kWh)",
@@ -571,9 +572,10 @@
       },
       "custom_dso": {
         "title": "Grid (DSO) tariffs",
-        "description": "Regulated grid costs, identical for every supplier on your DSO. Copy them from your bill or your DSO's tariff sheet, excluding VAT. Only distribution is required. Leave the day, night and band boxes blank if your tariff has no such split: blank bills the single distribution rate, while 0 bills none. Leave any other charge you don't pay at 0. The yearly box takes the data-management fee (databeheer) in Flanders, the fixed term (terme fixe) in Wallonia, which the Impact tariff does not bill, and the metering and fixed-term charges together in Brussels. In Flanders, tick the first box to take them from Fluvius's own tariff sheet for your area instead: they then follow Fluvius's yearly change by themselves, and the boxes only stand in until the sheet is read.",
+        "description": "Regulated grid costs, identical for every supplier on your DSO. Copy them from your bill or your DSO's tariff sheet, excluding VAT. Only distribution is required. Leave the day, night and band boxes blank if your tariff has no such split: blank bills the single distribution rate, while 0 bills none. Leave any other charge you don't pay at 0. The yearly box takes the data-management fee (databeheer) in Flanders, the fixed term (terme fixe) in Wallonia, which the Impact tariff does not bill, and the metering and fixed-term charges together in Brussels. In Flanders and Brussels, tick the first box to take them from the published tariff sheet instead, Fluvius's for your area or Brugel's: they then follow each yearly change by themselves, and the boxes only stand in until the sheet is read. Brugel's sheet does not print the Brugel OSP fee, which stays as typed.",
         "data": {
           "custom_dso_from_fluvius": "Take them from Fluvius's tariff sheet for my area",
+          "custom_dso_from_brugel": "Take them from Brugel's tariff sheet",
           "custom_dso_distribution_single": "Distribution (EUR/kWh)",
           "custom_dso_distribution_peak": "Distribution peak (EUR/kWh)",
           "custom_dso_distribution_offpeak": "Distribution off-peak (EUR/kWh)",

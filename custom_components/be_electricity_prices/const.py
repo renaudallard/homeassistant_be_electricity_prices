@@ -754,6 +754,8 @@ CONF_CUSTOM_DSO_TRANSPORT: Final = "custom_dso_transport"
 # Flanders only: take the network rates off Fluvius's sheet for the entry's
 # area and each delivery year, the figures typed standing in until it is read.
 CONF_CUSTOM_DSO_FROM_FLUVIUS: Final = "custom_dso_from_fluvius"
+# Brussels only: the same off Brugel's yearly sheet for Sibelga.
+CONF_CUSTOM_DSO_FROM_BRUGEL: Final = "custom_dso_from_brugel"
 CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR: Final = "custom_dso_data_management_per_year"
 CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR: Final = "custom_dso_capacity_eur_per_kw_year"
 CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR: Final = (

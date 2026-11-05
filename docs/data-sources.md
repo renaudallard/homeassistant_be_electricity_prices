@@ -1434,3 +1434,64 @@ The parser is tested on the 2026 Zenne-Dijle sheet and the 2023 Antwerpen one
 as Fluvius served them on 2026-10-19 (`tests/fixtures/fluvius_*.xlsx`), and
 `parse_analog_surcharge` was run on every area's sheet of 2025 and 2026 and the
 2023 and 2024 sheets of all ten operators of the time.
+
+## Part 7: Sibelga's network, read from Brugel's tariff sheet (`brugel.py`)
+
+Brugel publishes Sibelga's distribution tariffs once a year as one PDF stating
+"prix hors TVA", at
+`https://brugel.brussels/publication/document/notype/<year-1>/fr/Tarif-distribution-Elec-<year>.pdf`.
+Every Brussels entry reads it for the power term of Sibelga's fixed charge
+(`ensure_power_term`, `cached_power_term`), which Bolt's cards leave out. A
+custom Brussels entry that ticks **Take them from Brugel's tariff sheet**
+takes its whole network from the same text (`_parse_network`,
+`NetworkTerms`, `cached_network_terms`), so it costs no request of its own.
+
+Every row ends in one figure per column: MT main and backup supply, then BT
+with a peak meter, BT without one and BT without metering. A residential
+connection is BT without a peak meter, the fourth figure (`_bt_figure`). The
+kWh rows of the peak-metered block above carry the same labels and print that
+column as a dash, which is how the block a household is billed on is told
+apart. Read, for 2026, excluding VAT:
+
+| Row | Figure |
+| --- | --- |
+| heures pleines, kWh HI | 0,0572325 EUR/kWh |
+| heures creuses, kWh LO | 0,0343395 EUR/kWh |
+| soldes régulatoires | 0 EUR/kWh |
+| obligations de service public | 0,0217516 EUR/kWh |
+| pensions non capitalisées | 0,0007664 EUR/kWh |
+| redevance de voirie | 0,0087329 EUR/kWh |
+| impôt des sociétés et autres prélèvements | 0,0054389 EUR/kWh |
+| tarifs de transport | 0,0214403 EUR/kWh |
+| mesure et comptage | 13,90 EUR/year |
+| puissance mise à disposition, up to 13 kVA / above | 47,24 / 94,48 EUR/year |
+
+The five charges per kWh below the table are added to each register's rate,
+which is how the cards print them: 0,0939223 EUR/kWh by day and 0,0710293 by
+night, the night one also an exclusive-night circuit's, and the metering term
+with each band's power term, 61,14 and 108,38 EUR a year. With 6% VAT that is
+the 9,96 and 7,53 c/kWh and 2,27 c/kWh of transport every commercial Brussels
+card printed in October 2026, and the 64,80 to 64,81 EUR a year those that
+print the whole fixed charge print. Every row is required: a sheet that
+stops printing one, or prints it under another label, gives no network and the
+entry keeps the figures it typed, rather than billing a network short of a
+charge. Refused too: a night rate above the day one, a rate above 0,5 EUR/kWh,
+and a metering term outside 1 to 500 EUR a year. The Brugel OSP fee is not on
+the sheet and stays as typed.
+
+Only the final sheet gives the network: the 2025 to 2027 grid that stands in
+for the power term prints its later pages' figures apart from their labels.
+`cached_network_terms` answers the year's network, else the latest earlier one
+held, never a later one. Nothing Brugel's module reads is kept over a restart,
+and Brugel has no listing to find the year before on, so `ensure_custom_network`
+(`snapshot_resolve.py`) reads the year before's sheet when the year's network
+is not held: from 1 January until the new sheet is out, last year's stands in.
+The tick asks for this year, the backfill for every year its window spans and
+`ensure_period_analog_rates` (`contract_periods.py`) for every year an earlier
+custom contract covers. `_resolve_brugel_network` (`snapshot_resolve.py`) puts
+the figures on the basis the entry typed on (`on_card_basis`), before
+`resolve_brussels_power_term`, which then leaves the yearly charge alone since
+the band above 13 kVA is set.
+
+The parser is tested on the 2026 sheet as Brugel served it on 2026-11-05
+(`tests/fixtures/brugel_elec_2026.pdf`).
