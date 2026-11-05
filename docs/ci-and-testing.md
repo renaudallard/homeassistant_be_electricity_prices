@@ -631,27 +631,21 @@ price formula in either language the same month, and again in November, where th
 and Brussels cards do; it still parses, so its entries bill the rates it prints, and its entry
 now runs to the December card. The five October 2026 TotalEnergies
 cards whose Dutch edition disagreed with the French one (issues #115 and #117) were allowed the
-same way: three Dutch addresses served another document, one prints its formula with a stray
-comma and one prints its fee ex-VAT. TotalEnergies corrected the three addresses on 5 and 6
-October and their entries were removed; the other two stay allowed. The French card is the one
-billed. The French myEssential card in Flanders, whose green contribution is left blank and
-whose Dutch edition has stood in for it since 1 October, is allowed until the November card.
-So is the French myComfort card in Wallonia. Its 8 October upload (issue #124) printed its
-title from a form field the readers do not see and swapped its REGIE DE WAVRE and ORES
-(Verviers) distribution rows; the 26 October upload (issue #140) draws its figures in fonts that
-carry no Unicode map. The Dutch edition standing in for it prints the same figures and is the
-one billed.
-The Dutch Électricité Fixe card in Wallonia (issue #129) leaves out the notice that its day/night
+same way: three Dutch addresses served another document, one printed its formula with a stray
+comma and one its fee ex-VAT. TotalEnergies corrected the three addresses on 5 and 6 October.
+The French myComfort cards in Wallonia (issue #124, a title in a form field and swapped
+distribution rows, then issue #140, figures in fonts that carry no Unicode map) and in
+Brussels (issue #139, the same fonts beside a Dutch edition with the stray comma) were
+allowed too, the Walloon one priced on its Dutch edition and the Brussels one on the card it
+replaced.
+TotalEnergies' November cards, uploaded on 2 November, read right but for two, and the other
+entries were removed. The French myEssential card in Flanders still leaves its green
+contribution blank, so its Dutch edition, standing in since 1 October, is billed. The Dutch
+Électricité Fixe card in Wallonia (issue #129) still leaves out the notice that its day/night
 rate does not apply under Tarif Impact, which its French edition and every other Walloon card
-print; the French card is billed. The French myComfort card in Brussels was re-uploaded on 26
-October (issue #139) with its figures drawn in fonts that carry no Unicode map, so no reader
-sees them, and its Dutch edition still has the stray comma, so neither reads; the upload
-repeats the figures of the card it replaced, which entries keep pricing on until the November
-card. TotalEnergies had published no November card by 1 November, so these TotalEnergies
-entries run to 6 November (`_TOTALENERGIES_OCTOBER_UNTIL`), the day after the period check's
-grace, which flags a card a month behind from then on. In November the French myDynamic
+print, so the French card is billed. Both run to 1 December. In November the French myDynamic
 address in Brussels serves myDrive's November 2026 card (issue #153); the Dutch edition is
-myDynamic's and is billed, and the entry runs to 1 December. The report gives these rows their
+myDynamic's and is billed, and the entry runs to 1 December too. The report gives these rows their
 own section.
 
 An unreadable label is reported but does not fail: unknown is not evidence of staleness. The label
