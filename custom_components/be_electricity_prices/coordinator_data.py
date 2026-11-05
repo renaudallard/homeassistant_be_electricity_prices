@@ -107,6 +107,13 @@ class CoordinatorData:
     # deliberately kept out of last_error, which drives the staleness Repairs
     # card.
     spot_source: str = "entsoe"
+    # The index a month-priced energy leg bills the running month on so far,
+    # in EUR/kWh: the mean of the day-ahead prices from the 1st through today,
+    # weighted by the load profile where the card names it. A card prints its
+    # price on an estimate of that index, so this is what explains the energy
+    # component against the card (discussion #161). None for any other leg,
+    # for one indexed on its quarter, and before the month has a price.
+    energy_index_mtd: float | None = None
     # This month's running peak, as measured. NOT floored at the regulated
     # minimum: it is a measurement, and the floor is a billing rule that
     # belongs on the quantity below.

@@ -248,6 +248,7 @@ The payload:
 | `snapshot_stale` | `data.snapshot_stale` | true past the staleness threshold, never on the final card of a supplier that left or a withdrawn product |
 | `last_error` | `data.last_error` | last fetch/parse error string, or empty. A fetch failure always names the exception, so a CDN timeout reads `network error fetching <url>: TimeoutError` |
 | `spot_source` | `data.spot_source` | every source behind the live day-ahead curve, joined by `+`: `entsoe`, `energy-charts`, `smard`, or a mix such as `entsoe+energy-charts` (a keyless source filled a day ENTSO-E had not published) |
+| `energy_index_mtd_eur_per_kwh` | `round(data.energy_index_mtd, 6)` | present only on a contract priced on the month's index (kind `spot_monthly`, not one indexed on its quarter), once the month has a price: the index the energy component is built on so far, the mean of the day-ahead prices from the 1st through today in EUR/kWh, weighted by the load profile where the card names one. A card prints its price on an estimate of that index, so this is what explains the energy component against the card (discussion #161) |
 | `attribution` | `ENERGY_CHARTS_ATTRIBUTION` or `SMARD_ATTRIBUTION` | present only while `spot_source` includes a keyless source: the CC BY 4.0 credit its data requires. The energy-charts credit names SMARD as its origin, so it is the one shown when both contributed |
 | `cheapest_4h_today` | `_today_ranked(data, 4)[0]` | 4 cheapest today-hours, chronological |
 | `most_expensive_4h_today` | `_today_ranked(data, 4)[1]` | 4 dearest today-hours, chronological |
@@ -810,7 +811,7 @@ Top-level dump keys:
 The `coordinator` block (`diagnostics.py`) mirrors the current-price
 attributes plus every scalar `CoordinatorData` field:
 `snapshot_publication`, `signing_card`, `snapshot_age_hours`, `snapshot_stale`,
-`snapshot_valid_until`, `last_error`, `monthly_peak_kw`, `monthly_peak_month`,
+`snapshot_valid_until`, `last_error`, `energy_index_mtd`, `monthly_peak_kw`, `monthly_peak_month`,
 `capacity_cost_eur`, `prosumer_cost_eur`, `yearly_fixed_fee_eur`,
 `energy_fund_eur_per_month`, `injection_price_eur_per_kwh`,
 `current_year_cost_eur`, `projected_year_cost_eur`, `annual_kwh_priced` (the

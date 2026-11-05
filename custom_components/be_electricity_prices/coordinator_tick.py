@@ -113,7 +113,7 @@ from .providers import (
 from .providers import (
     get as get_extractor,
 )
-from .providers._rates import DynamicRates, EnergyRates
+from .providers._rates import DynamicRates, EnergyRates, SpotMonthlyRates
 from .snapshot_resolve import analog_meter
 from .snapshot_store import cached_month_card
 from .spot_stats import _injection_is_quarter_hourly
@@ -520,6 +520,14 @@ class _TickMixin:
             last_error=self._last_error,
             card_read_by_ocr=self._card_read_by_ocr,
             spot_source=self._spot_source,
+            # The mean the price table was built on, and only where it is a
+            # month's: a quarter-indexed leg bills its quarter's.
+            energy_index_mtd=(
+                energy_mean
+                if isinstance(priced.energy, SpotMonthlyRates)
+                and not priced.energy.quarter_indexed
+                else None
+            ),
             monthly_peak_kw=self._peak_kw,
             monthly_peak_month=self._peak_month,
             capacity_billed_peak_kw=billed_peak,

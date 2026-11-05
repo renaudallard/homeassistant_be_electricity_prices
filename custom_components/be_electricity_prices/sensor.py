@@ -633,6 +633,13 @@ class BePriceSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity):
                 # shown, and every other entry should carry nothing extra.
                 **({"card_read_by_ocr": True} if data.card_read_by_ocr else {}),
                 "spot_source": data.spot_source,
+                # Only on a leg priced on the month's index, once the month
+                # has a price: a card prints its figure on an estimate of it.
+                **(
+                    {"energy_index_mtd_eur_per_kwh": round(data.energy_index_mtd, 6)}
+                    if data.energy_index_mtd is not None
+                    else {}
+                ),
                 # CC BY 4.0 obliges us to credit the fallback's source
                 # wherever its data is shown, so the credit rides with the
                 # prices and appears only while the fallback is in use.

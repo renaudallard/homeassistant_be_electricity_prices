@@ -294,6 +294,7 @@ async def async_get_config_entry_diagnostics(
                 else None
             ),
             "last_error": _scrub_secret(data.last_error, api_key),
+            "energy_index_mtd": data.energy_index_mtd,
             "monthly_peak_kw": data.monthly_peak_kw,
             "monthly_peak_month": (
                 data.monthly_peak_month.isoformat() if data.monthly_peak_month else None

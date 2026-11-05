@@ -558,6 +558,33 @@ def test_signing_card_attribute_appears_only_with_a_cohort() -> None:
     )
 
 
+def test_month_index_attribute_appears_only_on_a_month_priced_leg() -> None:
+    """Discussion #161: the energy component of a month-priced card moves
+    with the month's index, which the card prints only as an estimate, so
+    the price publishes the index it was built on. A leg priced on anything
+    else publishes nothing rather than a row the UI would still render."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.sensor import SENSORS, BePriceSensor
+
+    def _attrs(data: CoordinatorData) -> dict[str, Any]:
+        sensor = BePriceSensor(
+            SimpleNamespace(  # type: ignore[arg-type]
+                data=data,
+                entry=SimpleNamespace(entry_id="x", data={}, title="t"),
+                last_update_success=True,
+            ),
+            next(d for d in SENSORS if d.key == "current_price"),
+        )
+        return sensor.extra_state_attributes
+
+    data = _today_data([0.10] * 24)
+    assert "energy_index_mtd_eur_per_kwh" not in _attrs(data)
+    indexed = _attrs(replace(data, energy_index_mtd=0.25597234))
+    assert indexed["energy_index_mtd_eur_per_kwh"] == 0.255972
+    assert "energy_index_mtd_eur_per_kwh" not in BePriceSensor._unrecorded_attributes
+
+
 def test_current_price_bulk_attributes_are_unrecorded() -> None:
     """The hourly today / tomorrow arrays and ranked windows must stay out
     of the recorder so they don't bloat the long-term database."""

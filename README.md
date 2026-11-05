@@ -434,7 +434,7 @@ All sensors share one device per config entry.
 
 | Sensor | Description |
 | --- | --- |
-| `current_price` | All-in EUR/kWh **now**. Attributes carry today's and tomorrow's slot-by-slot prices, the four cheapest and four most expensive hours of today (not necessarily consecutive), the snapshot's publication month and age, and `card_read_by_ocr` while a card is being read off its pixels. See [docs/entities.md](./docs/entities.md). |
+| `current_price` | All-in EUR/kWh **now**. Attributes carry today's and tomorrow's slot-by-slot prices, the four cheapest and four most expensive hours of today (not necessarily consecutive), the snapshot's publication month and age, `card_read_by_ocr` while a card is being read off its pixels, and, on a contract priced on the month's index, `energy_index_mtd_eur_per_kwh`: the index the energy component is built on so far this month, where the card prints its price on an estimate of it. See [docs/entities.md](./docs/entities.md). |
 | `next_hour_price` | All-in EUR/kWh for the next hour. |
 | `today_average` | Daily average all-in EUR/kWh. |
 | `today_min` / `today_max` | Daily extremes. |

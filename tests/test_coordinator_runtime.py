@@ -7794,6 +7794,77 @@ async def test_spot_monthly_mean_waits_for_the_historical_spot_fill(
     )
 
 
+async def test_the_tick_hands_on_the_month_index_it_priced_on(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Discussion #161: a card prints its price on an estimate of the month's
+    index, so only the index itself explains the energy component against
+    it. The tick hands on the mean its month leg was priced on, weighted
+    where the card names a profile, and nothing for a leg priced on anything
+    else, a quarter's index included."""
+    from unittest.mock import MagicMock
+
+    from custom_components.be_electricity_prices.coordinator_data import (
+        CoordinatorData,
+    )
+    from custom_components.be_electricity_prices.providers._rates import EnergyRates
+
+    freezer.move_to("2026-11-05 12:30:00+01:00")
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "custom",
+            "contract": "custom_monthly",
+            "region": "wallonia",
+            "dso": "ores",
+            "meter": "mono",
+            "solar_regime": "none",
+            "api_key": "TESTKEY",
+        },
+        title="month index",
+    )
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
+    # A custom entry builds its card from its own boxes on every tick; the
+    # legs under test are set by hand instead.
+    coord._refresh_custom_snapshot = MagicMock()  # type: ignore[method-assign]
+    coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    coord._fetch_spot_prices = AsyncMock(  # type: ignore[method-assign]
+        return_value={datetime(2026, 11, 5, h, tzinfo=UTC): 0.25 for h in range(24)}
+    )
+    coord._ensure_historical_spots = AsyncMock()  # type: ignore[method-assign]
+    coord._monthly_spot_mean = MagicMock(return_value=0.2501)  # type: ignore[method-assign]
+    # The load profile is held, so a leg indexed on it bills the weighted mean.
+    coord._tick_profiles = AsyncMock(return_value=(False, True, False))  # type: ignore[method-assign]
+    coord._rlp_weighted_month_mean = MagicMock(return_value=0.2559)  # type: ignore[method-assign]
+
+    async def tick(energy: EnergyRates) -> CoordinatorData:
+        coord._snapshot = make_snapshot(energy=energy)
+        with (
+            patch(
+                "custom_components.be_electricity_prices.coordinator_costs._compute_current_year_cost",
+                AsyncMock(return_value=0.0),
+            ),
+            patch.object(coord, "_save_persistent", AsyncMock()),
+        ):
+            return await coord._update_body()
+
+    data = await tick(
+        SpotMonthlyRates(
+            factor=1.1872, base=0.00848, rlp_indexed=True, rlp_blend="columns"
+        )
+    )
+    assert data.energy_index_mtd == 0.2559
+    assert {round(bd.energy, 6) for bd in data.hourly.values()} == {
+        round(1.1872 * 0.2559 + 0.00848, 6)
+    }
+    data = await tick(SpotMonthlyRates(factor=1.0, base=0.0, quarter_indexed=True))
+    assert data.energy_index_mtd is None
+    data = await tick(FixedRates(single=0.2))
+    assert data.energy_index_mtd is None
+
+
 async def test_a_month_indexed_card_keeps_its_indicative_when_the_mean_is_missing(
     hass: HomeAssistant,
 ) -> None:
