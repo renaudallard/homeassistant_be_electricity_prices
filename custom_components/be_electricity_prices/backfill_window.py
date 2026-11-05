@@ -81,7 +81,7 @@ from .coordinator import BePricesCoordinator
 from .day_night import day_start_for
 from .fees import FirstYearVolume
 from .first_year import first_year_volume
-from .fluvius import ensure_analog_surcharge, ensure_tariff_sheet
+from .fluvius import ensure_analog_surcharge, ensure_area_terms, ensure_tariff_sheet
 from .injection import _injection_hourly_on_cohort
 from .period_cards import period_card
 from .pricing import DsoTariffMode, MeterType
@@ -98,6 +98,7 @@ from .snapshot_resolve import (
     analog_meter,
     entry_annual_injection_kwh,
     entry_annual_kwh,
+    takes_fluvius_network,
 )
 from .spot_stats import (
     _energy_is_rlp_indexed,
@@ -491,6 +492,10 @@ async def _build_context(
             await ensure_tariff_sheet(coordinator._session, year)
             if analog_meter(entry.data, date(year, 1, 1)):
                 await ensure_analog_surcharge(
+                    coordinator._session, year, str(entry.data[CONF_DSO])
+                )
+            if takes_fluvius_network(entry.data):
+                await ensure_area_terms(
                     coordinator._session, year, str(entry.data[CONF_DSO])
                 )
     return _BackfillContext(

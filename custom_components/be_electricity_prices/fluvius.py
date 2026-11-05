@@ -42,9 +42,11 @@ first sheet the year's listing links to answers for every area:
   as the "minimale bijdrage" in EUR a year, which divided by the area's
   capacity rate gives 2,50 kW on every sheet from 2023 to 2026.
 
-A third is the area's own, and is read off the entry's area sheet only for an
-entry on an analog meter: what such a meter pays per kWh over a peak-metered
-one. Fluvius cannot measure an analog meter's peak, "Je betaalt dan een
+The rest is the area's own, and read off the entry's area sheet only where an
+entry needs it. A custom entry that takes its network from Fluvius rather than
+typing it reads the whole peak-metered column (:class:`AreaTerms`), which is
+what every card prints for the area, less VAT. An entry on an analog meter
+reads what such a meter pays per kWh over a peak-metered one. Fluvius cannot measure an analog meter's peak, "Je betaalt dan een
 forfaitair bedrag voor 2.5 kW als maandpiek en een aanvullend tarief voor je
 verbruik in kWh": the capacity tariff on the minimum peak, which is the "Vaste
 term" of the sheet's analog column to the cent on every sheet from 2023 to
@@ -162,6 +164,16 @@ _SHARED_LABELS: Final = (
     "kWh-tarief exclusief nacht",
     "Tarieven voor de toeslagen",
 )
+# The data management fee of a low-voltage connection, the "Laagspanningnet"
+# row of its own section.
+_DATA_SECTION_LABEL: Final = "Tarieven voor het databeheer"
+_LOW_VOLTAGE_LABEL: Final = "Laagspanning"
+# Sized on the slip they catch, a factor of ten or a column read as a rate:
+# 0,0553921 EUR/kWh, 56,12 EUR/kW and 17,85 EUR on Zenne-Dijle for 2026.
+_MAX_AREA_KWH: Final = 0.3
+_MIN_AREA_CAPACITY: Final = 10.0
+_MAX_AREA_CAPACITY: Final = 200.0
+_MAX_DATA_MANAGEMENT: Final = 100.0
 
 
 @dataclass(frozen=True)
@@ -174,6 +186,20 @@ class SheetTerms:
     floor_kw: float | None
 
 
+@dataclass(frozen=True)
+class AreaTerms:
+    """One area's network rates for a peak-metered low-voltage connection, as
+    its sheet gives them, in EUR excluding VAT: the per-kWh rate of the normal
+    and of the exclusive-night register, each the network use, public service
+    and surcharge rates added up, the capacity rate a kW a year and the data
+    management fee a year."""
+
+    kwh_normal: float
+    kwh_exclusive_night: float
+    capacity_per_kw_year: float
+    data_management_per_year: float
+
+
 # Successes are kept for the life of the process: the figures are set per
 # calendar year. A failure is kept only briefly, so a blocked or slow Fluvius
 # does not cost three downloads every tick while a transient one still heals.
@@ -182,11 +208,15 @@ _failed_at: dict[int, datetime] = {}
 # The analog surcharge, per year and DSO key, kept the same way.
 _analog: dict[tuple[int, str], float] = {}
 _analog_failed_at: dict[tuple[int, str], datetime] = {}
+# An area's network rates, per year and DSO key, kept the same way.
+_area: dict[tuple[int, str], AreaTerms] = {}
+_area_failed_at: dict[tuple[int, str], datetime] = {}
 # What an entry's store kept of the two from before the last restart, beneath
 # them: a year or an area this process has read answers its own figure, so a
 # store never stands in the way of a sheet read again (:func:`restore`).
 _stored: dict[int, SheetTerms] = {}
 _stored_analog: dict[tuple[int, str], float] = {}
+_stored_area: dict[tuple[int, str], AreaTerms] = {}
 # One fetch per sheet at a time, for the reason brugel.py gives.
 _locks: dict[Hashable, asyncio.Lock] = {}
 # The listing as last fetched, or what fetching it raised, and when.
@@ -264,6 +294,19 @@ def cached_analog_surcharge(year: int, dso: str) -> float | None:
     return held[max(held)] if held else None
 
 
+def cached_area_terms(year: int, dso: str) -> AreaTerms | None:
+    """``dso``'s network rates for ``year``, or ``None`` before any of its
+    sheets is read: the year's sheet, else the latest earlier one held, never
+    a later one, the rule :func:`cached_analog_surcharge` follows.
+    Synchronous for the reason :func:`cached_network_ceiling` gives."""
+    held = {
+        held_year: terms
+        for (held_year, area), terms in _area_terms().items()
+        if area == dso and held_year <= year
+    }
+    return held[max(held)] if held else None
+
+
 def _sheets() -> dict[int, SheetTerms]:
     """Each year's figures held, as read since the start or else as stored."""
     return {**_stored, **_cache}
@@ -272,6 +315,20 @@ def _sheets() -> dict[int, SheetTerms]:
 def _analog_rates() -> dict[tuple[int, str], float]:
     """Each year's and area's analog surcharge held, the same way."""
     return {**_stored_analog, **_analog}
+
+
+def _area_terms() -> dict[tuple[int, str], AreaTerms]:
+    """Each year's and area's network rates held, the same way."""
+    return {**_stored_area, **_area}
+
+
+def _area_terms_in_bounds(terms: AreaTerms) -> bool:
+    """Whether ``terms`` read as an area's rates rather than a slip."""
+    return (
+        0.0 < terms.kwh_exclusive_night <= terms.kwh_normal < _MAX_AREA_KWH
+        and _MIN_AREA_CAPACITY <= terms.capacity_per_kw_year <= _MAX_AREA_CAPACITY
+        and 0.0 < terms.data_management_per_year < _MAX_DATA_MANAGEMENT
+    )
 
 
 def restore(table: Mapping[str, Any]) -> None:
@@ -300,18 +357,36 @@ def restore(table: Mapping[str, Any]) -> None:
                 floor_kw = None
             _stored.setdefault(year, SheetTerms(ceiling, floor_kw))
     analog = table.get("analog")
-    if not isinstance(analog, Mapping):
+    if isinstance(analog, Mapping):
+        for label, areas in analog.items():
+            if not isinstance(areas, Mapping):
+                continue
+            for dso, rate in areas.items():
+                try:
+                    year, surcharge = int(label), float(rate)
+                except (TypeError, ValueError):
+                    continue
+                if dso in _AREA_SLUGS and 0.0 < surcharge < _MAX_ANALOG_SURCHARGE:
+                    _stored_analog.setdefault((year, dso), surcharge)
+    area = table.get("area")
+    if not isinstance(area, Mapping):
         return
-    for label, areas in analog.items():
+    for label, areas in area.items():
         if not isinstance(areas, Mapping):
             continue
-        for dso, rate in areas.items():
+        for dso, row in areas.items():
             try:
-                year, surcharge = int(label), float(rate)
-            except (TypeError, ValueError):
+                year = int(label)
+                terms = AreaTerms(
+                    kwh_normal=float(row["kwh_normal"]),
+                    kwh_exclusive_night=float(row["kwh_exclusive_night"]),
+                    capacity_per_kw_year=float(row["capacity_per_kw_year"]),
+                    data_management_per_year=float(row["data_management_per_year"]),
+                )
+            except (TypeError, ValueError, KeyError):
                 continue
-            if dso in _AREA_SLUGS and 0.0 < surcharge < _MAX_ANALOG_SURCHARGE:
-                _stored_analog.setdefault((year, dso), surcharge)
+            if dso in _AREA_SLUGS and _area_terms_in_bounds(terms):
+                _stored_area.setdefault((year, dso), terms)
 
 
 def held_table() -> dict[str, Any]:
@@ -320,12 +395,21 @@ def held_table() -> dict[str, Any]:
     analog: dict[str, dict[str, float]] = {}
     for (year, dso), surcharge in sorted(_analog_rates().items()):
         analog.setdefault(str(year), {})[dso] = surcharge
+    area: dict[str, dict[str, dict[str, float]]] = {}
+    for (year, dso), terms in sorted(_area_terms().items()):
+        area.setdefault(str(year), {})[dso] = {
+            "kwh_normal": terms.kwh_normal,
+            "kwh_exclusive_night": terms.kwh_exclusive_night,
+            "capacity_per_kw_year": terms.capacity_per_kw_year,
+            "data_management_per_year": terms.data_management_per_year,
+        }
     return {
         "sheets": {
             str(year): {"ceiling": terms.ceiling, "floor_kw": terms.floor_kw}
             for year, terms in sorted(_sheets().items())
         },
         "analog": analog,
+        "area": area,
     }
 
 
@@ -363,6 +447,29 @@ async def ensure_analog_surcharge(
         _analog_failed_at,
         lambda: _fetch_analog_surcharge(session, year, dso, area),
         f"{year} {area} tariff sheet",
+    )
+
+
+async def ensure_area_terms(
+    session: aiohttp.ClientSession, year: int, dso: str
+) -> AreaTerms | None:
+    """Read ``dso``'s network rates off its own sheet for ``year`` unless they
+    are held, and return them or ``None``, never raising.
+
+    Only for a custom entry that takes its network from Fluvius rather than
+    typing it. ``None`` for a key that is not a Fluvius area. Where the
+    listing has no sheet for the year yet, the year before is read off the
+    same listing to stand in (:func:`cached_area_terms`).
+    """
+    area = _AREA_SLUGS.get(dso)
+    if area is None:
+        return None
+    return await _held_or_read(
+        (year, dso),
+        _area,
+        _area_failed_at,
+        lambda: _fetch_area_terms(session, year, dso, area),
+        f"{year} {area} network rates",
     )
 
 
@@ -467,6 +574,34 @@ async def _fetch_analog_surcharge(
             "is billed the peak-metered kWh rate until it does",
             year,
             area,
+        )
+    return None
+
+
+async def _fetch_area_terms(
+    session: aiohttp.ClientSession, year: int, dso: str, area: str
+) -> AreaTerms | None:
+    """One area's network rates for ``year`` off its sheet, the year before
+    read to stand in where the listing has no sheet for the year yet. A sheet
+    listed that no longer reads is warned of, since the entry then bills the
+    figures it typed, or an earlier year's held."""
+    listing = await _fetch_listing(session)
+    publication = _AREA_PUBLICATION_RE.format(area=area, year=year)
+    if re.search(publication, listing) is not None:
+        payload = await _fetch_workbook(session, listing, publication)
+        terms = None if payload is None else parse_area_terms(payload, year)
+        if terms is None:
+            _LOGGER.warning(
+                "Fluvius %d tariff sheet for %s gives no network rates", year, area
+            )
+        return terms
+    if re.search(_AREA_PUBLICATION_RE.format(area=area, year=year - 1), listing):
+        await ensure_area_terms(session, year - 1, dso)
+        _LOGGER.debug(
+            "Fluvius gives no %d tariff sheet for %s yet: its %d one stands in",
+            year,
+            area,
+            year - 1,
         )
     return None
 
@@ -617,6 +752,90 @@ def parse_analog_surcharge(payload: bytes, year: int) -> float | None:
     # The sheet states its rates to the seventh decimal.
     surcharge = round(own - peak, 7)
     return surcharge if 0.0 < surcharge < _MAX_ANALOG_SURCHARGE else None
+
+
+def parse_area_terms(payload: bytes, year: int) -> AreaTerms | None:
+    """A peak-metered low-voltage connection's network rates off an area's
+    sheet, EUR excluding VAT: each register's kWh rate is the network use kWh
+    rate, the register's public service rate and the surcharge rate added up,
+    which is what the cards print for the area, less VAT.
+
+    ``None`` when the workbook is not the year's tariff list, when a rate
+    cannot be found in the column the capacity rate is in, or when a figure
+    lands outside its bounds. Raises on a payload that is not a workbook; the
+    caller logs it.
+    """
+    rows = _rows(payload)
+    if not _is_years_sheet(rows, year):
+        return None
+    capacity = _labelled_row(rows, _CAPACITY_LABEL)
+    column = None if capacity is None else _number_column(capacity)
+    if capacity is None or column is None:
+        return None
+    kwh = next(
+        (
+            _value(row, column)
+            for row in rows
+            if _KWH_LABEL in row.values() and column in row
+        ),
+        None,
+    )
+    normal, night, surcharges = (
+        _labelled_value(rows, label, column) for label in _SHARED_LABELS
+    )
+    rate = _value(capacity, column)
+    data = _data_management(rows, column)
+    if (
+        kwh is None
+        or normal is None
+        or night is None
+        or surcharges is None
+        or rate is None
+        or data is None
+    ):
+        return None
+    # The sheet states its rates to the seventh decimal.
+    terms = AreaTerms(
+        kwh_normal=round(kwh + normal + surcharges, 7),
+        kwh_exclusive_night=round(kwh + night + surcharges, 7),
+        capacity_per_kw_year=rate,
+        data_management_per_year=data,
+    )
+    return terms if _area_terms_in_bounds(terms) else None
+
+
+def _data_management(rows: list[dict[str, str]], column: str) -> float | None:
+    """The low-voltage row of the data management section, at ``column``."""
+    start = _labelled_index(rows, _DATA_SECTION_LABEL)
+    if start is None:
+        return None
+    for row in rows[start + 1 :]:
+        if any(text.startswith(_LOW_VOLTAGE_LABEL) for text in row.values()):
+            return _value(row, column)
+        if row.get("A"):
+            # The next numbered section: the rows of this one are over.
+            return None
+    return None
+
+
+def _labelled_value(
+    rows: list[dict[str, str]], label: str, column: str
+) -> float | None:
+    """The number at ``column`` of the first row labelled ``label``."""
+    row = _labelled_row(rows, label)
+    return None if row is None else _value(row, column)
+
+
+def _labelled_index(rows: list[dict[str, str]], label: str) -> int | None:
+    """The index of the first row a cell of which starts with ``label``."""
+    return next(
+        (
+            i
+            for i, row in enumerate(rows)
+            if any(text.startswith(label) for text in row.values())
+        ),
+        None,
+    )
 
 
 def _value(row: dict[str, str], column: str) -> float | None:

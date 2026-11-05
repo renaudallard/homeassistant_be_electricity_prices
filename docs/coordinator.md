@@ -113,7 +113,8 @@ _update_body (coordinator_tick.py)
  ├─ _sync_deprecated_supplier_issue(), _sync_withdrawn_contract_issue()
  ├─ unless the setup tick: warm_meter_reads(), _ensure_annual_volume()
  ├─ ensure_power_term(year)              Brussels only (brugel.py)
- ├─ ensure_tariff_sheet(year)            Flanders only (fluvius.py)
+ ├─ ensure_tariff_sheet(year)            Flanders only (fluvius.py), with an analog
+ │                                       meter's surcharge and a custom entry's area rates
  ├─ ensure_vat_rates()                   card archive on (vat_rates.py)
  ├─ ensure_law_archive()                 card archive on (law_archive.py)
  ├─ ensure_excise_law()                  every entry (excise_law.py)

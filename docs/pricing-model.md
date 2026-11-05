@@ -1803,9 +1803,13 @@ accordingly:
   figure Luminus prints in its "Compteur classique" column). An analog
   exclusive-night meter is not billed it again: the household pays the one
   flat amount, on the main entry (`bills_capacity`, `fees.py`).
+- `_resolve_fluvius_network` (`snapshot_resolve.py`) first puts a custom entry that
+  asks for it on its area's sheet of the delivery year (`fluvius.cached_area_terms`),
+  in place of the network it typed, with no transport and no day/night split.
 - `_resolve_analog_meter` (`snapshot_resolve.py`) adds the analog surcharge, the
   analog kWh rate less the piekmeting one, to every distribution rate of the
-  entry's own overlay, the exclusive-night one included, and clears the
+  entry's own overlay (a custom entry's only when it takes Fluvius's), the
+  exclusive-night one included, and clears the
   ceiling. The surcharge is read off the area's own sheet of the delivery year
   (`fluvius.cached_analog_surcharge`, the year before standing in for a year
   not published yet) and put on the card's VAT basis with `on_card_basis`: 2,73

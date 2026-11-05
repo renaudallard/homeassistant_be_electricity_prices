@@ -1414,3 +1414,138 @@ def test_an_unset_custom_vat_rate_is_the_months_residential_one() -> None:
         snap = build_snapshot(data, const.REGION_FLANDERS, const.DSO_FLUVIUS_ANTWERPEN)
     assert schema({})[const.CONF_CUSTOM_VAT_RATE] == 0.07
     assert snap.taxes.vat_rate == 0.07
+
+
+def _flemish_network(**extra: Any) -> dict[str, Any]:
+    """A Flemish custom entry whose network was typed by hand."""
+    return {
+        const.CONF_SUPPLIER: const.SUPPLIER_CUSTOM,
+        const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+        const.CONF_REGION: const.REGION_FLANDERS,
+        const.CONF_DSO: "fluvius_zenne_dijle",
+        const.CONF_METER: const.METER_MONO,
+        const.CONF_CUSTOM_ENERGY_SINGLE: 0.1,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.04,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_EXCLUSIVE_NIGHT: 0.03,
+        const.CONF_CUSTOM_DSO_TRANSPORT: 0.01,
+        const.CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR: 50.0,
+        const.CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR: 15.0,
+        const.CONF_CUSTOM_VAT_RATE: 0.06,
+        **extra,
+    }
+
+
+def _resolved_network(data: dict[str, Any]) -> tuple[float, Any]:
+    """The per-kWh network of November 2026 with VAT, and the overlay."""
+    from datetime import date
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.pricing import compute_breakdown
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        _resolve_snapshot,
+    )
+
+    raw = build_snapshot(data, const.REGION_FLANDERS, "fluvius_zenne_dijle")
+    snap = _resolve_snapshot(
+        SimpleNamespace(data=data),  # type: ignore[arg-type]
+        raw,
+        annual_kwh=3500.0,
+        delivery_month=date(2026, 11, 1),
+    )
+    breakdown = compute_breakdown(
+        snap,
+        "fluvius_zenne_dijle",
+        const.REGION_FLANDERS,
+        datetime(2026, 11, 5, 11, tzinfo=UTC),
+        meter=data[const.CONF_METER],
+    )
+    return breakdown.network, snap.dsos["fluvius_zenne_dijle"]
+
+
+def _hold_zenne_dijle_2026() -> None:
+    from pathlib import Path
+
+    from custom_components.be_electricity_prices import fluvius
+
+    sheet = Path(__file__).parent / "fixtures" / "fluvius_zenne_dijle_2026.xlsx"
+    terms = fluvius.parse_area_terms(sheet.read_bytes(), 2026)
+    assert terms is not None
+    fluvius._area[(2026, "fluvius_zenne_dijle")] = terms
+
+
+def test_a_custom_entry_can_take_its_network_off_fluvius_s_sheet() -> None:
+    """Ticked, the sheet of the delivery year replaces what was typed: on
+    Zenne-Dijle for November 2026 the 5,87 c/kWh, 59,49 EUR/kW and 18,92 EUR
+    a year every card prints, no transport, which the sheet's rates include,
+    and no day/night split, which a peak-metered connection does not have."""
+    _hold_zenne_dijle_2026()
+    network, overlay = _resolved_network(
+        _flemish_network(
+            **{
+                const.CONF_CUSTOM_DSO_FROM_FLUVIUS: True,
+                const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK: 0.06,
+                const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK: 0.02,
+            }
+        )
+    )
+    assert round(network * 100, 2) == 5.87
+    assert network == pytest.approx(0.0553921 * 1.06)
+    assert overlay.transport == 0.0
+    assert overlay.distribution_peak is None
+    assert overlay.distribution_offpeak is None
+    assert overlay.distribution_exclusive_night == pytest.approx(0.0501456)
+    assert round(overlay.capacity_eur_per_kw_year, 2) == 59.49
+    assert round(overlay.data_management_per_year, 2) == 18.92
+
+
+def test_the_typed_network_stands_unticked_or_with_no_sheet_held() -> None:
+    """Unticked, the figures typed are billed whatever sheet is held; ticked
+    with none held, they stand in, so the entry still prices."""
+    from custom_components.be_electricity_prices import fluvius
+
+    typed = (0.04 + 0.01) * 1.06
+    _hold_zenne_dijle_2026()
+    network, overlay = _resolved_network(_flemish_network())
+    assert network == pytest.approx(typed)
+    assert overlay.transport == pytest.approx(0.01)
+    fluvius._area.clear()
+    network, _overlay = _resolved_network(
+        _flemish_network(**{const.CONF_CUSTOM_DSO_FROM_FLUVIUS: True})
+    )
+    assert network == pytest.approx(typed)
+
+
+def test_an_analog_meter_on_fluvius_s_network_pays_the_analog_rate() -> None:
+    """The analog surcharge, kept off a custom entry's typed figures, is laid
+    on the sheet's: 9,70 c/kWh on Zenne-Dijle in 2026, the analog column every
+    card prints."""
+    from custom_components.be_electricity_prices import fluvius
+
+    _hold_zenne_dijle_2026()
+    fluvius._analog[(2026, "fluvius_zenne_dijle")] = 0.0360809
+    analog = {const.CONF_ANALOG_METER: True}
+    network, _overlay = _resolved_network(
+        _flemish_network(**{const.CONF_CUSTOM_DSO_FROM_FLUVIUS: True, **analog})
+    )
+    assert round(network * 100, 2) == 9.70
+    network, _overlay = _resolved_network(_flemish_network(**analog))
+    assert network == pytest.approx((0.04 + 0.01) * 1.06)
+
+
+def test_only_a_flemish_network_step_offers_fluvius_s_sheet() -> None:
+    """Every Flemish area is Fluvius's; the box comes first there and nowhere
+    else."""
+    for region, offered in (
+        (const.REGION_FLANDERS, True),
+        (const.REGION_WALLONIA, False),
+        (const.REGION_BRUSSELS, False),
+    ):
+        keys = [
+            str(k)
+            for k in _custom_dso_schema(
+                {const.CONF_REGION: region, const.CONF_METER: const.METER_MONO}
+            ).schema
+        ]
+        assert (const.CONF_CUSTOM_DSO_FROM_FLUVIUS in keys) is offered, region
+        if offered:
+            assert keys[0] == const.CONF_CUSTOM_DSO_FROM_FLUVIUS

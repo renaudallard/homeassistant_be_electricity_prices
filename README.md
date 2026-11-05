@@ -575,7 +575,12 @@ dropped rather than billed on the new card.
    is still an **Analog meter** (off by default). On the *Expert: custom
    formula* supplier the network figures you type are billed as typed: there
    the box bills the capacity tariff on 2,5 kW and quotes the cards the
-   comparison page sets against yours on the analog rates. The social tariff
+   comparison page sets against yours on the analog rates. A Flemish custom
+   entry can instead tick **Take them from Fluvius's tariff sheet for my
+   area** on its network step: the rates then come from Fluvius's published
+   sheet of each delivery year, the analog rate included on an analog meter,
+   and follow Fluvius's change on 1 January by themselves; the figures typed
+   only stand in until the sheet is read. The social tariff
    has no capacity tariff and keeps the CREG's network component: there the
    box changes nothing on your own bill and only quotes the cards compared
    with yours on the analog rates and 2,5 kW. A social-tariff entry that

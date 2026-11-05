@@ -60,8 +60,11 @@ def _nothing_held() -> None:
     fluvius._failed_at.clear()
     fluvius._analog.clear()
     fluvius._analog_failed_at.clear()
+    fluvius._area.clear()
+    fluvius._area_failed_at.clear()
     fluvius._stored.clear()
     fluvius._stored_analog.clear()
+    fluvius._stored_area.clear()
     fluvius._listing = None
 
 
@@ -96,6 +99,45 @@ def test_a_figure_outside_the_bounds_is_refused(tmp_path: Path) -> None:
                 )
             dst.writestr(info, data)
     assert fluvius.parse_sheet(out.read_bytes(), 2026) is None
+
+
+def test_an_areas_network_rates_are_its_peak_metered_column() -> None:
+    """Each register's kWh rate is the network use, public service and
+    surcharge rates added up: on Zenne-Dijle for 2026 the November cards
+    print 5,87 and 5,32 c/kWh, 59,49 EUR/kW and 18,92 EUR a year, which is
+    this with 6% VAT. The 2023 sheet keeps the household's column one further
+    along, as the ceiling's test shows."""
+    terms = fluvius.parse_area_terms(_SHEET_2026, 2026)
+    assert terms == fluvius.AreaTerms(0.0553921, 0.0501456, 56.1228635, 17.85)
+    assert terms is not None
+    assert (
+        round(terms.kwh_normal * 106, 2),
+        round(terms.kwh_exclusive_night * 106, 2),
+        round(terms.capacity_per_kw_year * 1.06, 2),
+        round(terms.data_management_per_year * 1.06, 2),
+    ) == (5.87, 5.32, 59.49, 18.92)
+    assert fluvius.parse_area_terms(_SHEET_2023, 2023) == fluvius.AreaTerms(
+        0.0317434, 0.0209886, 37.7649625, 13.71
+    )
+    assert fluvius.parse_area_terms(_SHEET_2026, 2027) is None
+
+
+def test_an_areas_rate_outside_the_bounds_is_refused(tmp_path: Path) -> None:
+    """A capacity rate read ten times over is a slip, not a tariff."""
+    out = tmp_path / "slipped.xlsx"
+    with (
+        zipfile.ZipFile(_FIXTURES / "fluvius_zenne_dijle_2026.xlsx") as src,
+        zipfile.ZipFile(out, "w") as dst,
+    ):
+        for info in src.infolist():
+            data = src.read(info)
+            if info.filename == "xl/worksheets/sheet1.xml":
+                assert data.count(b"<v>56.122863500000001</v>") == 1
+                data = data.replace(
+                    b"<v>56.122863500000001</v>", b"<v>561.22863500000001</v>"
+                )
+            dst.writestr(info, data)
+    assert fluvius.parse_area_terms(out.read_bytes(), 2026) is None
 
 
 def test_the_analog_surcharge_is_the_two_kwh_rates_apart() -> None:
@@ -224,6 +266,60 @@ async def test_an_analog_meter_reads_its_own_areas_sheet() -> None:
     # Not a Fluvius area: nothing to ask for.
     assert await fluvius.ensure_analog_surcharge(session, 2026, "ores") is None
     assert session.asked == []
+
+
+async def test_a_custom_entry_reads_its_areas_rates_off_its_sheet() -> None:
+    """Off the area's own sheet, kept, and standing in for a year Fluvius has
+    not published, never for an earlier one."""
+    session: Any = _Session()
+    terms = await fluvius.ensure_area_terms(session, 2026, "fluvius_zenne_dijle")
+    assert terms == fluvius.parse_area_terms(_SHEET_2026, 2026)
+    assert session.asked == [
+        fluvius._LISTING_URL,
+        fluvius._SITE + _PUBLICATION,
+        fluvius._SITE + _WORKBOOK,
+    ]
+    session.asked.clear()
+    assert (
+        await fluvius.ensure_area_terms(session, 2026, "fluvius_zenne_dijle") == terms
+    )
+    assert session.asked == [], "a held sheet was fetched again"
+    # 2027 is not listed yet: nothing for it, and 2026's stands in.
+    assert await fluvius.ensure_area_terms(session, 2027, "fluvius_zenne_dijle") is None
+    assert fluvius.cached_area_terms(2027, "fluvius_zenne_dijle") == terms
+    assert fluvius.cached_area_terms(2025, "fluvius_zenne_dijle") is None
+    assert fluvius.cached_area_terms(2026, "fluvius_antwerpen") is None
+    # Not a Fluvius area: nothing to ask for.
+    session.asked.clear()
+    assert await fluvius.ensure_area_terms(session, 2026, "ores") is None
+    assert session.asked == []
+
+
+def test_the_store_keeps_the_area_rates() -> None:
+    """What an entry's store kept stands in after a restart, and a row that
+    does not read as an area's rates is skipped."""
+    terms = fluvius.parse_area_terms(_SHEET_2026, 2026)
+    assert terms is not None
+    fluvius._area[(2026, "fluvius_zenne_dijle")] = terms
+    stored = fluvius.held_table()
+    fluvius._area.clear()
+    fluvius.restore(stored)
+    assert fluvius.cached_area_terms(2026, "fluvius_zenne_dijle") == terms
+    fluvius._stored_area.clear()
+    row = stored["area"]["2026"]["fluvius_zenne_dijle"]
+    fluvius.restore(
+        {
+            "area": {
+                "2026": {
+                    "fluvius_zenne_dijle": {**row, "capacity_per_kw_year": 5612.0},
+                    "ores": row,
+                },
+                "x": {"fluvius_west": row},
+            }
+        }
+    )
+    fluvius.restore({"area": "nonsense"})
+    assert fluvius.held_table()["area"] == {}
 
 
 async def test_an_area_sheet_that_cannot_be_read_never_raises() -> None:
@@ -383,12 +479,15 @@ def test_the_sheet_is_read_before_the_card_is_resolved() -> None:
     assert body.index("ensure_analog_surcharge(") < body.index(
         "_maybe_refresh_snapshot()"
     )
+    # And a custom entry's area rates before its card is built.
+    assert body.index("ensure_area_terms(") < body.index("_refresh_custom_snapshot()")
     resolver = inspect.getsource(snapshot_resolve._resolve_snapshot)
     assert "cached_network_ceiling(month.year)" in resolver
     # A backfill asks for every year its window prices, not just this one.
     context = inspect.getsource(backfill._build_context)
     assert "ensure_tariff_sheet(coordinator._session, year)" in context
     assert "coordinator._session, year, str(entry.data[CONF_DSO])" in context
+    assert "ensure_area_terms(" in context
 
 
 async def test_a_restart_puts_the_ceiling_on_the_stored_card(hass: Any) -> None:
@@ -577,7 +676,7 @@ def test_the_store_keeps_the_figures_beneath_what_is_read() -> None:
         }
     )
     fluvius.restore({"sheets": [0.3], "analog": "nonsense"})
-    assert fluvius.held_table() == {"sheets": {}, "analog": {}}
+    assert fluvius.held_table() == {"sheets": {}, "analog": {}, "area": {}}
 
 
 async def test_a_restart_without_fluvius_bills_the_sheet_last_read(

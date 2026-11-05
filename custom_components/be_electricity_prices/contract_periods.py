@@ -80,7 +80,7 @@ from .energy_meters import (
 )
 from .fees import billed_peak_for
 from .flow_contracts import _contract_is_month_indexed
-from .fluvius import ensure_analog_surcharge
+from .fluvius import ensure_analog_surcharge, ensure_area_terms
 from .meter_daily import _measured_kwh
 from .meter_faults import _without_today
 from .meter_hourly import _metered_sides
@@ -92,6 +92,7 @@ from .providers.base import (
 from .snapshot_resolve import (
     analog_meter,
     replaced_meter_facts,
+    takes_fluvius_network,
 )
 from .spot_stats import _energy_is_rlp_indexed, _spp_weighting_enabled, spots_available
 from .ytd_cost import _compute_current_year_cost
@@ -615,7 +616,9 @@ async def ensure_period_analog_rates(
     session: aiohttp.ClientSession, periods: list[ContractPeriod]
 ) -> None:
     """Read the area's analog kWh rate for every year an earlier contract held
-    on an analog meter covers, until the meter was replaced where it was.
+    on an analog meter covers, until the meter was replaced where it was, and
+    the area's network rates for every year an earlier custom contract that
+    took them off Fluvius's sheet covers.
 
     The tick reads it for the entry's own meter only, so a contract kept analog
     at a recorded switch found none once the entry had gone digital and was
@@ -625,10 +628,16 @@ async def ensure_period_analog_rates(
     (``period_card``), which is where a month no archive holds takes it.
     """
     for period in periods:
+        dso = str(period.data.get(CONF_DSO, ""))
+        years = range(period.start.year, period.end.year + 1)
+        # An earlier custom contract that took its network off the area's
+        # sheet, for the same reason.
+        if takes_fluvius_network(period.data):
+            for year in years:
+                await ensure_area_terms(session, year, dso)
         if not analog_meter(period.data, period.start):
             continue
-        dso = str(period.data.get(CONF_DSO, ""))
-        for year in range(period.start.year, period.end.year + 1):
+        for year in years:
             await ensure_analog_surcharge(session, year, dso)
 
 

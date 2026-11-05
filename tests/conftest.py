@@ -231,8 +231,11 @@ def _fluvius_sheets_as_published() -> Iterator[None]:
         fluvius._failed_at.clear()
         fluvius._analog.clear()
         fluvius._analog_failed_at.clear()
+        fluvius._area.clear()
+        fluvius._area_failed_at.clear()
         fluvius._stored.clear()
         fluvius._stored_analog.clear()
+        fluvius._stored_area.clear()
         fluvius._listing = None
 
     _forget()
@@ -249,6 +252,9 @@ def _fluvius_sheets_as_published() -> Iterator[None]:
         patch.object(coordinator_tick, "ensure_analog_surcharge", AsyncMock()),
         patch.object(backfill_window, "ensure_analog_surcharge", AsyncMock()),
         patch.object(contract_periods, "ensure_analog_surcharge", AsyncMock()),
+        patch.object(coordinator_tick, "ensure_area_terms", AsyncMock()),
+        patch.object(backfill_window, "ensure_area_terms", AsyncMock()),
+        patch.object(contract_periods, "ensure_area_terms", AsyncMock()),
     ):
         yield
     _forget()

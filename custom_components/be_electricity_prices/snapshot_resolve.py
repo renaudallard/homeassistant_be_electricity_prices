@@ -54,6 +54,7 @@ from .const import (
     CONF_ANALOG_METER,
     CONF_ANALOG_REPLACED,
     CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_CUSTOM_DSO_FROM_FLUVIUS,
     CONF_CUSTOM_PROFESSIONAL,
     CONF_CUSTOM_VAT_RATE,
     CONF_DIRECT_DEBIT,
@@ -79,7 +80,12 @@ from .const import (
     SUPPLIER_SOCIAL,
 )
 from .excise_law import household_schedule
-from .fluvius import cached_analog_surcharge, cached_network_ceiling, tariff_sheet_held
+from .fluvius import (
+    cached_analog_surcharge,
+    cached_area_terms,
+    cached_network_ceiling,
+    tariff_sheet_held,
+)
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
 from .providers._resolve import (
     apply_vat,
@@ -184,10 +190,11 @@ def offers_analog_meter(data: Mapping[str, Any]) -> bool:
     A Flemish mono, bi-hourly or exclusive-night meter: a dynamic contract is
     billed off a digital meter's quarter-hours, and only Fluvius bills the two
     apart. On the custom supplier and the social tariff too: the network
-    figures of the first are the ones typed for the household's meter, and the
-    CREG's network component replaces the operator's tariffs on the second, so
-    both cards stay as they are (:func:`_resolve_analog_meter`), but the cards
-    either is compared with are quoted on the meter it has.
+    figures of the first are the ones typed for the household's meter, unless
+    it takes Fluvius's (:func:`takes_fluvius_network`), and the CREG's network
+    component replaces the operator's tariffs on the second, so both cards
+    stay as they are (:func:`_resolve_analog_meter`), but the cards either is
+    compared with are quoted on the meter it has.
     """
     meter = data.get(CONF_METER, METER_MONO)
     return data.get(CONF_REGION) == REGION_FLANDERS and meter in (
@@ -279,6 +286,48 @@ def meter_segment(data: Mapping[str, Any], day: date) -> date:
     return first
 
 
+def takes_fluvius_network(data: Mapping[str, Any]) -> bool:
+    """Whether this entry is a custom one taking its network rates off
+    Fluvius's sheet for its area rather than the figures it typed."""
+    return data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM and bool(
+        data.get(CONF_CUSTOM_DSO_FROM_FLUVIUS)
+    )
+
+
+def _resolve_fluvius_network(
+    entry: ConfigEntry, snap: SupplierSnapshot, month: date
+) -> SupplierSnapshot:
+    """A custom entry's network overlay as Fluvius's sheet of the delivery
+    year gives it for the entry's area, where the entry asks for it.
+
+    The figures typed into the entry stand while no sheet of that year or an
+    earlier one is held, and for a key that is not a Fluvius area. The sheet
+    is excluding VAT, the custom card's own basis. Transmission is included
+    in its rates, and a peak-metered connection pays one rate day and night,
+    so a typed transport and day/night split go with the typed figures. The
+    ceiling and an analog meter's surcharge are laid on after it, as on every
+    card.
+    """
+    if not takes_fluvius_network(entry.data):
+        return snap
+    dso = str(entry.data.get(CONF_DSO, ""))
+    terms = cached_area_terms(month.year, dso)
+    overlay = snap.dsos.get(dso)
+    if terms is None or overlay is None:
+        return snap
+    sheet = replace(
+        overlay,
+        distribution_single=terms.kwh_normal,
+        distribution_peak=None,
+        distribution_offpeak=None,
+        distribution_exclusive_night=terms.kwh_exclusive_night,
+        transport=0.0,
+        capacity_eur_per_kw_year=terms.capacity_per_kw_year,
+        data_management_per_year=terms.data_management_per_year,
+    )
+    return replace(snap, dsos={**snap.dsos, dso: sheet})
+
+
 def entry_analog_surcharge(
     entry: ConfigEntry, year: int, day: date | None = None
 ) -> float | None:
@@ -320,12 +369,17 @@ def _resolve_analog_meter(
 
     Identity on a digital meter, before the sheet is read, and on a card whose
     network is not Fluvius's tariffs: the custom supplier's, whose figures are
-    typed for the household's own meter, and the social tariff's. Only the
+    typed for the household's own meter unless it takes them off Fluvius's
+    sheet (:func:`takes_fluvius_network`), and the social tariff's. Only the
     entry's own area, since the surcharge is that area's. On the meter the
     entry has now, or the one ``day`` was billed on (:func:`meter_of_day`).
     """
     surcharge = entry_analog_surcharge(entry, month.year, day)
-    if surcharge is None or snap.supplier in (SUPPLIER_CUSTOM, SUPPLIER_SOCIAL):
+    if (
+        surcharge is None
+        or snap.supplier == SUPPLIER_SOCIAL
+        or (snap.supplier == SUPPLIER_CUSTOM and not takes_fluvius_network(entry.data))
+    ):
         return snap
     dso = str(entry.data.get(CONF_DSO, ""))
     overlay = snap.dsos.get(dso)
@@ -512,6 +566,9 @@ def _resolve_snapshot(
     resolved = resolve_brussels_power_term(
         resolved, terms=cached_power_term(month.year), month=month
     )
+    # A custom entry's network off Fluvius's sheet of the delivery year, where
+    # it asks for it, before the ceiling and the analog surcharge are laid on.
+    resolved = _resolve_fluvius_network(entry, resolved, month)
     # Before apply_vat for the same reason, and the month decides it the way
     # it decides the two federal levies below: the VREG sets one ceiling for
     # all of Flanders per calendar year, so a card stating another one is out

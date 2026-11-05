@@ -1370,6 +1370,18 @@ public service rates ("kWh-tarief normaal", "kWh-tarief exclusief nacht") or
 the surcharges row differ between the two columns, since the kWh rates would
 then not be the whole difference, and a figure outside 0 to 0,2 EUR/kWh.
 
+A custom entry that ticks **Take them from Fluvius's tariff sheet for my area**
+reads its area's whole peak-metered column instead of typing it
+(`parse_area_terms`, `AreaTerms`): each register's kWh rate is the network
+use, public service and surcharge rates added up, beside the capacity rate
+and the data management fee, all excluding VAT. On Zenne-Dijle for 2026 that
+is 0,0553921 and 0,0501456 EUR/kWh, 56,12 EUR/kW and 17,85 EUR a year, the
+5,87, 5,32, 59,49 and 18,92 every card prints with 6% VAT. Refused: a rate
+missing from the capacity rate's column, or a figure outside its bounds.
+`ensure_area_terms` reads it in the tick and the backfill like the analog
+rate, for every year a window spans, with the same year-before stand-in,
+backoff and store (`cached_area_terms`, the `area` part of `held_table`).
+
 ### Caching and failure
 
 `ensure_tariff_sheet` runs in the tick of a Flemish entry, before the card
