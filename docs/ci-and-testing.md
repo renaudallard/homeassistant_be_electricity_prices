@@ -957,7 +957,10 @@ The diff runs both ways. A registered product the listing no longer names fails
 like from here: OCTA+ replaced Fixed, Flux, Eco Fixed and Eco Flux with its October 2026 cards
 and left their files up, serving the August cards with a clean parse, so every other check stayed
 green. A product the registry already marks withdrawn (`Contract.withdrawn`) is left out of the
-OCTA+ baseline, so it is not reported gone every night and its slug coming back reads as new.
+OCTA+, Mega, Eneco and Frank baselines, so it is not reported gone every night and its slug
+coming back reads as new. Frank's list has been its terms page's links since 5 November 2026:
+the 60 newest uploads it read before still held VT's October card after the tier's withdrawal,
+so VT read as sold.
 Suppliers in `_CATALOG_PARTIAL` skip this half: Engie's sitemap names no page for Basic Online,
 Direct Online or Empty House while all three cards are current
 (`test_a_product_the_listing_no_longer_names_is_reported`). And a product whose card is found

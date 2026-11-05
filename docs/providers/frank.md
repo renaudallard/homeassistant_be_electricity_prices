@@ -187,9 +187,17 @@ JN card on 30 October 2026, and "Dynamisch VT Slim", uploaded after the VT card 
 December 2024 and March 2025, are other products, and were read as those tiers' cards
 before (`test_matches_suffix_rejects_another_product_sharing_the_token`).
 
-No tier is retired. `discover()` (`providers/frank.py`) surfaces any unrecognised
-suffix as `frank_dynamic_<suffix>` so the catalog-drift detector flags a genuinely new
-tier instead of silently ignoring it, as it did for Plus in October 2026.
+VT is withdrawn from 1 November 2026 (`_WITHDRAWN`). `discover()` (`providers/frank.py`)
+reads the tiers Frank sells off its terms page, https://www.frankenergie.be/nl/voorwaarden,
+whose links read "Actuele Tariefkaart Stroom Dynamisch" followed by the tier's word, none
+for the standard tier and "Slim" where the files say `SL`. It read the 60 newest uploads
+before, which still held VT's October card days after the withdrawal, so VT read as sold;
+the page dropped VT's link on 4 November. A tier word no contract has reads as
+`frank_dynamic_<words>`, so the catalog-drift detector flags a genuinely new tier, as it
+did for Plus in October 2026, and the live check's baseline leaves VT out, so its link
+coming back reads as new. `tests/test_discover.py` reads the pages of 29 September (VT
+linked, no Plus yet) and 5 November 2026 (the five tiers sold). The page also links five
+"Stroom Variabel" tiers, which no contract here covers and the list does not read.
 
 ## Fetch strategy
 

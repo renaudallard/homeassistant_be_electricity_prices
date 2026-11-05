@@ -35,7 +35,6 @@ that grows the catalogue, fails fast.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from typing import Any, cast
 
@@ -493,35 +492,55 @@ def test_cociter_discover_surfaces_new_family() -> None:
     assert "RCNew_FAM" in discovered - known
 
 
-def _frank_cms_body(filenames: list[str]) -> str:
-    """Build a Sanity CMS JSON response body for the given filenames."""
-    return json.dumps({"result": [{"originalFilename": f} for f in filenames]})
+_FRANK_SOLD = {
+    "frank_dynamic",
+    "frank_dynamic_hv",
+    "frank_dynamic_jn",
+    "frank_dynamic_slim",
+    "frank_dynamic_plus",
+}
 
 
 def test_frank_discover_matches_registry() -> None:
-    # Frank scrapes the Sanity CMS rather than an HTML listing; one PDF
-    # per tier maps back to its contract id (a bare month is the standard
-    # tier, the suffix words HV/VT/JN/SL/Plus the others).
-    session = _FakeSession(
-        _frank_cms_body(
-            [
-                f"Tariefkaart Elektriciteit Dynamisch{sfx} Januari 2026.pdf"
-                for sfx in ("", " HV", " VT", " JN", " SL", " Plus")
-            ]
-        )
-    )
+    # Frank's terms page links the card of each dynamic tier it sells, and a
+    # withdrawn tier leaves it: on 5 November 2026 the five sold, VT gone.
+    session = _FakeSession(_read("frank.html"))
     discovered = _run(frank_mod.discover(session))
-    expected = {t[0] for t in frank_mod._TIERS}
-    assert discovered == expected
+    assert discovered == _FRANK_SOLD
+    assert discovered == {
+        t[0] for t in frank_mod._TIERS if t[0] not in frank_mod._WITHDRAWN
+    }
+
+
+def test_frank_discover_reads_the_tiers_the_page_links() -> None:
+    # On 29 September 2026 the page still linked VT's card, and Plus had none
+    # yet; the page writes Slim where the files say SL.
+    session = _FakeSession(_read("frank_2026-09.html"))
+    assert _run(frank_mod.discover(session)) == _FRANK_SOLD - {"frank_dynamic_plus"} | {
+        "frank_dynamic_korting"
+    }
+
+
+def test_frank_discover_reads_the_dynamic_links_alone() -> None:
+    # The page also links five Stroom Variabel tiers under the same words;
+    # they are other products, so Plus's variable card alone sells no
+    # dynamic Plus.
+    page = _read("frank.html")
+    without = page.replace("Actuele Tariefkaart Stroom Dynamisch Plus", "")
+    assert without != page and "Actuele Tariefkaart Stroom Variabel Plus" in without
+    assert _run(frank_mod.discover(_FakeSession(without))) == _FRANK_SOLD - {
+        "frank_dynamic_plus"
+    }
 
 
 def test_frank_discover_surfaces_new_tier() -> None:
-    session = _FakeSession(
-        _frank_cms_body(["Tariefkaart Elektriciteit Dynamisch XL Januari 2026.pdf"])
+    body = (
+        _read("frank.html") + '<a href="x">Actuele Tariefkaart Stroom Dynamisch XL</a>'
     )
+    session = _FakeSession(body)
     discovered = _run(frank_mod.discover(session))
     known = {t[0] for t in frank_mod._TIERS}
-    assert "frank_dynamic_xl" in discovered - known
+    assert discovered - known == {"frank_dynamic_xl"}
 
 
 # ---- error handling ---------------------------------------------------------
@@ -639,7 +658,7 @@ def test_discover_returns_empty_on_http_error() -> None:
     assert _run(ecofix_mod.discover(session)) == set()
     # EBEM scrapes the listing page; an HTTP error must yield set().
     assert _run(ebem_mod.discover(session)) == set()
-    # Frank queries the Sanity CMS; a 5xx raises ExtractorError -> set().
+    # Frank reads its terms page; a 5xx raises ExtractorError -> set().
     assert _run(frank_mod.discover(session)) == set()
     # Energy Knights, EnergyVision and Elegant scrape a listing page.
     assert _run(energyknights_mod.discover(session)) == set()

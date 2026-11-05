@@ -2394,7 +2394,8 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
     "ecofix": lambda m: {c.contract_id for c in m._CONTRACTS},
     "ecopower": lambda m: set(m.DISCOVER_IDS),
     "dats24": lambda m: {m._CONTRACT_ID},
-    "frank": lambda m: {t[0] for t in m._TIERS},
+    # A withdrawn tier is left out, so its link coming back reads as new.
+    "frank": lambda m: {t[0] for t in m._TIERS if t[0] not in m._WITHDRAWN},
     "energyvision": lambda m: set(m.DISCOVER_IDS),
     "energyknights": lambda m: set(m.DISCOVER_IDS),
     "aspiravi": lambda m: {c.id for c in m.EXTRACTOR.contracts},

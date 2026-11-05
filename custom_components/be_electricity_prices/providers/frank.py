@@ -63,7 +63,9 @@ The formula is the same on either grid, so the card cannot say which side a
 household is on and nothing here can read it. The tiers carry
 ``quarter_hourly_option`` and the config flow asks; see ``_TIERS``.
 
-Data source: Sanity file asset API (public, no auth required).
+Data source: Sanity file asset API (public, no auth required). The terms
+page (https://www.frankenergie.be/nl/voorwaarden) links each tier's current
+card, which discover reads for the live check.
 Region: Flanders only (all 8 Fluvius sub-areas).
 """
 
@@ -171,10 +173,13 @@ _WITHDRAWN: dict[str, date] = {"frank_dynamic_korting": date(2026, 11, 1)}
 _TIER_SUFFIX: dict[str, str | None] = {t[0]: t[2] for t in _TIERS}
 _VALID_IDS: frozenset[str] = frozenset(_TIER_SUFFIX)
 
-# discover() reverse maps: a filename suffix back to its contract id, and
-# the bare-month (suffixless) filename to the standard tier.
-_SUFFIX_TO_ID: dict[str, str] = {v: k for k, v in _TIER_SUFFIX.items() if v is not None}
-_DEFAULT_TIER_ID: str = next(t[0] for t in _TIERS if t[2] is None)
+# discover() reads the words the terms page links each tier's card under:
+# the file names' suffix, none for the standard tier, and "Slim" where the
+# files say "SL".
+_PAGE_TIER_IDS: dict[str, str] = {
+    **{(suffix or "").casefold(): cid for cid, _label, suffix in _TIERS},
+    "slim": "frank_dynamic_slim",
+}
 
 # Frank alternates the Slim tier's filename token between the abbreviation
 # "SL" and the full word "Slim" from one month to the next (both are live in
@@ -415,38 +420,39 @@ async def probe(
     return None
 
 
-async def discover(session: aiohttp.ClientSession) -> set[str]:
-    """Surface the dynamic tiers visible in Frank Energie's Sanity CMS.
+_TERMS_URL = "https://www.frankenergie.be/nl/voorwaarden"
+# The terms page links the card of every product Frank sells today, the
+# dynamic tiers as "Actuele Tariefkaart Stroom Dynamisch" followed by the
+# tier's word but for the standard tier. On 5 November 2026 they were the
+# standard, HV, JN, Slim and Plus tiers: VT's link left the page with the
+# tier. A link's text stands in the HTML, ended by "<", and in the page's
+# script payload, ended by an escaped quote.
+_CATALOG_RE = re.compile(r"Actuele Tariefkaart Stroom Dynamisch\b([^<\\\"]*)")
 
-    Each tier publishes one PDF per month named
-    "... Tariefkaart Dynamisch[ <suffix>] <Month> <Year>". Map the word
-    after "Dynamisch" back to our contract id - a bare month name is the
-    standard tier - and surface an unrecognised suffix as
-    ``frank_dynamic_<suffix>`` so the catalog drift detector flags a new
-    tier instead of silently ignoring it.
+
+def parse_catalog(page: str) -> set[str]:
+    """The dynamic tiers the terms page links a card for, by contract id; a
+    tier no contract is reads as ``frank_dynamic_<words>``."""
+    out: set[str] = set()
+    for match in _CATALOG_RE.finditer(page):
+        words = re.findall(r"\w+", match.group(1).casefold())
+        out.add(_PAGE_TIER_IDS.get(" ".join(words), "frank_dynamic_" + "_".join(words)))
+    return out
+
+
+async def discover(session: aiohttp.ClientSession) -> set[str]:
+    """The dynamic tiers Frank sells today, as its terms page links them.
+
+    The 60 newest uploads this read before still held VT's October card
+    days after the tier was withdrawn on 1 November 2026, so VT read as sold
+    and would have read as gone once that card left them. The page dropped
+    VT's link on 4 November. An empty set when the page does not read.
     """
-    q = (
-        _CARD_SELECT
-        + "]{originalFilename,_createdAt}"
-        + " | order(_createdAt desc)[0..59]"
-    )
     try:
-        rows = await _sanity_query(session, q)
+        page = await fetch_text(session, _TERMS_URL)
     except ExtractorError:
         return set()
-    out: set[str] = set()
-    for row in rows:
-        m = re.search(r"Dynamisch\s+(\S+)", row.get("originalFilename", ""))
-        if not m:
-            continue
-        word = m.group(1)
-        if word.lower() in _NL_MONTHS_LOWER:
-            out.add(_DEFAULT_TIER_ID)
-        elif word in _SUFFIX_TO_ID:
-            out.add(_SUFFIX_TO_ID[word])
-        else:
-            out.add(f"frank_dynamic_{word.lower()}")
-    return out
+    return parse_catalog(page)
 
 
 # ---- snapshot parser ---------------------------------------------------------

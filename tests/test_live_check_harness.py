@@ -4474,6 +4474,38 @@ def test_a_withdrawn_product_is_not_in_the_catalog_baseline() -> None:
     assert "BOOSTFLEX" in baseline
 
 
+@pytest.mark.parametrize(
+    ("page", "new", "gone"),
+    [
+        ("frank_2026-09.html", "frank_dynamic_korting", "frank_dynamic_plus"),
+        ("frank.html", "", ""),
+    ],
+)
+def test_frank_s_terms_page_is_held_against_the_tiers_sold(
+    monkeypatch: pytest.MonkeyPatch, page: str, new: str, gone: str
+) -> None:
+    """On 29 September 2026 the page still linked VT and had no Plus yet,
+    both of which the registry now says otherwise; VT, withdrawn, is out of
+    the baseline. On 5 November it links the five tiers sold."""
+    from custom_components.be_electricity_prices.providers import frank
+
+    body = (Path(__file__).parent / "fixtures" / "discover" / page).read_text(
+        encoding="utf-8"
+    )
+
+    async def terms_page(*_args: Any, **_kwargs: Any) -> str:
+        return body
+
+    monkeypatch.setattr(frank, "fetch_text", terms_page)
+    lc.CHECKS.clear()
+    asyncio.run(lc._check_catalogs(None, {"frank": frank}))  # type: ignore[arg-type]
+    assert [(c.label, c.detail) for c in lc.CHECKS] == [
+        ("frank/catalog: no new products at supplier", new),
+        ("frank/catalog: no products gone from supplier", gone),
+    ]
+    lc.CHECKS.clear()
+
+
 def test_a_dynamic_card_may_print_a_negative_base(_bound_rate_types: None) -> None:
     """A floor at zero sized the bound on tariff economics rather than on the
     unit slip it exists to catch. The row that lowered it, OCTA+ Dynamic's
