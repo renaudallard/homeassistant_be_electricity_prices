@@ -124,6 +124,7 @@ relative to that package directory.
 | `compare_sweep_flow.py` | The compare-all branch: the progress step that sweeps the market a slice at a time, the parked ranking, and the daily job that enters the same sweep with nobody watching. |
 | `compare_engine.py` | `_SweepEngine`: prices each candidate against the resolved household and ranks them, for the dialog and the schedule alike. |
 | `compare_household.py` | `_HouseholdMixin`: resolves the one picture of the home every candidate is priced against, which is most of the work and none of the ranking. |
+| `compare_spots.py` | The day-ahead means that household's quotes are priced on: the delivery month, the quarter and the profile-weighted months, fetched once into a copy of the coordinator's spots, the index a card names that could not be resolved, and the export-weighted rate a compensation meter nets at. |
 | `compare_inputs.py` | What the comparison reads off a household and what it calls things: volumes, regime, load-profile weights, the running welcome credit, and the registry's names. |
 | `compare_placeholders.py` | `_PlaceholdersMixin`: everything the result page renders, from the side-by-side table to the charts and the caveats. |
 | `compare_quote.py` | The annual-cost arithmetic that branch displays: the bill, the fees on it, the welcome credit and the volumes it is billed on. Kept out of `pricing.py`, which is a leaf the coordinator imports. |

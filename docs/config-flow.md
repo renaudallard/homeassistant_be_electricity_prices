@@ -4,7 +4,7 @@ This document covers the config-flow package -- `config_flow.py` plus the
 modules split out of it (`flow_schemas.py`, `flow_contracts.py`,
 `flow_schemas_custom.py`, `flow_schemas_meters.py`, `flow_switch.py`, `flow_wizard.py`, `flow_prefill.py`, `compare_quote.py`,
 `compare_weighting.py`, `compare_table.py`, and the compare branch: `compare_flow.py`, `compare_sweep_flow.py`,
-`compare_engine.py`, `compare_household.py`, `compare_inputs.py` and
+`compare_engine.py`, `compare_household.py`, `compare_spots.py`, `compare_inputs.py` and
 `compare_placeholders.py`) -- the multi-step wizard that turns a user's
 supplier, region, DSO, meter, solar, and sensor choices into a config entry. It
 walks the config-flow steps in order, the branching between them, the validation
@@ -1017,7 +1017,7 @@ Saving the caches, emptying them for the fetch and putting them back after
 it, which this replaced, left a tick in that window billing current_year_cost
 without its per-slot feed-in credit and threw away what the coordinator's own
 walk added meanwhile. The month-mean borrow merges
-(`compare_household.py`); the YTD borrow isolates (`compare_placeholders.py`),
+(`compare_spots.py`); the YTD borrow isolates (`compare_placeholders.py`),
 and runs when the cache is empty or, on an entry with no source of its own
 where a key was typed on the page, stale (`_keyless_stale_spots`), so that key
 is not ignored over the spots an earlier contract's key left behind; what it
@@ -1029,10 +1029,10 @@ the token step and the annual note say. The household's own row never reads
 what the page fetched: it is priced on the entry's own day-ahead, none for an
 entry with no source, whatever was typed, since its current_year_cost sensor
 bills on it (`_own_year`, `compare_placeholders.py`); its annual feed-in credit
-likewise keeps the printed figure (`compare_household.py`). The month-mean
+likewise keeps the printed figure (`compare_spots.py`). The month-mean
 borrow starts empty rather than from such an entry's stale cache
 (`_keyless_stale_spots`), which can only be an earlier contract's days.
-The builder is in two halves: `_resolve_household` (`compare_household.py`) resolves everything that does not depend on which contract is being quoted -- the meter reads, the recorder walk, the measured hour shapes, the day-ahead window -- and returns a `_HouseholdQuote` (`compare_inputs.py`); the rest of `_build_compare_placeholders` (`compare_placeholders.py`) is the target side, recomputed per contract. The household half is O(1) in the number of contracts compared, which is what makes quoting more than one affordable. Placeholder
+The builder is in two halves: `_resolve_household` (`compare_household.py`) resolves everything that does not depend on which contract is being quoted -- the meter reads, the recorder walk, the measured hour shapes, the day-ahead window and the means read off it (`_household_spots`, `compare_spots.py`) -- and returns a `_HouseholdQuote` (`compare_inputs.py`); the rest of `_build_compare_placeholders` (`compare_placeholders.py`) is the target side, recomputed per contract. The household half is O(1) in the number of contracts compared, which is what makes quoting more than one affordable. Placeholder
 tokens map to `options.step.compare_result.description` (`strings.json`), which
 references `{current_annual}`, `{delta_ytd}`, the ASCII bar charts
 `{annual_chart}`/`{ytd_chart}`, `{card_note}` (per-side caveats about what a card
