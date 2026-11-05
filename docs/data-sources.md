@@ -1376,8 +1376,11 @@ reads its area's whole peak-metered column instead of typing it
 use, public service and surcharge rates added up, beside the capacity rate
 and the data management fee, all excluding VAT. On Zenne-Dijle for 2026 that
 is 0,0553921 and 0,0501456 EUR/kWh, 56,12 EUR/kW and 17,85 EUR a year, the
-5,87, 5,32, 59,49 and 18,92 every card prints with 6% VAT. Refused: a rate
-missing from the capacity rate's column, or a figure outside its bounds.
+5,87, 5,32, 59,49 and 18,92 every card prints with 6% VAT. They are put on
+the basis the entry typed on (`on_card_basis`), as the ceiling is, so a
+household typing VAT-inclusive figures at a 0 rate takes them grossed.
+Refused: a rate missing from the capacity rate's column, or a figure
+outside its bounds.
 `ensure_area_terms` reads it in the tick and the backfill like the analog
 rate, for every year a window spans, with the same year-before stand-in,
 backoff and store (`cached_area_terms`, the `area` part of `held_table`).

@@ -310,11 +310,12 @@ def _resolve_fluvius_network(
 
     The figures typed into the entry stand while no sheet of that year or an
     earlier one is held, and for a key that is not a Fluvius area. The sheet
-    is excluding VAT, the custom card's own basis. Transmission is included
-    in its rates, and a peak-metered connection pays one rate day and night,
-    so a typed transport and day/night split go with the typed figures. The
-    ceiling and an analog meter's surcharge are laid on after it, as on every
-    card.
+    is excluding VAT and put on the basis the entry typed on, as the ceiling
+    is: a household typing VAT-inclusive figures at a 0 rate was billed it
+    6% short. Transmission is included in its rates, and a peak-metered
+    connection pays one rate day and night, so a typed transport and
+    day/night split go with the typed figures. The ceiling and an analog
+    meter's surcharge are laid on after it, as on every card.
     """
     if not takes_fluvius_network(entry.data):
         return snap
@@ -323,15 +324,19 @@ def _resolve_fluvius_network(
     overlay = snap.dsos.get(dso)
     if terms is None or overlay is None:
         return snap
+
+    def basis(rate: float) -> float:
+        return on_card_basis(snap, month, rate)
+
     sheet = replace(
         overlay,
-        distribution_single=terms.kwh_normal,
+        distribution_single=basis(terms.kwh_normal),
         distribution_peak=None,
         distribution_offpeak=None,
-        distribution_exclusive_night=terms.kwh_exclusive_night,
+        distribution_exclusive_night=basis(terms.kwh_exclusive_night),
         transport=0.0,
-        capacity_eur_per_kw_year=terms.capacity_per_kw_year,
-        data_management_per_year=terms.data_management_per_year,
+        capacity_eur_per_kw_year=basis(terms.capacity_per_kw_year),
+        data_management_per_year=basis(terms.data_management_per_year),
     )
     return replace(snap, dsos={**snap.dsos, dso: sheet})
 

@@ -1524,6 +1524,37 @@ def test_the_typed_network_stands_unticked_or_with_no_sheet_held() -> None:
     assert network == pytest.approx(typed)
 
 
+@pytest.mark.parametrize(
+    ("professional", "factor"),
+    [
+        # A 0 rate typed by a household reads as VAT-inclusive figures.
+        (False, 1.06),
+        # A business typing 0 deducts VAT: its figures are excluding it.
+        (True, 1.0),
+    ],
+)
+def test_fluvius_s_sheet_is_billed_on_the_basis_the_entry_typed_on(
+    professional: bool, factor: float
+) -> None:
+    """The sheet is excluding VAT. A household typing VAT-inclusive figures at
+    a 0 rate takes it grossed, the 5,87 c/kWh every card prints rather than
+    the sheet's 5,54, as it takes the network ceiling; a business deducting
+    VAT takes it as published."""
+    _hold_zenne_dijle_2026()
+    data = _flemish_network(
+        **{
+            const.CONF_CUSTOM_DSO_FROM_FLUVIUS: True,
+            const.CONF_CUSTOM_VAT_RATE: 0.0,
+            const.CONF_CUSTOM_PROFESSIONAL: professional,
+        }
+    )
+    network, overlay = _resolved_network(data)
+    assert network == pytest.approx(0.0553921 * factor)
+    assert overlay.distribution_exclusive_night == pytest.approx(0.0501456 * factor)
+    assert overlay.capacity_eur_per_kw_year == pytest.approx(56.1228635 * factor)
+    assert overlay.data_management_per_year == pytest.approx(17.85 * factor)
+
+
 def test_an_analog_meter_on_fluvius_s_network_pays_the_analog_rate() -> None:
     """The analog surcharge, kept off a custom entry's typed figures, is laid
     on the sheet's: 9,70 c/kWh on Zenne-Dijle in 2026, the analog column every
