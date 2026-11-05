@@ -183,8 +183,7 @@ _TIERS: tuple[tuple[str, str, str | None], ...] = (
 # VT's cards were once titled "Korting" too ("Frank Energie Variabel -
 # Korting - juni 2025", "VT" by October 2026), but no entry predates this
 # tier, so its id takes the name its file names have always carried.
-# "Variabel JN Pro" is the business card, and the "Variabel June" files of
-# early 2025 are not read.
+# "Variabel JN Pro" is the business card.
 _VARIABLE_TIERS: tuple[tuple[str, str, str | None], ...] = (
     ("frank_variable", "Frank Energie Variabel", None),
     ("frank_variable_hv", "Frank Energie Variabel HV", "HV"),
@@ -224,8 +223,24 @@ _PAGE_TIER_IDS: dict[tuple[str, str], str] = {
 
 # Frank alternates the Slim tier's filename token between the abbreviation
 # "SL" and the full word "Slim" from one month to the next (both are live in
-# the CMS), so treat them as aliases when matching a card to its tier.
-_SUFFIX_ALIASES: dict[str, tuple[str, ...]] = {"SL": ("SL", "Slim")}
+# the CMS), so treat them as aliases when matching a card to its tier. JN was
+# named June until May 2025: its cards of February and May 2025 are titled
+# "June" and print JN's formula and feed-in in both products, May's the very
+# terms of JN's first card in June.
+_SUFFIX_ALIASES: dict[str, tuple[str, ...]] = {
+    "SL": ("SL", "Slim"),
+    "JN": ("JN", "June"),
+}
+# Uploads a later one replaced under a name no month lookup finds. The
+# variable June card first uploaded for February 2025 printed the standard
+# tier's formula and 2,08 a month; the one Frank put up on 6 February in its
+# place, filed as "... Variabel June 2025.pdf", prints JN's formula, 2,75 a
+# month and the 35 EUR cashback, as the dynamic card re-uploaded that day
+# does. Left out, that month has no card and falls back as any month
+# without one does, rather than bill the terms Frank withdrew.
+_SUPERSEDED: frozenset[str] = frozenset(
+    {"Frank Energie Tariefkaart Elektriciteit Variabel June Februari 2025.pdf"}
+)
 
 _FLUVIUS_LABELS: dict[str, str] = {
     "Antwerpen": DSO_FLUVIUS_ANTWERPEN,
@@ -320,6 +335,7 @@ async def _resolve_pdf_url(
         r
         for r in rows
         if _matches_suffix(r.get("originalFilename", ""), suffix, product)
+        and r.get("originalFilename") not in _SUPERSEDED
     ]
     if not matches:
         raise ExtractorError(

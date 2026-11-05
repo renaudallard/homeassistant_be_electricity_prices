@@ -265,17 +265,92 @@ def test_each_variable_file_name_maps_to_its_tier(
 
 def test_other_files_sharing_the_word_are_no_tier_s() -> None:
     """The business card "Variabel JN Pro" came out beside the household JN
-    card in November 2026, and early 2025 had "Variabel June" files: neither
-    is a tier's, nor is a dynamic card."""
+    card in November 2026, a file naming no month is no month's card, and a
+    dynamic card is no variable tier's."""
     for name in (
         "Frank Energie Tariefkaart Elektriciteit Variabel JN Pro November 2026.pdf",
-        "Frank Energie Tariefkaart Elektriciteit Variabel June Mei 2025.pdf",
         "Frank Energie Tariefkaart Elektriciteit Variabel June 2025.pdf",
         "Frank Energie Tariefkaart Dynamisch HV November 2026.pdf",
     ):
         assert not any(
             _matches_suffix(name, t[2], "Variabel") for t in frank._VARIABLE_TIERS
         ), name
+
+
+@pytest.mark.parametrize(
+    ("name", "product"),
+    [
+        (
+            "Frank Energie Tariefkaart Elektriciteit Variabel June Mei 2025.pdf",
+            "Variabel",
+        ),
+        (
+            "Frank Energie Tariefkaart Elektriciteit Variabel June Mei 2025 (4).pdf",
+            "Variabel",
+        ),
+        (
+            "Frank Energie Tariefkaart Elektriciteit Dynamisch June Februari 2025.pdf",
+            "Dynamisch",
+        ),
+        (
+            "Frank Energie Tariefkaart Elektriciteit Dynamisch June Mei 2025.pdf",
+            "Dynamisch",
+        ),
+    ],
+)
+def test_june_was_jn_s_earlier_name(name: str, product: str) -> None:
+    """JN was named June until May 2025, in both products: its May 2025 cards
+    print the very terms of its first JN card in June, so they are JN's and no
+    other tier's."""
+    tiers = frank._VARIABLE_TIERS if product == "Variabel" else frank._TIERS
+    assert [t[2] for t in tiers if _matches_suffix(name, t[2], product)] == ["JN"]
+
+
+async def test_the_superseded_february_card_is_not_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The variable June card first put up for February 2025 printed the
+    standard tier's formula; its replacement of 6 February carries no month
+    in its name, so a month lookup sees only the withdrawn one. It is left
+    out, while May 2025 reads its newest June card."""
+    rows = [
+        {
+            "originalFilename": name,
+            "url": f"https://cdn/{i}.pdf",
+            "_createdAt": created,
+        }
+        for i, (name, created) in enumerate(
+            (
+                (
+                    "Frank Energie Tariefkaart Elektriciteit Variabel June Februari 2025.pdf",
+                    "2025-01-31T09:51:00Z",
+                ),
+                (
+                    "Frank Energie Tariefkaart Elektriciteit Variabel June Mei 2025.pdf",
+                    "2025-05-07T09:14:00Z",
+                ),
+                (
+                    "Frank Energie Tariefkaart Elektriciteit Variabel June Mei 2025 (4).pdf",
+                    "2025-05-07T09:15:00Z",
+                ),
+            )
+        )
+    ]
+
+    async def query(_session: Any, q: str) -> list[dict[str, str]]:
+        # As the CMS filters: every name the query asks for, gas excluded.
+        words = [w for w in re.findall(r'match "\*([^*]+)\*"', q) if w != "Gas"]
+        return [
+            r
+            for r in rows
+            if all(w.casefold() in r["originalFilename"].casefold() for w in words)
+        ]
+
+    monkeypatch.setattr(frank, "_sanity_query", query)
+    with pytest.raises(ExtractorError, match="no Frank Energie tariff card"):
+        await frank._resolve_pdf_url(None, "frank_variable_jn", date(2025, 2, 1))  # type: ignore[arg-type]
+    found = await frank._resolve_pdf_url(None, "frank_variable_jn", date(2025, 5, 1))  # type: ignore[arg-type]
+    assert found == ("https://cdn/2.pdf", "mei 2025")
 
 
 async def test_a_variable_tier_resolves_on_its_own_product(

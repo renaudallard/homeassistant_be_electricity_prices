@@ -249,8 +249,13 @@ Verwacht volgens methode VNR voor november 2026 (EURct/kWh)  8,2277
 - **File names.** The "Elektriciteit" token is missing from many names (every one of
   September 2026) and misspelt "Elektricteit" once (VT, February 2026); re-uploads carry
   "(2)" or "v2". The
-  business card "Variabel JN Pro" and the "Variabel June" files of early 2025 match no
-  tier. A month is found by its name and year, which the file names carry from January
+  business card "Variabel JN Pro" matches no tier. JN was named June until May 2025, in
+  both products (`_SUFFIX_ALIASES`): its June cards of May 2025 print the terms of its
+  first JN card. The variable June card first uploaded for February 2025 printed the
+  standard tier's formula and 2,08 a month, and the one that replaced it on 6 February
+  (JN's formula, 2,75 a month, the 35 EUR cashback) is filed as "... Variabel June
+  2025.pdf", with no month a lookup can find, so the first is left out
+  (`_SUPERSEDED`) and that month falls back as any month without a card does. A month is found by its name and year, which the file names carry from January
   2025, so `fetch_for_month` reaches back that far.
 - **Live check.** Each variable tier gets its card rows and its freshness row (scanned on
   "Variabel", gas's files left out), and the catalog holds the page's "Stroom Variabel"
@@ -552,7 +557,8 @@ This parsed date is what makes `archive_validity_check` authoritative in `fetch_
 - GROQ `[0]` returns a dict, not a list. `_sanity_query` wraps a lone dict
   (`providers/frank.py`); removing that branch breaks `probe`.
 - Suffix is not the tier name. Korting's filename token is `VT`, Slim's is `SL` or the
-  full word `Slim` (aliased in `_SUFFIX_ALIASES`, `providers/frank.py`). Both Slim
+  full word `Slim`, and JN's was `June` until May 2025 (both aliased in
+  `_SUFFIX_ALIASES`, `providers/frank.py`). Both Slim
   spellings are live simultaneously.
 - Both decimal separators must be accepted (`_NUM`, `providers/frank.py`); a
   comma-only regex truncated dot-rendered values (`test_dot_decimal_render_matches_comma`).
