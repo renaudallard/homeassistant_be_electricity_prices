@@ -1495,3 +1495,87 @@ the band above 13 kVA is set.
 
 The parser is tested on the 2026 sheet as Brugel served it on 2026-11-05
 (`tests/fixtures/brugel_elec_2026.pdf`).
+
+## Part 8: a Walloon operator's network, read from the CWaPE's approved grids (`cwape.py`)
+
+The CWaPE approves each Walloon operator's periodic tariffs and publishes them
+year by year as a workbook and a PDF, "Tarifs périodiques de distribution
+d'électricité - Prélèvement", beside one grid for the transport costs every
+operator re-invoices, "Tarifs de refacturation du transport". A custom Walloon
+entry that ticks **Take them from the CWaPE's tariff grid for my operator**
+takes its network from them instead of typing it.
+
+Both are found through the documents service the CWaPE's tariff page is built
+from: `https://www.cwape.be/rest/documents?_format=json` with
+`documents_types[]=202` (an operator's tariffs for consumption) and `210`
+(transport), close to 2 MB of JSON parsed off the event loop (`parse_listing`).
+Each record carries its type, its operator (`field_grd`: 213 AIEG, 214 AIESH,
+453 ORES, 225 RESA, 224 REW, 452 all of them), the years it applies to
+(`field_date_application`, `2026 - 2026`) and its file. The operator's file
+name is checked against its id (`_names`), so an id that came to mean another
+operator is not billed for it. Only records for one year are read, and only
+from 2026, the first year of the 2026 to 2029 tariff structure with its Impact
+bands: the 2025 grids print another layout, and a year before 2026 keeps the
+figures typed.
+
+An operator's grid is read off its workbook (`parse_grid`), the sheet titled
+"Prélèvement basse tension": the first is the higher voltages', with the same
+labels and codes. REW publishes its workbook in the old binary `.xls` format no
+reader here opens, so its PDF's low-voltage page is read instead, through
+pdfplumber (`extract_pdf_text_layout`), which keeps each row whole. Each row is
+split at its market code (`E210` and the like) into its label and its figures,
+one per column, "Configuration tarifaire incitative" then "standard":
+
+| Row | Code | Column |
+| --- | --- | --- |
+| Heures normales, pleines, creuses | E210 | standard, the last |
+| Heures PIC, MEDIUM, ECO | E210 | incitative, the first |
+| Exclusif de nuit | E210 | the only one |
+| Terme fixe | E270 | standard, the last |
+| Tarif prosumer | E250 (E260 at REW) | the only one |
+| Obligations de service public, redevance de voirie, impôt sur les sociétés, autres impôts, soldes régulatoires | E215, E891, E850, E890, E410 | the only one |
+
+The five charges are added to every rate per kWh, which is how the cards print
+them. AIEG prints its other local taxes as "V", variable by municipality, which
+the CWaPE's summary bills as nothing, and so does this. With 6% VAT the five
+operators' 2026 rates are the CWaPE's own summary of the 2026 tariffs to the
+rounding it prints at, 0,00001 c/kWh: on ORES 11,98070 c/kWh single, 13,27278
+and 7,38666 by day and night, 16,57474, 10,83219 and 5,08965 in the Impact
+bands. The fixed terms are the summary's to the cent: AIEG's 18,39 and AIESH's
+16,91 EUR a year are 19,49 and 17,92 with VAT, as all but one of the cards of
+January 2026 print them, a cent under the summary's 19,50 and 17,93, which
+that one prints. The prosumer rates with VAT are those the cards print, 85,84
+EUR per kVA on ORES. Every rate is
+required: a row the grid stops printing refuses it, as a night rate above the
+day one, the Impact bands out of order or a figure out of bounds do.
+
+The transport grid is read off its workbook (`parse_transport`): the "Heures
+normales" rate under `E520` in its last column, "Tous les raccordements", which
+every low-voltage connection without a peak meter is billed, with the three
+rates below it, `E976` (renewables support), `E930` (public domain surcharge)
+and `E650` (regulatory balances), each the last of its row: 0,0258728 EUR/kWh
+for 2026, the summary's 2,74252 c/kWh with VAT. In 2025 it changed on 1 March,
+and the CWaPE published a grid for each period.
+
+Each grid states the days it is valid ("Période de validité : du 01.01.2026 au
+31.12.2026"). `cached_network` answers the grid valid on the delivery month,
+else the latest that began before it, never one that begins after, and the same
+for the transport grid, so from 1 January until a year's grids are read the
+year before's stand in, and each stands on its own: a transport grid published
+after the operator's leaves the transport typed until it is.
+`ensure_network` reads what is not held, once per document for the life of the
+process, the listing and a document that did not read being kept six hours, and
+where a year's documents do not cover every month of it, it reads the year
+before's of the kind that is missing. RESA's 2027 workbook says its low-voltage
+sheet is valid until 31 January 2027, its other sheet and its PDF until 31
+December: it is billed every month as the latest begun, and the year counts as
+not covered, so the listing is asked again every six hours for a grid that
+would take over. `_resolve_cwape_network` (`snapshot_resolve.py`) puts every
+register and Impact band, the fixed term and the prosumer rate on the basis the
+entry typed on (`on_card_basis`); the entry's meter and tariff mode decide
+which it bills, and `fees.py` bills no fixed term on Impact.
+
+The parser is tested on the five operators' 2026 grids, ORES's and RESA's for
+2027 and the 2026 transport grid as the CWaPE served them on 2026-11-05
+(`tests/fixtures/cwape_*`), and on the listing of that day trimmed to the
+records of 2025 to 2027.

@@ -1439,11 +1439,14 @@ def _resolved_network(
     data: dict[str, Any],
     region: str = const.REGION_FLANDERS,
     dso: str = "fluvius_zenne_dijle",
+    hour: int = 11,
 ) -> tuple[float, Any]:
-    """The per-kWh network of 5 November 2026 at 11:00 with VAT, and the
-    overlay."""
+    """The per-kWh network of 5 November 2026 at ``hour`` with VAT, on the
+    entry's own tariff mode, and the overlay."""
     from datetime import date
     from types import SimpleNamespace
+
+    from homeassistant.util import dt as dt_util
 
     from custom_components.be_electricity_prices.pricing import compute_breakdown
     from custom_components.be_electricity_prices.snapshot_resolve import (
@@ -1461,8 +1464,9 @@ def _resolved_network(
         snap,
         dso,
         region,
-        datetime(2026, 11, 5, 11, tzinfo=UTC),
+        datetime(2026, 11, 5, hour, tzinfo=dt_util.get_default_time_zone()),
         meter=data[const.CONF_METER],
+        dso_tariff_mode=data.get(const.CONF_DSO_TARIFF_MODE, "bi_horaire"),
     )
     return breakdown.network, snap.dsos[dso]
 
@@ -1661,13 +1665,14 @@ def test_brugel_s_power_term_is_not_added_to_the_sheet_s_twice(
 
 
 def test_each_region_s_network_step_offers_its_own_sheet() -> None:
-    """Flanders offers Fluvius's sheet and Brussels Brugel's, first on the
-    step and nowhere else."""
+    """Flanders offers Fluvius's sheet, Brussels Brugel's and Wallonia the
+    CWaPE's grid, first on the step and nowhere else."""
     offered = {
         const.REGION_FLANDERS: const.CONF_CUSTOM_DSO_FROM_FLUVIUS,
         const.REGION_BRUSSELS: const.CONF_CUSTOM_DSO_FROM_BRUGEL,
+        const.REGION_WALLONIA: const.CONF_CUSTOM_DSO_FROM_CWAPE,
     }
-    boxes = {const.CONF_CUSTOM_DSO_FROM_FLUVIUS, const.CONF_CUSTOM_DSO_FROM_BRUGEL}
+    boxes = set(offered.values())
     for region in (const.REGION_FLANDERS, const.REGION_BRUSSELS, const.REGION_WALLONIA):
         keys = [
             str(k)
@@ -1760,3 +1765,137 @@ def test_brugel_s_sheet_is_billed_on_the_basis_the_entry_typed_on(
     network, overlay = _resolved_network(data, const.REGION_BRUSSELS, "sibelga")
     assert network == pytest.approx((brugel_2026.day + brugel_2026.transport) * factor)
     assert overlay.data_management_per_year == pytest.approx(61.14 * factor)
+
+
+def _walloon_network(**extra: Any) -> dict[str, Any]:
+    """A Walloon custom entry on ORES whose network was typed by hand."""
+    return {
+        const.CONF_SUPPLIER: const.SUPPLIER_CUSTOM,
+        const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED,
+        const.CONF_REGION: const.REGION_WALLONIA,
+        const.CONF_DSO: const.DSO_ORES,
+        const.CONF_METER: const.METER_MONO,
+        const.CONF_CUSTOM_ENERGY_SINGLE: 0.1,
+        const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.04,
+        const.CONF_CUSTOM_DSO_TRANSPORT: 0.01,
+        const.CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR: 15.0,
+        const.CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR: 70.0,
+        const.CONF_CUSTOM_VAT_RATE: 0.06,
+        **extra,
+    }
+
+
+@pytest.fixture
+def ores_2026() -> Any:
+    """ORES's 2026 grid and the 2026 transport grid held as the tick would
+    have read them."""
+    from pathlib import Path
+
+    from custom_components.be_electricity_prices import cwape
+
+    fixtures = Path(__file__).parent / "fixtures"
+    grid = cwape.parse_grid((fixtures / "cwape_ores_2026.xlsx").read_bytes())
+    transport = cwape.parse_transport(
+        (fixtures / "cwape_transport_2026.xlsx").read_bytes()
+    )
+    assert grid is not None and transport is not None
+    cwape._grids[const.DSO_ORES] = {"grid": grid}
+    cwape._transport["transport"] = transport
+    yield grid, transport
+    cwape._grids.clear()
+    cwape._transport.clear()
+
+
+def test_a_walloon_custom_entry_can_take_its_network_off_the_cwape_s_grid(
+    ores_2026: Any,
+) -> None:
+    """Ticked, ORES's grid valid in November 2026 replaces what was typed: the
+    11,98 c/kWh single rate and 2,74 c/kWh transport of the CWaPE's summary,
+    and its fixed term and prosumer rate, 14,10 EUR a year and 85,84 EUR per
+    kVA with VAT."""
+    ticked = _walloon_network(**{const.CONF_CUSTOM_DSO_FROM_CWAPE: True})
+    network, overlay = _resolved_network(ticked, const.REGION_WALLONIA, "ores")
+    assert round(network * 100, 2) == 14.72
+    assert round(overlay.data_management_per_year, 2) == 14.10
+    assert round(overlay.prosumer_eur_per_kva_year, 2) == 85.84
+
+
+def test_an_impact_entry_on_the_cwape_s_grid_bills_its_band(ores_2026: Any) -> None:
+    """The PIC band from 17:00, 16,57 c/kWh with VAT, and the ECO one at
+    noon, 5,09, each with transport."""
+    impact = _walloon_network(
+        **{
+            const.CONF_CUSTOM_DSO_FROM_CWAPE: True,
+            const.CONF_METER: const.METER_DYNAMIC,
+            const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_IMPACT,
+        }
+    )
+    pic, _overlay = _resolved_network(impact, const.REGION_WALLONIA, "ores", hour=18)
+    eco, _overlay = _resolved_network(impact, const.REGION_WALLONIA, "ores", hour=12)
+    assert round(pic * 100, 2) == round(16.57474 + 2.74252, 2)
+    assert round(eco * 100, 2) == round(5.08965 + 2.74252, 2)
+
+
+def test_the_typed_walloon_network_stands_where_no_grid_is_held(
+    ores_2026: Any,
+) -> None:
+    """Unticked, the figures typed are billed; ticked, each grid not held
+    leaves its own figures typed: the transport typed beside the operator's
+    rates until the transport grid is read."""
+    from custom_components.be_electricity_prices import cwape
+
+    typed = (0.04 + 0.01) * 1.06
+    network, overlay = _resolved_network(
+        _walloon_network(), const.REGION_WALLONIA, "ores"
+    )
+    assert network == pytest.approx(typed)
+    assert overlay.prosumer_eur_per_kva_year == pytest.approx(70.0 * 1.06)
+    grid, _transport = ores_2026
+    cwape._transport.clear()
+    ticked = _walloon_network(**{const.CONF_CUSTOM_DSO_FROM_CWAPE: True})
+    network, overlay = _resolved_network(ticked, const.REGION_WALLONIA, "ores")
+    assert network == pytest.approx((grid.single + 0.01) * 1.06)
+    cwape._grids.clear()
+    network, _overlay = _resolved_network(ticked, const.REGION_WALLONIA, "ores")
+    assert network == pytest.approx(typed)
+
+
+@pytest.mark.parametrize(("professional", "factor"), [(False, 1.06), (True, 1.0)])
+def test_the_cwape_s_grid_is_billed_on_the_basis_the_entry_typed_on(
+    ores_2026: Any, professional: bool, factor: float
+) -> None:
+    """Excluding VAT: grossed for a household typing VAT-inclusive figures at a
+    0 rate, as published for a business deducting VAT."""
+    grid, transport = ores_2026
+    data = _walloon_network(
+        **{
+            const.CONF_CUSTOM_DSO_FROM_CWAPE: True,
+            const.CONF_CUSTOM_VAT_RATE: 0.0,
+            const.CONF_CUSTOM_PROFESSIONAL: professional,
+        }
+    )
+    network, _overlay = _resolved_network(data, const.REGION_WALLONIA, "ores")
+    assert network == pytest.approx((grid.single + transport.rate) * factor)
+
+
+async def test_the_dispatcher_reads_the_cwape_s_grids_for_a_walloon_entry() -> None:
+    from unittest.mock import AsyncMock
+
+    from custom_components.be_electricity_prices import snapshot_resolve
+
+    session = object()
+    grids = AsyncMock()
+    with patch.object(snapshot_resolve, "ensure_cwape_network", grids):
+        await snapshot_resolve.ensure_custom_network(
+            session,  # type: ignore[arg-type]
+            _walloon_network(**{const.CONF_CUSTOM_DSO_FROM_CWAPE: True}),
+            2027,
+        )
+        grids.assert_awaited_once_with(session, 2027, "ores")
+        grids.reset_mock()
+        await snapshot_resolve.ensure_custom_network(
+            session,  # type: ignore[arg-type]
+            _walloon_network(),
+            2027,
+        )
+        grids.assert_not_awaited()

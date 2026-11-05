@@ -1809,6 +1809,11 @@ accordingly:
   `_resolve_brugel_network` does the same for a custom Brussels entry off Brugel's
   sheet (`brugel.cached_network_terms`), on the basis the entry typed on, before
   Brugel's power term, which the sheet's yearly charge already carries.
+  `_resolve_cwape_network` does it for a custom Walloon entry off its
+  operator's grid valid on the delivery month and the transport grid
+  (`cwape.cached_network`), each standing on its own, with every register and
+  Impact band, the fixed term, which `fees.py` does not bill on Impact, and
+  the prosumer rate.
 - `_resolve_analog_meter` (`snapshot_resolve.py`) adds the analog surcharge, the
   analog kWh rate less the piekmeting one, to every distribution rate of the
   entry's own overlay (a custom entry's only when it takes Fluvius's), the

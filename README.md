@@ -260,12 +260,16 @@ rate, each with an optional never-negative injection floor (on by default for
 the monthly average) — plus the regulated DSO
 and tax values, which are identical for every supplier on your grid. The
 network step can take the DSO values off the published tariff sheet instead:
-tick **Take them from Fluvius's tariff sheet for my area** in Flanders or
-**Take them from Brugel's tariff sheet** in Brussels, and they follow each
+tick **Take them from Fluvius's tariff sheet for my area** in Flanders,
+**Take them from Brugel's tariff sheet** in Brussels or **Take them from the
+CWaPE's tariff grid for my operator** in Wallonia, and they follow each
 1 January change by themselves, read off the sheet of each delivery year,
 the latest one held standing in until the next is published and the figures
 typed only until a sheet is read. Brugel's sheet does not print the Brugel
-OSP fee, which stays as typed. The two
+OSP fee, which stays as typed. In Wallonia the operator's approved grid
+gives the rates, Impact bands, fixed term and prosumer rate, and the CWaPE's
+transport grid the transport, each standing on its own, from 2026, the first
+year of the current Walloon tariff structure. The two
 federal levies among them follow the law as they do on every card (see
 [The federal levies come from the law](#the-federal-levies-come-from-the-law-not-from-your-card)):
 from August 2026 the energy contribution is dropped whatever you type, and

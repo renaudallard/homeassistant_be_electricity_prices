@@ -756,6 +756,8 @@ CONF_CUSTOM_DSO_TRANSPORT: Final = "custom_dso_transport"
 CONF_CUSTOM_DSO_FROM_FLUVIUS: Final = "custom_dso_from_fluvius"
 # Brussels only: the same off Brugel's yearly sheet for Sibelga.
 CONF_CUSTOM_DSO_FROM_BRUGEL: Final = "custom_dso_from_brugel"
+# Wallonia only: the same off the CWaPE's approved grid for the operator.
+CONF_CUSTOM_DSO_FROM_CWAPE: Final = "custom_dso_from_cwape"
 CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR: Final = "custom_dso_data_management_per_year"
 CONF_CUSTOM_DSO_CAPACITY_EUR_PER_KW_YEAR: Final = "custom_dso_capacity_eur_per_kw_year"
 CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR: Final = (

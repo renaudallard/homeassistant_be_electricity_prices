@@ -60,6 +60,7 @@ from .const import (
     CONF_CUSTOM_DSO_DISTRIBUTION_PIC,
     CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE,
     CONF_CUSTOM_DSO_FROM_BRUGEL,
+    CONF_CUSTOM_DSO_FROM_CWAPE,
     CONF_CUSTOM_DSO_FROM_FLUVIUS,
     CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR,
     CONF_CUSTOM_DSO_TRANSPORT,
@@ -104,11 +105,12 @@ from .flow_schemas import _add_manual_num, _custom_num
 from .vat_rates import residential_vat
 
 # The box that takes a region's network off its published sheet: every
-# Flemish area is Fluvius's and Brussels is Sibelga's, whose rates Brugel
-# publishes.
+# Flemish area is Fluvius's, Brussels is Sibelga's, whose rates Brugel
+# publishes, and the CWaPE publishes each Walloon operator's.
 _NETWORK_SOURCE: dict[str, str] = {
     REGION_FLANDERS: CONF_CUSTOM_DSO_FROM_FLUVIUS,
     REGION_BRUSSELS: CONF_CUSTOM_DSO_FROM_BRUGEL,
+    REGION_WALLONIA: CONF_CUSTOM_DSO_FROM_CWAPE,
 }
 
 

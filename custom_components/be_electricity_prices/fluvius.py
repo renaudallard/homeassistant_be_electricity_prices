@@ -77,7 +77,6 @@ from datetime import datetime
 from typing import Any, Final
 
 import aiohttp
-from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -93,7 +92,7 @@ from .const import (
 )
 from .providers._parse import to_float
 from .providers._pdf import USER_AGENT, fetch_text, guard_redirect, read_capped
-from .synergrid import _NS, _column_of, _resolve_sheet_path, _shared_strings
+from .synergrid import _resolve_sheet_path, _shared_strings, sheet_rows
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -670,23 +669,7 @@ def _rows(payload: bytes) -> list[dict[str, str]]:
     with zipfile.ZipFile(io.BytesIO(payload)) as z:
         if sum(info.file_size for info in z.infolist()) > _MAX_UNPACKED_BYTES:
             raise ValueError("workbook unpacks past the size cap")
-        strings = _shared_strings(z)
-        sheet = ET.fromstring(z.read(_resolve_sheet_path(z, "")))
-    rows: list[dict[str, str]] = []
-    for row in sheet.iter(_NS + "row"):
-        cells: dict[str, str] = {}
-        for cell in row.iter(_NS + "c"):
-            kind = cell.get("t")
-            if kind == "inlineStr":
-                text = "".join(t.text or "" for t in cell.iter(_NS + "t"))
-            else:
-                value = cell.find(_NS + "v")
-                if value is None or value.text is None:
-                    continue
-                text = strings[int(value.text)] if kind == "s" else value.text
-            cells[_column_of(cell.get("r", ""))] = text.strip()
-        rows.append(cells)
-    return rows
+        return sheet_rows(z, _resolve_sheet_path(z, ""), _shared_strings(z))
 
 
 def parse_sheet(payload: bytes, year: int) -> SheetTerms | None:

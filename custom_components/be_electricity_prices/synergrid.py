@@ -354,19 +354,50 @@ async def _download(
 def _resolve_sheet_path(z: zipfile.ZipFile, prefix: str = _SHEET_PREFIX) -> str:
     """Map the first sheet whose name starts with ``prefix`` (the ex-ante
     sheet by default) to its worksheet XML member."""
+    for name, path in sheet_paths(z):
+        if name.startswith(prefix):
+            return path
+    raise KeyError(f"no sheet starting {prefix!r}")
+
+
+def sheet_paths(z: zipfile.ZipFile) -> list[tuple[str, str]]:
+    """Each worksheet's name and XML member, in the workbook's order; a sheet
+    whose relationship names no target is left out."""
     wb = ET.fromstring(z.read("xl/workbook.xml"))
-    rid = None
-    for sheet in wb.iter(_NS + "sheet"):
-        if (sheet.get("name") or "").startswith(prefix):
-            rid = sheet.get(_REL_NS + "id")
-            break
-    if rid is None:
-        raise KeyError(f"no sheet starting {prefix!r}")
     rels = ET.fromstring(z.read("xl/_rels/workbook.xml.rels"))
-    for rel in rels.iter(_PKG_REL_NS + "Relationship"):
-        if rel.get("Id") == rid:
-            return "xl/" + (rel.get("Target") or "").lstrip("/")
-    raise KeyError(f"no relationship target for {rid!r}")
+    targets = {
+        rel.get("Id"): rel.get("Target") or ""
+        for rel in rels.iter(_PKG_REL_NS + "Relationship")
+    }
+    paths: list[tuple[str, str]] = []
+    for sheet in wb.iter(_NS + "sheet"):
+        target = targets.get(sheet.get(_REL_NS + "id"))
+        if target is not None:
+            paths.append((sheet.get("name") or "", "xl/" + target.lstrip("/")))
+    return paths
+
+
+def sheet_rows(
+    z: zipfile.ZipFile, path: str, strings: list[str]
+) -> list[dict[str, str]]:
+    """One worksheet's cells as text, one ``{column: text}`` per row, the
+    shared strings resolved and blanks left out."""
+    sheet = ET.fromstring(z.read(path))
+    rows: list[dict[str, str]] = []
+    for row in sheet.iter(_NS + "row"):
+        cells: dict[str, str] = {}
+        for cell in row.iter(_NS + "c"):
+            kind = cell.get("t")
+            if kind == "inlineStr":
+                text = "".join(t.text or "" for t in cell.iter(_NS + "t"))
+            else:
+                value = cell.find(_NS + "v")
+                if value is None or value.text is None:
+                    continue
+                text = strings[int(value.text)] if kind == "s" else value.text
+            cells[_column_of(cell.get("r", ""))] = text.strip()
+        rows.append(cells)
+    return rows
 
 
 def _shared_strings(z: zipfile.ZipFile) -> list[str]:

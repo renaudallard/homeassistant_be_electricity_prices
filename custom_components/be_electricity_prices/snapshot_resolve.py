@@ -56,6 +56,7 @@ from .const import (
     CONF_ANALOG_REPLACED,
     CONF_ANNUAL_CONSUMPTION_KWH,
     CONF_CUSTOM_DSO_FROM_BRUGEL,
+    CONF_CUSTOM_DSO_FROM_CWAPE,
     CONF_CUSTOM_DSO_FROM_FLUVIUS,
     CONF_CUSTOM_PROFESSIONAL,
     CONF_CUSTOM_VAT_RATE,
@@ -78,10 +79,13 @@ from .const import (
     METER_MONO,
     REGION_BRUSSELS,
     REGION_FLANDERS,
+    REGION_WALLONIA,
     SOLAR_REGIME_INJECTION,
     SUPPLIER_CUSTOM,
     SUPPLIER_SOCIAL,
 )
+from .cwape import cached_network as cached_cwape_network
+from .cwape import ensure_network as ensure_cwape_network
 from .excise_law import household_schedule
 from .fluvius import (
     cached_analog_surcharge,
@@ -380,12 +384,66 @@ def _resolve_brugel_network(
     return replace(snap, dsos={**snap.dsos, dso: sheet})
 
 
+def takes_cwape_network(data: Mapping[str, Any]) -> bool:
+    """Whether this entry is a custom Walloon one taking its network rates
+    off its operator's grid as the CWaPE publishes it rather than the
+    figures it typed."""
+    return (
+        data.get(CONF_SUPPLIER) == SUPPLIER_CUSTOM
+        and data.get(CONF_REGION) == REGION_WALLONIA
+        and bool(data.get(CONF_CUSTOM_DSO_FROM_CWAPE))
+    )
+
+
+def _resolve_cwape_network(
+    entry: ConfigEntry, snap: SupplierSnapshot, month: date
+) -> SupplierSnapshot:
+    """A custom Walloon entry's network overlay as its operator's grid valid
+    on the delivery month gives it, and the transport grid, where the entry
+    asks for it.
+
+    Each stands on its own: the figures typed stand for one not read yet, so
+    a transport grid published after the operator's leaves the transport
+    typed until it is. Excluding VAT, put on the basis the entry typed on.
+    Every register and Impact band is set, and the entry's meter and tariff
+    mode decide which it bills.
+    """
+    if not takes_cwape_network(entry.data):
+        return snap
+    dso = str(entry.data.get(CONF_DSO, ""))
+    grid, transport = cached_cwape_network(month, dso)
+    overlay = snap.dsos.get(dso)
+    if overlay is None or (grid is None and transport is None):
+        return snap
+
+    def basis(rate: float) -> float:
+        return on_card_basis(snap, month, rate)
+
+    sheet = overlay
+    if grid is not None:
+        sheet = replace(
+            sheet,
+            distribution_single=basis(grid.single),
+            distribution_peak=basis(grid.peak),
+            distribution_offpeak=basis(grid.offpeak),
+            distribution_exclusive_night=basis(grid.exclusive_night),
+            distribution_pic=basis(grid.pic),
+            distribution_medium=basis(grid.medium),
+            distribution_eco=basis(grid.eco),
+            data_management_per_year=basis(grid.fixed_per_year),
+            prosumer_eur_per_kva_year=basis(grid.prosumer_per_kva_year),
+        )
+    if transport is not None:
+        sheet = replace(sheet, transport=basis(transport.rate))
+    return replace(snap, dsos={**snap.dsos, dso: sheet})
+
+
 async def ensure_custom_network(
     session: aiohttp.ClientSession, data: Mapping[str, Any], year: int
 ) -> None:
     """Read the sheet a custom entry takes its network rates from for
     ``year``, where it takes them from one: its area's off Fluvius's listing,
-    or Brugel's.
+    Brugel's, or its operator's and the transport grid off the CWaPE's.
 
     Before the card is resolved, which reads the caches synchronously and
     cannot await. Never raises, as each reader promises.
@@ -399,6 +457,8 @@ async def ensure_custom_network(
         # final sheet is out the one before is read to stand in.
         if cached_network_terms(year) is None:
             await ensure_power_term(session, year - 1)
+    elif takes_cwape_network(data):
+        await ensure_cwape_network(session, year, str(data.get(CONF_DSO, "")))
 
 
 def entry_analog_surcharge(
@@ -638,6 +698,7 @@ def _resolve_snapshot(
     # already carries, and the ceiling and the analog surcharge laid on after.
     resolved = _resolve_fluvius_network(entry, resolved, month)
     resolved = _resolve_brugel_network(entry, resolved, month)
+    resolved = _resolve_cwape_network(entry, resolved, month)
     # Before apply_vat, which resolves the card's own basis away: the term
     # Brugel publishes is stated excluding VAT and has to be put onto the
     # basis the card printed on before anything else moves it.
