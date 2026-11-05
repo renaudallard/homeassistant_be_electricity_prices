@@ -979,7 +979,8 @@ it, while the per-day walk of the static year-to-date path, which is by wall
 clock, takes the key whole. The same download and temp-file discipline as the
 SPP file applies, with a `.xlsb` suffix. The coordinator fetches the profile for
 an entry whose energy leg carries `rlp_indexed` (Eneco Zon & Wind Flex and Flex
-One, Energy Knights Essentia, energie.be Variabel) and holds an ENTSO-E key, and
+One, Energy Knights Essentia, energie.be Variabel, Frank Energie Variabel) and holds an
+ENTSO-E key, and
 for every entry on the compensation regime, whose yearly net it spreads over the
 year by that profile (`_NetAllocation`, see the pricing model). It refreshes the
 profile monthly and `_energy_month_spot` picks the weighted mean over the plain

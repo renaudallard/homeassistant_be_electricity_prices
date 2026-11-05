@@ -57,7 +57,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
 )
 from custom_components.be_electricity_prices.providers.frank import (
-    _CARD_SELECT,
+    _card_select,
     _matches_suffix,
     parse_snapshot,
 )
@@ -455,6 +455,12 @@ def test_frank_is_registered() -> None:
         "frank_dynamic_jn",
         "frank_dynamic_slim",
         "frank_dynamic_plus",
+        "frank_variable",
+        "frank_variable_hv",
+        "frank_variable_vt",
+        "frank_variable_jn",
+        "frank_variable_slim",
+        "frank_variable_plus",
     }
 
 
@@ -462,17 +468,20 @@ def test_the_vt_tier_is_withdrawn_in_november_2026() -> None:
     """Frank published no November 2026 card for VT while its five other
     tiers had theirs on 30 October, and its conditions page lists those five
     alone from 4 November: households on VT keep its last card and the
-    picker marks it withdrawn."""
+    picker marks it withdrawn. Its variable twin went the same way."""
     withdrawn = {c.id: c.withdrawn for c in EXTRACTORS["frank"].contracts}
     assert withdrawn["frank_dynamic_korting"] == date(2026, 11, 1)
+    assert withdrawn["frank_variable_vt"] == date(2026, 11, 1)
     assert {cid for cid, day in withdrawn.items() if day is not None} == {
-        "frank_dynamic_korting"
+        "frank_dynamic_korting",
+        "frank_variable_vt",
     }
 
 
-def test_all_contracts_are_dynamic_and_flanders_only() -> None:
+def test_each_tier_is_its_product_s_kind_and_flanders_only() -> None:
+    dynamic = {t[0] for t in frank._TIERS}
     for c in EXTRACTORS["frank"].contracts:
-        assert c.kind == "dynamic"
+        assert c.kind == ("dynamic" if c.id in dynamic else "spot_monthly"), c.id
         assert c.regions == frozenset({"flanders"})
 
 
@@ -598,16 +607,19 @@ def test_card_selector_does_not_key_on_the_elektriciteit_token() -> None:
     silently served the previous month's card - a live mis-price, and one the
     probe could not see either, because its own key came from the same query.
     """
-    assert "Elektriciteit" not in _CARD_SELECT
-    assert 'match "*Dynamisch*"' in _CARD_SELECT
+    for product in ("Dynamisch", "Variabel"):
+        assert "Elektriciteit" not in _card_select(product)
+        assert f'match "*{product}*"' in _card_select(product)
 
 
 def test_card_selector_excludes_gas() -> None:
     """The same release renamed "Gas ZTP" to "Gas", so the gas cards are no
     longer separated from the electricity ones by their own token. Matching
     "Dynamisch" alone would adopt a future "Gas Dynamisch" card as an
-    electricity tier, so gas is excluded explicitly."""
-    assert '!(originalFilename match "*Gas*")' in _CARD_SELECT
+    electricity tier, so gas is excluded explicitly. The variable cards need
+    it already: the gas cards of 2023 were named "Gas Variabel"."""
+    for product in ("Dynamisch", "Variabel"):
+        assert '!(originalFilename match "*Gas*")' in _card_select(product)
 
 
 def test_matches_suffix_handles_the_september_naming() -> None:
@@ -648,16 +660,18 @@ def test_the_plus_tier_maps_to_its_own_card() -> None:
 # ---- the uur- / kwartierprijzen choice -------------------------------------------
 
 
-def test_every_tier_offers_the_quarter_hourly_choice() -> None:
-    """The footnote is on every tier's card, so every tier carries the flag.
+def test_every_dynamic_tier_offers_the_quarter_hourly_choice() -> None:
+    """The footnote is on every dynamic tier's card, so every dynamic tier
+    carries the flag, and no variable tier, priced on the month's index.
 
     Set per contract rather than per supplier: the flow reads it off the
     contract the user picked, and a tier that lost the footnote would have to
     lose the box with it.
     """
+    dynamic = {t[0] for t in frank._TIERS}
     for c in EXTRACTORS["frank"].contracts:
-        assert c.quarter_hourly_option, c.id
-        assert offers_quarter_hourly("frank", c.id), c.id
+        assert c.quarter_hourly_option == (c.id in dynamic), c.id
+        assert offers_quarter_hourly("frank", c.id) == (c.id in dynamic), c.id
 
 
 def test_exactly_two_suppliers_offer_the_quarter_hourly_choice() -> None:
@@ -679,7 +693,7 @@ def test_exactly_two_suppliers_offer_the_quarter_hourly_choice() -> None:
         for c in ex.contracts
         if c.quarter_hourly_option
     }
-    assert flagged == {("frank", c.id) for c in EXTRACTORS["frank"].contracts} | {
+    assert flagged == {("frank", t[0]) for t in frank._TIERS} | {
         ("bolt", cid)
         for cid in (
             "bolt_variable",

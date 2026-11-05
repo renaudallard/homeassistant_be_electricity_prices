@@ -2395,7 +2395,9 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
     "ecopower": lambda m: set(m.DISCOVER_IDS),
     "dats24": lambda m: {m._CONTRACT_ID},
     # A withdrawn tier is left out, so its link coming back reads as new.
-    "frank": lambda m: {t[0] for t in m._TIERS if t[0] not in m._WITHDRAWN},
+    "frank": lambda m: {
+        t[0] for t in (*m._TIERS, *m._VARIABLE_TIERS) if t[0] not in m._WITHDRAWN
+    },
     "energyvision": lambda m: set(m.DISCOVER_IDS),
     "energyknights": lambda m: set(m.DISCOVER_IDS),
     "aspiravi": lambda m: {c.id for c in m.EXTRACTOR.contracts},
@@ -4160,11 +4162,17 @@ async def _check_card_freshness(
         # Dutch month word. Keeping it loose is what caught the September
         # 2026 rename: the extractor filtered on an "Elektriciteit" token
         # Frank dropped, and a check sharing that predicate would have gone
-        # green while every tier served August's card.
-        pattern = (
-            r"(?m)^(?=.*dynamis).*?((?:januari|februari|maart|april|mei|juni|juli|"
+        # green while every tier served August's card. The variable tiers
+        # are scanned the same way on their own word, gas's "Gas Variabel"
+        # files left out.
+        stamp = (
+            r".*?((?:januari|februari|maart|april|mei|juni|juli|"
             r"augustus|september|oktober|november|december)\s+20\d{2}"
             r"|20\d{2}[-_ ]?(?:0[1-9]|1[0-2]))"
+        )
+        products = (
+            (frank._TIERS, r"(?m)^(?=.*dynamis)" + stamp),
+            (frank._VARIABLE_TIERS, r"(?m)^(?=.*variabel)(?!.*gas)" + stamp),
         )
         try:
             rows = await frank._sanity_query(
@@ -4174,7 +4182,7 @@ async def _check_card_freshness(
             )
         except _EXTRACTOR_ERROR as err:
             _record(
-                "frank/freshness: serving the newest advertised dynamic card",
+                "frank/freshness: serving the newest advertised cards",
                 True,
                 f"CMS unreadable: {type(err).__name__}: {err}",
             )
@@ -4189,47 +4197,54 @@ async def _check_card_freshness(
             # unreadable CMS and leave every later tier without a row.
             today = datetime.now(ZoneInfo("Europe/Brussels")).date()
             running = today.year * 100 + today.month
-            for tier_id, _tier_label, _suffix in frank._TIERS:
-                label = f"frank/freshness: newest advertised {tier_id} card"
-                gone = _WITHDRAWN_CONTRACTS.get(tier_id)
-                if gone is not None and today >= gone:
-                    # A tier Frank no longer sells has no next card to wait
-                    # for; its fetch and card rows are marked withdrawn.
-                    continue
-                try:
-                    _url, card_label = await frank._resolve_pdf_url(session, tier_id)
-                except _EXTRACTOR_ERROR as err:
-                    transient = _is_transient_fetch_error(str(err))
-                    _record(
+            for tiers, pattern in products:
+                for tier_id, _tier_label, _suffix in tiers:
+                    label = f"frank/freshness: newest advertised {tier_id} card"
+                    gone = _WITHDRAWN_CONTRACTS.get(tier_id)
+                    if gone is not None and today >= gone:
+                        # A tier Frank no longer sells has no next card to wait
+                        # for; its fetch and card rows are marked withdrawn.
+                        continue
+                    try:
+                        _url, card_label = await frank._resolve_pdf_url(
+                            session, tier_id
+                        )
+                    except _EXTRACTOR_ERROR as err:
+                        transient = _is_transient_fetch_error(str(err))
+                        _record(
+                            label,
+                            transient,
+                            f"{'CMS unreadable' if transient else 'no card resolved'}: "
+                            f"{type(err).__name__}: {err}",
+                        )
+                        continue
+                    served = _frank_month_key(card_label)
+                    if served == _UNREADABLE_STAMP:
+                        _expect(
+                            label, False, f"cannot read a month out of {card_label!r}"
+                        )
+                        continue
+                    if served >= running:
+                        # On the running month's card the tier is current, whatever
+                        # its siblings already show of the next month: Frank
+                        # uploads each tier's next card on its own day, VT's after
+                        # the five others' on 30 October 2026. A resolver that
+                        # cannot see a renamed card is still caught, the day the
+                        # month turns.
+                        _record(
+                            label,
+                            True,
+                            f"serving the running month's card ({card_label})",
+                        )
+                        continue
+                    _expect_newest_card(
                         label,
-                        transient,
-                        f"{'CMS unreadable' if transient else 'no card resolved'}: "
-                        f"{type(err).__name__}: {err}",
+                        blob,
+                        pattern,
+                        card_label,
+                        key=_frank_month_key,
+                        exclude="combi",
                     )
-                    continue
-                served = _frank_month_key(card_label)
-                if served == _UNREADABLE_STAMP:
-                    _expect(label, False, f"cannot read a month out of {card_label!r}")
-                    continue
-                if served >= running:
-                    # On the running month's card the tier is current, whatever
-                    # its siblings already show of the next month: Frank
-                    # uploads each tier's next card on its own day, VT's after
-                    # the five others' on 30 October 2026. A resolver that
-                    # cannot see a renamed card is still caught, the day the
-                    # month turns.
-                    _record(
-                        label, True, f"serving the running month's card ({card_label})"
-                    )
-                    continue
-                _expect_newest_card(
-                    label,
-                    blob,
-                    pattern,
-                    card_label,
-                    key=_frank_month_key,
-                    exclude="combi",
-                )
 
     energyvision = modules.get("energyvision")
     if energyvision is not None:
@@ -6196,10 +6211,12 @@ BYTES_WARN_THRESHOLD = 5_000_000
 #   * mega: ~5.3 MB (~342KB listing fetched once via the harness's
 #     listing-cache + 33 region PDFs at ~150KB each). Allow 7 MB so a
 #     slow CI day or a slightly larger PDF batch doesn't fire.
-#   * frank: ~9.9 MB measured on 13 October 2026, one card per tier, six
-#     tiers at 1.45-1.84 MB each, plus a small CMS query per tier. Allow
-#     13 MB. Latency stays on the 90 s default: one card fetched in 0.56 s
-#     from a runner, so six sum to a few seconds.
+#   * frank: ~24.1 MB measured on 5 November 2026, one card per tier of
+#     both products, twelve at 1.45-1.9 MB each with the withdrawn VT
+#     pair's last cards, the two October JN cards their waivers name, and a
+#     small CMS query per tier. Allow 30 MB. Latency stays on the 90 s
+#     default: one card fetched in 0.56 s from a runner, so fourteen sum to
+#     well under it.
 #   * octaplus: ~32.7 MB measured on 2 October 2026, 27 cards at ~1.2 MB:
 #     the October Boost range plus the withdrawn products, still checked
 #     while their cards are served (the Impact contracts are Wallonia-only).
@@ -6220,7 +6237,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     "ecofix": 16_000_000,
     "mega": 14_000_000,
     "octaplus": 40_000_000,
-    "frank": 13_000_000,
+    "frank": 30_000_000,
     "luminus": 10_000_000,
 }
 

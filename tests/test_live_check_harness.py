@@ -4043,17 +4043,19 @@ def test_every_frank_tier_is_checked_and_gets_its_own_freshness_row(
     the check fetched the base tier only. The freshness block resolved every
     tier in one try, so a tier whose card was not found passed the whole
     block as an unreadable CMS and the tiers after it got no row. In October
-    2026, before VT was withdrawn, so that every tier has its row."""
+    2026, before VT was withdrawn, so that every tier has its row, the
+    variable tiers as much as the dynamic ones."""
     freezer.move_to("2026-10-15 12:00:00+02:00")
     frank = lc._load_providers()["frank"]
-    tiers = [t[0] for t in frank._TIERS]
+    tiers = [c.id for c in frank.EXTRACTOR.contracts]
     # As the CMS would read if Frank renamed the Plus token.
     rows = [
         {
-            "originalFilename": f"Frank Energie Dynamisch {s}Oktober 2026.pdf",
-            "url": f"https://cdn/{i}.pdf",
+            "originalFilename": f"Frank Energie {product} {s}Oktober 2026.pdf",
+            "url": f"https://cdn/{product}/{i}.pdf",
             "_createdAt": "2026-10-01T00:00:00Z",
         }
+        for product in ("Dynamisch", "Variabel")
         for i, s in enumerate(["", "HV ", "VT ", "JN ", "SL ", "Premium "])
     ]
     fetched: list[str] = []
@@ -4076,8 +4078,9 @@ def test_every_frank_tier_is_checked_and_gets_its_own_freshness_row(
     assert fetched == tiers
     fresh = {c.label: c for c in _rows("frank/freshness")}
     assert len(fresh) == len(tiers)
-    plus = fresh["frank/freshness: newest advertised frank_dynamic_plus card"]
-    assert not plus.ok and "no card resolved" in plus.detail
+    for tier in ("frank_dynamic_plus", "frank_variable_plus"):
+        plus = fresh[f"frank/freshness: newest advertised {tier} card"]
+        assert not plus.ok and "no card resolved" in plus.detail
     assert all(c.ok for label, c in fresh.items() if "plus" not in label)
 
     # A tier the CMS could not answer for passes, and the next still gets a row.
@@ -4105,14 +4108,15 @@ def test_a_frank_tier_on_the_running_month_s_card_is_current(
     not VT's. VT, on the running month's card, is current. Once November has
     begun VT is withdrawn, so it has no next card to wait for and no row,
     while a tier still sold that misses the month is a month behind and
-    fails."""
+    fails. The variable tiers went the same way on the same days."""
     frank = lc._load_providers()["frank"]
     rows = [
         {
-            "originalFilename": f"Frank Energie Dynamisch {s}{month} 2026.pdf",
-            "url": f"https://cdn/{month}/{i}.pdf",
+            "originalFilename": f"Frank Energie {product} {s}{month} 2026.pdf",
+            "url": f"https://cdn/{product}/{month}/{i}.pdf",
             "_createdAt": created,
         }
+        for product in ("Dynamisch", "Variabel")
         for month, created in (
             ("Oktober", "2026-09-30T14:00:00Z"),
             ("November", "2026-10-30T14:00:00Z"),
@@ -4125,19 +4129,24 @@ def test_a_frank_tier_on_the_running_month_s_card_is_current(
         return rows
 
     monkeypatch.setattr(frank, "_sanity_query", _query)
-    vt = "frank/freshness: newest advertised frank_dynamic_korting card"
+    vts = [
+        f"frank/freshness: newest advertised {tier} card"
+        for tier in ("frank_dynamic_korting", "frank_variable_vt")
+    ]
     freezer.move_to("2026-10-31 12:00:00+01:00")
     lc.CHECKS.clear()
     asyncio.run(lc._check_card_freshness(None, {"frank": frank}))
     fresh = {c.label: c for c in _rows("frank/freshness")}
-    assert fresh[vt].ok and "running month" in fresh[vt].detail
+    for vt in vts:
+        assert fresh[vt].ok and "running month" in fresh[vt].detail
     assert all(c.ok for c in fresh.values())
 
     freezer.move_to("2026-11-02 12:00:00+01:00")
     lc.CHECKS.clear()
     asyncio.run(lc._check_card_freshness(None, {"frank": frank}))
     fresh = {c.label: c for c in _rows("frank/freshness")}
-    assert vt not in fresh
+    assert not set(vts) & set(fresh)
+    assert len(fresh) == 10
     assert all(c.ok for c in fresh.values())
 
     hv = "frank/freshness: newest advertised frank_dynamic_hv card"
@@ -4477,16 +4486,21 @@ def test_a_withdrawn_product_is_not_in_the_catalog_baseline() -> None:
 @pytest.mark.parametrize(
     ("page", "new", "gone"),
     [
-        ("frank_2026-09.html", "frank_dynamic_korting", "frank_dynamic_plus"),
+        (
+            "frank_2026-09.html",
+            "frank_dynamic_korting, frank_variable_vt",
+            "frank_dynamic_plus, frank_variable_plus",
+        ),
         ("frank.html", "", ""),
     ],
 )
 def test_frank_s_terms_page_is_held_against_the_tiers_sold(
     monkeypatch: pytest.MonkeyPatch, page: str, new: str, gone: str
 ) -> None:
-    """On 29 September 2026 the page still linked VT and had no Plus yet,
-    both of which the registry now says otherwise; VT, withdrawn, is out of
-    the baseline. On 5 November it links the five tiers sold."""
+    """On 29 September 2026 the page still linked VT and had no Plus yet, in
+    both products, which the registry now says otherwise; VT, withdrawn, is
+    out of the baseline. On 5 November it links the five tiers sold of
+    each."""
     from custom_components.be_electricity_prices.providers import frank
 
     body = (Path(__file__).parent / "fixtures" / "discover" / page).read_text(

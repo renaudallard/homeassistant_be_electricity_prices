@@ -2,8 +2,8 @@
 
 This document is the maintenance reference for the Frank Energie Belgium extractor
 (`providers/frank.py`). It explains how the extractor discovers Frank's monthly PDF
-tariff cards through a Sanity CMS API, how it maps each of the six dynamic tiers to a
-contract id, how the energy / injection / tax / DSO fields are parsed out of one shared
+tariff cards through a Sanity CMS API, how it maps each of the six dynamic tiers and the
+six variable ones to a contract id, how the energy / injection / tax / DSO fields are parsed out of one shared
 PDF layout, and the land mines a future maintainer must know when Frank changes its card.
 The test module `tests/test_frank.py` is treated as ground truth throughout: it pins the
 expected parse output against real fixtures, so the illustrative numbers below all come
@@ -19,8 +19,8 @@ Related reading:
 
 ## Overview
 
-Frank Energie Belgium sells only dynamic (spot-indexed) electricity, and only in
-Flanders. The module docstring (`providers/frank.py`) and `_FRANK_REGIONS`
+Frank Energie Belgium sells dynamic (spot-indexed) and variable (month-indexed)
+electricity, only in Flanders. The module docstring (`providers/frank.py`) and `_FRANK_REGIONS`
 (`providers/frank.py`) fix the region to `REGION_FLANDERS`; `fetch` rejects any other
 region with "Frank Energie only operates in Flanders" (`providers/frank.py`). All
 eight Fluvius sub-areas are covered (see the DSO section).
@@ -34,7 +34,7 @@ requested tier, and downloads the winning asset's `url`. The API base is
 
 ```
 config (contract_id) ->  probe(): GROQ newest _createdAt  -> freshness key
-                     \-> fetch():  GROQ "*Dynamisch*" (gas excluded)
+                     \-> fetch():  GROQ "*Dynamisch*" or "*Variabel*" (gas excluded)
                                      |
                                      v
                               _matches_suffix() filters rows to this tier
@@ -199,6 +199,63 @@ coming back reads as new. `tests/test_discover.py` reads the pages of 29 Septemb
 linked, no Plus yet) and 5 November 2026 (the five tiers sold). The page also links five
 "Stroom Variabel" tiers, which no contract here covers and the list does not read.
 
+## Variable tiers
+
+The same tiers are sold as Variabel cards, linked from the terms page as "Actuele
+Tariefkaart Stroom Variabel ..." beside the dynamic ones. `_VARIABLE_TIERS`
+(`providers/frank.py`) declares them, each `kind="spot_monthly"` (the kind energie.be's
+Variabel is), Flanders only, with no settlement choice:
+
+| contract id | label | filename suffix | note |
+| --- | --- | --- | --- |
+| `frank_variable` | Frank Energie Variabel | none (bare month) | standard tier |
+| `frank_variable_hv` | Frank Energie Variabel HV | `HV` | November 2026 prints the standard tier's formula and subscription; September printed 8,50 EUR a month and 0,1020 x Belpex RLP_BE + 0,500 |
+| `frank_variable_vt` | Frank Energie Variabel VT | `VT` | titled "Korting" on some cards (June 2025). Withdrawn from 1 November 2026 with its dynamic twin: no November card, no link on the terms page |
+| `frank_variable_jn` | Frank Energie Variabel JN | `JN` | its November 2026 card waives the subscription for a contract's first 12 months, after which "de tariefkaart Variabel - JN - Oktober 2026" applies; `_with_waived_fee` bills and credits it as on the dynamic card (2,33 a month). A waiver naming the other product's card fails the fetch |
+| `frank_variable_slim` | Frank Energie Variabel Slim | `SL` (or `Slim`) | requires smart devices |
+| `frank_variable_plus` | Frank Energie Variabel Plus | `Plus` | since October 2026; its formula prints a stray bracket, "(0,10100] x Belpex RLP_BE + 0,485)" |
+
+The cards share the dynamic cards' title line, subscription row, levies, network table
+and waiver wording, which `frank.py` reads for both products. `parse_snapshot` picks the
+energy and feed-in readers by the contract's product; the variable ones live in
+`providers/_frank_variable.py`:
+
+```
+Formule Stroomprijs: (0,1068 x Belpex RLP_BE + 1,500) x 1,06 in EURct/kWh
+Verwacht volgens methode VNR voor november 2026 (EURct/kWh)  21,9710
+Formule Terugleveringsvergoeding: (0,1 x M BELPEX SPP_BE -1,150), in EURct/kWh (vrijgesteld van btw)
+Verwacht volgens methode VNR voor november 2026 (EURct/kWh)  8,2277
+```
+
+- **Energy.** `variable_energy` stores `factor = factor_pdf * vat_mult * 10` and
+  `base = base_cents * vat_mult / 100` on a `SpotMonthlyRates` leg with `rlp_indexed` and
+  `rlp_blend="columns"`. The card calls RLP_BE the mean of the profiles "van de
+  verschillende distributienetbeheerders in Vlaanderen", but the values Frank publishes
+  for it are the column-weighted mean: within 0,09 EUR/MWh in each 2026 month up to
+  October, where the Fluvius curve alone misses by up to 1,09 (see
+  [../pricing-model.md](../pricing-model.md)). The printed expected price is not read: it
+  sits on VNR's estimate of the index, 180,03 EUR/MWh on every November 2026 card.
+- **Feed-in.** `variable_injection` reads the formula and the estimate printed under it,
+  as `current` with `factor`, `base` and `spp_indexed`: the month's SPP-weighted mean
+  credits it, the printed estimate standing in while the Synergrid profile is not held.
+  VAT-exempt, and the sign is kept. Up to February 2025 the cards credited the feed-in
+  per hour, "(0,1 x BELPEX per uur -1,150)", the dynamic wording, which
+  `_extract_injection` reads as the hourly shape.
+- **Not modelled.** HV, JN and Plus bill six months' subscription when a contract ends
+  in its first six months. The November 2026 cards charge "Forfait zonnepanelen voor
+  aansluitingen met analoge meter: 6,50 EUR/kVA/maand", which applies to a Flemish
+  connection with a meter that runs backwards; the integration bills a supplier's solar
+  forfait on the Walloon compensation regime only, so it is not read.
+- **File names.** The "Elektriciteit" token is missing from many names (every one of
+  September 2026) and misspelt "Elektricteit" once (VT, February 2026); re-uploads carry
+  "(2)" or "v2". The
+  business card "Variabel JN Pro" and the "Variabel June" files of early 2025 match no
+  tier. A month is found by its name and year, which the file names carry from January
+  2025, so `fetch_for_month` reaches back that far.
+- **Live check.** Each variable tier gets its card rows and its freshness row (scanned on
+  "Variabel", gas's files left out), and the catalog holds the page's "Stroom Variabel"
+  links against the variable tiers sold.
+
 ## Fetch strategy
 
 ### Discovery and download (`fetch`)
@@ -216,8 +273,8 @@ asks for every "Dynamisch" file asset ordered newest first (`[0..29]`):
   {originalFilename,url,_createdAt} | order(_createdAt desc)[0..29]
 ```
 
-The selector is shared by all four lookups as `_CARD_SELECT`, and the two halves
-are each load-bearing. It does **not** key on "Elektriciteit": Frank dropped that
+The selector is built by `_card_select(product)` for all four lookups, "Dynamisch" or
+"Variabel" after the contract (`_PRODUCT`), and its two halves are each load-bearing. It does **not** key on "Elektriciteit": Frank dropped that
 token in September 2026, renaming
 `... Tariefkaart Elektriciteit Dynamisch HV  Augustus 2026.pdf` to
 `... Tariefkaart Dynamisch HV September 2026.pdf`. A filter carrying the old token
@@ -225,10 +282,11 @@ matched nothing newer than August, so every tier silently served the previous
 month's card, and the probe could not see it either because its key came from the
 same query. Gas is then excluded explicitly rather than left to its own naming,
 because the same release also renamed "Gas ZTP" to "Gas" - matching "Dynamisch"
-alone would adopt a future "Gas Dynamisch" card as an electricity tier.
+alone would adopt a future "Gas Dynamisch" card as an electricity tier, and the gas
+cards of 2023 were named "Gas Variabel" or "Gas variabel".
 
-The returned rows are filtered through `_matches_suffix(filename, suffix)`
-(`providers/frank.py`), which extracts the word after "Dynamisch" and checks: for the
+The returned rows are filtered through `_matches_suffix(filename, suffix, product)`
+(`providers/frank.py`), which extracts the word after the product's word and checks: for the
 standard tier (`suffix is None`) the word must be a Dutch month name (so a tier-suffixed
 card is rejected); otherwise the word must be the tier suffix or one of its aliases. The
 surviving rows are sorted by `_createdAt` descending and the newest is chosen
@@ -238,7 +296,8 @@ surviving rows are sorted by `_createdAt` descending and the newest is chosen
 ### Probe (freshness key)
 
 `probe` (`providers/frank.py`) returns the `_createdAt` of the single newest
-"Dynamisch" asset across all tiers, on the same `_CARD_SELECT`:
+asset of the contract's product across all its tiers, on the same `_card_select`; for
+a dynamic contract:
 
 ```groq
 *[_type=="sanity.fileAsset" && originalFilename match "*Dynamisch*"
@@ -286,8 +345,8 @@ sub-parsers. All five run against the layout-preserving text from
 
 | field | parser | source |
 | --- | --- | --- |
-| `energy` (`DynamicRates`) | `_extract_dynamic` | `providers/frank.py` |
-| `injection` (`InjectionRates`) | `_extract_injection` | `providers/frank.py` |
+| `energy` (`DynamicRates`, or `SpotMonthlyRates` on a variable card) | `_extract_dynamic`, or `variable_energy` | `providers/frank.py`, `providers/_frank_variable.py` |
+| `injection` (`InjectionRates`) | `_extract_injection`, or `variable_injection` on a variable card | `providers/frank.py`, `providers/_frank_variable.py` |
 | `taxes` (`TaxOverlay`) | `_extract_taxes` | `providers/frank.py` |
 | `dsos` (`dict[str, DsoOverlay]`) | `_extract_dsos` | `providers/frank.py` |
 | `valid_until` | `_valid_until`, then `parse_valid_until` (shared) | `providers/frank.py`, `_validity.py` |
@@ -529,6 +588,11 @@ Fixtures live under `tests/fixtures/`. Each is a real Frank PDF for one tier and
 | `frank_dynamic_plus_oct.pdf` | `frank_dynamic_plus` | Plus tier, October 2026, its first card; its validity sentence says September |
 | `frank_dynamic_aug.pdf` | `frank_dynamic` | standard tier, August 2026; the first card with the energy-contribution row deleted |
 | `frank_dynamic_jn_sep.pdf` | `frank_dynamic_jn` | JN tier, September 2026; its validity sentence says August |
+| `frank_variable_nov.pdf` | `frank_variable` | standard variable tier, November 2026 |
+| `frank_variable_jn_nov.pdf` | `frank_variable_jn` | variable JN, November 2026; the subscription waiver naming the October card |
+| `frank_variable_jn_oct.pdf` | `frank_variable_jn` | variable JN, October 2026; the subscription the waiver ends on |
+| `frank_variable_plus_nov.pdf` | `frank_variable_plus` | variable Plus, November 2026; the stray bracket in its formula |
+| `frank_variable_feb25.pdf` | `frank_variable` | standard variable tier, February 2025; the feed-in credited per hour |
 
 The tiers share one PDF layout, but only the default tier had a fixture originally;
 `test_non_default_tiers_extract_energy_and_injection` (`tests/test_frank.py`) was added
@@ -540,7 +604,7 @@ with its first card. Tests load fixtures through `fixture_text(name, layout=True
 
 | symptom | likely culprit | why |
 | --- | --- | --- |
-| Every tier serves last month's card | `_CARD_SELECT` (`providers/frank.py`) | Frank renamed the filenames and the GROQ predicate no longer matches the new ones, as when "Elektriciteit" was dropped in September 2026. The probe shares the selector, so it goes blind at the same moment and nothing forces a re-fetch |
+| Every tier serves last month's card | `_card_select` (`providers/frank.py`) | Frank renamed the filenames and the GROQ predicate no longer matches the new ones, as when "Elektriciteit" was dropped in September 2026. The probe shares the selector, so it goes blind at the same moment and nothing forces a re-fetch |
 | A tier stops fetching, or a new tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py`-139) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
 | "could not parse Frank Energie energy formula" | `_FORMULA_RE` | BELPEX wording, sign chars, or the `x 1,06` multiplier changed on the card |
 | Wrong per-kWh price after a card update | the EURct->EUR conversion in `_extract_dynamic` | Frank switched units or dropped the VAT multiplier |

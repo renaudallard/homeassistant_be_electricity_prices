@@ -23,7 +23,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Frank Energie Belgium dynamic tariff extractor.
+"""Frank Energie Belgium tariff extractor, dynamic and variable.
 
 Frank Energie Belgium publishes monthly tariff cards as PDFs hosted on a
 Sanity CMS CDN.  Six dynamic contract tiers share the same PDF layout
@@ -63,6 +63,14 @@ The formula is the same on either grid, so the card cannot say which side a
 household is on and nothing here can read it. The tiers carry
 ``quarter_hourly_option`` and the config flow asks; see ``_TIERS``.
 
+The same tiers are sold as Variabel cards ("Stroom Variabel"), priced on the
+month's RLP-weighted index and crediting the feed-in on its SPP-weighted one,
+the kind energie.be's Variabel is. They share the dynamic cards' subscription
+row, waiver, levies, network table and title, read here for both; their
+energy and feed-in readers are in ``_frank_variable.py``. A file is told from
+the other product's by the word after which its tier stands, "Dynamisch" or
+"Variabel".
+
 Data source: Sanity file asset API (public, no auth required). The terms
 page (https://www.frankenergie.be/nl/voorwaarden) links each tier's current
 card, which discover reads for the live check.
@@ -92,6 +100,7 @@ from ..const import (
     WELCOME_CREDIT_ANNIVERSARY,
     WELCOME_CREDIT_PRO_RATA,
 )
+from ._frank_variable import variable_energy, variable_injection
 from ._parse import (
     SIGN_CHARS,
     parse_sign,
@@ -114,6 +123,7 @@ from ._rates import (
     Contract,
     DynamicRates,
     InjectionRates,
+    SpotMonthlyRates,
 )
 from ._validity import (
     archive_validity_check,
@@ -133,20 +143,24 @@ _LOGGER = logging.getLogger(__name__)
 
 _SANITY_API = "https://8navd656.api.sanity.io/v2023-01-01/data/query/production-be"
 
-# The GROQ predicate every lookup filters on. Frank dropped the "Elektriciteit"
-# token from the September 2026 filenames ("... Tariefkaart Elektriciteit
-# Dynamisch HV Augustus 2026" became "... Tariefkaart Dynamisch HV September
-# 2026"), which left a filter keyed on it matching nothing newer than August
-# and every tier quietly serving the previous month's card. Matching on
-# "Dynamisch" alone is what survives that rename; gas is excluded explicitly
-# rather than relied on to keep its own naming, since the same release
-# renamed "Gas ZTP" to "Gas" and a future "Gas Dynamisch" would otherwise be
-# picked up as an electricity card.
-_CARD_SELECT = (
-    '*[_type=="sanity.fileAsset"'
-    ' && originalFilename match "*Dynamisch*"'
-    ' && !(originalFilename match "*Gas*")'
-)
+
+# The GROQ predicate every lookup of a product's cards filters on. Frank
+# dropped the "Elektriciteit" token from the September 2026 filenames ("...
+# Tariefkaart Elektriciteit Dynamisch HV Augustus 2026" became "...
+# Tariefkaart Dynamisch HV September 2026", the variable cards of September
+# and April 2026 alike), which left a filter keyed on it matching nothing
+# newer than August and every tier quietly serving the previous month's card.
+# Matching on the product word alone is what survives that rename; gas is
+# excluded explicitly rather than relied on to keep its own naming, since the
+# same release renamed "Gas ZTP" to "Gas", and the gas cards of 2023 were
+# named "Gas Variabel" or "Gas variabel".
+def _card_select(product: str) -> str:
+    return (
+        '*[_type=="sanity.fileAsset"'
+        f' && originalFilename match "*{product}*"'
+        ' && !(originalFilename match "*Gas*")'
+    )
+
 
 # Frank prints the month title-cased ("Januari"); keep a title tuple for
 # indexing and the header regex, plus a lowercase set for membership.
@@ -165,20 +179,47 @@ _TIERS: tuple[tuple[str, str, str | None], ...] = (
     ("frank_dynamic_slim", "Frank Energie Dynamisch Slim", "SL"),
     ("frank_dynamic_plus", "Frank Energie Dynamisch Plus", "Plus"),
 )
+# The variable tiers, by the suffix their file names carry after "Variabel".
+# VT's cards were once titled "Korting" too ("Frank Energie Variabel -
+# Korting - juni 2025", "VT" by October 2026), but no entry predates this
+# tier, so its id takes the name its file names have always carried.
+# "Variabel JN Pro" is the business card, and the "Variabel June" files of
+# early 2025 are not read.
+_VARIABLE_TIERS: tuple[tuple[str, str, str | None], ...] = (
+    ("frank_variable", "Frank Energie Variabel", None),
+    ("frank_variable_hv", "Frank Energie Variabel HV", "HV"),
+    ("frank_variable_vt", "Frank Energie Variabel VT", "VT"),
+    ("frank_variable_jn", "Frank Energie Variabel JN", "JN"),
+    ("frank_variable_slim", "Frank Energie Variabel Slim", "SL"),
+    ("frank_variable_plus", "Frank Energie Variabel Plus", "Plus"),
+)
 # The first day Frank no longer sold a tier (``Contract.withdrawn``). VT had
 # no November 2026 card while the five others had theirs on 30 October, and
 # Frank's conditions page, which still linked VT's October card on 3 November,
-# lists the five others alone from 4 November.
-_WITHDRAWN: dict[str, date] = {"frank_dynamic_korting": date(2026, 11, 1)}
-_TIER_SUFFIX: dict[str, str | None] = {t[0]: t[2] for t in _TIERS}
+# lists the five others alone from 4 November. Its variable twin went the same
+# way: no November card, no link on the page.
+_WITHDRAWN: dict[str, date] = {
+    "frank_dynamic_korting": date(2026, 11, 1),
+    "frank_variable_vt": date(2026, 11, 1),
+}
+_TIER_SUFFIX: dict[str, str | None] = {t[0]: t[2] for t in (*_TIERS, *_VARIABLE_TIERS)}
+# The word a tier's file names and terms-page link carry before its suffix.
+_PRODUCT: dict[str, str] = {
+    **{t[0]: "Dynamisch" for t in _TIERS},
+    **{t[0]: "Variabel" for t in _VARIABLE_TIERS},
+}
 _VALID_IDS: frozenset[str] = frozenset(_TIER_SUFFIX)
 
 # discover() reads the words the terms page links each tier's card under:
-# the file names' suffix, none for the standard tier, and "Slim" where the
-# files say "SL".
-_PAGE_TIER_IDS: dict[str, str] = {
-    **{(suffix or "").casefold(): cid for cid, _label, suffix in _TIERS},
-    "slim": "frank_dynamic_slim",
+# the product, then the file names' suffix, none for the standard tier, and
+# "Slim" where the files say "SL".
+_PAGE_TIER_IDS: dict[tuple[str, str], str] = {
+    **{
+        (_PRODUCT[cid].casefold(), (suffix or "").casefold()): cid
+        for cid, _label, suffix in (*_TIERS, *_VARIABLE_TIERS)
+    },
+    ("dynamisch", "slim"): "frank_dynamic_slim",
+    ("variabel", "slim"): "frank_variable_slim",
 }
 
 # Frank alternates the Slim tier's filename token between the abbreviation
@@ -206,16 +247,20 @@ _FRANK_REGIONS = frozenset({REGION_FLANDERS})
 # ---- Sanity CMS API helpers --------------------------------------------------
 
 
-def _matches_suffix(filename: str, suffix: str | None) -> bool:
-    """True when *filename* belongs to the tier identified by *suffix*.
+def _matches_suffix(
+    filename: str, suffix: str | None, product: str = "Dynamisch"
+) -> bool:
+    """True when *filename* belongs to the tier identified by *suffix* of
+    *product*.
 
     A tier's token is followed by the month, "Juli.pdf" and "Oktober'24"
     included. Another product sharing the token is not the tier's: "Dynamisch
     JN Pro November 2026", the business card, was uploaded after the
     household JN card of that month and priced JN entries on its figures,
     as "Dynamisch VT Slim" did VT entries in December 2024 and March 2025.
+    "Variabel JN Pro" came out beside the household card the same way.
     """
-    m = re.search(r"Dynamisch\s+(\S+)(?:\s+([A-Za-z]+))?", filename)
+    m = re.search(rf"{product}\s+(\S+)(?:\s+([A-Za-z]+))?", filename)
     if not m:
         return False
     word, after = m.group(1), m.group(2) or ""
@@ -253,25 +298,28 @@ async def _resolve_pdf_url(
     suffix = _TIER_SUFFIX.get(contract_id)
     if suffix is None and contract_id not in _VALID_IDS:
         raise ExtractorError(f"unknown Frank Energie contract {contract_id!r}")
+    product = _PRODUCT[contract_id]
 
     if target_month is not None:
         month_name = _NL_MONTHS_TITLE[target_month.month - 1]
         q = (
-            _CARD_SELECT
+            _card_select(product)
             + f' && originalFilename match "*{month_name}*"'
             + f' && originalFilename match "*{target_month.year}*"'
             + "]{originalFilename,url,_createdAt}"
         )
     else:
         q = (
-            _CARD_SELECT
+            _card_select(product)
             + "]{originalFilename,url,_createdAt}"
             + " | order(_createdAt desc)[0..29]"
         )
 
     rows = await _sanity_query(session, q)
     matches = [
-        r for r in rows if _matches_suffix(r.get("originalFilename", ""), suffix)
+        r
+        for r in rows
+        if _matches_suffix(r.get("originalFilename", ""), suffix, product)
     ]
     if not matches:
         raise ExtractorError(
@@ -345,15 +393,16 @@ async def fetch_for_month(
 # "Gedurende de eerste 12 maanden van het contract ontvang je een maandelijkse
 # korting op de abonnementskosten, waardoor deze worden verlaagd naar € 0,00
 # per maand. Na afloop van deze periode gelden de abonnementskosten volgens de
-# tariefkaart Dynamisch - JN - Oktober 2026", under the JN card's "0,00*".
+# tariefkaart Dynamisch - JN - Oktober 2026", under the JN card's "0,00*". The
+# variable JN card of the same month names "Variabel - JN - Oktober 2026".
 _FEE_WAIVER_RE = re.compile(
     r"eerste\s+(\d+)\s+maanden\s+van\s+het\s+contract\s+ontvang\s+je\s+een\s+"
     r"maandelijkse\s+korting\s+op\s+de\s+abonnementskosten",
     re.IGNORECASE,
 )
 _FEE_CARD_RE = re.compile(
-    r"abonnementskosten\s+volgens\s+de\s+tariefkaart\s+Dynamisch\s*-\s*\S+\s*-\s*"
-    r"([A-Za-z]+)\s+(\d{4})",
+    r"abonnementskosten\s+volgens\s+de\s+tariefkaart\s+(Dynamisch|Variabel)\s*-\s*"
+    r"\S+\s*-\s*([A-Za-z]+)\s+(\d{4})",
     re.IGNORECASE,
 )
 
@@ -373,18 +422,23 @@ async def _with_waived_fee(
     year: billed at the one the card it names prints, and granted back to a
     contract signed on it as a first-year credit of the same amount, pro rata
     over the year. A card without a waiver is returned as it is; one waiving
-    for another term than a year, or naming no card, fails loud, since a
-    credit over the first year would misprice it."""
+    for another term than a year, or naming no card, or another product's,
+    fails loud, since a credit over the first year would misprice it."""
     waiver = _FEE_WAIVER_RE.search(text)
     if waiver is None:
         return snap
     named = _FEE_CARD_RE.search(text)
-    month_name = "" if named is None else named.group(1).lower()
-    if named is None or month_name not in _NL_MONTHS_LOWER or waiver.group(1) != "12":
+    month_name = "" if named is None else named.group(2).lower()
+    if (
+        named is None
+        or month_name not in _NL_MONTHS_LOWER
+        or waiver.group(1) != "12"
+        or named.group(1).casefold() != _PRODUCT[contract_id].casefold()
+    ):
         raise ExtractorError(
             "Frank Energie: the card waives its subscription in a way not priced here"
         )
-    month = date(int(named.group(2)), _NL_MONTHS.index(month_name) + 1, 1)
+    month = date(int(named.group(3)), _NL_MONTHS.index(month_name) + 1, 1)
     yearly = _NAMED_FEES.get((contract_id, month))
     if yearly is None:
         url, _ = await _resolve_pdf_url(session, contract_id, target_month=month)
@@ -410,7 +464,10 @@ async def probe(
 ) -> str | None:
     if contract_id not in _VALID_IDS:
         return None
-    q = _CARD_SELECT + "] | order(_createdAt desc)[0]{_createdAt}"
+    q = (
+        _card_select(_PRODUCT[contract_id])
+        + "] | order(_createdAt desc)[0]{_createdAt}"
+    )
     try:
         rows = await _sanity_query(session, q)
     except ExtractorError:
@@ -422,26 +479,35 @@ async def probe(
 
 _TERMS_URL = "https://www.frankenergie.be/nl/voorwaarden"
 # The terms page links the card of every product Frank sells today, the
-# dynamic tiers as "Actuele Tariefkaart Stroom Dynamisch" followed by the
-# tier's word but for the standard tier. On 5 November 2026 they were the
-# standard, HV, JN, Slim and Plus tiers: VT's link left the page with the
-# tier. A link's text stands in the HTML, ended by "<", and in the page's
-# script payload, ended by an escaped quote.
-_CATALOG_RE = re.compile(r"Actuele Tariefkaart Stroom Dynamisch\b([^<\\\"]*)")
+# electricity tiers as "Actuele Tariefkaart Stroom Dynamisch" or "... Stroom
+# Variabel" followed by the tier's word but for the standard tier. On 5
+# November 2026 they were the standard, HV, JN, Slim and Plus tiers of each:
+# VT's links left the page with the tier. A link's text stands in the HTML,
+# ended by "<", and in the page's script payload, ended by an escaped quote.
+_CATALOG_RE = re.compile(
+    r"Actuele Tariefkaart Stroom (Dynamisch|Variabel)\b([^<\\\"]*)"
+)
+_CATALOG_PREFIX = {"dynamisch": "frank_dynamic_", "variabel": "frank_variable_"}
 
 
 def parse_catalog(page: str) -> set[str]:
-    """The dynamic tiers the terms page links a card for, by contract id; a
-    tier no contract is reads as ``frank_dynamic_<words>``."""
+    """The electricity tiers the terms page links a card for, by contract
+    id; a tier no contract is reads as ``frank_dynamic_<words>`` or
+    ``frank_variable_<words>``."""
     out: set[str] = set()
     for match in _CATALOG_RE.finditer(page):
-        words = re.findall(r"\w+", match.group(1).casefold())
-        out.add(_PAGE_TIER_IDS.get(" ".join(words), "frank_dynamic_" + "_".join(words)))
+        product = match.group(1).casefold()
+        words = re.findall(r"\w+", match.group(2).casefold())
+        out.add(
+            _PAGE_TIER_IDS.get(
+                (product, " ".join(words)), _CATALOG_PREFIX[product] + "_".join(words)
+            )
+        )
     return out
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
-    """The dynamic tiers Frank sells today, as its terms page links them.
+    """The electricity tiers Frank sells today, as its terms page links them.
 
     The 60 newest uploads this read before still held VT's October card
     days after the tier was withdrawn on 1 November 2026, so VT read as sold
@@ -468,17 +534,25 @@ def parse_snapshot(
     contract_id: str,
     publication_label: str = "",
 ) -> SupplierSnapshot:
+    energy: DynamicRates | SpotMonthlyRates
+    if _PRODUCT.get(contract_id) == "Variabel":
+        energy = variable_energy(text, _yearly_fee(text))
+        # Credited per hour up to February 2025, in the dynamic cards' words.
+        injection = variable_injection(text) or _extract_injection(text)
+    else:
+        energy = _extract_dynamic(text)
+        injection = _extract_injection(text)
     return with_vat_basis(
         SupplierSnapshot(
             supplier="frank",
             contract=contract_id,
-            energy=_extract_dynamic(text),
+            energy=energy,
             dsos=_extract_dsos(text),
             taxes=_extract_taxes(text),
             source_url=source_url,
             publication_label=publication_label,
             valid_until=_valid_until(text),
-            injection=_extract_injection(text),
+            injection=injection,
             welcome_credit_eur=_welcome_credit(text),
             welcome_credit_kind=WELCOME_CREDIT_ANNIVERSARY,
         ),
@@ -595,19 +669,22 @@ def _extract_dynamic(text: str) -> DynamicRates:
     factor = factor_pdf * vat_mult * 10.0
     base = base_pre_vat_cents * vat_mult / 100.0
 
+    return DynamicRates(
+        factor=factor,
+        base=base,
+        yearly_fixed_fee=_yearly_fee(text),
+    )
+
+
+def _yearly_fee(text: str) -> float:
+    """The subscription a card prints per month, by the year."""
     fee_match = _MONTHLY_FEE_RE.search(text)
     if fee_match is None:
         # The monthly standing charge (~35 EUR/yr) is mandatory; the
         # adjacent tax block already fails loud, so do the same here
         # rather than silently bill a zero standing charge on drift.
         raise ExtractorError("Frank Energie: monthly fixed fee row not found")
-    yearly_fee = to_float(fee_match.group(1)) * 12.0
-
-    return DynamicRates(
-        factor=factor,
-        base=base,
-        yearly_fixed_fee=yearly_fee,
-    )
+    return to_float(fee_match.group(1)) * 12.0
 
 
 # ---- injection ---------------------------------------------------------------
@@ -730,20 +807,36 @@ EXTRACTOR = SupplierExtractor(
     sweep_cost_s=28.4,
     id="frank",
     label="Frank Energie",
-    contracts=tuple(
-        Contract(
-            id=cid,
-            label=clabel,
-            kind="dynamic",
-            regions=_FRANK_REGIONS,
-            # The asterisk on both printed formulas points at the
-            # uur- / kwartierprijzen footnote (module docstring): the
-            # customer picks the grid in Frank's app, so the entry answers
-            # for the card. Set on every tier because every tier prints it.
-            quarter_hourly_option=True,
-            withdrawn=_WITHDRAWN.get(cid),
-        )
-        for cid, clabel, _ in _TIERS
+    contracts=(
+        *(
+            Contract(
+                id=cid,
+                label=clabel,
+                kind="dynamic",
+                regions=_FRANK_REGIONS,
+                # The asterisk on both printed formulas points at the
+                # uur- / kwartierprijzen footnote (module docstring): the
+                # customer picks the grid in Frank's app, so the entry
+                # answers for the card. Set on every tier because every
+                # tier prints it.
+                quarter_hourly_option=True,
+                withdrawn=_WITHDRAWN.get(cid),
+            )
+            for cid, clabel, _ in _TIERS
+        ),
+        # "spot_monthly", as energie.be's Variabel: the card prices the month
+        # on an index it names and prints only an estimate of it, and the
+        # kind is what collects the ENTSO-E key the index needs.
+        *(
+            Contract(
+                id=cid,
+                label=clabel,
+                kind="spot_monthly",
+                regions=_FRANK_REGIONS,
+                withdrawn=_WITHDRAWN.get(cid),
+            )
+            for cid, clabel, _ in _VARIABLE_TIERS
+        ),
     ),
     fetch=fetch,
     probe=probe,

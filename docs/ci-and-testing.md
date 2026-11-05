@@ -85,6 +85,7 @@ machinery.
 | `tests/test_law_archive.py` | The archive's law table: what `scripts/archive_cards.py` writes from the law, `law_archive.py` reading it, and the months `excise_law.py` bills on it |
 | `tests/test_card_vat.py` | The VAT basis each card records: the rate it states, or the one its parser grossed a formula by |
 | `tests/test_frank.py` | Frank Energie extractor |
+| `tests/test_frank_variable.py` | Frank Energie's variable tiers, on their real cards |
 | `tests/test_luminus.py` | Luminus extractor |
 | `tests/test_mega.py` | Mega extractor |
 | `tests/test_octaplus.py` | OCTA+ extractor |
@@ -373,7 +374,8 @@ Frank's rows measure each tier against the newest month any of its cards names, 
 next card goes up later than its siblings' read as broken: on 30 October 2026 the November cards
 of five tiers were up and VT still had October's. A Frank tier on the running month's card
 passes for that reason, and is held to the newest advertised card once the month has turned, which
-is when a resolver blind to a renamed card serves last month's.
+is when a resolver blind to a renamed card serves last month's. The variable tiers get the same
+rows, scanned on the word "Variabel" with gas's "Gas Variabel" files left out.
 
 ### The federal tax block
 
@@ -960,7 +962,8 @@ green. A product the registry already marks withdrawn (`Contract.withdrawn`) is 
 OCTA+, Mega, Eneco and Frank baselines, so it is not reported gone every night and its slug
 coming back reads as new. Frank's list has been its terms page's links since 5 November 2026:
 the 60 newest uploads it read before still held VT's October card after the tier's withdrawal,
-so VT read as sold.
+so VT read as sold. The page links the variable tiers under the same words ("Actuele
+Tariefkaart Stroom Variabel HV"), read as their own products.
 Suppliers in `_CATALOG_PARTIAL` skip this half: Engie's sitemap names no page for Basic Online,
 Direct Online or Empty House while all three cards are current
 (`test_a_product_the_listing_no_longer_names_is_reported`). And a product whose card is found

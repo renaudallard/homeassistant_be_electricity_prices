@@ -765,8 +765,8 @@ place it in. `SupplierSnapshot` carries the amount and the rule its card states
 
 | kind | who | grant | cap |
 | --- | --- | --- | --- |
-| `pro_rata` | EnergyVision's cards from July 2026 · Mega's residential cards from October 2026 | accrued by the day across 365 days from the start date, totalling the printed amount over a full year | the supplier's energy component of the consumption (gross of any feed-in credit, never the network or tax legs) + the supplier's standing charge + the region's green / CHP contribution, prorated onto the credited days |
-| `anniversary` | Frank Energie, JN (and HV and Korting until September 2026) · Mega, 19 of 21 contracts up to September 2026, and its professional cards since · Bolt's Plenty cards · OCTA+'s June to September 2026 Fixed, Fixed Impact, Flux and Dynamic cards · EnergyVision's cards from November 2025 to June 2026 | the whole amount, in the window the first anniversary falls in and no other | Frank's, Bolt's, OCTA+'s and EnergyVision's cards up to March 2026 state none; Mega's states its own ceiling (`welcome_credit_cap_eur`, 848 EUR on the residential cards and 800 on the professional ones, which is the same figure ex-VAT); EnergyVision's April to June 2026 cards hold the lump to the three components above (`welcome_credit_lump_capped`) as the first contract year charged them, walked on its own and held as the ceiling in every window the lump lands in (`lump_held_to_first_year`); a quote of the coming year measures it on that year |
+| `pro_rata` | EnergyVision's cards from July 2026 · Mega's residential cards from October 2026 · Frank's JN subscription waiver from November 2026, on the dynamic and the variable card | accrued by the day across 365 days from the start date, totalling the printed amount over a full year | the supplier's energy component of the consumption (gross of any feed-in credit, never the network or tax legs) + the supplier's standing charge + the region's green / CHP contribution, prorated onto the credited days |
+| `anniversary` | Frank Energie, JN (and HV and Korting until September 2026), on the variable cards as on the dynamic ones where they print one · Mega, 19 of 21 contracts up to September 2026, and its professional cards since · Bolt's Plenty cards · OCTA+'s June to September 2026 Fixed, Fixed Impact, Flux and Dynamic cards · EnergyVision's cards from November 2025 to June 2026 | the whole amount, in the window the first anniversary falls in and no other | Frank's, Bolt's, OCTA+'s and EnergyVision's cards up to March 2026 state none; Mega's states its own ceiling (`welcome_credit_cap_eur`, 848 EUR on the residential cards and 800 on the professional ones, which is the same figure ex-VAT); EnergyVision's April to June 2026 cards hold the lump to the three components above (`welcome_credit_lump_capped`) as the first contract year charged them, walked on its own and held as the ceiling in every window the lump lands in (`lump_held_to_first_year`); a quote of the coming year measures it on that year |
 
 The pro-rata kind always carries its cap; a lump carries one only where its card states
 it, which `welcome_credit_lump_capped` says. Suppliers change rule between two months of
@@ -1191,7 +1191,11 @@ estimate that figure replaces is the previous month's index, 15,62 EUR/MWh out
 on average, which is the error that actually mattered.
 energie.be Variabel against the column-weighted mean, every DSO sub-area counting
 once, which is how it publishes the same phrase Eneco reads as the distinct
-mean. DATS 24's BE_spotRLP is the column-weighted mean too, at quarter-hour
+mean. Frank Energie's variable tiers call their RLP_BE the mean of the profiles
+"van de verschillende distributienetbeheerders in Vlaanderen", yet the values
+Frank publishes for it are the column-weighted mean as well: within 0,09
+EUR/MWh in each 2026 month up to October, where the Fluvius curve alone misses
+by up to 1,09. DATS 24's BE_spotRLP is the column-weighted mean too, at quarter-hour
 resolution: 0,04 EUR/MWh off its six published 2026 values on average, 0,15 on
 the hourly weighting the engine uses. Each blend was settled against the supplier's own published table rather
 than against the wording, which is identical on two of the three cards.

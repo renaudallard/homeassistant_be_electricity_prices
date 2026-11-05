@@ -498,49 +498,61 @@ _FRANK_SOLD = {
     "frank_dynamic_jn",
     "frank_dynamic_slim",
     "frank_dynamic_plus",
+    "frank_variable",
+    "frank_variable_hv",
+    "frank_variable_jn",
+    "frank_variable_slim",
+    "frank_variable_plus",
 }
 
 
 def test_frank_discover_matches_registry() -> None:
-    # Frank's terms page links the card of each dynamic tier it sells, and a
-    # withdrawn tier leaves it: on 5 November 2026 the five sold, VT gone.
+    # Frank's terms page links the card of each tier it sells, dynamic and
+    # variable, and a withdrawn tier leaves it: on 5 November 2026 the five
+    # of each sold, VT gone from both.
     session = _FakeSession(_read("frank.html"))
     discovered = _run(frank_mod.discover(session))
     assert discovered == _FRANK_SOLD
     assert discovered == {
-        t[0] for t in frank_mod._TIERS if t[0] not in frank_mod._WITHDRAWN
+        t[0]
+        for t in (*frank_mod._TIERS, *frank_mod._VARIABLE_TIERS)
+        if t[0] not in frank_mod._WITHDRAWN
     }
 
 
 def test_frank_discover_reads_the_tiers_the_page_links() -> None:
-    # On 29 September 2026 the page still linked VT's card, and Plus had none
-    # yet; the page writes Slim where the files say SL.
+    # On 29 September 2026 the page still linked VT's cards, and Plus had
+    # none yet; the page writes Slim where the files say SL.
     session = _FakeSession(_read("frank_2026-09.html"))
-    assert _run(frank_mod.discover(session)) == _FRANK_SOLD - {"frank_dynamic_plus"} | {
-        "frank_dynamic_korting"
-    }
+    assert _run(frank_mod.discover(session)) == _FRANK_SOLD - {
+        "frank_dynamic_plus",
+        "frank_variable_plus",
+    } | {"frank_dynamic_korting", "frank_variable_vt"}
 
 
-def test_frank_discover_reads_the_dynamic_links_alone() -> None:
-    # The page also links five Stroom Variabel tiers under the same words;
-    # they are other products, so Plus's variable card alone sells no
-    # dynamic Plus.
+def test_frank_discover_reads_each_product_under_its_own_word() -> None:
+    # The page links the dynamic and the variable tiers under the same tier
+    # words: Plus's variable card alone sells no dynamic Plus, and the other
+    # way round.
     page = _read("frank.html")
-    without = page.replace("Actuele Tariefkaart Stroom Dynamisch Plus", "")
-    assert without != page and "Actuele Tariefkaart Stroom Variabel Plus" in without
-    assert _run(frank_mod.discover(_FakeSession(without))) == _FRANK_SOLD - {
-        "frank_dynamic_plus"
-    }
+    for product, other in (("Dynamisch", "Variabel"), ("Variabel", "Dynamisch")):
+        without = page.replace(f"Actuele Tariefkaart Stroom {product} Plus", "")
+        assert without != page
+        assert f"Actuele Tariefkaart Stroom {other} Plus" in without
+        gone = "frank_dynamic_plus" if product == "Dynamisch" else "frank_variable_plus"
+        assert _run(frank_mod.discover(_FakeSession(without))) == _FRANK_SOLD - {gone}
 
 
 def test_frank_discover_surfaces_new_tier() -> None:
     body = (
-        _read("frank.html") + '<a href="x">Actuele Tariefkaart Stroom Dynamisch XL</a>'
+        _read("frank.html")
+        + '<a href="x">Actuele Tariefkaart Stroom Dynamisch XL</a>'
+        + '<a href="y">Actuele Tariefkaart Stroom Variabel XL</a>'
     )
     session = _FakeSession(body)
     discovered = _run(frank_mod.discover(session))
-    known = {t[0] for t in frank_mod._TIERS}
-    assert discovered - known == {"frank_dynamic_xl"}
+    known = {t[0] for t in (*frank_mod._TIERS, *frank_mod._VARIABLE_TIERS)}
+    assert discovered - known == {"frank_dynamic_xl", "frank_variable_xl"}
 
 
 # ---- error handling ---------------------------------------------------------
