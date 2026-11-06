@@ -35,6 +35,7 @@ import time
 from collections.abc import Callable, Iterator, Sequence
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import aiohttp
@@ -53,6 +54,7 @@ from custom_components.be_electricity_prices.providers._parse import (
 )
 from custom_components.be_electricity_prices.providers._pdf import (
     MAX_RESPONSE_BYTES,
+    MAX_TEXT_BYTES,
     _fetch_validated_pdf_bytes,
     fetch_pdf_text,
     fetch_text,
@@ -82,8 +84,11 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
+from custom_components.be_electricity_prices.snapshot_months import (
+    _archived_card_from_github,
+)
 from scripts import card_texts
-from tests import FIXTURES, FakeBody
+from tests import FIXTURES, FakeBody, make_text_session
 
 
 class _PdfResponse:
@@ -647,7 +652,9 @@ async def test_a_body_past_the_cap_is_refused_as_it_streams(
     socket_enabled: None, monkeypatch: pytest.MonkeyPatch, pdf: bool
 ) -> None:
     """Only a declared Content-Length was checked, and on a PDF alone: a
-    chunked answer, or a page of text, was read whole whatever its size."""
+    chunked answer, or a page of text, was read whole whatever its size.
+    A card is held to MAX_RESPONSE_BYTES, a page to the limit its caller
+    passes, MAX_TEXT_BYTES unless it knows the page to be smaller."""
     from aiohttp import web
     from aiohttp.test_utils import TestServer
 
@@ -668,9 +675,98 @@ async def test_a_body_past_the_cap_is_refused_as_it_streams(
     app.router.add_get("/", chunked)
     async with TestServer(app) as server, aiohttp.ClientSession() as session:
         url = str(server.make_url("/"))
-        fetch = fetch_pdf_text(session, url) if pdf else fetch_text(session, url)
+        fetch = (
+            fetch_pdf_text(session, url)
+            if pdf
+            else fetch_text(session, url, limit=1000)
+        )
         with pytest.raises(ExtractorError, match="more than 1000 bytes"):
             await fetch
+
+
+async def test_a_text_answer_past_its_cap_is_refused_before_it_is_parsed() -> None:
+    """A page, an API answer or a table was held to the 64 MiB a card may
+    take, then parsed whole: 63 MiB of JSON, which gzip carries in 64 kB,
+    held the event loop for 14 to 47 s. Text has a cap of its own, applied
+    as it is read, and a card of the same size still reads."""
+    from custom_components.be_electricity_prices import api, creg_ev
+
+    session = make_text_session("[" + "{}," * (MAX_TEXT_BYTES // 3) + "{}]")
+    over = f"more than {MAX_TEXT_BYTES} bytes"
+    with pytest.raises(ExtractorError, match=over):
+        await fetch_text(session, "https://x.test/listing")
+    with pytest.raises(api.EntsoeError, match=over):
+        await api.SmardClient(session)._get_json("https://www.smard.de/x.json")
+    assert await creg_ev._csv_text(session) is None
+    card = b"%PDF-1.7" + b" " * MAX_TEXT_BYTES
+    read = await _fetch_validated_pdf_bytes(_FakeBodySession(card), "https://x.test/c")  # type: ignore[arg-type]
+    assert read == card
+
+
+async def test_an_archive_row_past_its_cap_is_not_parsed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A row of the card archive is a few kB, and one was held only to the
+    8 MiB any text may take, then parsed on the event loop. The reader is
+    the one imported here: conftest stands a stub in for it in the module."""
+    from custom_components.be_electricity_prices import snapshot_months
+    from custom_components.be_electricity_prices.const import (
+        CARD_ARCHIVE_MAX_ROW_BYTES,
+    )
+
+    parsed: list[str] = []
+
+    def loads(text: str) -> dict[str, object]:
+        parsed.append(text)
+        return {}
+
+    monkeypatch.setattr(snapshot_months, "json", SimpleNamespace(loads=loads))
+
+    async def row(body: str) -> object:
+        return await _archived_card_from_github(
+            make_text_session(body),
+            "elegant",
+            "elegant_flex",
+            "flanders",
+            date(2026, 10, 1),
+        )
+
+    assert await row("x" * (CARD_ARCHIVE_MAX_ROW_BYTES + 1)) is None
+    assert parsed == []
+    # A row under the cap is parsed: this one does not decode, so it is None.
+    assert await row("{}") is None
+    assert parsed == ["{}"]
+
+
+async def test_an_archive_table_past_its_cap_is_not_parsed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The archive's tables are under 80 kB, and one was held only to the
+    8 MiB any text may take, then parsed on the event loop."""
+    from custom_components.be_electricity_prices import archive_table
+    from custom_components.be_electricity_prices.const import (
+        ARCHIVE_TABLE_MAX_BYTES,
+        VAT_TABLE_URL,
+    )
+
+    parsed: list[str] = []
+
+    def loads(text: str) -> dict[str, object]:
+        parsed.append(text)
+        return {}
+
+    monkeypatch.setattr(archive_table, "json", SimpleNamespace(loads=loads))
+    held: list[object] = []
+    table = archive_table.ArchiveTable(VAT_TABLE_URL, held.append)
+    await table.ensure(make_text_session("x" * (ARCHIVE_TABLE_MAX_BYTES + 1)))
+    assert parsed == []
+    assert held == []
+    assert table.failed_at is not None
+    # A table under the cap is parsed and held.
+    table.failed_at = None
+    await table.ensure(make_text_session("{}"))
+    assert parsed == ["{}"]
+    assert held == [{}]
 
 
 _BLANK_PDF = (

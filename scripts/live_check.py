@@ -478,9 +478,9 @@ async def _on_request_end(
     #    they never reach here: see `_on_request_exception`.
 
 
-def _counting_reads(
-    read: Callable[[aiohttp.ClientResponse, str], Awaitable[bytes]],
-) -> Callable[[aiohttp.ClientResponse, str], Awaitable[bytes]]:
+def _counting_reads[**P](
+    read: Callable[P, Awaitable[bytes]],
+) -> Callable[P, Awaitable[bytes]]:
     """``read``, adding each body it returns to the supplier being checked.
 
     Every body the providers fetch goes through providers/_pdf.read_capped,
@@ -488,13 +488,16 @@ def _counting_reads(
     ``on_response_chunk_received`` from ``ClientResponse.read()`` only, so a
     trace hook sees none of those bytes and every supplier read ``-``.
 
+    The wrapper takes what ``read`` takes and passes it all on, so the
+    limit read_text_capped asks for a page reaches read_capped too.
+
     The count is of the body once read whole, so a transfer that stalls
     halfway records zero bytes, not a partial count, which is why a counted
     fetch with no bytes means "headers arrived, body never finished".
     """
 
-    async def counted(resp: aiohttp.ClientResponse, url: str) -> bytes:
-        payload = await read(resp, url)
+    async def counted(*args: P.args, **kwargs: P.kwargs) -> bytes:
+        payload = await read(*args, **kwargs)
         supplier = _CURRENT_SUPPLIER.get()
         if supplier is not None:
             _metrics_bucket(supplier)["bytes"] += float(len(payload))

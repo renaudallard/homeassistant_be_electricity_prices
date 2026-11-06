@@ -618,6 +618,10 @@ CARD_ARCHIVE_URL: Final = (
     "https://raw.githubusercontent.com/renaudallard/be_price_cards/main/"
     "electricity/cards"
 )
+# A row is a few kB: the largest of the 4,894 the archive held on 5 November
+# 2026 was 11,6 kB, an Elegant card. One past this is refused as it streams
+# rather than parsed on the event loop.
+CARD_ARCHIVE_MAX_ROW_BYTES: Final = 256 * 1024
 # The VAT rate the archived cards of each month agree on (vat_rates.py), read
 # under the same card-archive option as the cards.
 VAT_TABLE_URL: Final = (
@@ -637,6 +641,10 @@ NETWORK_TABLE_URL: Final = (
     "https://raw.githubusercontent.com/renaudallard/be_price_cards/main/"
     "electricity/network.json"
 )
+# The three tables are small: on 6 November 2026 network.json held 78 kB,
+# vat.json 8 kB and law.json 2 kB. One past this is refused as it streams
+# rather than parsed on the event loop.
+ARCHIVE_TABLE_MAX_BYTES: Final = 1024 * 1024
 # The earliest month the archive can hold for a supplier with no archive of
 # its own. A backfill only mirrors a supplier's own archive, so for those
 # suppliers the archive starts at its daily captures, which began in

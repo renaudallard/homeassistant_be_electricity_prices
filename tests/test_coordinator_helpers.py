@@ -6357,7 +6357,9 @@ async def test_archived_card_from_github_tells_absent_from_transient(
                 is None
             )
     fetch.assert_awaited_once_with(
-        ANY, f"{CARD_ARCHIVE_URL}/acme/acme_fix/wallonia/2026-01.json"
+        ANY,
+        f"{CARD_ARCHIVE_URL}/acme/acme_fix/wallonia/2026-01.json",
+        limit=snapshot_months.CARD_ARCHIVE_MAX_ROW_BYTES,
     )
 
 

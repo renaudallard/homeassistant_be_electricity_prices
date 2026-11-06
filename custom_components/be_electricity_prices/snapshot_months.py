@@ -55,6 +55,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CARD_ARCHIVE_FIRST_MONTH,
+    CARD_ARCHIVE_MAX_ROW_BYTES,
     CARD_ARCHIVE_URL,
     CONF_CARD_ARCHIVE,
     CONF_DSO,
@@ -490,7 +491,7 @@ async def _archived_card_from_github(
         f"{year_month.year:04d}-{year_month.month:02d}.json"
     )
     try:
-        body = await fetch_text(session, url)
+        body = await fetch_text(session, url, limit=CARD_ARCHIVE_MAX_ROW_BYTES)
     except ExtractorError as err:
         if is_transient_fetch_error(str(err)):
             raise

@@ -186,6 +186,7 @@ class _Response:
     def __init__(self, body: bytes, status: int) -> None:
         self.status = status
         self.content_length = None
+        self.charset = None
         self.content = FakeBody(body)
 
     async def __aenter__(self) -> _Response:

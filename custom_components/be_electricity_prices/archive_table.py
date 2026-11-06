@@ -42,6 +42,7 @@ from typing import Any, Final
 import aiohttp
 from homeassistant.util import dt as dt_util
 
+from .const import ARCHIVE_TABLE_MAX_BYTES
 from .providers._pdf import fetch_text
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,7 +75,9 @@ class ArchiveTable:
         ):
             return
         try:
-            table = json.loads(await fetch_text(session, self.url))
+            table = json.loads(
+                await fetch_text(session, self.url, limit=ARCHIVE_TABLE_MAX_BYTES)
+            )
             if not isinstance(table, Mapping):
                 raise ValueError("not a table")
         except Exception as err:  # the docstring promises no raise

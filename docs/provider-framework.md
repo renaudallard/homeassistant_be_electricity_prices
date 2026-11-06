@@ -697,17 +697,31 @@ Internals worth knowing:
   what a broken or hostile server can pull into coordinator memory. The cap
   holds on the bytes as they stream, not only on a declared Content-Length,
   which a chunked answer leaves out and a server can lie about.
-  `read_text_capped` decodes a page under the same cap, replacing what does
-  not decode so a mislabelled page is refused by its parser as an
-  `ExtractorError` rather than raised as a `UnicodeDecodeError`. It reads a
-  page in the charset it declares only when that is UTF-8, Latin-1, cp1252 or
+  `read_text_capped` reads a page, an API answer or a table under a cap of its
+  own, `MAX_TEXT_BYTES` (8 MiB): text is decoded and parsed whole, mostly on
+  the event loop, at many times its size in memory, and 8 MiB of JSON took
+  1,4 s and 185 MiB to load on a Raspberry Pi where 63 MiB had held the loop
+  for 14 to 47 s. Measured on 2026-11-06 the largest real answers are
+  energy-charts' from 2015 to November 2026 (2,3 MB, growing 0,6 MB a year),
+  the CWaPE document listing (1,9 MB) and an OCTA+ archive sheet, a card in
+  base64 (1,6 MB). `read_text_capped` passes it to `read_capped` as its
+  `limit`, and the live check's counting wrapper (`_counting_reads`) forwards
+  whatever it is called with, so it still sees every body. A caller whose
+  document is known to be small passes a tighter `limit` to `fetch_text`: a
+  card archive row is held to 256 KiB (`CARD_ARCHIVE_MAX_ROW_BYTES`, the
+  largest of 4,894 rows on 5 November 2026 being 11,6 kB) and an archive table
+  to 1 MiB (`ARCHIVE_TABLE_MAX_BYTES`, `network.json` the largest at 78 kB), both
+  in `const.py`. `read_text_capped`
+  replaces what does not decode, so a mislabelled page is refused by its parser
+  as an `ExtractorError` rather than raised as a `UnicodeDecodeError`. It reads
+  a page in the charset it declares only when that is UTF-8, Latin-1, cp1252 or
   ASCII (`_charset`, each name normalised through `codecs.lookup`), and in
   UTF-8 otherwise: Python decodes in any codec it ships, on the event loop
   here, and punycode is quadratic (200 kB took 4,4 s on a Raspberry Pi). On
   2026-11-06 every source declared UTF-8, Justel ISO-8859-1, or nothing. The
-  ENTSO-E and energy-charts answers, the Brugel
-  sheets, the CREG rate file and Synergrid's download page are read through
-  them too.
+  ENTSO-E, energy-charts and SMARD answers, the CREG rate file and Synergrid's
+  download page are read through it too, and the Brugel sheets through
+  `read_capped`.
 - The decode bound (`_pdf_bound.py`, pdfminer's wrappers in
   `_pdf_bound_pdfminer.py`) holds what a card's streams may decode
   to, counted on each reader as it reads the card. `read_capped` bounds the

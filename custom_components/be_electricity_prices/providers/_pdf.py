@@ -146,30 +146,44 @@ def error_text(err: BaseException) -> str:
 
 
 # 64 MiB: ~12x the largest real tariff card (Bolt's ~5 MiB PDFs), so it
-# never trips on a legitimate card or page while bounding what a broken or
-# hostile server can pull into the coordinator's memory in one fetch.
+# never trips on a legitimate card or workbook while bounding what a broken
+# or hostile server can pull into the coordinator's memory in one fetch.
 MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 
+# 8 MiB: the cap on a page, an API answer or a table. Each is decoded and
+# parsed whole, mostly on the event loop, at many times its size in memory:
+# 8 MiB of JSON took 1,4 s and 185 MiB to load on a Raspberry Pi. Measured
+# 2026-11-06, the largest real ones are energy-charts' answer from 2015,
+# where its Belgian prices start, to November 2026 at 2,3 MB (0,6 MB more a
+# year), the CWaPE document listing at 1,9 MB and an OCTA+ archive sheet, a
+# card in base64, at 1,6 MB. A Justel law page is 0,6 MB, Luminus's largest
+# sitemap 0,4 MB, every other listing and API answer under 0,35 MB, the
+# archive's tables under 80 kB and the CREG rate file 1,3 kB. ENTSO-E's
+# largest, a week of both products, is about 0,1 MB by its layout.
+MAX_TEXT_BYTES = 8 * 1024 * 1024
 
-async def read_capped(resp: aiohttp.ClientResponse, url: str) -> bytes:
-    """Read a response body, refusing one past :data:`MAX_RESPONSE_BYTES`.
+
+async def read_capped(
+    resp: aiohttp.ClientResponse, url: str, limit: int = MAX_RESPONSE_BYTES
+) -> bytes:
+    """Read a response body, refusing one past ``limit`` bytes: a card's
+    or a workbook's :data:`MAX_RESPONSE_BYTES`, or the :data:`MAX_TEXT_BYTES`
+    :func:`read_text_capped` passes for a page.
 
     Content-Length is only a hint: a chunked answer carries none and a
     server can lie, so the cap holds on the bytes read as well. The bytes
     counted are the decoded ones, so a compressed answer is held to it too.
     """
     declared = resp.content_length
-    if declared is not None and declared > MAX_RESPONSE_BYTES:
+    if declared is not None and declared > limit:
         raise ExtractorError(
-            f"refusing {url}: declared {declared} bytes (limit {MAX_RESPONSE_BYTES})"
+            f"refusing {url}: declared {declared} bytes (limit {limit})"
         )
     payload = bytearray()
     async for chunk in resp.content.iter_chunked(65536):
         payload.extend(chunk)
-        if len(payload) > MAX_RESPONSE_BYTES:
-            raise ExtractorError(
-                f"refusing {url}: more than {MAX_RESPONSE_BYTES} bytes"
-            )
+        if len(payload) > limit:
+            raise ExtractorError(f"refusing {url}: more than {limit} bytes")
     return bytes(payload)
 
 
@@ -193,14 +207,18 @@ def _charset(declared: str | None) -> str:
     return name if name in _CHARSETS else "utf-8"
 
 
-async def read_text_capped(resp: aiohttp.ClientResponse, url: str) -> str:
-    """Read a text body under the cap, in the charset it declares or UTF-8.
+async def read_text_capped(
+    resp: aiohttp.ClientResponse, url: str, *, limit: int = MAX_TEXT_BYTES
+) -> str:
+    """Read a text body under ``limit`` bytes, in the charset it declares or
+    UTF-8. The limit is :data:`MAX_TEXT_BYTES` unless the caller knows its
+    document to be smaller.
 
     Not strict: a page in another charset than it declares is then refused
     by its parser as an ExtractorError rather than raised as a
     UnicodeDecodeError.
     """
-    payload = await read_capped(resp, url)
+    payload = await read_capped(resp, url, limit)
     return payload.decode(_charset(resp.charset), errors="replace")
 
 
@@ -414,7 +432,7 @@ async def _fetch_validated_pdf_bytes(
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
-            payload = await read_capped(resp, url)
+            payload = await read_capped(resp, url, MAX_RESPONSE_BYTES)
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(
             f"network error fetching {url}: {error_text(err)}"
@@ -775,6 +793,7 @@ async def fetch_text(
     *,
     params: dict[str, str] | None = None,
     timeout: int = 20,
+    limit: int = MAX_TEXT_BYTES,
 ) -> str:
     """GET ``url`` and return the response body as text.
 
@@ -785,7 +804,9 @@ async def fetch_text(
 
     ``params`` is passed straight to :meth:`aiohttp.ClientSession.get`
     for endpoints that carry their query in the URL string (e.g. a
-    Sanity CMS ``query``).
+    Sanity CMS ``query``). ``limit`` caps the body
+    (:func:`read_text_capped`): a caller whose document is known to be
+    small passes a tighter one, as the card archive's rows and tables do.
 
     Callers that prefer a soft None-on-failure can wrap this in a
     ``try / except ExtractorError`` block; concentrating the network /
@@ -810,7 +831,7 @@ async def fetch_text(
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
-            body = await read_text_capped(resp, url)
+            body = await read_text_capped(resp, url, limit=limit)
             # Only a success is memoised. A failure is re-attempted by the
             # next caller, which is what the negative cache one layer up is
             # for; caching it here would give it a second, untracked lifetime.
