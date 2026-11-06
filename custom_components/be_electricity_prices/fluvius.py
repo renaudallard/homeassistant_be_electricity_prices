@@ -67,10 +67,8 @@ restart while fluvius.be does not answer bills the figures last read.
 from __future__ import annotations
 
 import asyncio
-import io
 import logging
 import re
-import zipfile
 from collections.abc import Awaitable, Callable, Hashable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -92,7 +90,7 @@ from .const import (
 )
 from .providers._parse import to_float
 from .providers._pdf import USER_AGENT, fetch_text, guard_redirect, read_capped
-from .synergrid import _resolve_sheet_path, _shared_strings, sheet_rows
+from .synergrid import WorkbookZip, _resolve_sheet_path, _shared_strings, sheet_rows
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -132,9 +130,11 @@ _FAILURE_RETRY_S: Final = 6 * 3600
 # and an analog meter's area sheet then cost one listing download between
 # them, and a Fluvius that does not answer one timeout rather than one a sheet.
 _LISTING_TTL_S: Final = 300
-# A sheet is about 25 KB zipped and a few hundred KB unpacked. The cap on the
-# unpacked size refuses a zip bomb before anything is read out of it.
-_MAX_UNPACKED_BYTES: Final = 4 * 1024 * 1024
+# What reading a sheet may inflate, counted on the bytes read rather than
+# the sizes the zip states (synergrid's WorkbookZip). Measured on 6 November
+# 2026 over the sheets held from 2023 to 2026: about 25 KB zipped, of which
+# the read inflates 39 to 43 KB.
+_MAX_UNPACKED_BYTES: Final = 1024 * 1024
 # Sized on the slip it catches, a factor of ten or a column read as a rate,
 # not on what the tariff ought to be.
 _MIN_CEILING: Final = 0.1
@@ -697,9 +697,7 @@ async def _fetch_workbook(
 
 def _rows(payload: bytes) -> list[dict[str, str]]:
     """The first worksheet's cells as text, one ``{column: text}`` per row."""
-    with zipfile.ZipFile(io.BytesIO(payload)) as z:
-        if sum(info.file_size for info in z.infolist()) > _MAX_UNPACKED_BYTES:
-            raise ValueError("workbook unpacks past the size cap")
+    with WorkbookZip(payload, _MAX_UNPACKED_BYTES) as z:
         return sheet_rows(z, _resolve_sheet_path(z, ""), _shared_strings(z))
 
 

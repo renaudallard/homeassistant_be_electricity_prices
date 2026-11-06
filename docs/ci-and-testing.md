@@ -81,6 +81,7 @@ machinery.
 | `tests/test_creg_ev.py` | The CREG home charging reimbursement rate and the sensor that carries it |
 | `tests/test_synergrid_rlp.py` | Synergrid RLP profile fetch and parse (the `.xlsb` workbook) and the RLP-weighted month mean |
 | `tests/test_synergrid_spp.py` | Synergrid SPP profile fetch and parse and the SPP-weighted custom injection |
+| `tests/test_workbook_zip.py` | The workbook zips Synergrid, Fluvius and the CWaPE publish, read only through a budget of what their members really inflate to (`WorkbookZip`, `synergrid.py`), and the shape the Synergrid sheets are held to while they are read |
 | `tests/test_vat_rates.py` | The VAT rate of the month billed (`vat_rates.py`) and where it reaches a card |
 | `tests/test_vat_table.py` | The archive's VAT table: the consensus `scripts/archive_cards.py` writes from the cards and `vat_rates.py` reading it |
 | `tests/test_law_archive.py` | The archive's law table: what `scripts/archive_cards.py` writes from the law, `law_archive.py` reading it, and the months `excise_law.py` bills on it |

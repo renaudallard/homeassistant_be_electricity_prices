@@ -58,11 +58,9 @@ coordinator tick, and a failure leaves the entry on the figures it typed.
 from __future__ import annotations
 
 import asyncio
-import io
 import json
 import logging
 import re
-import zipfile
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -75,7 +73,7 @@ from homeassistant.util import dt as dt_util
 from .const import DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW
 from .providers._pdf import USER_AGENT, fetch_text, guard_redirect, read_capped
 from .providers._pdf_render import extract_pdf_text_layout
-from .synergrid import _shared_strings, sheet_paths, sheet_rows
+from .synergrid import WorkbookZip, _shared_strings, sheet_paths, sheet_rows
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,8 +99,11 @@ _OPERATORS: Final[Mapping[str, tuple[str, str]]] = {
 FIRST_YEAR: Final = 2026
 _TIMEOUT: Final = 30
 _FAILURE_RETRY_S: Final = 6 * 3600
-# RESA's workbook unpacks to 1,8 MB.
-_MAX_UNPACKED_BYTES: Final = 8 * 1024 * 1024
+# What reading a workbook may inflate, counted on the bytes read rather than
+# the sizes the zip states (synergrid's WorkbookZip). Measured on 6 November
+# 2026 over the 2026 and 2027 grids: RESA's workbook unpacks to 1,8 MB, of
+# which the read inflates 175 KB, the most of any.
+_MAX_UNPACKED_BYTES: Final = 2 * 1024 * 1024
 # A rate per kWh is cents and a yearly term tens of euro: bounds sized on a
 # column read as another, not on what the network ought to cost.
 _MAX_KWH: Final = 0.5
@@ -566,9 +567,7 @@ def _workbook_page(
 ) -> tuple[str, list[_Row]] | None:
     """The text and coded rows of the first sheet ``title`` is found on, or
     with no title of the first sheet holding coded rows."""
-    with zipfile.ZipFile(io.BytesIO(payload)) as z:
-        if sum(info.file_size for info in z.infolist()) > _MAX_UNPACKED_BYTES:
-            raise ValueError("workbook unpacks past the size cap")
+    with WorkbookZip(payload, _MAX_UNPACKED_BYTES) as z:
         strings = _shared_strings(z)
         sheets = [sheet_rows(z, path, strings) for _name, path in sheet_paths(z)]
     for cells in sheets:

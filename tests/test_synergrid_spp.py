@@ -1153,8 +1153,11 @@ def test_workbook_xml_entity_expansion_is_refused() -> None:
         z.writestr("xl/workbook.xml", bomb)
     path = Path(buf.name)
     try:
-        with pytest.raises(Exception) as excinfo:
-            synergrid._resolve_sheet_path(zipfile.ZipFile(path))
+        with (
+            pytest.raises(Exception) as excinfo,
+            synergrid.WorkbookZip(path, 1 << 20) as workbook,
+        ):
+            synergrid._resolve_sheet_path(workbook)
         assert "Entities" in type(excinfo.value).__name__, (
             f"expansion must be refused, got {type(excinfo.value).__name__}"
         )

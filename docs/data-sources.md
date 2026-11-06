@@ -1115,7 +1115,8 @@ the 2026 address, with the same fallback to the download page's link as the RLP
 file, which is where the 2025 workbook is found. The file is ~52 MB, almost entirely the ex-post sheet the fetcher never touches:
 `fetch_spp_weights` streams the download to a temp file (never into memory) and
 parses only the ex-ante sheet with the stdlib `zipfile` +
-`ElementTree` (no new dependency), keeping peak memory around 20 MB. The sheet is
+`ElementTree` (no new dependency), keeping peak memory around 20 MB whatever
+the sheet holds ([what a workbook may unpack to](#what-a-workbook-may-unpack-to)). The sheet is
 resolved by name-prefix and the value column by header text (`_SHEET_PREFIXES`,
 `_VALUE_HEADERS`), so a layout change degrades to an empty result rather than a
 wrong one. 2026 names them `SPP_ex-ante_2026` and `SPPExanteBE`. 2025's sheet,
@@ -1183,6 +1184,50 @@ SPP-weighted value is much closer than the plain mean but not the exact settled
 figure a supplier prints on its card. Scraped SPP-indexed suppliers (DATS 24,
 EBEM, Ecofix Flexy) are unaffected: they print the realized value and the
 integration reads it into `InjectionRates.current` directly.
+
+### What a workbook may unpack to
+
+Every workbook read here is a zip: Synergrid's two, and the Fluvius and CWaPE
+sheets of parts 6 and 8. A zip states how large each member unpacks to, and
+nothing holds it to that: `ZipFile.read` inflates up to 2 GiB in one call
+before it compares the result with the size stated, so a cap on the stated
+sizes caps nothing (a 261 KB workbook stating 1.180 bytes inflated 256 MiB).
+Every member is read through `WorkbookZip` (`synergrid.py`) instead, which
+counts the bytes really inflated, a workbook's members together, and refuses
+the workbook past a budget sized on what its reader reads of the real
+workbooks, measured on 6 November 2026:
+
+| Reader | Budget | Read of the real workbooks |
+| --- | --- | --- |
+| SPP | 160 MiB | 9,5 MB of 2026's, 40,6 MB of 2025's |
+| RLP | 64 MiB | 20,8 MB of each from 2024 to 2026 |
+| Fluvius | 1 MiB | 39 to 43 KB of each sheet from 2023 to 2026 |
+| CWaPE | 2 MiB | 54 to 175 KB, RESA's the most |
+
+Before `ZipFile` opens a workbook, `_check_directory` holds its central
+directory to 256 KiB, where the real ones take 0,8 to 13 KB: `ZipFile` reads
+the whole directory as it opens, an object per entry, and a 64 MiB one holds
+1,4 million entries. The size is what bounds them, since `ZipFile` reads
+entries until it has read that many bytes, whatever count the directory
+states. ZIP64 records are refused, since `ZipFile` would take the size from
+them and no workbook needs them, and so is a member compressed any way but
+stored or deflated: Python 3.13's `ZipFile` inflates an lzma or bzip2 member
+whole on its first read. An encrypted member, a directory naming a zip
+version past `ZipFile`'s and a stream that does not inflate are refused as a
+workbook that does not read, where `ZipFile` would raise errors the fetchers
+here, which never raise, do not catch. pyxlsb is handed the bounded zip in
+place of
+the `ZipFile` its `open_workbook` makes, so its whole-member reads are held to
+the RLP budget.
+
+The ex-ante sheet streams, and the parse drops each element from its parent
+once read: a cleared element still hangs off its parent, and a sheet of empty
+rows inside the budget held 470 MB that way. Since the tree runs up to a chunk
+ahead of the events, nothing is looked up in it: a cell's value is read off
+its value's own end event. A sheet of more rows than a year's quarter-hours
+under a header (`_SPP_MAX_ROWS`, 40.000 against the 35.137 of 2024) or nested
+deeper than `_SPP_MAX_DEPTH` is refused, so the work a sheet of empty rows asks
+for is bounded with the memory.
 
 ## Part 4: the CREG home charging reimbursement rate (`creg_ev.py`)
 
@@ -1359,8 +1404,9 @@ Fluvius's "Netkosten afname elektriciteit" page lists one workbook per network
 area and year, each through a publication page of its own named after the
 year it covers (`...-afname-elektriciteit-01012026-31122026`). `fluvius.py`
 takes the first such page for the year, follows its link to the `.xlsx`, and
-reads the first worksheet with the stdlib zip reader and `defusedxml`, through
-the helpers `synergrid.py` already uses. The sheet must title itself the
+reads the first worksheet with `defusedxml`, through the helpers `synergrid.py`
+already uses and its bounded zip reader, on a budget of 1 MiB inflated (see
+[what a workbook may unpack to](#what-a-workbook-may-unpack-to)). The sheet must title itself the
 year's "Tarieflijst periodieke distributienettarieven". Two rows are read: the
 capacity rate's ("Gemiddelde maandpiek"), whose only figure sits in the
 column a peak-metered low-voltage connection is billed on, and the
@@ -1556,7 +1602,9 @@ figures typed.
 
 An operator's grid is read off its workbook (`parse_grid`), the sheet titled
 "Prélèvement basse tension": the first is the higher voltages', with the same
-labels and codes. REW publishes its workbook in the old binary `.xls` format no
+labels and codes. A workbook is opened through the bounded zip reader of
+`synergrid.py`, on a budget of 2 MiB inflated (see
+[what a workbook may unpack to](#what-a-workbook-may-unpack-to)). REW publishes its workbook in the old binary `.xls` format no
 reader here opens, so its PDF's low-voltage page is read instead, through
 pdfplumber (`extract_pdf_text_layout`), which keeps each row whole. Each row is
 split at its market code (`E210` and the like) into its label and its figures,

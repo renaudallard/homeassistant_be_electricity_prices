@@ -57,11 +57,14 @@ empty mapping so the caller degrades to the plain arithmetic mean.
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
+import os
 import re
 import struct
 import tempfile
 import zipfile
+import zlib
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -105,6 +108,13 @@ _SPP_TOKENS = ("spp", "ex-ante")
 # per-area 2024 indices show, and is refused rather than read off one area.
 _SHEET_PREFIXES = ("SPP_ex-ante", "Ex-ante")
 _VALUE_HEADERS = ("SPPExanteBE", "ModelBE")
+# The ex-ante sheet is one row per quarter-hour of its year under a header
+# row, nested five deep (worksheet, sheetData, row, c, v): measured on 6
+# November 2026, 35.041 rows in 2025 and 2026 and 35.137 in 2024, a leap
+# year. Past these the sheet is not the year's curve, and the work a sheet
+# of empty rows asks for stays bounded with the memory.
+_SPP_MAX_ROWS: Final = 40_000
+_SPP_MAX_DEPTH: Final = 64
 # The workbook's first column is the true UTC instant (an Excel date serial);
 # its Year/Month/Day/Hour columns are LOCAL Belgian wall-clock, so we key on
 # this column to line up with the coordinator's UTC-keyed spot cache.
@@ -116,6 +126,21 @@ _EXCEL_EPOCH = datetime(1899, 12, 30)
 # download without rejecting a legitimately larger future edition.
 _MAX_BYTES = 200 * 1024 * 1024
 _TIMEOUT = 120
+# What a workbook's members may inflate to, counted on the bytes read
+# (``WorkbookZip``), measured on 6 November 2026. The parts read before the
+# sheet, the workbook, its relationships and shared strings, take 9 KB in
+# every RLP file from 2024 to 2026 and 23 KB in the SPP ones; they are parsed
+# whole, at some twenty times their size, so they get a budget of their own.
+# Then the sheet: the SPP parse streams 9,5 MB of the 2026 file and 40,6 MB of
+# the 2025 one, whose ex-ante sheet carries a curve per grid area, and the
+# RLP parse reads a 20,8 MB sheet in every file. Four and three times those.
+_PARTS_MAX_UNPACKED_BYTES: Final = 1024 * 1024
+_SPP_MAX_UNPACKED_BYTES: Final = 160 * 1024 * 1024
+_RLP_MAX_UNPACKED_BYTES: Final = 64 * 1024 * 1024
+# What a workbook's central directory may take. Every real one measured, 2024
+# to 2026, runs 0,8 to 2,8 KB, and the largest workbook read here, RESA's
+# grid, 13 KB for its 157 entries.
+_MAX_DIRECTORY_BYTES: Final = 256 * 1024
 
 _NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 _REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
@@ -358,8 +383,171 @@ async def _download(
     return Path(tmp.name)
 
 
+# The end of central directory record and the signature of the ZIP64 locator
+# that would sit just before it, as zipfile reads them.
+_END_RECORD: Final = struct.Struct("<4s4H2LH")
+_END_SIGNATURE: Final = b"PK\x05\x06"
+_ZIP64_LOCATOR: Final = b"PK\x06\x07"
+_ZIP64_LOCATOR_SIZE: Final = 20
+_MAX_ZIP_COMMENT: Final = 0xFFFF
+# Stored and deflated are the methods every workbook here uses, and the two
+# a read of a given size holds to that size. Python 3.13's ZipFile inflates
+# the others with no limit on a single call: a 38 KB lzma member inflated
+# its whole 256 MiB on a read of one MiB.
+_READ_METHODS: Final = (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)
+# Encrypted, patched or strongly encrypted members: ZipFile refuses them
+# with RuntimeError or NotImplementedError, which the fetchers here do not
+# expect, so they are refused before it opens them.
+_UNREAD_FLAGS: Final = 0x01 | 0x20 | 0x40
+_READ_PIECE: Final = 1024 * 1024
+
+
+class WorkbookZip:
+    """A workbook's zip, its members read through one budget of inflated bytes.
+
+    A zip states how large each member unpacks to and nothing holds it to
+    that: ZipFile.read inflates up to 2 GiB in one call before it compares
+    the result with the size stated, so a capped sum of the stated sizes
+    caps nothing. Every read here counts the bytes it really inflates, a
+    workbook's members together, and refuses the workbook past ``budget``.
+    The central directory is checked before ZipFile reads it, since it makes
+    an object per entry for as many entries as the directory's size holds.
+
+    It has the ZipFile surface pyxlsb's Workbook uses (``open`` and
+    ``close``), so the RLP reader is held to the same budget. Refuses with
+    BadZipFile or ValueError, and raises KeyError for a member the workbook
+    does not hold, as ZipFile does.
+    """
+
+    def __init__(self, source: Path | bytes, budget: int) -> None:
+        self._file: IO[bytes] = (
+            source.open("rb") if isinstance(source, Path) else io.BytesIO(source)
+        )
+        try:
+            _check_directory(self._file)
+            self._zip = zipfile.ZipFile(self._file)
+        except NotImplementedError as err:
+            # A directory entry stating a zip version past what ZipFile reads.
+            self._file.close()
+            raise zipfile.BadZipFile(str(err)) from err
+        except BaseException:
+            self._file.close()
+            raise
+        self._left = budget
+
+    def __enter__(self) -> WorkbookZip:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self._zip.close()
+        self._file.close()
+
+    def open(self, name: str, mode: str = "r") -> _Member:
+        """Member ``name`` as a file whose reads count against the budget."""
+        if mode != "r":
+            raise ValueError(f"workbook members are read only, not {mode!r}")
+        info = self._zip.getinfo(name)
+        if info.compress_type not in _READ_METHODS or info.flag_bits & _UNREAD_FLAGS:
+            raise ValueError(
+                f"workbook member {name} is not plainly stored or deflated"
+            )
+        return _Member(self._zip.open(info), self)
+
+    def read(self, name: str) -> bytes:
+        """Member ``name`` whole, counted against the budget."""
+        with self.open(name) as member:
+            return member.read()
+
+    def allow(self, more: int) -> None:
+        """Let the reads that follow inflate ``more`` bytes besides what the
+        budget has left: a sheet gets its own, past what the parts read
+        before it were allowed."""
+        self._left += more
+
+    def _take(self, fh: IO[bytes], size: int) -> bytes:
+        """Up to ``size`` bytes of a member, all of it for a negative size.
+
+        No read asks for more than one byte past what the budget has left:
+        that byte tells a workbook that fits from one that does not. A read
+        to the end goes a MiB at a time, since one inflate holds what it
+        returns twice over as it finishes, and a member past the budget is
+        refused before its pieces are joined.
+        """
+        try:
+            if size >= 0:
+                return self._count(fh.read(min(size, self._left + 1)))
+            pieces = []
+            while piece := self._count(fh.read(min(_READ_PIECE, self._left + 1))):
+                pieces.append(piece)
+        except zlib.error as err:
+            # A stream that does not inflate: ZipFile lets zlib's own error
+            # through, which the fetchers here do not expect.
+            raise zipfile.BadZipFile(str(err)) from err
+        return b"".join(pieces)
+
+    def _count(self, data: bytes) -> bytes:
+        self._left -= len(data)
+        if self._left < 0:
+            raise ValueError("workbook unpacks past the size cap")
+        return data
+
+
+class _Member:
+    """One member of a :class:`WorkbookZip`, opened for reading."""
+
+    def __init__(self, fh: IO[bytes], book: WorkbookZip) -> None:
+        self._fh = fh
+        self._book = book
+
+    def __enter__(self) -> _Member:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self._fh.close()
+
+    def read(self, size: int = -1) -> bytes:
+        return self._book._take(self._fh, size)
+
+
+def _check_directory(fh: IO[bytes]) -> None:
+    """Refuse a zip whose central directory is larger than a workbook's.
+
+    The end record is found where zipfile looks for it, so the size checked
+    is the one zipfile reads. That size is what bounds the entries: zipfile
+    reads entries until it has read that many bytes, whatever count the
+    record states, and an entry takes at least 46 of them. ZIP64 records are
+    refused rather than read, since zipfile takes its sizes from them
+    instead and no workbook needs them.
+    """
+    end = fh.seek(0, os.SEEK_END)
+    fh.seek(max(end - _END_RECORD.size - _MAX_ZIP_COMMENT - _ZIP64_LOCATOR_SIZE, 0))
+    tail = fh.read()
+    # A record with no comment ends the file, and zipfile takes that one
+    # before it searches for the last signature.
+    at = len(tail) - _END_RECORD.size
+    if at < 0 or not (
+        tail.startswith(_END_SIGNATURE, at) and tail.endswith(b"\x00\x00")
+    ):
+        at = tail.rfind(_END_SIGNATURE)
+    if at < 0 or len(tail) - at < _END_RECORD.size:
+        raise zipfile.BadZipFile("File is not a zip file")
+    if at >= _ZIP64_LOCATOR_SIZE and tail.startswith(
+        _ZIP64_LOCATOR, at - _ZIP64_LOCATOR_SIZE
+    ):
+        raise ValueError("workbook zip carries ZIP64 records")
+    size = _END_RECORD.unpack_from(tail, at)[5]
+    if size > _MAX_DIRECTORY_BYTES:
+        raise ValueError(f"workbook zip directory takes {size} bytes")
+
+
 def _resolve_sheet_path(
-    z: zipfile.ZipFile, prefix: str | tuple[str, ...] = _SHEET_PREFIXES
+    z: WorkbookZip, prefix: str | tuple[str, ...] = _SHEET_PREFIXES
 ) -> str:
     """Map the first sheet whose name starts with ``prefix``, or with one of
     them (the ex-ante sheet by default), to its worksheet XML member."""
@@ -369,7 +557,7 @@ def _resolve_sheet_path(
     raise KeyError(f"no sheet starting {prefix!r}")
 
 
-def sheet_paths(z: zipfile.ZipFile) -> list[tuple[str, str]]:
+def sheet_paths(z: WorkbookZip) -> list[tuple[str, str]]:
     """Each worksheet's name and XML member, in the workbook's order; a sheet
     whose relationship names no target is left out."""
     wb = ET.fromstring(z.read("xl/workbook.xml"))
@@ -386,9 +574,7 @@ def sheet_paths(z: zipfile.ZipFile) -> list[tuple[str, str]]:
     return paths
 
 
-def sheet_rows(
-    z: zipfile.ZipFile, path: str, strings: list[str]
-) -> list[dict[str, str]]:
+def sheet_rows(z: WorkbookZip, path: str, strings: list[str]) -> list[dict[str, str]]:
     """One worksheet's cells as text, one ``{column: text}`` per row, the
     shared strings resolved and blanks left out."""
     sheet = ET.fromstring(z.read(path))
@@ -409,7 +595,7 @@ def sheet_rows(
     return rows
 
 
-def _shared_strings(z: zipfile.ZipFile) -> list[str]:
+def _shared_strings(z: WorkbookZip) -> list[str]:
     """The workbook's shared-string table (header cells reference it)."""
     try:
         data = z.read("xl/sharedStrings.xml")
@@ -438,36 +624,60 @@ def _cell_number(cell: tuple[str | None, str | None]) -> float | None:
 def _parse_hourly_weights(path: Path) -> SppWeights:
     """Parse the ex-ante sheet, summing the four quarters of each UTC hour.
 
-    Streams the worksheet XML, clearing elements as it goes so peak memory stays
-    a few tens of MB regardless of the 52 MB file. The UTC instant and value
+    Streams the worksheet XML, dropping each element once read so peak memory
+    stays a few tens of MB regardless of the 52 MB file. The UTC instant and value
     columns are resolved from the header row (by name, not fixed position); the
     hour is taken from the UTC column, not the local Year/Month/Day/Hour columns.
     A header naming neither curve raises there, before the rest of the sheet is
     read.
     """
-    with zipfile.ZipFile(path) as z:
+    cell, row, value = _NS + "c", _NS + "row", _NS + "v"
+    with WorkbookZip(path, _PARTS_MAX_UNPACKED_BYTES) as z:
         target = _resolve_sheet_path(z)
         strings = _shared_strings(z)
+        z.allow(_SPP_MAX_UNPACKED_BYTES)
         columns: tuple[str, str] | None = None
         weights: SppWeights = {}
         row_cells: dict[str, tuple[str | None, str | None]] = {}
+        # The open elements, and for each open cell whether its first value
+        # has been read and its text. Every element is dropped from its
+        # parent once it ends, so the tree holds the open path and no more:
+        # a cleared element still hangs off its parent, and a sheet of empty
+        # rows inside the budget held 470 MB that way. The tree runs up to a
+        # chunk ahead of the events, so nothing is looked up in it: a cell's
+        # value is read off its value's own end event.
+        open_path: list[Any] = []
+        values: list[tuple[bool, str | None]] = []
+        rows = 0
         with z.open(target) as fh:
-            for _event, el in ET.iterparse(fh, events=("end",)):
-                if el.tag == _NS + "c":
-                    ref = el.get("r", "")
-                    val = el.find(_NS + "v")
-                    row_cells[_column_of(ref)] = (
+            for event, el in ET.iterparse(fh, events=("start", "end")):
+                if event == "start":
+                    open_path.append(el)
+                    if len(open_path) > _SPP_MAX_DEPTH:
+                        raise ValueError("the ex-ante sheet nests too deep")
+                    if el.tag == cell:
+                        values.append((False, None))
+                    continue
+                open_path.pop()
+                if el.tag == value:
+                    if open_path and open_path[-1].tag == cell and not values[-1][0]:
+                        values[-1] = (True, el.text)
+                elif el.tag == cell:
+                    row_cells[_column_of(el.get("r", ""))] = (
                         el.get("t"),
-                        val.text if val is not None else None,
+                        values.pop()[1],
                     )
-                    el.clear()
-                elif el.tag == _NS + "row":
+                elif el.tag == row:
+                    rows += 1
+                    if rows > _SPP_MAX_ROWS:
+                        raise ValueError("the ex-ante sheet holds more than a year")
                     if int(el.get("r", "0")) == 1:
                         columns = _header_columns(row_cells, strings)
                     elif columns is not None:
                         _accumulate_row(row_cells, columns, weights)
                     row_cells = {}
-                    el.clear()
+                if open_path:
+                    del open_path[-1][:]
     if columns is None:
         raise KeyError("the ex-ante sheet has no header row")
     return weights
@@ -532,10 +742,18 @@ def _parse_rlp_blends(path: Path, blends: Collection[str]) -> dict[str, RlpWeigh
     DSO curves once and every blend is a combination of those groups. A blend
     that cannot be reduced is dropped from the result; the others stand.
     """
-    from pyxlsb import open_workbook
+    from pyxlsb import Workbook
 
-    with open_workbook(str(path)) as workbook, workbook.get_sheet(_RLP_SHEET) as sheet:
-        groups = _rlp_groups_from_rows([c.v for c in row] for row in sheet.rows())
+    # pyxlsb reads each member whole through the zip it is handed, which
+    # open_workbook would make a plain ZipFile. Opening the workbook reads
+    # its parts; the sheet is read by get_sheet.
+    with (
+        WorkbookZip(path, _PARTS_MAX_UNPACKED_BYTES) as z,
+        Workbook(fp=z) as workbook,
+    ):
+        z.allow(_RLP_MAX_UNPACKED_BYTES)
+        with workbook.get_sheet(_RLP_SHEET) as sheet:
+            groups = _rlp_groups_from_rows([c.v for c in row] for row in sheet.rows())
     out: dict[str, RlpWeights] = {}
     for blend in dict.fromkeys(blends):
         try:
