@@ -668,7 +668,10 @@ Internals worth knowing:
   that is empty, its class name. aiohttp raises its timeouts argless, so without
   it the message ended in a bare colon -- and that message is user-visible on the
   `snapshot_stale` Repairs card, the `last_error` sensor attribute, and in
-  diagnostics. The ENTSO-E client uses it for the same reason (`api.py`).
+  diagnostics. The ENTSO-E client uses it for the same reason (`api.py`). It and
+  every address a message here names are cut to 500 characters (`_shown`): most
+  links are read off a supplier's page, and the longest real one, Elegant's
+  archive, is 366.
 - `_is_pdf_payload` (`_pdf.py`) validates by magic bytes (`%PDF`, allowing a
   leading UTF-8 BOM that OCTA+ prepends and blank space after it, which some
   servers emit), not Content-Type, because some CDNs return 200 + text/html for
@@ -679,6 +682,12 @@ Internals worth knowing:
   file with `No /Root object! - Is this really a PDF?`, which reads like a
   corrupt card rather than a few stray bytes. pypdf recovers on its own, so this
   is what keeps the `aligned` and `layout` variants working on such a card.
+  A payload that is not a PDF raises `expected a PDF at <url>, got a web page`
+  when it opens with a tag past any blank space, which `is_missing_card_error`
+  reads as a card not there, and `... got something else` otherwise. What came
+  goes to the debug log only: the message reaches `last_error`, the Repairs
+  card and the sensors' attributes, and copying the payload's first 80 bytes
+  into it put whatever the server sent there, links and images included.
 - `_storage_error_code` (`_pdf.py`) splits one case back out of that
   catch-all. An object store refusing the read answers the proxy in front of it
   with its own XML error document, which the proxy passes through as a 200, so
@@ -686,8 +695,9 @@ Internals worth knowing:
   Azure Blob and S3 both shape it as a root `<Error>` carrying a `<Code>`; the
   match is anchored at the start of the payload so an HTML page that merely
   mentions such a block is not caught. A hit is wrapped as
-  `storage error fetching <url>: <Code>` and classifies as transient, because no
-  code change can fix it. Luminus switched anonymous access off on the storage
+  `storage error fetching <url>: the store refused the read` and classifies as
+  transient, because no code change can fix it; the `<Code>` goes to the debug
+  log. Luminus switched anonymous access off on the storage
   account behind `api-next/get-pricelist` on 2026-08-10 and every card came back
   as a 248-byte `PublicAccessNotPermitted` document, which raised the
   `extractor_failed` card on every Luminus entry, asking users to report a layout

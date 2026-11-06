@@ -2941,7 +2941,7 @@ async def test_a_withdrawn_product_is_asked_for_this_month_by_name(
     )
 
     freezer.move_to(moment)
-    stub = ExtractorError("expected a PDF at x, payload starts with b'<!DOCTYPE html>'")
+    stub = ExtractorError("expected a PDF at x, got a web page")
     fetched = AsyncMock(side_effect=stub)
     with (
         patch.object(mega_mod, "_fetch_listing_html", new=AsyncMock(return_value="")),

@@ -102,12 +102,10 @@ def is_transient_fetch_error(message: str) -> bool:
     return False
 
 
-# The "expected a PDF" message _fetch_validated_pdf_bytes writes when the
-# address served a web page: the repr of a payload whose first byte, past any
-# leading whitespace, opens a tag.
-_WEB_PAGE_INSTEAD_OF_CARD = re.compile(
-    r"expected a PDF at .*, payload starts with b['\"](?:\\[nrt]|\s)*<"
-)
+# What _fetch_validated_pdf_bytes says came in a card's place when the
+# payload opens with a tag past any blank space: a web page.
+_A_WEB_PAGE = "a web page"
+_WEB_PAGE_RE = re.compile(rb"[ \t\r\n]*<")
 
 
 def is_missing_card_error(message: str) -> bool:
@@ -125,7 +123,9 @@ def is_missing_card_error(message: str) -> bool:
     """
     if message.startswith("HTTP "):
         return message[len("HTTP ") :].split(None, 1)[0] in ("404", "410")
-    return _WEB_PAGE_INSTEAD_OF_CARD.match(message) is not None
+    return message.startswith("expected a PDF at ") and message.endswith(
+        f", got {_A_WEB_PAGE}"
+    )
 
 
 def error_text(err: BaseException) -> str:
@@ -140,9 +140,22 @@ def error_text(err: BaseException) -> str:
     caller's own prefix already says what was being attempted.
 
     Also used by the ENTSO-E client, whose ``EntsoeError`` reaches the same
-    three surfaces through ``ENTSO-E: {err}``.
+    three surfaces through ``ENTSO-E: {err}``. Cut like an address
+    (:func:`_shown`), since aiohttp's errors spell out the one they failed on.
     """
-    return str(err) or type(err).__name__
+    return _shown(str(err) or type(err).__name__)
+
+
+# How much of an address, or of an error, a message shows. Most links are
+# read off a supplier's page, so one is as long as the page makes it, and the
+# message reaches last_error, the Repairs card and every sensor's attributes.
+# The longest real one, Elegant's archive, was 366 characters on 2026-11-06.
+_SHOWN = 500
+
+
+def _shown(text: str) -> str:
+    """``text`` cut to :data:`_SHOWN` characters, for a message."""
+    return text if len(text) <= _SHOWN else f"{text[:_SHOWN]}..."
 
 
 # 64 MiB: ~12x the largest real tariff card (Bolt's ~5 MiB PDFs), so it
@@ -177,13 +190,13 @@ async def read_capped(
     declared = resp.content_length
     if declared is not None and declared > limit:
         raise ExtractorError(
-            f"refusing {url}: declared {declared} bytes (limit {limit})"
+            f"refusing {_shown(url)}: declared {declared} bytes (limit {limit})"
         )
     payload = bytearray()
     async for chunk in resp.content.iter_chunked(65536):
         payload.extend(chunk)
         if len(payload) > limit:
-            raise ExtractorError(f"refusing {url}: more than {limit} bytes")
+            raise ExtractorError(f"refusing {_shown(url)}: more than {limit} bytes")
     return bytes(payload)
 
 
@@ -322,7 +335,7 @@ async def checked_request(
     except ValueError:
         refused = "not an address"
     if refused is not None:
-        raise ExtractorError(f"refusing {url}: {refused}")
+        raise ExtractorError(f"refusing {_shown(url)}: {refused}")
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
     send = session.head if head else session.get
@@ -361,7 +374,7 @@ async def checked_request(
                 refused = "not an address"
         if refused is not None:
             _LOGGER.debug("%s redirected to %s", url, location)
-            raise ExtractorError(f"refusing {url}: its redirect is {refused}")
+            raise ExtractorError(f"refusing {_shown(url)}: its redirect is {refused}")
         # The query was the first address's; the redirect carries its own.
         target, params = hop, None
 
@@ -431,28 +444,34 @@ async def _fetch_validated_pdf_bytes(
             session, url, timeout=timeout, headers={"User-Agent": USER_AGENT}
         ) as resp:
             if resp.status >= 400:
-                raise ExtractorError(f"HTTP {resp.status} fetching {url}")
+                raise ExtractorError(f"HTTP {resp.status} fetching {_shown(url)}")
             payload = await read_capped(resp, url, MAX_RESPONSE_BYTES)
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(
-            f"network error fetching {url}: {error_text(err)}"
+            f"network error fetching {_shown(url)}: {error_text(err)}"
         ) from err
 
     if not _is_pdf_payload(payload):
+        # What came instead is the server's to choose, and the message
+        # reaches last_error, the Repairs card and the sensors' attributes,
+        # so it says what kind of thing came and the bytes go to the log.
+        _LOGGER.debug("%s answered %r instead of a PDF", url, payload[:80])
         # An object store refusing the read is the one non-PDF payload no
         # code change can fix, so it gets its own prefix and lands on the
         # transient side of is_transient_fetch_error rather than asking
         # the user to report a layout change.
         code = _storage_error_code(payload)
         if code is not None:
-            raise ExtractorError(f"storage error fetching {url}: {code}")
+            _LOGGER.debug("%s answered the storage error %s", url, code)
+            raise ExtractorError(
+                f"storage error fetching {_shown(url)}: the store refused the read"
+            )
         # Some CDNs return 200 + text/html for missing PDFs (a 404
         # disguised as success). Engie's API returns octet-stream
         # for valid PDFs, so checking the magic bytes is more
         # reliable than the Content-Type header.
-        raise ExtractorError(
-            f"expected a PDF at {url}, payload starts with {payload[:80]!r}"
-        )
+        got = _A_WEB_PAGE if _WEB_PAGE_RE.match(payload) else "something else"
+        raise ExtractorError(f"expected a PDF at {_shown(url)}, got {got}")
     return _strip_pdf_prefix(payload)
 
 
@@ -620,11 +639,11 @@ async def head_or_raise(
             headers={"User-Agent": USER_AGENT},
         ) as resp:
             if resp.status >= 400:
-                raise ExtractorError(f"HTTP {resp.status} fetching {url}")
+                raise ExtractorError(f"HTTP {resp.status} fetching {_shown(url)}")
             return resp.headers.get("Last-Modified")
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(
-            f"network error fetching {url}: {error_text(err)}"
+            f"network error fetching {_shown(url)}: {error_text(err)}"
         ) from err
 
 
@@ -830,7 +849,7 @@ async def fetch_text(
             headers={"User-Agent": USER_AGENT},
         ) as resp:
             if resp.status >= 400:
-                raise ExtractorError(f"HTTP {resp.status} fetching {url}")
+                raise ExtractorError(f"HTTP {resp.status} fetching {_shown(url)}")
             body = await read_text_capped(resp, url, limit=limit)
             # Only a success is memoised. A failure is re-attempted by the
             # next caller, which is what the negative cache one layer up is
@@ -840,7 +859,7 @@ async def fetch_text(
             return body
     except (aiohttp.ClientError, TimeoutError) as err:
         raise ExtractorError(
-            f"network error fetching {url}: {error_text(err)}"
+            f"network error fetching {_shown(url)}: {error_text(err)}"
         ) from err
 
 

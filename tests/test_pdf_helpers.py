@@ -452,20 +452,25 @@ _S3_ERROR_BODY = (
     ],
 )
 async def test_object_store_error_document_is_transient_not_a_parse_failure(
-    body: bytes, code: str
+    caplog: pytest.LogCaptureFixture, body: bytes, code: str
 ) -> None:
     """An object store that refuses the read answers through the proxy as a
     200 carrying its own XML error document. Read as a plain non-PDF payload
     it reported as a permanent parse failure, so every entry on that supplier
     raised the extractor_failed card asking the user to report a layout change
     that had not happened (Luminus, 2026-08-10). No code change can fix it,
-    which is what transient means in this taxonomy.
+    which is what transient means in this taxonomy. The code the store names
+    is its text, not ours: it goes to the debug log.
     """
+    caplog.set_level("DEBUG", logger=_pdf.__name__)
     session = _FakeBodySession(body)
     with pytest.raises(ExtractorError) as excinfo:
         await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
-    assert str(excinfo.value) == f"storage error fetching https://x/card.pdf: {code}"
+    assert str(excinfo.value) == (
+        "storage error fetching https://x/card.pdf: the store refused the read"
+    )
     assert is_transient_fetch_error(str(excinfo.value))
+    assert code in caplog.text
 
 
 async def test_a_disguised_404_page_is_still_a_permanent_parse_failure() -> None:
@@ -501,6 +506,42 @@ async def test_a_web_page_where_the_card_should_be_is_a_missing_card(
     with pytest.raises(ExtractorError) as excinfo:
         await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
     assert is_missing_card_error(str(excinfo.value)) is missing
+
+
+@pytest.mark.parametrize(
+    ("body", "got"),
+    [
+        (b"\n<p>[report](https://x.test/) ![](https://x.test/i.png)</p>", "a web page"),
+        (b"Card withdrawn, see [here](https://x.test/)", "something else"),
+    ],
+)
+async def test_what_came_instead_of_a_card_stays_out_of_its_error(
+    caplog: pytest.LogCaptureFixture, body: bytes, got: str
+) -> None:
+    """The first 80 bytes of whatever came instead of a card were copied
+    into the error, which reaches last_error, the Repairs card and every
+    sensor's attributes, links and images included. The message says what
+    kind of thing came; the bytes go to the debug log."""
+    caplog.set_level("DEBUG", logger=_pdf.__name__)
+    session = _FakeBodySession(body)
+    with pytest.raises(ExtractorError) as excinfo:
+        await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
+    assert str(excinfo.value) == f"expected a PDF at https://x/card.pdf, got {got}"
+    assert "x.test" in caplog.text
+
+
+async def test_a_long_address_is_cut_in_a_message() -> None:
+    """Most links are read off a supplier's page and land in the message as
+    they are, however long the page made them."""
+    url = "https://x.test/" + "a" * 5000
+    with pytest.raises(ExtractorError) as excinfo:
+        await fetch_text(_FakeSession(TimeoutError()), url)  # type: ignore[arg-type]
+    message = str(excinfo.value)
+    assert message == f"network error fetching {url[:500]}...: TimeoutError"
+    assert is_transient_fetch_error(message)
+    long_error = _pdf.error_text(aiohttp.InvalidURL(url))
+    assert len(long_error) == 503
+    assert long_error.endswith("...")
 
 
 async def test_an_error_element_inside_an_html_page_is_not_a_storage_error() -> None:
