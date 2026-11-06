@@ -37,7 +37,7 @@ Related docs:
 | --- | --- | --- |
 | `_WizardStepsMixin` | - | The shared step chain (`async_step_contract` through `async_step_meters`) plus the branch helpers (`flow_wizard.py`) |
 | `BePricesConfigFlow` | `_WizardStepsMixin, ConfigFlow` | Install-time flow; entry step `async_step_user`, finalizes with `async_create_entry` (`config_flow.py`) |
-| `BePricesOptionsFlow` | `_WizardStepsMixin, _SweepStepsMixin, OptionsFlow` | Post-install; menu -> `edit` (re-runs the chain pre-filled), `switch` (records a supplier switch, then re-runs the chain), `remove_switch` (only while a switch from the running year is recorded), `compare` (throwaway quote) or `compare_all` (ranking) (`config_flow.py`). `_SweepStepsMixin` (`compare_sweep_flow.py`) extends `_CompareStepsMixin` |
+| `BePricesOptionsFlow` | `_WizardStepsMixin, _SweepStepsMixin, OptionsFlow` | Post-install; menu -> `edit` (re-runs the chain pre-filled), `switch` (records a supplier switch, then re-runs the chain), `remove_switch` (only while a switch from the running year is recorded), `compare` (throwaway quote), `compare_all` (ranking) or `reset_monthly_peak` (only where a Flemish capacity charge is billed) (`config_flow.py`). `_SweepStepsMixin` (`compare_sweep_flow.py`) extends `_CompareStepsMixin` |
 
 Both flows walk the *same* chain: `supplier/region -> contract -> (settlement) ->
 (signed_rate) -> dso -> meter -> (professional) -> (direct_debit) ->
@@ -725,8 +725,9 @@ stale stored value never renders as an invalid pre-selection:
 ## Options flow
 
 `BePricesOptionsFlow` (`config_flow.py`) opens on `async_step_init`
-(`config_flow.py`) with a menu (`async_show_menu`) of four items, five while a
-switch is recorded in the running year:
+(`config_flow.py`) with a menu (`async_show_menu`) of four items, one more while
+a switch is recorded in the running year and one more on an entry billed the
+Flemish capacity charge:
 
 | Menu option | Step | Effect |
 | --- | --- | --- |
@@ -735,6 +736,7 @@ switch is recorded in the running year:
 | `remove_switch` | `async_step_remove_switch` (`config_flow.py`) | Only offered while a switch is recorded in the running year (`_removable_switch`, `flow_switch.py`): one from an earlier year prices nothing and is a real, settled change. Names the last one and, on submit, puts the entry back as it stood before it was recorded (`_remove_last_switch`, `flow_switch.py`); aborts `no_switch_recorded` if there is none this year |
 | `compare` | `async_step_compare` (`compare_flow.py`) | One-off quote against another supplier; nothing saved |
 | `compare_all` | `async_step_compare_all` (`compare_sweep_flow.py`) | Rank every candidate card for the household; the ranking branch below |
+| `reset_monthly_peak` | `async_step_reset_monthly_peak` (`config_flow.py`) | Only offered where `bills_capacity` (`fees.py`) holds. Names how many monthly peaks are banked and, on submit, calls `reset_monthly_peak` (`coordinator_peak.py`) and aborts `monthly_peak_reset`; aborts `compare_all_entry_reloading` while the entry has no coordinator. It replaces the diagnostic button any user could press: the options flow is for administrators only |
 
 Menu labels live in `options.step.init.menu_options` (`strings.json`).
 

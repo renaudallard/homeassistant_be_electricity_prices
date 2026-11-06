@@ -15,7 +15,7 @@ Related deep-dive docs:
 - [provider-framework.md](provider-framework.md): the extractor protocol, dataclasses, and registry.
 - [config-flow.md](config-flow.md): the config and options wizard.
 - [data-sources.md](data-sources.md): the ENTSO-E spot client, recorder backfill, the Synergrid profiles and the CREG home charging rate.
-- [entities.md](entities.md): sensors, the binary sensor, the button, services, diagnostics, i18n.
+- [entities.md](entities.md): sensors, the binary sensor, services, diagnostics, i18n.
 - [ci-and-testing.md](ci-and-testing.md): the live-check harness, test suite, and CI workflows.
 - Per-supplier notes live under [providers/](providers/) (one file per extractor).
 
@@ -147,7 +147,6 @@ relative to that package directory.
 | `sensor.py` | The sensor platform: current price, next-hour price, year-to-date cost, injection price, fixed-fee and energy-fund sensors, and diagnostic sensors. |
 | `sensor_values.py` | What the price sensors read off `CoordinatorData`: the current and next slot, the day's and tomorrow's average, minimum and maximum, the cheapest and dearest hours, and the today / tomorrow tables. |
 | `binary_sensor.py` | The `tomorrow_prices_available` binary sensor (ON once ENTSO-E has published the next-day curve). |
-| `button.py` | The `reset_monthly_peak` diagnostic button, Flemish entries only: drops the persisted monthly peak and the banked months, restarting the twelve-month mean, so the next tick rebuilds it. |
 | `icons.json` | The icons of the entities and services; an entity with a device class keeps the icon Home Assistant gives it. |
 | `repairs.py` | The fix flow of the `snapshot_stale` Repairs card (`RetryFetchFlow`): fetches the entry's card again now and closes the card only when that cleared it. |
 | `diagnostics.py` | The HA download-diagnostics payload for an entry (config, snapshot metadata, last error), redacting the ENTSO-E key and the household's sensor entity ids. |
@@ -306,12 +305,12 @@ injection is VAT-exempt, so `InjectionRates` values are never VAT-inclusive
    |     +-- CoordinatorData(hourly={slot: PriceBreakdown}, resolution, ...)  coordinator.py
    |
    async_create_background_task(refresh)             # the refresh that reads the meters
-   async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor, button
+   async_forward_entry_setups(entry, PLATFORMS)      # sensor, binary_sensor
    async_track_time_change(...) -> push at slot boundaries   __init__.py
    async_create_background_task(backfill_if_missing) # recorder backfill
         |
         v
- sensor / binary_sensor / button read coordinator.data
+ sensor / binary_sensor read coordinator.data
 ```
 
 Numbered walkthrough:
@@ -345,7 +344,7 @@ Numbered walkthrough:
    UTC slot start, the `resolution` (`RESOLUTION_QUARTER` only for quarter-hourly-billed dynamic
    suppliers, `coordinator_tick.py`), plus snapshot metadata, the injection price, fees, and the
    running year-to-date cost.
-9. The three platforms are forwarded and a slot-boundary push is registered (`__init__.py`). Because `current_price` and
+9. The two platforms are forwarded and a slot-boundary push is registered (`__init__.py`). Because `current_price` and
    `next_hour_price` read the wall clock live, the push at each `:00` (and `:15/:30/:45` for a
    quarter-hourly supplier, or a feed-in credited per quarter-hour as on Bolt's fixed cards)
    re-evaluates the sensors without a re-fetch, keeping them aligned to

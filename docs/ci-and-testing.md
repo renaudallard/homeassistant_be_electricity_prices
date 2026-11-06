@@ -77,7 +77,7 @@ machinery.
 | `tests/test_fluvius.py` | The VREG network ceiling and capacity floor read off Fluvius's yearly tariff sheet (`fluvius.py`), on two real workbooks, the analog meter's kWh surcharge and a custom entry's network rates read off the entry's own area sheet, the year before standing in for a sheet not read, and the restart that has to put the ceiling back on a stored card, from the entry's store while Fluvius does not answer, and each sheet parsed off the event loop |
 | `tests/test_cwape.py` | The CWaPE's approved Walloon grids (`cwape.py`): each operator's 2026 grid against the CWaPE's own summary, REW's off its PDF, the transport grid, the grid valid on a month and the year before standing in, RESA's 2027 sheet whose period ends in January, and the listing, the reads and the backoff on the real files and listing of 5 November 2026, a sheet listed many times read once, and a listing past its cap refused before it is parsed |
 | `tests/test_analog_replaced.py` | An analog meter Fluvius replaced during the year (`CONF_ANALOG_REPLACED`): the day asked at setup and once on an entry that never answered it, a blank answer kept so it is not asked again, and when Edit settings unticks the box or picks a meter or contract only a digital meter carries, a switch to a dynamic contract included, refused in the future, shown again to change while the day held falls in this year or the last, left blank for a box ticked by mistake, dropped when it is ticked again, a day given on the smart meter counting on a social entry, the digital meter's mean leaving out the months before it; the days before it billed as analog on the per-day and the hourly walk, a month split per day, the backfill meeting the live figure, a quoted card, a restart and a recorded switch; Engie Basic Online in Antwerpen replaced on 1 July bills 1158,70 EUR rather than 1176,66 |
-| `tests/test_capacity_meters.py` | The Flemish capacity charge per meter (`bills_capacity`, `fees.py`): none of its own on an exclusive-night circuit, analog or digital, whose quarter-hours or flat amount Fluvius bills with the main meter's, so no peak tracked, no capacity sensors or reset button, and no capacity step in the flow; on an analog meter (`analog_meter`, `snapshot_resolve.py`) the minimum peak's charge, the area's analog kWh rate and no ceiling, read on the tick with the year before standing in, asked on the meter step and kept for an earlier contract |
+| `tests/test_capacity_meters.py` | The Flemish capacity charge per meter (`bills_capacity`, `fees.py`): none of its own on an exclusive-night circuit, analog or digital, whose quarter-hours or flat amount Fluvius bills with the main meter's, so no peak tracked, no capacity sensors or peak reset in the options menu, and no capacity step in the flow; on an analog meter (`analog_meter`, `snapshot_resolve.py`) the minimum peak's charge, the area's analog kWh rate and no ceiling, read on the tick with the year before standing in, asked on the meter step and kept for an earlier contract |
 | `tests/test_creg_ev.py` | The CREG home charging reimbursement rate and the sensor that carries it |
 | `tests/test_synergrid_rlp.py` | Synergrid RLP profile fetch and parse (the `.xlsb` workbook) and the RLP-weighted month mean |
 | `tests/test_synergrid_spp.py` | Synergrid SPP profile fetch and parse and the SPP-weighted custom injection |
@@ -122,7 +122,7 @@ machinery.
 | `tests/test_binary_sensor.py` | The `tomorrow_prices_available` binary sensor |
 | `tests/test_bi_hourly_sensors.py` | The static peak and off-peak price sensors (pull request #98) |
 | `tests/test_reminder_sensor.py` | The contract end date renewal reminder sensor |
-| `tests/test_button.py` | The Flemish `reset_monthly_peak` button |
+| `tests/test_peak_reset.py` | The Flemish monthly peak reset: offered in the options flow only where a peak is billed, reached by administrators only, cleared once confirmed, and the old button's registry row removed at setup |
 | `tests/test_api.py` | Day-ahead clients: ENTSO-E, energy-charts, SMARD and the fallback chain (`api.py`) |
 | `tests/test_keyless_spots.py` | The keyless setting: no-key fetches, the backfill, and every branch that asks `spots_available` |
 | `tests/test_backfill.py` | Recorder cost-statistics backfill |
@@ -239,7 +239,7 @@ non-strict (see the workflows below). Several entity and coordinator tests subst
 are read (for example `entry.runtime_data = SimpleNamespace(data=...)` in
 `tests/test_diagnostics.py`). That stub does not match the production signature, so the call
 site is annotated with `# type: ignore[arg-type]` to keep the non-strict mypy pass clean, as in
-`tests/test_button.py` and `tests/test_ecopower.py`. The convention is to suppress at the
+`tests/test_capacity_meters.py` and `tests/test_ecopower.py`. The convention is to suppress at the
 call site with `# type: ignore[arg-type]`, never to relax the production function signature to
 accept the stub. `pyproject.toml` sets `explicit_package_bases = true` (`pyproject.toml`) so
 mypy treats `custom_components/be_electricity_prices` and `tests/` as separate package roots

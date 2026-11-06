@@ -60,9 +60,10 @@ where they apply:
 
 OptionsFlow opens on a menu: ``edit`` re-runs the chain, ``switch`` records
 a change of supplier and then re-runs it, ``remove_switch`` undoes the last
-one recorded this year, and ``compare`` / ``compare_all`` quote other
+one recorded this year, ``compare`` / ``compare_all`` quote other
 contracts without saving anything (``compare_flow.py``,
-``compare_sweep_flow.py``).
+``compare_sweep_flow.py``), and ``reset_monthly_peak`` clears the Flemish
+capacity peaks banked so far.
 
 OptionsFlow pre-fills every field with the current value, so the user can
 change anything (including supplier/contract/region) post-install. On
@@ -103,6 +104,7 @@ from .const import (
     DOMAIN,
     METER_EXCLUSIVE_NIGHT,
 )
+from .fees import bills_capacity
 from .flow_switch import (
     _another_contract,
     _record_switch,
@@ -270,7 +272,8 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         # Removing a switch is offered only to an entry that holds one from
-        # this year.
+        # this year, and the peak reset only to one billed a capacity charge
+        # of its own: elsewhere every tick holds the peak at 0 anyway.
         switched = (
             _removable_switch(self.config_entry.data, dt_util.now().date()) is not None
         )
@@ -282,6 +285,11 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
                 *(["remove_switch"] if switched else []),
                 "compare",
                 "compare_all",
+                *(
+                    ["reset_monthly_peak"]
+                    if bills_capacity(self.config_entry.data)
+                    else []
+                ),
             ],
         )
 
@@ -344,6 +352,31 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
                     supplier, str(held.get(CONF_CONTRACT, ""))
                 ),
             },
+        )
+
+    async def async_step_reset_monthly_peak(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Clear the monthly peak and the months banked before it, once
+        confirmed.
+
+        This was a button on the device page, which any user allowed to press
+        a button could press: one press lost up to eleven banked months for
+        good, and the capacity cost then ran on fewer months for up to a year.
+        Only an administrator can open the options flow, and the step says
+        what goes before anything does.
+        """
+        from .coordinator import BePricesCoordinator
+
+        coord = getattr(self.config_entry, "runtime_data", None)
+        if not isinstance(coord, BePricesCoordinator):
+            return self.async_abort(reason="compare_all_entry_reloading")
+        if user_input is not None:
+            await coord.reset_monthly_peak()
+            return self.async_abort(reason="monthly_peak_reset")
+        return self.async_show_form(
+            step_id="reset_monthly_peak",
+            description_placeholders={"months": str(len(coord._peak_history))},
         )
 
     _entry_step_id = "edit"

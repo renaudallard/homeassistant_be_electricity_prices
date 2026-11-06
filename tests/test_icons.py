@@ -35,7 +35,7 @@ from typing import Any
 import yaml  # type: ignore[import-untyped]
 from homeassistant.helpers.entity import Entity
 
-from custom_components.be_electricity_prices import binary_sensor, button, sensor
+from custom_components.be_electricity_prices import binary_sensor, sensor
 
 PACKAGE = (
     Path(__file__).resolve().parent.parent
@@ -78,7 +78,6 @@ def test_every_entity_icon_names_an_entity_and_none_is_missing() -> None:
     for name, module in (
         ("sensor", sensor),
         ("binary_sensor", binary_sensor),
-        ("button", button),
     ):
         entities = _entities(module)
         named = set(_icons()["entity"].get(name, {}))

@@ -90,7 +90,8 @@ class _PeakMixin:
     async def reset_monthly_peak(self) -> None:
         """Drop the persisted monthly peak so the next tick rebuilds it.
 
-        Exposed via the diagnostic Reset peak button. Required when an
+        Run by the options flow's reset_monthly_peak step, which only an
+        administrator can open (config_flow.py). Required when an
         earlier release stored an inflated peak (e.g. a W-unit sensor
         misread as kW pre-0.5.45) and the rolling-max comparison would
         otherwise hold the bad value until the next 1st of the month.

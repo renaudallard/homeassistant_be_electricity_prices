@@ -87,11 +87,6 @@
       "tomorrow_prices_available": {
         "default": "mdi:calendar-clock"
       }
-    },
-    "button": {
-      "reset_monthly_peak": {
-        "default": "mdi:restart"
-      }
     }
   },
   "services": {

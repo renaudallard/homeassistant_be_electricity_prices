@@ -676,36 +676,6 @@ async def test_a_platform_that_fails_to_set_up_keeps_its_rows(
     assert kept.name == "My price"
 
 
-async def test_leaving_flanders_removes_the_peak_reset_button(
-    hass: HomeAssistant,
-) -> None:
-    """The button platform adds nothing outside Flanders, and records that it
-    meant to, so the button of an entry that moved region goes with it."""
-    from contextlib import ExitStack
-
-    entry = make_entry(
-        region="flanders", dso="fluvius_antwerpen", title="Eneco (Flanders)"
-    )
-    entry.add_to_hass(hass)
-    registry = er.async_get(hass)
-    with ExitStack() as stack:
-        for p in await _setup_with_ev_box(hass, entry):
-            stack.enter_context(p)
-        assert await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
-        button = registry.async_get_entity_id(
-            "button", DOMAIN, f"{entry.entry_id}_reset_monthly_peak"
-        )
-        assert button is not None
-
-        hass.config_entries.async_update_entry(
-            entry, data={**entry.data, "region": "wallonia", "dso": "ores"}
-        )
-        await hass.async_block_till_done()
-    assert entry.state is ConfigEntryState.LOADED
-    assert registry.async_get(button) is None
-
-
 async def test_the_refresh_service_can_target_one_entry(hass: HomeAssistant) -> None:
     """Without entry_id every loaded entry fetches again; with one, only that
     entry does, and an id no loaded entry has is refused rather than taken

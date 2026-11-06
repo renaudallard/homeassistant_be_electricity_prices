@@ -37,7 +37,7 @@ modules under `providers/` do the fetching and parsing. See
 | [config-flow.md](config-flow.md) | The setup wizard and options flow |
 | [data-sources.md](data-sources.md) | The ENTSO-E spot client (`api.py`) and recorder backfill (`backfill.py`) |
 | [provider-framework.md](provider-framework.md) | The extractor protocol, dataclasses, registry, and shared PDF helpers |
-| [entities.md](entities.md) | Sensors, binary sensor, button, diagnostics, services, translations |
+| [entities.md](entities.md) | Sensors, binary sensor, diagnostics, services, translations |
 | [ci-and-testing.md](ci-and-testing.md) | `scripts/live_check.py`, the test suite, and the GitHub workflows |
 
 ### Provider reference

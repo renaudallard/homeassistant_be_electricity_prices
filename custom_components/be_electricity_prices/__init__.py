@@ -233,8 +233,8 @@ def _remove_unprovided_entities(
     """Drop the registry rows of entities this entry's settings no longer create.
 
     Several entities exist only for some settings (the EV rate box, the band
-    sensors of a bi-hourly meter, the Flemish capacity sensors and reset
-    button, the solar sensors, the contract end and saving sensors). An edit
+    sensors of a bi-hourly meter, the Flemish capacity sensors, the solar
+    sensors, the contract end and saving sensors). An edit
     or a recorded switch that turns one off stops creating it, and without
     this the registry kept its row, restored as unavailable, until the user
     deleted it by hand. Its recorded history is not touched.
@@ -261,6 +261,24 @@ def _remove_unprovided_entities(
     for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         if reg_entry.disabled_by is None and reg_entry.unique_id not in keep:
             registry.async_remove(reg_entry.entity_id)
+
+
+@callback
+def _remove_peak_reset_button(hass: HomeAssistant, entry: BePricesConfigEntry) -> None:
+    """Drop the registry row of the old Reset monthly peak button.
+
+    The reset moved into the options flow, which only an administrator can
+    open: as a button on the device page, any user allowed to press one could
+    lose the household up to eleven banked months of peaks. The button entity
+    is gone, so its row would otherwise stay in the registry for good, shown
+    as unavailable, or as disabled where the user had disabled it.
+    """
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id(
+        "button", DOMAIN, f"{entry.entry_id}_reset_monthly_peak"
+    )
+    if entity_id is not None:
+        registry.async_remove(entity_id)
 
 
 @callback
@@ -394,6 +412,7 @@ def _migrate_zeroed_custom_impact_bands(
 async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> bool:
     """Set up one config entry."""
     _migrate_current_year_cost_unique_id(hass, entry)
+    _remove_peak_reset_button(hass, entry)
     _migrate_zeroed_custom_impact_bands(hass, entry)
     _migrate_bolt_dynamic_contract(hass, entry)
     coordinator = BePricesCoordinator(hass, entry, defer_meter_reads=True)

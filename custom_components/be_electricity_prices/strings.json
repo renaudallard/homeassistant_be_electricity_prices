@@ -274,7 +274,8 @@
       "compare_all_no_alternatives": "No other contract of this kind is sold in your region, so there is nothing to rank. The one-off compare can still quote a different kind of contract.",
       "compare_all_unknown_contract": "This entry's contract is no longer in the supplier's catalogue, so it cannot be placed against the others. Re-pick it under Edit settings first.",
       "compare_all_entry_reloading": "The entry is still loading. Try again in a moment.",
-      "no_switch_recorded": "No supplier switch is recorded on this entry for this year."
+      "no_switch_recorded": "No supplier switch is recorded on this entry for this year.",
+      "monthly_peak_reset": "The monthly peak and the months banked before it are cleared. The twelve-month mean starts over from the next reading."
     },
     "error": {
       "invalid_api_key": "[%key:component::be_electricity_prices::config::error::invalid_api_key%]",
@@ -303,7 +304,8 @@
           "switch": "Record a supplier switch",
           "remove_switch": "Remove the last supplier switch",
           "compare": "Compare another supplier (one-off quote)",
-          "compare_all": "Compare every contract of your kind (ranked)"
+          "compare_all": "Compare every contract of your kind (ranked)",
+          "reset_monthly_peak": "Reset the monthly peak"
         }
       },
       "switch": {
@@ -319,6 +321,10 @@
       "remove_switch": {
         "title": "Remove the last supplier switch",
         "description": "This removes the switch recorded for {until}, when you left {supplier} - {contract}, and puts the entry back as it stood before that switch was recorded: {supplier} - {contract} becomes your current contract again, with the settings it had then, and anything changed since is undone, except the answer to a question added after the switch was recorded, which is kept. To correct a switch date, remove the switch, then record it again with the right date and pick the new contract again. Submit to remove it."
+      },
+      "reset_monthly_peak": {
+        "title": "Reset the monthly peak",
+        "description": "This drops this month's running peak, which the next reading of the peak sensor rebuilds, and every monthly peak banked before it ({months} now), so the twelve-month mean the capacity cost is billed on starts over. Use it after a misconfigured sensor inflated the peak, or to drop months banked at a fixed peak you have changed since. The months cleared do not come back. Submit to reset."
       },
       "edit": {
         "title": "[%key:component::be_electricity_prices::config::step::user::title%]",
@@ -1035,11 +1041,6 @@
     "binary_sensor": {
       "tomorrow_prices_available": {
         "name": "Tomorrow prices available"
-      }
-    },
-    "button": {
-      "reset_monthly_peak": {
-        "name": "Reset monthly peak"
       }
     }
   }

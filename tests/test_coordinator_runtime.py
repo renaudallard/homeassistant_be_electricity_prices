@@ -6200,7 +6200,7 @@ async def test_a_reading_from_earlier_in_the_month_still_counts(
     """The guard above drops a reading written before the MONTH began, not
     before today. A maximum the meter set on the 5th and has not beaten since
     is still this month's on the 10th, and an entry starting then (or one
-    whose running peak the reset button just cleared) has nothing else to go
+    whose running peak the options-flow reset just cleared) has nothing else to go
     on: skipping it billed the month at the regulated floor until the meter
     set a new maximum."""
     entity_id = "sensor.dsmr_maximum_demand_current_month"
@@ -6333,7 +6333,7 @@ async def test_capacity_peak_rejects_energy_sensor(
 async def test_reset_monthly_peak_drops_persisted_value(
     hass: HomeAssistant, freezer: Any
 ) -> None:
-    """The diagnostic reset button must clear the rolling max so a
+    """The options-flow reset must clear the rolling max so a
     previously inflated value (e.g. 4481 stored when the W-as-kW bug
     was live) doesn't survive the upgrade. The next tick rebuilds the
     peak from the corrected sensor reading."""
@@ -9825,7 +9825,7 @@ async def test_an_unreadable_card_sets_a_new_entry_up_with_no_prices(
     assert entry.state is ConfigEntryState.LOADED
     states = [
         hass.states.get(eid)
-        for domain in ("sensor", "binary_sensor", "button")
+        for domain in ("sensor", "binary_sensor")
         for eid in hass.states.async_entity_ids(domain)
     ]
     assert states, "the entry must still create its entities"

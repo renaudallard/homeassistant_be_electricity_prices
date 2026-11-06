@@ -42,9 +42,6 @@ import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices.button import (
-    async_setup_entry as button_setup,
-)
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
 from custom_components.be_electricity_prices.fees import (
@@ -161,11 +158,12 @@ def test_a_night_circuit_gets_no_capacity_sensors() -> None:
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_a_night_circuit_gets_no_reset_peak_button(hass: HomeAssistant) -> None:
-    for meter, analog, count in (
-        ("mono", False, 1),
-        ("exclusive_night", False, 0),
-        ("exclusive_night", True, 0),
+async def test_a_night_circuit_is_offered_no_peak_reset(hass: HomeAssistant) -> None:
+    opts = hass.config_entries.options
+    for meter, analog, offered in (
+        ("mono", False, True),
+        ("exclusive_night", False, False),
+        ("exclusive_night", True, False),
     ):
         entry = _flemish(
             meter,
@@ -174,10 +172,9 @@ async def test_a_night_circuit_gets_no_reset_peak_button(hass: HomeAssistant) ->
             analog_meter=analog,
         )
         entry.add_to_hass(hass)
-        entry.runtime_data = BePricesCoordinator(hass, entry)  # type: ignore[misc]
-        added: list[Any] = []
-        await button_setup(hass, entry, added.extend)  # type: ignore[arg-type]
-        assert len(added) == count, (meter, analog)
+        result = await opts.async_init(entry.entry_id)
+        assert ("reset_monthly_peak" in result["menu_options"]) is offered, meter
+        opts.async_abort(result["flow_id"])
 
 
 async def _steps(

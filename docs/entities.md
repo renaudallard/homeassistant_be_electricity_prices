@@ -1,7 +1,7 @@
 # Entities, diagnostics, services
 
-This document covers the read-side of the integration: the sensor,
-binary_sensor and button entities that surface `coordinator.data` to Home
+This document covers the read-side of the integration: the sensor and
+binary_sensor entities that surface `coordinator.data` to Home
 Assistant, the diagnostics dump a bug reporter downloads, the four services
 (`refresh`, `cheapest_window`, `most_expensive_window`, `backfill_statistics`),
 and the `strings.json` translation catalog that names all of them. Their icons
@@ -30,11 +30,17 @@ exactly one device carrying every entity below. Names come from
 
 ## Platform registration
 
-`const.py` lists the three entity platforms HA forwards the entry to:
+`const.py` lists the two entity platforms HA forwards the entry to:
 
 ```python
-PLATFORMS = ("sensor", "binary_sensor", "button")
+PLATFORMS = ("sensor", "binary_sensor")
 ```
+
+There used to be a button platform as well, holding one diagnostic button that
+reset the Flemish monthly peak. Any user allowed to press a button could press
+it and lose up to eleven banked months for good, so the reset is now an
+options-flow step, which only an administrator can open (see
+[Monthly peak reset](#monthly-peak-reset)).
 
 Services are registered once per HA process in `async_setup` (not per entry);
 see [Services](#services).
@@ -90,7 +96,7 @@ Most descriptions are built by the `_eur_per_kwh(key, value_fn)` helper
 
 The capacity gate exists because the Flemish capacity tariff (introduced Jan
 2023) is the only region that bills a monthly-peak term; outside Flanders
-`_track_monthly_peak` forces the peak to 0 anyway (see the button section). The
+`_track_monthly_peak` forces the peak to 0 anyway (see [Monthly peak reset](#monthly-peak-reset)). The
 gate is `bills_capacity` (`fees.py`), which also leaves out an exclusive-night
 circuit: Fluvius bills its quarter-hours with the main meter's, as one monthly
 peak, so the main entry carries the charge and the night entry has none. An
@@ -100,8 +106,8 @@ two solar groups are mutually exclusive by regime: the Walloon compensation
 regime ("compteur qui tourne a l'envers") yields a net-cost sensor, the
 post-2024 injection tariff yields a per-kWh injection credit sensor.
 
-When a settings change stops creating one of these (or the Flemish reset
-button), the reload removes its registry row
+When a settings change stops creating one of these, the reload removes its
+registry row
 (`_remove_unprovided_entities`, `__init__.py`) rather than leaving it restored
 as unavailable. Its recorded history stays in the recorder. The judgement is
 made on what each platform set out to create, which it records in
@@ -596,28 +602,28 @@ Ecopower's names the month its index settled rather than the month the card is
 used in. Only a card dated by neither skips gate 2, and the price table alone
 decides.
 
-## Button (`button.py`)
+## Monthly peak reset
 
-One button, and only on an entry billed a capacity charge of its own: `ResetMonthlyPeakButton`
-(`button.py`), key `reset_monthly_peak`, `entity_category=DIAGNOSTIC`,
-unique id `{entry_id}_reset_monthly_peak`.
+There is no button entity. The reset that drops the Flemish monthly peak is
+the options menu's `reset_monthly_peak` step (`async_step_reset_monthly_peak`,
+`config_flow.py`), offered only where `bills_capacity` (`fees.py`) holds, a
+Flemish entry that is not an exclusive-night circuit: elsewhere no capacity
+charge is billed on the entry and `_track_monthly_peak` forces `_peak_kw` to 0
+every tick, so a reset would do nothing. The step names how many months are
+banked and clears nothing until it is submitted; then it calls
+`reset_monthly_peak` (`coordinator_peak.py`), which drops the persisted
+monthly peak so the next coordinator tick rebuilds it from the live peak
+source, and the months banked in `_peak_history` with it, so the twelve-month
+mean `capacity_cost` is billed on starts over from the running month. This is
+the manual escape hatch for a spurious peak spike, which would otherwise
+inflate `capacity_cost` for the rest of the month and, once banked, drag the
+mean for a year.
 
-`async_setup_entry` (`button.py`) creates it only when `bills_capacity`
-(`fees.py`) holds, a Flemish entry that is not an exclusive-night circuit,
-because elsewhere no capacity charge is billed on the entry and
-`_track_monthly_peak` forces `_peak_kw` to 0 every tick, so a reset would do
-nothing. Elsewhere it still records an empty
-`intended_unique_ids["button"]`, which is what lets the registry cleanup
-(`_remove_unprovided_entities`) remove the button of an entry that moved out
-of Flanders.
-
-Pressing it calls `await self.coordinator.reset_monthly_peak()`
-(`button.py`), which drops the persisted monthly peak so the next coordinator
-tick rebuilds it from the live peak source, and the months banked in
-`_peak_history` with it, so the twelve-month mean `capacity_cost` is billed on
-starts over from the running month. This is the manual escape hatch for a
-spurious peak spike, which would otherwise inflate `capacity_cost` for the rest
-of the month and, once banked, drag the mean for a year.
+It was a diagnostic button until the options flow took it over: Home
+Assistant lets any user who is not read-only press a button, and one press
+lost up to eleven banked months. `_remove_peak_reset_button` (`__init__.py`)
+drops that button's registry row, `{entry_id}_reset_monthly_peak`, at every
+setup, disabled or not, so no unavailable entity is left behind.
 
 ## Services
 
@@ -890,7 +896,7 @@ Top-level keys in `strings.json`:
 | `services` | names and field descriptions for the four services |
 | `exceptions` | `ServiceValidationError` messages |
 | `issues` | Repairs cards: `snapshot_stale`, `extractor_failed`, `extractor_unreachable`, `extractor_card_missing`, `extractor_unreadable`, `extractor_unreadable_no_prices`, `card_read_by_ocr`, `entsoe_auth_failed`, `supplier_deprecated`, `supplier_deprecated_no_successor`, `supplier_deprecated_ended`, `supplier_deprecated_ended_no_successor`, `contract_withdrawn`, `exclusive_night_rate_missing`, `impact_rates_missing`, `prosumer_tariff_missing`, `compensation_kva_missing`, `connection_fee_missing`, `brussels_power_term_missing`, `excise_law_unread`, `recorder_missing`, `direct_debit_unanswered`, `register_pair_incomplete`, `register_pair_covered`, `brussels_power_term_indicative` |
-| `entity` | entity names under `sensor.*`, `binary_sensor.*`, `button.*` |
+| `entity` | entity names under `sensor.*` and `binary_sensor.*` |
 
 Entity names are resolved by `translation_key`, which each description sets equal
 to its `key`, so a new sensor `key` must have a matching entry under

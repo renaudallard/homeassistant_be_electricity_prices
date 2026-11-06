@@ -274,7 +274,8 @@
       "compare_all_no_alternatives": "Aucun autre contrat de ce type n'est vendu dans votre région, il n'y a donc rien à classer. La comparaison ponctuelle peut toujours calculer un autre type de contrat.",
       "compare_all_unknown_contract": "Le contrat de cette entrée ne figure plus au catalogue du fournisseur, il ne peut donc pas être situé par rapport aux autres. Re-sélectionnez-le d'abord dans Modifier les paramètres.",
       "compare_all_entry_reloading": "L'entrée est encore en cours de chargement. Réessayez dans un instant.",
-      "no_switch_recorded": "Aucun changement de fournisseur n'est enregistré sur cette entrée pour cette année."
+      "no_switch_recorded": "Aucun changement de fournisseur n'est enregistré sur cette entrée pour cette année.",
+      "monthly_peak_reset": "Le pic mensuel et les mois conservés avant lui sont effacés. La moyenne sur douze mois repart de la prochaine lecture."
     },
     "error": {
       "invalid_api_key": "ENTSO-E a rejeté ce jeton. Vérifiez la valeur sur transparency.entsoe.eu (My Account Settings -> Web API Security Token).",
@@ -303,7 +304,8 @@
           "switch": "Enregistrer un changement de fournisseur",
           "remove_switch": "Supprimer le dernier changement de fournisseur",
           "compare": "Comparer un autre fournisseur (devis ponctuel)",
-          "compare_all": "Comparer tous les contrats de votre type (classement)"
+          "compare_all": "Comparer tous les contrats de votre type (classement)",
+          "reset_monthly_peak": "Réinitialiser le pic mensuel"
         }
       },
       "switch": {
@@ -319,6 +321,10 @@
       "remove_switch": {
         "title": "Supprimer le dernier changement de fournisseur",
         "description": "Ceci supprime le changement enregistré pour le {until}, quand vous avez quitté {supplier} - {contract}, et remet l'entrée dans l'état où elle était avant l'enregistrement de ce changement : {supplier} - {contract} redevient votre contrat actuel, avec les paramètres qu'il avait alors, et tout ce qui a été modifié depuis est annulé, sauf la réponse à une question ajoutée après l'enregistrement de ce changement, qui est conservée. Pour corriger la date d'un changement, supprimez-le, puis enregistrez-le à nouveau avec la bonne date et choisissez à nouveau le nouveau contrat. Validez pour le supprimer."
+      },
+      "reset_monthly_peak": {
+        "title": "Réinitialiser le pic mensuel",
+        "description": "Ceci efface le pic du mois en cours, que la prochaine lecture du capteur de pic reconstruit, ainsi que chaque pic mensuel conservé avant lui ({months} à ce jour), de sorte que la moyenne sur douze mois sur laquelle le coût capacitaire est facturé repart de zéro. Utilisez-le après qu'un capteur mal configuré a gonflé le pic, ou pour écarter des mois conservés avec un pic fixe que vous avez modifié depuis. Les mois effacés ne reviennent pas. Validez pour réinitialiser."
       },
       "edit": {
         "title": "Prix de l'électricité en Belgique",
@@ -1035,11 +1041,6 @@
     "binary_sensor": {
       "tomorrow_prices_available": {
         "name": "Prix de demain disponibles"
-      }
-    },
-    "button": {
-      "reset_monthly_peak": {
-        "name": "Réinitialiser le pic mensuel"
       }
     }
   }
