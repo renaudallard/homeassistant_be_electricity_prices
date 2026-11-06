@@ -569,7 +569,11 @@ def _workbook_page(
     with no title of the first sheet holding coded rows."""
     with WorkbookZip(payload, _MAX_UNPACKED_BYTES) as z:
         strings = _shared_strings(z)
-        sheets = [sheet_rows(z, path, strings) for _name, path in sheet_paths(z)]
+        # A sheet listed more than once is read once, at its first listing,
+        # which is where the page would be found: a 22 KB workbook listing
+        # one sheet two thousand times ran four minutes, each listing a parse.
+        paths = dict.fromkeys(path for _name, path in sheet_paths(z))
+        sheets = [sheet_rows(z, path, strings) for path in paths]
     for cells in sheets:
         lines = [
             [row[column] for column in sorted(row, key=lambda c: (len(c), c))]

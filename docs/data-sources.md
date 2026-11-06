@@ -1627,7 +1627,9 @@ An operator's grid is read off its workbook (`parse_grid`), the sheet titled
 "Prélèvement basse tension": the first is the higher voltages', with the same
 labels and codes. A workbook is opened through the bounded zip reader of
 `synergrid.py`, on a budget of 2 MiB inflated (see
-[what a workbook may unpack to](#what-a-workbook-may-unpack-to)). REW publishes its workbook in the old binary `.xls` format no
+[what a workbook may unpack to](#what-a-workbook-may-unpack-to)), and a sheet
+it lists more than once is read once, at its first listing: each listing was
+a parse of its own, and 22 KB listing one sheet 2000 times ran 234 s. REW publishes its workbook in the old binary `.xls` format no
 reader here opens, so its PDF's low-voltage page is read instead, through
 pdfplumber (`extract_pdf_text_layout`), which keeps each row whole. Each row is
 split at its market code (`E210` and the like) into its label and its figures,

@@ -27,6 +27,8 @@
 
 from __future__ import annotations
 
+import io
+import zipfile
 from collections.abc import Iterator
 from datetime import date, timedelta
 from pathlib import Path
@@ -35,7 +37,7 @@ from unittest.mock import patch
 
 import pytest
 
-from custom_components.be_electricity_prices import cwape
+from custom_components.be_electricity_prices import cwape, synergrid
 from custom_components.be_electricity_prices.const import DSO_ORES, DSO_RESA, DSO_REW
 from tests import FakeBody
 
@@ -357,3 +359,32 @@ def test_the_listing_is_parsed_off_the_event_loop() -> None:
     assert "read_listing(session)" in inspect.getsource(cwape._listed)
     source = inspect.getsource(cwape.read_listing)
     assert "asyncio.to_thread(parse_listing" in source
+
+
+def test_a_sheet_listed_many_times_is_read_once() -> None:
+    """A workbook may list one sheet under many names, and each listing was a
+    parse of its own: 22 KB listing a 7,8 MB sheet 2000 times ran 234 s. A
+    sheet is read once, and the grid read as it was."""
+    real = (_FIXTURES / "cwape_ores_2026.xlsx").read_bytes()
+    listed = "".join(
+        f'<sheet name="BT {i}" sheetId="{i + 3}" r:id="rId{1 + i % 2}"/>'
+        for i in range(2000)
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(real)) as source, zipfile.ZipFile(buf, "w") as z:
+        for info in source.infolist():
+            data = source.read(info)
+            if info.filename == "xl/workbook.xml":
+                data = data.replace(b"</sheets>", listed.encode() + b"</sheets>")
+            z.writestr(info, data)
+    reads: list[str] = []
+
+    def _rows(z: Any, path: str, strings: list[str]) -> list[dict[str, str]]:
+        reads.append(path)
+        return synergrid.sheet_rows(z, path, strings)
+
+    expected = cwape.parse_grid(real)
+    assert expected is not None
+    with patch.object(cwape, "sheet_rows", _rows):
+        assert cwape.parse_grid(buf.getvalue()) == expected
+    assert len(reads) == len(set(reads)) == 2, reads[:4]
