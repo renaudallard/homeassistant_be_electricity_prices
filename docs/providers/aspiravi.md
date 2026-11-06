@@ -30,6 +30,13 @@ both pages are scraped rather than a URL built. The listing pages send no
 find the card and asks the card itself. The WordPress REST API is closed
 (401), so it cannot list the uploads instead.
 
+Both pages are read by `_links`: each anchor whose last href ends in `.pdf`,
+with its label up to the first `</a>` and its tags taken out (`strip_tags`,
+`providers/_markup.py`). A tag is known to close before any href in it is
+tried, and the next link is looked for past the last one's `</a>`, so a page
+costs its length. As one pattern, a page of `<a` with no tag end, or of links
+with no `</a>`, was read to its end from each of them.
+
 ## Contract
 
 | Contract id | Label | Kind | Injection shape |
@@ -194,7 +201,9 @@ Eco Plus Flex, off both pages. A code no contract carries surfaces as
 
 ## Tests
 
-`tests/test_aspiravi.py` runs against three cards:
+`tests/test_aspiravi.py` runs against the two pages as served on 6 November
+2026, `aspiravi_downloads.html` and `aspiravi_tariefkaarten.html`, which link
+November's card as the current one and the archive's months, and three cards:
 
 - `aspiravi_eco_plus_flex_2026-09.pdf`: the September 2026 card, every field
   read, and the formulas reproducing the rates it prints at August's mean.

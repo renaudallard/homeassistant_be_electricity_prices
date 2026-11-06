@@ -27,7 +27,9 @@
 
 from __future__ import annotations
 
+import time
 from datetime import date
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -300,6 +302,52 @@ async def test_fetch_reads_the_card_linked_as_current(
     assert snap.source_url == f"{_UPLOADS}/2026/09/900027_card.pdf"
     with pytest.raises(ExtractorError, match="no current card"):
         await aspiravi.fetch(make_text_session("<p>nothing</p>"), _CID, REGION_FLANDERS)
+
+
+def _page(name: str) -> str:
+    """One of the two pages as served on 6 November 2026."""
+    return (Path(__file__).resolve().parent / "fixtures" / name).read_text("utf-8")
+
+
+async def test_the_pages_as_served_link_the_cards() -> None:
+    """The downloads page links November's card as the current one, beside
+    the terms and forms, and the archive every month from August 2022 to
+    November 2026 under its own label but November 2024, which was never
+    published."""
+    session = make_text_session(_page("aspiravi_downloads.html"))
+    assert await aspiravi._current_card_url(session) == (
+        f"{_UPLOADS}/2026/11/900027_Eco_Plus_flex_huishoudelijk-formule-2026.pdf"
+    )
+    links = aspiravi._links(_page("aspiravi_tariefkaarten.html"))
+    months = {
+        month
+        for _url, label in links
+        if (month := aspiravi._archive_month(label)) is not None
+    }
+    assert len(links) == 56
+    assert len(months) == 51
+    assert (min(months), max(months)) == (date(2022, 8, 1), date(2026, 11, 1))
+    assert date(2024, 11, 1) not in months
+
+
+# What the host could send instead, about 100,000 characters each, on which
+# a pattern read the rest of the page again from every place a link could
+# start, for seconds to minutes: anchors whose tag never ends, links with no
+# </a>, a label of stray tags, and a tag of hrefs with no </a> after it, read
+# again for each href.
+@pytest.mark.parametrize(
+    "crafted",
+    [
+        pytest.param("a<" * 50_000, id="anchors"),
+        pytest.param('<a href="x.pdf">' * 6_250, id="links"),
+        pytest.param(f'<a href="x.pdf">{"<" * 100_000}</a>', id="label"),
+        pytest.param("<a " + 'href="x.pdf" ' * 3_800 + ">" + "x" * 50_000, id="hrefs"),
+    ],
+)
+def test_a_crafted_page_is_read_in_time_linear_in_its_length(crafted: str) -> None:
+    started = time.perf_counter()
+    aspiravi._links(crafted)
+    assert time.perf_counter() - started < 2.0
 
 
 async def test_probe_asks_the_current_card(monkeypatch: pytest.MonkeyPatch) -> None:

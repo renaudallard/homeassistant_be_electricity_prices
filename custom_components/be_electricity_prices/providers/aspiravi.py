@@ -46,6 +46,7 @@ from datetime import date
 import aiohttp
 
 from ..const import FLUVIUS_CARD_LABELS, REGION_FLANDERS
+from ._markup import strip_tags
 from ._parse import (
     SIGN_CHARS,
     numeric_row,
@@ -91,7 +92,12 @@ _PRODUCT_CODE_RE = re.compile(r"(?:^|[_-])(\d{6})[_-]")
 # with the product code.
 _CARD_LABEL_RE = re.compile(r"^(?:huidige tariefkaart$|\d{6}\s)", re.I)
 
-_LINK_RE = re.compile(r'<a\b[^>]*\bhref="([^"]+\.pdf)"[^>]*>(.*?)</a>', re.I | re.S)
+# A link to a PDF: an anchor whose last href ends in .pdf, and its label up
+# to the first </a>. A tag ends at its first > and holds no <, so a tag is
+# known to close before any href in it is tried, and no tag scan runs past
+# the next one.
+_LINK_RE = re.compile(r'<a\b(?=[^<>]*>)[^<>]*\bhref="([^"<>]+\.pdf)"[^<>]*>', re.I)
+_LINK_END_RE = re.compile(r"</a>", re.I)
 # "900027 eco plus flex (huishoudelijk) aug 26": the month, spelled out or cut
 # short, and a two-digit year. The two labels naming a year alone ("eco plus
 # flex 2023") are cards of an older layout and match nothing.
@@ -156,11 +162,24 @@ _WKK_RE = re.compile(rf"Kosten WKK excl\.\s*BTW\s+{_NUM}")
 
 
 def _links(page: str) -> list[tuple[str, str]]:
-    """``(url, label)`` for every PDF the page links, the label as read."""
-    return [
-        (url, " ".join(re.sub(r"<[^>]+>", " ", label).split()))
-        for url, label in _LINK_RE.findall(page)
-    ]
+    """``(url, label)`` for every PDF the page links, the label as read.
+
+    The next link is looked for past the last one's ``</a>``, and one with
+    none after it ends the page, since no later link can have one either.
+    As one pattern with the label in it, that link was read to the end of
+    the page and so was every later one, and a page of ``<a`` with no ``>``
+    was read to its end from each: the square of the page.
+    """
+    out: list[tuple[str, str]] = []
+    pos = 0
+    while (link := _LINK_RE.search(page, pos)) is not None:
+        end = _LINK_END_RE.search(page, link.end())
+        if end is None:
+            break
+        label = strip_tags(page[link.end() : end.start()])
+        out.append((link.group(1), " ".join(label.split())))
+        pos = end.end()
+    return out
 
 
 async def _current_card_url(session: aiohttp.ClientSession) -> str:
