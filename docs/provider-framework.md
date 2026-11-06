@@ -893,10 +893,49 @@ Internals worth knowing:
   parsed. A range takes a line, and
   2,8 kB mapping 2^32 codes ran pdfminer out of memory after 52 s, while
   pypdf held 970 MB for 48 fonts of the 100 000 codes it maps at most for
-  one. The most a card reaches is 196 659 under pdfminer and 198 676 under
+  one. Under pdfminer an entry of a map counts once more for each
+  character past its first it maps to, since a range gives every code of
+  it the characters its line names, up to 4 000: a 1 kB card holding one
+  font of 65 536 codes so mapped held 500 MB, where the codes alone let 15
+  such fonts through. pypdf gives a code of a range at most 8. The most a
+  card reaches is 196 659 under pdfminer and 198 676 under
   pypdf, on Energy Knights' cards mapping three fonts of 65 536 codes
-  each, and this is about five times that, pypdf holding about 180 bytes a
-  code. A refusal ends the read where it is made, raised as an error no
+  each to a character apiece, the most characters past the first any
+  shipped fixture maps being 163, on a Bolt card, and this is about five
+  times that, pypdf holding about 180 bytes a code. A reader makes at most
+  `_MAX_CHARACTERS` (100 000) characters of text of a card, counted as
+  they are made: each glyph's text as pdfminer lays it out, and under
+  pypdf each character a font's map gives a code shown, each its encoding
+  gives a code past the first, and each space or line end pypdf puts
+  between them. A glyph shows the characters its font maps it to, which
+  the glyph and font counts do not see: a ToUnicode map gives a code up
+  to 4 000 under pdfminer and 256 under pypdf, and an encoding gives it a
+  glyph name as long as the card writes it, so a 4,8 kB card had pypdf
+  make 1 024 000 000 characters and hold 1,1 GB, and a 1 kB card had
+  pdfplumber lay out 32 000 000 and hold 2,7 GB. pypdf joins what a
+  string's codes give only once it has looked them all up, and builds a
+  line of many strings before anything reads it, so the characters count
+  as a font's encoding or map hands them out. pypdf also copies all a page
+  holds each time it ends a run of text, in a time quadratic in the
+  characters, and puts in, uncounted, a space for a wide gap between the
+  strings of an array it shows, so a page holds up to twice what is
+  counted: 99 000 runs of a glyph and such a space each, the most the
+  budget lets through, took 65 s on a busy Raspberry Pi. Checking each
+  move or string shown for the line or word it starts, pypdf made the
+  page and the line one string to take its last
+  character, copying the page each time (on a page holding 400 000
+  characters, 20 000 moves that went nowhere took 6,4 s), and a move to
+  the right put a space in, one down a line end, with no glyph shown
+  (80 000 pairs of moves took 15 s): while a card is read the check is
+  handed the page's last character alone, all it reads of it, what it
+  appends is put back on the page, and the space or line end counts as a
+  character made. The check is wrapped only while it takes the line and
+  the page where pypdf 6.7.1 to 6.20.1 hand them, and is left as it is
+  otherwise. The most a shipped fixture makes is 17 037 under pdfminer and
+  17 321 under pypdf, both on Cociter's dynamic card of April 2026, the
+  longest text the archive held on 2026-11-06 being the same card's of
+  November 2026, 18 197 characters, and this is about five times that. A
+  refusal ends the read where it is made, raised as an error no
   reader catches: pypdf
   catches any error a form raises and goes on to its next draw, logging
   each, 99 984 lines for one file. pypdf reaching one of its own limits is
@@ -907,7 +946,8 @@ Internals worth knowing:
   it wrapped them again and had each read counted once for every copy.
   The checks only count, and what they change (a font a reader builds once,
   the paths pdfminer no longer paints, a page let go of once read, a glyph
-  found at once, a name made for the read alone) leaves the text as it was, so a card under the bound
+  found at once, a name made for the read alone, the page's last character
+  alone handed to pypdf's check of a move) leaves the text as it was, so a card under the bound
   renders to the same text as before, and only these refuse: a file a
   reader cannot open is left to it to fail on.
   The manifest asks for pypdf 6.7.1 or later, the first release that maps

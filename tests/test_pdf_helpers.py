@@ -2381,6 +2381,253 @@ def test_what_a_reader_builds_of_fonts_is_held(
             extract(payload)
 
 
+def _ranged_pdf(codes: int, characters: int) -> bytes:
+    """A font whose ToUnicode map gives ``codes`` codes in a range, below
+    the ones the page shows, ``characters`` characters each."""
+    import zlib
+
+    cmap = (
+        b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n"
+        b"1 begincodespacerange <00> <FF> endcodespacerange\n"
+        b"1 beginbfrange\n<00> <%02X> <%s>\nendbfrange\n"
+        b"endcmap CMapName currentdict /CMap defineresource pop end end"
+        % (codes - 1, ("A" * characters).encode("utf-16-be").hex().encode())
+    )
+    return _font_pdf(1, zlib.compress(cmap))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_a_map_entry_counts_each_character_it_maps_to(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """A range gives each of its codes the characters its line names, up to
+    4 000 under pdfminer: a 1 kB card holding one font of 65 536 codes so
+    mapped held 500 MB, and the codes alone let 15 such fonts through. An
+    entry counts once more for each character past its first. pypdf takes
+    no more than 8 characters for a code of a range, and refuses the line
+    under its own words."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_FONT_ENTRIES", 10_000)
+    with pytest.raises(
+        ExtractorError, match=r"^PDF has a reader build more than 10000 font entries"
+    ):
+        extract(_ranged_pdf(10, 2000))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract(_ranged_pdf(4, 2000))
+
+
+def _lines_pdf(fonts: bytes, lines: Sequence[bytes], *extra: bytes) -> bytes:
+    """A page showing each of ``lines``, a string, on a line of its own in
+    its font ``/F1``, its resources naming ``fonts``, then the ``extra``
+    objects, numbered from 5."""
+    content = (
+        b"BT /F1 5 Tf 6 TL 10 780 Td "
+        + b" T* ".join(b"(%s) Tj" % line for line in lines)
+        + b" ET"
+    )
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R"
+            b"/Resources<</Font<<%s>>>>>>" % fonts,
+            b"<</Length %d>>\nstream\n%s\nendstream" % (len(content), content),
+            *extra,
+        )
+    )
+
+
+def _glyphs_of_one_code(glyphs: int) -> list[bytes]:
+    """``glyphs`` glyphs of the code 1, a hundred to a line. Their font is
+    none of the standard ones, whose own widths pdfminer would take over
+    the card's, setting each glyph on the one before."""
+    return [b"\x01" * min(100, glyphs - at) for at in range(0, glyphs, 100)]
+
+
+def _mapped_glyphs_pdf(glyphs: int, characters: int) -> bytes:
+    """A page showing ``glyphs`` glyphs of one code, which its font's
+    ToUnicode map gives ``characters`` characters."""
+    import zlib
+
+    cmap = zlib.compress(
+        b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n"
+        b"1 begincodespacerange <00> <FF> endcodespacerange\n"
+        b"1 beginbfchar\n<01> <%s>\nendbfchar\n"
+        b"endcmap CMapName currentdict /CMap defineresource pop end end"
+        % ("A" * characters).encode("utf-16-be").hex().encode()
+    )
+    return _lines_pdf(
+        b"/F1<</Type/Font/Subtype/Type1/BaseFont/CardFont/FirstChar 1"
+        b"/LastChar 1/Widths[600]/ToUnicode 5 0 R>>",
+        _glyphs_of_one_code(glyphs),
+        b"<</Filter/FlateDecode/Length %d>>\nstream\n" % len(cmap)
+        + cmap
+        + b"\nendstream",
+    )
+
+
+def _named_glyphs_pdf(glyphs: int, name: bytes) -> bytes:
+    """A page showing ``glyphs`` glyphs of one code, which its font's
+    encoding names ``name``."""
+    return _lines_pdf(
+        b"/F1<</Type/Font/Subtype/Type1/BaseFont/CardFont/FirstChar 1"
+        b"/LastChar 1/Widths[600]/Encoding<</Type/Encoding/Differences[1/%s]>>>>"
+        % name,
+        _glyphs_of_one_code(glyphs),
+    )
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_a_glyph_counts_each_character_its_font_maps_it_to(
+    extract: Callable[[bytes], str],
+) -> None:
+    """The bounds counted glyphs, not the characters a glyph shows: a
+    ToUnicode map gives a code up to 4 000 of them under pdfminer and 256
+    under pypdf, and an encoding gives it a glyph name as long as the card
+    writes it, which pypdf takes for the text and pdfminer reads as the
+    characters it names. A 4,8 kB card had pypdf make 1 024 000 000
+    characters and hold 1,1 GB, and a 1 kB card had pdfplumber lay out
+    32 000 000 and hold 2,7 GB. Each character counts as it is made, pypdf
+    joining what a string's codes give only once it has looked them all
+    up."""
+    refused = r"^PDF has a reader make more than 100000 characters of text"
+    name = b"uni" + b"0041" * 1000
+    for payload in (_mapped_glyphs_pdf(600, 200), _named_glyphs_pdf(120, name)):
+        with pytest.raises(ExtractorError, match=refused):
+            extract(payload)
+    for payload in (_mapped_glyphs_pdf(400, 200), _named_glyphs_pdf(10, name)):
+        assert len(extract(payload)) >= 10_000
+
+
+def test_a_font_pypdf_stands_in_for_counts_what_it_shows() -> None:
+    """pypdf shows the codes of a font the page names but lacks through one
+    it makes for it, a character for each."""
+    other = b"/F2<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>"
+    lines = [b"a" * 1000] * 101
+    with pytest.raises(
+        ExtractorError, match=r"^PDF has a reader make more than 100000 characters"
+    ):
+        extract_pdf_text(_lines_pdf(other, lines))
+    assert len(extract_pdf_text(_lines_pdf(other, lines[:99]))) >= 99_000
+
+
+def test_what_pypdf_puts_between_strings_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A move to the right has pypdf put a space in, and one down end the
+    line, with no glyph shown, so moves alone grew a page by a character
+    each, every line ended copying the page: 80 000 pairs of them took 15 s
+    on a Raspberry Pi. Each counts as a character made."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_CHARACTERS", 10_000)
+
+    def moved(pairs: int) -> bytes:
+        content = b"BT /F1 9 Tf 10 700 Td (a) Tj\n" + b"20 0 Td 0 -20 Td\n" * pairs
+        return _pdf_of(content + b"ET", attrs=b"")
+
+    with pytest.raises(
+        ExtractorError, match=r"^PDF has a reader make more than 10000 characters"
+    ):
+        extract_pdf_text(moved(6000))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract_pdf_text(moved(4000))
+
+
+@pytest.mark.parametrize(
+    "name", ["mega_cosy_flex_v_2026-10.pdf", "cociter_dyn_2604.pdf"]
+)
+def test_pypdf_checks_a_move_against_the_page_s_last_character(
+    monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """Checking each move or string shown for the line or word it starts,
+    pypdf made the page and the line it was building one string to take
+    its last character, copying the page each time: on a page holding
+    400 000 characters, 20 000 moves that went nowhere took 6,4 s on a
+    Raspberry Pi. It is handed that character alone while a card is read,
+    and a real card reads as pypdf reads it with the whole page."""
+    import io
+
+    import pypdf
+    from pypdf import _text_extraction
+
+    from tests import FIXTURES
+
+    extractor = vars(_pdf_bound.pypdf_extractor)
+    assert extractor["crlf_space_check"].__qualname__.startswith("_tail_only.")
+    payload = (FIXTURES / name).read_bytes()
+    # Outside a read the check is handed the whole page, as pypdf does.
+    whole = "\n".join(
+        page.extract_text() for page in pypdf.PdfReader(io.BytesIO(payload)).pages
+    )
+    handed: list[int] = []
+
+    def check(*args: Any) -> Any:
+        handed.append(len(args[6]))
+        return _text_extraction.crlf_space_check(*args)
+
+    monkeypatch.setitem(extractor, "crlf_space_check", _pdf_bound._tail_only(check))
+    assert extract_pdf_text(payload) == whole
+    assert handed and max(handed) <= 1
+
+
+@pytest.mark.parametrize("extract", _EVERY_READER)
+def test_a_read_whose_bound_counts_no_characters_reads_as_before(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """The gas integration reads through the same wrappers, and a read its
+    copy of the bound started may come from a release that counts no
+    characters: the count passes such a read by, where it raised."""
+    from tests import FIXTURES
+
+    payload = (FIXTURES / "engie_social_w_2026-10.pdf").read_bytes()
+    expected = extract(payload)
+    monkeypatch.delattr(_pdf_bound._Reading, "show")
+    assert extract(payload) == expected
+
+
+def test_the_character_count_is_put_over_wrappers_that_lack_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A release of either integration from before the count may have put
+    the other wrappers in place, which both integrations then read through:
+    the count goes in over them, once, and leaves them as they are."""
+    from pdfminer import cmapdb
+    from pdfminer.layout import LTChar
+    from pdfminer.pdftypes import PDFStream
+    from pypdf import _text_extraction
+    from pypdf.generic import EncodedStreamObject
+
+    _pdf_bound_pdfminer._hold_pdfminer_to_the_bound()
+    others = (EncodedStreamObject.get_data, PDFStream.get_data)
+    font = _pdf_bound.pypdf_font.Font
+    extractor = vars(_pdf_bound.pypdf_extractor)
+
+    def unmarked(method: Any) -> Any:
+        def bare(*args: Any, **kwargs: Any) -> Any:
+            return method(*args, **kwargs)
+
+        return bare
+
+    for owner, name in (
+        (font, "__init__"),
+        (LTChar, "__init__"),
+        (cmapdb.FileUnicodeMap, "add_cid2unichr"),
+    ):
+        monkeypatch.setattr(owner, name, unmarked(getattr(owner, name)))
+    pypdf_check = _text_extraction.crlf_space_check
+    monkeypatch.setitem(extractor, "crlf_space_check", pypdf_check)
+
+    def counting() -> tuple[Any, ...]:
+        _pdf_bound._hold_pypdf_to_the_bound()
+        _pdf_bound_pdfminer._hold_pdfminer_to_the_bound()
+        assert (EncodedStreamObject.get_data, PDFStream.get_data) == others
+        return (font.__init__, LTChar.__init__, extractor["crlf_space_check"])
+
+    first = counting()
+    assert all(hasattr(method, _pdf_bound._MARK) for method in first[:2])
+    assert first[2] is not pypdf_check
+    assert first[2].__qualname__.startswith("_tail_only.")
+    assert counting() == first
+
+
 @pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
 def test_a_font_written_into_a_form_is_built_once_a_read(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]

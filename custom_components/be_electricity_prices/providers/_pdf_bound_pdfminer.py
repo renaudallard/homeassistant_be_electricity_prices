@@ -48,6 +48,7 @@ from ._pdf_bound import (
     _held_to_the_bound,
     _parsed,
     _refused_while_reading,
+    _show,
     _stepped,
 )
 
@@ -215,6 +216,46 @@ def _held(count: int, most: int) -> None:
         reading.hold(count, most)
 
 
+def _count_pdfminer_text() -> None:
+    """Have pdfminer count the characters of text it makes while a card is
+    read: each glyph's text it lays out through ``LTChar``, and as font
+    entries the characters past the first of every entry of a font's map it
+    builds through ``FileUnicodeMap.add_cid2unichr``. Done once whatever the
+    copy of this module, over the other wrappers too where a release of
+    either integration from before put them in place without these, and
+    only holding :data:`_HOLDING`."""
+    from pdfminer import cmapdb
+    from pdfminer.layout import LTChar
+
+    if hasattr(LTChar.__init__, _MARK):
+        return
+    add = cmapdb.FileUnicodeMap.add_cid2unichr
+
+    def mapped(self: cmapdb.FileUnicodeMap, cid: int, code: Any) -> None:
+        # A range gives each of its codes the characters its line names, so
+        # an entry counts once more for each past its first.
+        add(self, cid, code)
+        reading = _READING.get()
+        if reading is not None:
+            text = self.cid2unichr.get(cid, "")
+            if len(text) > 1:
+                reading.make_font(len(text) - 1)
+
+    lay_out = LTChar.__init__
+
+    def laid_out(self: LTChar, *args: Any, **kwargs: Any) -> None:
+        # Each glyph laid out holds the text its font maps it to, which
+        # pdfplumber then puts together, a character at a time.
+        lay_out(self, *args, **kwargs)
+        reading = _READING.get()
+        if reading is not None:
+            _show(reading, len(self.get_text()))
+
+    setattr(laid_out, _MARK, True)
+    cmapdb.FileUnicodeMap.add_cid2unichr = mapped  # type: ignore[method-assign]
+    LTChar.__init__ = laid_out  # type: ignore[method-assign]
+
+
 def _hold_pdfminer_to_the_bound() -> None:
     """Have pdfminer held to the bound while a card is read, and left as it
     is otherwise. Every stream it reads goes through ``PDFStream.get_data``,
@@ -229,9 +270,10 @@ def _hold_pdfminer_to_the_bound() -> None:
     backwards through ``revreadlines``, the resources it walks for a page
     or a form drawn through ``init_resources``, every font it builds through
     ``PDFResourceManager.get_font``, every CMap of its own it loads through
-    ``CMapDB.get_cmap`` and ``get_unicode_map``, and every loop building a
-    font through its font modules' ``range``, and every name and keyword it
-    makes through its tables of them. Done once whatever the copy of this
+    ``CMapDB.get_cmap`` and ``get_unicode_map``, every loop building a font
+    through its font modules' ``range``, every name and keyword it makes
+    through its tables of them, and every character of text it makes as
+    :func:`_count_pdfminer_text` says. Done once whatever the copy of this
     module."""
     from pdfminer import cmapdb, pdffont, pdftypes, psparser
     from pdfminer.arcfour import Arcfour
@@ -246,6 +288,7 @@ def _hold_pdfminer_to_the_bound() -> None:
     from pdfplumber.page import PDFPageAggregatorWithMarkedContent as Device
 
     with _HOLDING:
+        _count_pdfminer_text()
         if hasattr(pdftypes.PDFStream.get_data, _MARK):
             return
         names = vars(pdftypes)
@@ -524,7 +567,10 @@ def bounded_pdfminer() -> Iterator[None]:
     gathers no token, comment, line or inline image longer than
     :data:`_MAX_TOKEN_BYTES`, which it grows a byte or a buffer at a time,
     builds no more than :data:`_MAX_FONT_ENTRIES` entries of a card's
-    fonts, loads no more than :data:`_MAX_CMAPS` CMaps of its own,
+    fonts, an entry of a map counting once more for each character past
+    its first, lays out no more than :data:`_MAX_CHARACTERS` characters of
+    text, each glyph counting the characters its font maps it to, loads no
+    more than :data:`_MAX_CMAPS` CMaps of its own,
     which it keeps for good, those the read added dropped once it ends,
     and makes no more than :data:`_MAX_SYMBOLS` names and keywords its
     tables lack, which it keeps with the read alone.

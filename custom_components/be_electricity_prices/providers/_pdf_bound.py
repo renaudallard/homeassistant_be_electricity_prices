@@ -24,16 +24,17 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 """What a card's PDF streams may decode to, how many pages it may have,
-what a reader may parse of it and build of its fonts, how many steps
-pdfminer may take, how long a token or line it may gather and what it may
-lay out and hold of it, and how many lines pypdf may read backwards, held
-to while pypdf, or pdfminer under pdfplumber, reads it. What pdfminer is
-held to on top of this, and the wrappers holding it, are in
-:mod:`._pdf_bound_pdfminer`."""
+what a reader may parse of it, build of its fonts and make of its text,
+how many steps pdfminer may take, how long a token or line it may gather
+and what it may lay out and hold of it, and how many lines pypdf may read
+backwards, held to while pypdf, or pdfminer under pdfplumber, reads it.
+What pdfminer is held to on top of this, and the wrappers holding it, are
+in :mod:`._pdf_bound_pdfminer`."""
 
 from __future__ import annotations
 
 import importlib
+import inspect
 import sys
 import threading
 import zlib
@@ -59,6 +60,8 @@ try:
     pypdf_font: Any = importlib.import_module("pypdf.generic._font")
 except ModuleNotFoundError:
     pypdf_font = importlib.import_module("pypdf._font")
+# Where pypdf's text extraction keeps the state of a page it reads.
+pypdf_extractor: Any = importlib.import_module("pypdf._text_extraction._text_extractor")
 
 # What every stream of a card may decode to, together, counted as each
 # reader reads it. Across the 179 shipped fixtures pdfminer counts at most
@@ -145,11 +148,39 @@ _MAX_PARSED = 3_000_000
 # on its own is a token parsed, and a reader builds a font from a dictionary
 # once a read. A range takes a line: 2,8 kB mapping 2^32 codes ran pdfminer
 # out of memory after 52 s, and pypdf, which maps at most 100 000 codes for
-# a font from 6.7.1, held 970 MB for 48 fonts of that many. Measured as
-# above: at most 196 659 under pdfminer and 198 676 under pypdf, Energy
-# Knights' cards mapping three fonts of 65 536 codes each. This is about
-# five times that: pypdf holds about 180 bytes a code.
+# a font from 6.7.1, held 970 MB for 48 fonts of that many. Under pdfminer
+# an entry of a map counts once more for each character past its first it
+# maps to, since a range gives every code of it the characters its line
+# names, up to 4 000: a 1 kB card holding one font of 65 536 codes so
+# mapped held 500 MB, where the codes alone let 15 such fonts through.
+# pypdf gives a code of a range at most 8. Measured as above: at most
+# 196 659 under pdfminer and 198 676 under pypdf, Energy Knights' cards
+# mapping three fonts of 65 536 codes each to a character apiece, and
+# measured again on 2026-11-06 across the 243 shipped fixtures, at most 163
+# characters past the first, on a Bolt card. This is about five times that:
+# pypdf holds about 180 bytes a code.
 _MAX_FONT_ENTRIES = 1_000_000
+
+# The most characters of text a reader may make of a card, counted as they
+# are made: each glyph's as pdfminer lays it out, and under pypdf each a
+# font's map gives a character of a code shown, each an encoding gives a
+# code past its first, and each space or line end pypdf puts between them.
+# A glyph shows the characters its font maps its code to, which no other
+# bound counts: a ToUnicode map gives a code up to 4 000 under pdfminer and
+# 256 under pypdf, and an encoding gives it a glyph name as long as the card
+# writes it, so a 4,8 kB card had pypdf make 1 024 000 000 characters and
+# hold 1,1 GB, and a 1 kB card had pdfplumber lay out 32 000 000 and hold
+# 2,7 GB. pypdf also copies all a page holds each time it ends a run of
+# text, so in a time quadratic in the characters, and puts in, uncounted,
+# a space for a wide gap between the strings of an array it shows, so a
+# page holds up to twice what is counted: 99 000 runs of a glyph and such
+# a space each, the most this lets through, took 65 s on a busy Raspberry
+# Pi. Measured on 2026-11-06 across the 243 shipped fixtures:
+# at most 17 037 under pdfminer and 17 321 under pypdf, both on Cociter's
+# dynamic card of April 2026, while the longest text the archive held that
+# day is the same card's of November 2026, 18 197 characters. This is
+# about five times that.
+_MAX_CHARACTERS = 100_000
 
 # The longest token pdfminer may gather, a comment included, the longest
 # line it may read forwards and the most data of an inline image: it grows
@@ -259,6 +290,7 @@ class _Reading:
     parsed: int = 0
     steps: int = 0
     font_entries: int = 0
+    characters: int = 0
     lines_back: int = 0
     run: int | None = None
     inflated: list[int] = field(default_factory=list)
@@ -352,6 +384,15 @@ class _Reading:
                 "entries; refusing to read it"
             )
 
+    def show(self, characters: int) -> None:
+        """Count ``characters`` of text made."""
+        self.characters += characters
+        if self.characters > _MAX_CHARACTERS:
+            raise self.refuse(
+                f"PDF has a reader make more than {_MAX_CHARACTERS} characters "
+                "of text; refusing to read it"
+            )
+
     def hold(self, count: int, most: int) -> None:
         """Refuse the card once pdfminer holds ``count`` of something, past
         ``most``."""
@@ -382,7 +423,11 @@ class _Reading:
 # wrapped under. A second copy of this module, as the live check loads
 # under a package of its own, finds them there and reads through the same
 # wrappers, rather than wrapping the readers again and having each read
-# counted once for every copy.
+# counted once for every copy. So does the gas integration's copy of it,
+# with both integrations installed: a second set of wrappers would put its
+# own in place of some of the first's, pdfminer's zlib, its tables of names
+# and the font modules' range, and leave the other integration's reads
+# held to none of them.
 _MARK = "_be_electricity_prices_bound"
 _READING: ContextVar[_Reading | None]
 _HOLDING: threading.Lock
@@ -468,6 +513,114 @@ def _stepped(fill: Any) -> Any:
     return filled
 
 
+class _Shown(dict[Any, Any]):
+    """A font's encoding or character map as pypdf shows a card's codes
+    through it: while a card is read, each value it hands out counts the
+    characters it holds past the first ``free``, as it is handed out. pypdf
+    looks each code of a string up in the encoding, then each character
+    that gives up in the map, where it counts, so an encoding's value counts
+    only the characters past its first. pypdf joins what a string's codes
+    give only once it has looked up the whole string, so the text it joins
+    could not be counted before it was held."""
+
+    def __init__(self, mapping: dict[Any, Any], free: int) -> None:
+        super().__init__(mapping)
+        self._free = free
+
+    def get(self, key: Any, default: Any = None, /) -> Any:
+        return self._shown(super().get(key, default))
+
+    def __getitem__(self, key: Any, /) -> Any:
+        return self._shown(super().__getitem__(key))
+
+    def _shown(self, value: Any) -> Any:
+        reading = _READING.get()
+        if reading is not None and isinstance(value, str) and len(value) > self._free:
+            _show(reading, len(value) - self._free)
+        return value
+
+
+def _show(reading: _Reading, characters: int) -> None:
+    """Count ``characters`` of text made on ``reading``, where its bound
+    counts them: the copy of this module that started the read may come
+    from a release of the other integration that counts none."""
+    show = getattr(reading, "show", None)
+    if show is not None:
+        show(characters)
+
+
+# What pypdf's check of a move is handed first and where it takes what the
+# page holds, from pypdf 6.7.1 to 6.20.1 at least. The check is left as it
+# is should a release name other arguments there, or have none.
+_PAGE_ARGUMENT = 6
+_CHECK_ARGUMENTS = {0: "text", _PAGE_ARGUMENT: "output"}
+
+
+def _tail_only(check: Any) -> Any:
+    """``check``, the function pypdf runs for each move or string shown to
+    tell whether it starts a line or a word, handed while a card is read
+    only the last character of what the page holds rather than all of it,
+    and the space or line end it puts in counted as characters made. It
+    reads no more than that character, and appends to the page a line it
+    ends, but making the two one string to take that character copied the
+    whole page each time: on a page holding 400 000 characters, 20 000
+    moves that went nowhere took 6,4 s on a Raspberry Pi. What it appends is
+    put back on the page, so the page reads as it did. A move to the right
+    puts a space in and one down ends the line, with no glyph shown, so
+    moves alone grew a page by a character each: 80 000 pairs of them took
+    15 s."""
+
+    def checked(*args: Any, **kwargs: Any) -> Any:
+        reading = _READING.get()
+        if reading is None or len(args) <= _PAGE_ARGUMENT:
+            return check(*args, **kwargs)
+        page = args[_PAGE_ARGUMENT]
+        tail = page[-1:]
+        text, ended, *rest = check(
+            *args[:_PAGE_ARGUMENT], tail, *args[_PAGE_ARGUMENT + 1 :], **kwargs
+        )
+        _show(reading, max(len(text) + len(ended) - len(tail) - len(args[0]), 0))
+        return (text, page + ended[len(tail) :], *rest)
+
+    return checked
+
+
+def _count_pypdf_text() -> None:
+    """Have pypdf count the characters of text it makes while a card is
+    read, through the encoding and map of each ``Font`` it makes, and hand
+    its text extractor's ``crlf_space_check`` only the last character of
+    the page. Done once whatever the copy of this module, over the other
+    wrappers too where a release of either integration from before put
+    them in place without these."""
+    font = pypdf_font.Font
+    if hasattr(font.__init__, _MARK):
+        return
+    made = font.__init__
+
+    def make(self: Any, *args: Any, **kwargs: Any) -> None:
+        # Every font pypdf shows a code through, the one it stands in for
+        # a font a page lacks included. Only an encoding giving a code
+        # more than a character can make more of a string than its codes,
+        # and counting each code through it cost a string of 4 MB 2,5 s
+        # more on a Raspberry Pi.
+        made(self, *args, **kwargs)
+        if _READING.get() is not None:
+            encoding = self.encoding
+            if isinstance(encoding, dict) and any(
+                isinstance(value, str) and len(value) > 1 for value in encoding.values()
+            ):
+                self.encoding = _Shown(encoding, 1)
+            self.character_map = _Shown(self.character_map, 0)
+
+    extractor = vars(pypdf_extractor)
+    check = extractor.get("crlf_space_check")
+    named = dict(enumerate(inspect.signature(check).parameters)) if check else {}
+    if all(named.get(at) == name for at, name in _CHECK_ARGUMENTS.items()):
+        extractor["crlf_space_check"] = _tail_only(check)
+    setattr(make, _MARK, True)
+    font.__init__ = make
+
+
 def _hold_pypdf_to_the_bound() -> None:
     """Have pypdf held to the bound while a card is read, and left as it is
     otherwise. Every stream it reads goes through ``get_data``, every one it
@@ -477,9 +630,11 @@ def _hold_pypdf_to_the_bound() -> None:
     dictionary it parses through its ``generic`` module's ``read_object``
     and ``read_until_regex``, every line it reads backwards from the end of
     the file through its reader module's ``read_previous_line``, every font
-    map it builds through ``_parse_to_unicode``, and every loop building a
-    font through its font modules' ``range``. Done once whatever the copy of
-    this module."""
+    map it builds through ``_parse_to_unicode`` and every loop building a
+    font through its font modules' ``range``, and every character of text
+    it makes as :func:`_count_pypdf_text` says. Done once whatever the copy
+    of this module."""
+    _count_pypdf_text()
     if hasattr(EncodedStreamObject.get_data, _MARK):
         return
     decompress = pypdf_filters.decompress
@@ -660,10 +815,15 @@ def bounded_pypdf() -> Iterator[None]:
     :data:`_MAX_PARSED` operands, operators and elements of arrays and
     dictionaries, a content stream's each time it is interpreted, reads
     no more than :data:`_MAX_LINES_BACK` lines backwards from the end of
-    the file, and builds no more than :data:`_MAX_FONT_ENTRIES` entries of
-    a card's fonts. A refusal ends the read where it is made: pypdf catches
-    any Exception a form raises and goes on to its next draw, and a refusal
-    is not one.
+    the file, builds no more than :data:`_MAX_FONT_ENTRIES` entries of a
+    card's fonts, and makes no more than :data:`_MAX_CHARACTERS`
+    characters of text, each value a font's encoding or map hands it for a
+    code shown counted as it is handed out, so a glyph its font maps to
+    many characters counts each. Checking a move or a string shown for the
+    line or word it starts, pypdf is handed only the last character of what
+    the page holds, which is all it reads of it. A refusal ends the read
+    where it is made: pypdf catches any Exception a form raises and goes on
+    to its next draw, and a refusal is not one.
     """
     with _held_to_the_bound():
         yield
