@@ -86,6 +86,7 @@ from .const import (
 )
 from .first_year import first_year_volume
 from .flow_contracts import _contract_kind
+from .markdown_text import escape_markdown
 from .providers import get as get_extractor
 from .providers import settlement_answer
 from .snapshot_resolve import entry_annual_injection_kwh
@@ -263,8 +264,11 @@ class _PlaceholdersMixin(OptionsFlow):
         )
         if fetched.row is None and archived is None:
             # Includes the backoff arm, which carries a sibling's recent
-            # failure and no exception of its own.
-            placeholders["error"] = f"could not fetch quote: {fetched.error_message}"
+            # failure and no exception of its own. The page is markdown, and
+            # the message quotes what the supplier's server answered.
+            placeholders["error"] = (
+                f"could not fetch quote: {escape_markdown(fetched.error_message)}"
+            )
         else:
             if archived is not None:
                 # Page images: the archive's OCR reading is the only price

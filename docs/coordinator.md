@@ -702,6 +702,20 @@ The fail policy is "keep serving the cached snapshot, surface a Repairs issue". 
 
 Repairs issues, all keyed by `entry_id`:
 
+Home Assistant renders a card's description, its fix flow and the reason that
+flow aborts with as markdown, and its sanitiser lets links and images with an
+https address through. The free-text placeholders quote what a supplier's
+server answered (`error` on the extractor and ENTSO-E cards, `last_error` on
+the stale card and its fix flow), so each goes through `escape_markdown`
+(`markdown_text.py`) where the placeholder is built: every ASCII punctuation
+character is backslash-escaped and the text put on one line, every run of
+whitespace a single space, so nothing in it can form a link, an image, an
+autolink, emphasis or a tag, and it reads as given. The gas and water
+integrations escape their Repairs text the same way. The compare page's `error` and the ranking's row
+statuses (`compare_placeholders.py`, `compare_table.py`) go through it too.
+The same text stays as it was in the `last_error` and ranking attributes,
+which are plain text.
+
 | Issue | Raised by | When |
 |-------|-----------|------|
 | `snapshot_stale` | `_sync_stale_issue` | the one fixable card: its fix flow (`RetryFetchFlow`, `repairs.py`, found through the entry id the issue carries in its `data`) runs `async_force_refresh(wait=True)` and finishes, which deletes the card, only when the card in hand is no longer overdue; otherwise it aborts with `still_stale` and the card stays, and with `not_loaded` when the entry holds no coordinator to fetch with (its setup is being retried). Raised on age > `SNAPSHOT_STALE_DAYS` (7 d), or more than that past the card's validity (`card_valid_until`: the date it states, or else the end of the month its title names), on a card that can still move (`_snapshot_overdue`). Age alone missed a supplier that keeps serving an old month's card, since each probe match restarts the age: not once the supplier has left the market (`_supply_ended`), since past `deprecated_until` the final card is stale for good, the deprecation card says so, and `_maybe_refresh_snapshot` no longer asks the supplier at all; nor on a withdrawn product (`_card_is_final`), whose last card never moves again and whose `contract_withdrawn` card says so |

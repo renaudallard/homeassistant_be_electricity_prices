@@ -37,6 +37,7 @@ from homeassistant.helpers import issue_registry as ir
 
 from .const import DOMAIN
 from .coordinator import BePricesCoordinator
+from .markdown_text import escape_markdown
 
 
 class RetryFetchFlow(RepairsFlow):
@@ -72,11 +73,12 @@ class RetryFetchFlow(RepairsFlow):
         await coordinator.async_force_refresh(wait=True)
         if coordinator._snapshot is None or coordinator._snapshot_overdue():
             # Finishing the flow would delete the Repairs card although
-            # nothing was fixed; aborted, it stays.
+            # nothing was fixed; aborted, it stays. The reason is markdown,
+            # and the error quotes what the supplier's server answered.
             return self.async_abort(
                 reason="still_stale",
                 description_placeholders={
-                    "last_error": coordinator._last_error or "unknown"
+                    "last_error": escape_markdown(coordinator._last_error or "unknown")
                 },
             )
         return self.async_create_entry(data={})

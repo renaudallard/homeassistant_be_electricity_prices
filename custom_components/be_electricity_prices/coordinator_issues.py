@@ -69,6 +69,7 @@ from .fees import (
     grants_a_welcome_credit,
     last_credited_day,
 )
+from .markdown_text import escape_markdown
 from .providers import get as get_extractor
 from .providers import offers_direct_debit
 from .providers._rates import Contract
@@ -254,7 +255,9 @@ class _IssuesMixin:
             stale,
             extra={
                 "days": str(SNAPSHOT_STALE_DAYS),
-                "last_error": self._last_error or "unknown",
+                # The fix flow shows it as markdown, and it quotes what the
+                # supplier's server answered.
+                "last_error": escape_markdown(self._last_error or "unknown"),
             },
             fixable=True,
         )
@@ -698,7 +701,12 @@ class _IssuesMixin:
             is_fixable=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key=translation_key,
-            translation_placeholders={**self._issue_names(), "error": message},
+            # The card is markdown and the message quotes the supplier's
+            # server, which may have put a link or an image there.
+            translation_placeholders={
+                **self._issue_names(),
+                "error": escape_markdown(message),
+            },
         )
 
     def _sync_card_read_by_ocr_issue(self, active: bool) -> None:
@@ -724,7 +732,7 @@ class _IssuesMixin:
         self._sync_issue(
             "entsoe_auth_failed",
             active,
-            extra={"error": message or "401 Unauthorized"},
+            extra={"error": escape_markdown(message or "401 Unauthorized")},
             severity=ir.IssueSeverity.ERROR,
         )
 

@@ -40,6 +40,7 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+from custom_components.be_electricity_prices.markdown_text import escape_markdown
 from tests import make_entry, make_snapshot
 
 
@@ -92,8 +93,9 @@ async def test_fetching_again_closes_the_card_only_when_it_is_cleared(
         # An abort leaves the Repairs card where it is.
         assert done["type"] is FlowResultType.ABORT
         assert done["reason"] == "still_stale"
+        # Escaped for the markdown the reason is shown as.
         assert done["description_placeholders"] == {
-            "last_error": "HTTP 503 fetching https://card.test/x.pdf"
+            "last_error": escape_markdown("HTTP 503 fetching https://card.test/x.pdf")
         }
         assert left is not None
 

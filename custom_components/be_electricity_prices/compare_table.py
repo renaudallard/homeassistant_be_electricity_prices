@@ -41,6 +41,7 @@ from typing import Any
 from homeassistant.util import dt as dt_util
 
 from .const import SOLAR_REGIME_COMPENSATION, SOLAR_REGIME_INJECTION
+from .markdown_text import escape_markdown
 
 
 def _populate_charts(
@@ -384,8 +385,10 @@ def _ranking_table(
 
     if unpriced:
         out.append("")
+        # A status can quote what a supplier's server answered, and the page
+        # is markdown.
         for row in unpriced:
-            out.append(f"- {row.label} - {row.status}")
+            out.append(f"- {row.label} - {escape_markdown(row.status)}")
     if deferred:
         out.append("")
         out.append(

@@ -59,6 +59,7 @@ from custom_components.be_electricity_prices.coordinator import (
 from custom_components.be_electricity_prices.coordinator_issues import (
     _successor_for,
 )
+from custom_components.be_electricity_prices.markdown_text import escape_markdown
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
@@ -10576,7 +10577,8 @@ async def test_a_withdrawn_product_with_no_card_left_says_why(
     issue = registry.async_get_issue(DOMAIN, f"extractor_card_missing_{entry.entry_id}")
     assert issue is not None
     assert issue.translation_placeholders is not None
-    assert url in issue.translation_placeholders["error"]
+    # Escaped for the markdown the card is shown as, so it reads as typed.
+    assert escape_markdown(url) in issue.translation_placeholders["error"]
 
 
 async def test_a_withdrawn_products_last_card_is_never_called_stale(

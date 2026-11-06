@@ -1314,7 +1314,9 @@ If a refresh fails, the coordinator keeps serving the last known snapshot
 and exposes `snapshot_age_hours`, `snapshot_stale` and `last_error` as
 attributes on `sensor.<...>_current_price`. `last_error` always names the
 failing exception, so a CDN timeout reads `network error fetching <url>:
-TimeoutError` rather than trailing off after the colon. Twenty repair issues surface
+TimeoutError` rather than trailing off after the colon. Where a Repairs card
+or the compare page quotes that error, it is shown as plain text: whatever a
+supplier's server answered cannot turn into a link or an image there. Twenty repair issues surface
 under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; the fetch-related ones auto-clear on the next
 successful refresh:
