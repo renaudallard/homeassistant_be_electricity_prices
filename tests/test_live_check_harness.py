@@ -43,6 +43,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
@@ -1898,6 +1899,7 @@ def test_the_loader_binds_what_the_providers_use(
                     assert vars(mod)[name] is cls, (mod_name, name)
         parse = sys.modules["be_pkg.providers._parse"]
         assert lc._parse_vreg_ceiling is parse.parse_vreg_network_ceiling
+        assert lc._strip_tags is sys.modules["be_pkg.providers._markup"].strip_tags
         const = sys.modules["be_pkg.const"]
         assert lc._MAX_WELCOME_CREDIT_MONTHS == const.MAX_QUOTED_WELCOME_WAIT_MONTHS
         fluvius = sys.modules["be_pkg.fluvius"]
@@ -6026,9 +6028,11 @@ def _schedule_pages(
     page not served raises its entry in ``errors``, else an HTTP 404."""
     errors = errors or {}
     from custom_components.be_electricity_prices import day_night, pricing
+    from custom_components.be_electricity_prices.providers._markup import strip_tags
 
     monkeypatch.setattr(lc, "_DAY_NIGHT", day_night)
     monkeypatch.setattr(lc, "_IMPACT_BAND", pricing.dso_impact_band)
+    monkeypatch.setattr(lc, "_strip_tags", strip_tags)
     monkeypatch.setattr(lc, "_is_transient_fetch_error", is_transient_fetch_error)
     asked: list[str] = []
 
@@ -6108,6 +6112,32 @@ def test_a_page_the_runner_could_not_reach_passes(monkeypatch: Any) -> None:
         "_schedule: Fluvius early day hours no longer match",
     ]
     assert all(check.ok and dns in check.detail for check in lc.CHECKS)
+
+
+def test_a_page_of_stray_brackets_costs_its_length(monkeypatch: Any) -> None:
+    """An operator's page is read through the integration's tag stripper. The
+    pattern the live check kept of its own read each "<" with no ">" after it
+    to the end of the page."""
+    from custom_components.be_electricity_prices.providers._markup import strip_tags
+
+    monkeypatch.setattr(lc, "_strip_tags", strip_tags, raising=False)
+    started = time.perf_counter()
+    assert lc._page_text("<" * 100_000) == "<" * 100_000
+    assert time.perf_counter() - started < 2.0
+
+
+def test_a_page_of_unclosed_scripts_costs_its_length(monkeypatch: Any) -> None:
+    """A script block with no closing tag after it stays as it is, as the
+    pattern the live check used left it, and a closed block after it still
+    goes. That pattern read to the end of the page again from every unclosed
+    opening: 200,000 characters of them."""
+    from custom_components.be_electricity_prices.providers._markup import strip_tags
+
+    monkeypatch.setattr(lc, "_strip_tags", strip_tags, raising=False)
+    page = "<script " * 25_000 + "<style>hidden</style>shown"
+    started = time.perf_counter()
+    assert lc._page_text(page) == " ".join(["<script"] * 25_000 + ["shown"])
+    assert time.perf_counter() - started < 2.0
 
 
 def test_an_archive_row_holding_another_months_card_is_reported(

@@ -1407,6 +1407,17 @@ that does not convert (31 April), all as `ExciseLawError` so the backoff below
 applies. So does an archived copy whose schedule's bracket links no law, and a
 page of that law that does not give its dossier number.
 
+The page is parsed in the coroutine that fetched it, so what is read of it
+costs its length and no more. Article 419 is cut out with `str.find` and
+refused past 120,000 characters (`_MAX_ARTICLE_CHARS`), over four times the
+29,148 of the archived copy, before anything else reads it. The brackets and their
+superscripts (`_superscripts`), the footnotes (`_footnotes`), the archive's
+note, the tags (`strip_tags`, `providers/_markup.py`) and the marks a rate is
+dated by (`_amendment`) are each read in one pass, and the transition is
+looked for up to the next citation of the household rate. Read as they were
+before, a page of article names, brackets, stray tags or raw marks made each
+one read the rest of the page again from every place it could start.
+
 ### Caching and failure
 
 `ensure_excise_law` runs in every entry's tick, before the card is resolved,

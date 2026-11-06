@@ -69,7 +69,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from html import unescape
@@ -82,6 +82,7 @@ from homeassistant.util import dt as dt_util
 
 from . import law_archive
 from .const import EXCISE_LAW_ARCHIVE_URL, EXCISE_LAW_URL
+from .providers._markup import strip_tags
 from .providers._pdf import FR_MONTHS, fetch_text
 from .providers.base import ExtractorError
 
@@ -99,33 +100,32 @@ PROTECTED: Final = "protected"
 # table an entry stores.
 SCHEDULE: Final = "standard_schedule"
 
-_ARTICLE_RE = re.compile(
-    r"NAME='Art\.419'(.*?)(?:NAME='Art\.419bis'|NAME='Art\.420')", re.S
-)
-# An amendment's bracket, opening and closing. The opening carries the
-# amendment as a title: <L 2026-05-30/01, art. 38, 071; En vigueur : 01-08-2026>.
-_OPEN_RE = re.compile(
-    r"\[<sup>(?:(?!</sup>).)*?En vigueur\s*:\s*(\d{2})-(\d{2})-(\d{4})"
-    r"(?:(?!</sup>).)*</sup>",
-    re.S,
-)
-_CLOSE_RE = re.compile(r"\]<sup>(?:(?!</sup>).)*</sup>", re.S)
+# Article 419 runs from its name to the next article's: 22,921 characters in
+# the consolidated text of 9 October 2026 and 29,148 in the archived copy of
+# 15 October. One past 120,000, over four times either, is refused before
+# anything reads it.
+_ARTICLE: Final = "NAME='Art.419'"
+_NEXT_ARTICLES: Final = ("NAME='Art.419bis'", "NAME='Art.420'")
+_MAX_ARTICLE_CHARS: Final = 120_000
+# An amendment's bracket, opening and closing, each followed by a superscript
+# that runs to its </sup>. The opening's carries the amendment as a title:
+# <L 2026-05-30/01, art. 38, 071; En vigueur : 01-08-2026>.
+_IN_FORCE = r"En vigueur\s*:\s*(\d{2})-(\d{2})-(\d{4})"
+_IN_FORCE_RE = re.compile(_IN_FORCE)
 # An archived copy titles no bracket. It numbers them and dates each number
 # in its footnotes: (32)<L 2023-03-19/02, art. 9, 068; En vigueur : 01-04-2023>,
 # the law linked to its own page by its dossier number (cn_search=2023031902).
-# A number no footnote dates is marked with no date, which is refused only
-# when it is the bracket a rate is dated by.
+# A footnote runs to the next one, and its date is the first it gives. A
+# number no footnote dates is marked with no date, which is refused only when
+# it is the bracket a rate is dated by.
 _NUMBERED_RE = re.compile(r"\[<sup><font color=red>(\d+)</font></sup>")
-_FOOTNOTE_RE = re.compile(
-    r"\(<font color=red>(\d+)</font>\)&lt;(?:(?!\(<font color=red>).)*?"
-    r"(?:cn_search=(\d+)(?:(?!\(<font color=red>).)*?)?"
-    r"En vigueur\s*:\s*(\d{2}-\d{2}-\d{4})",
-    re.S | re.I,
-)
+_FOOTNOTE_RE = re.compile(r"\(<font color=red>(\d+)</font>\)&lt;", re.I)
+_FOOTNOTE_START_RE = re.compile(r"\(<font color=red>", re.I)
+_FOOTNOTE_IN_FORCE_RE = re.compile(_IN_FORCE, re.I)
+_FOOTNOTE_LAW_RE = re.compile(r"cn_search=(\d+)", re.I)
 _UNDATED = "00-00-0000"
 _OPEN = "\x01"
 _CLOSE = "\x02"
-_TAG_RE = re.compile(r"<[^>]+>")
 
 _ELECTRICITY = "électricité du code NC 2716"
 _NON_PROFESSIONAL_RE = re.compile(r"consommation non-professionnelle\s*:")
@@ -146,11 +146,11 @@ _TRANCHE_RE = re.compile(
     r"pour la tranche (?:de ([\d.]+) à ([\d.]+)|à partir de ([\d.]+)) MWh\s*:"
 )
 # The archive's note, which says until when each article it lists was in
-# force: "Art. 419 *** 420 *** ... En vigueur jusqu'au 01-08-2026".
-_NOTE_RE = re.compile(r'id="note".*?</div>', re.S)
-_UNTIL_RE = re.compile(
-    r"Art\.\s*(.*?)\s*En vigueur jusqu['’]au\s*(\d{2})-(\d{2})-(\d{4})"
-)
+# force: "Art. 419 *** 420 *** ... En vigueur jusqu'au 01-08-2026". Each
+# "Art." heads a list that runs to the first end date after it.
+_NOTE: Final = 'id="note"'
+_NOTE_END: Final = "</div>"
+_UNTIL_RE = re.compile(r"En vigueur jusqu['’]au\s*(\d{2})-(\d{2})-(\d{4})")
 # The number a law's own page gives it: "Dossier numéro : 2023031902".
 _DOSSIER_RE = re.compile(r"Dossier ?(?:numéro|nummer)\s*:\s*(\d+)")
 # A rate the amending law fixed for a while in its own articles rather than
@@ -158,9 +158,14 @@ _DOSSIER_RE = re.compile(r"Dossier ?(?:numéro|nummer)\s*:\s*(\d+)")
 # k), 2), b), i), ... s'élève, pour la période du 1er avril 2023 jusqu'au 30
 # juin 2023 inclus, à 42,5755 euros/MWh". The citation is the household
 # rate's ("b) autres" under electricity's "2. consommation
-# non-professionnelle"), any of its bands.
+# non-professionnelle"), any of its bands. The period is looked for up to the
+# end of the sentence or the next such citation: a sentence of citations was
+# read to its end from each, which cost the square of its length. A citation
+# stopped by the next one leaves its period to that one, which finds the same.
+_HOUSEHOLD_CITATION = r"article 419, k\), 2\), b\),"
 _TRANSITION_RE = re.compile(
-    r"article 419, k\), 2\), b\),[^.]*?pour la période du "
+    _HOUSEHOLD_CITATION
+    + rf"(?:(?!{_HOUSEHOLD_CITATION})[^.])*?pour la période du "
     + _DAY
     + r" jusqu['’]au "
     + _DAY
@@ -227,25 +232,35 @@ def _day(day: str, month: str, year: str) -> date:
 def _amendment(text: str, at: int) -> tuple[date, str]:
     """The entry into force of the innermost amendment around ``at``, and
     the dossier number of the law that made it where the page links that
-    law, else ``""``."""
-    stack: list[str] = []
-    pos = 0
-    while pos < at:
-        nxt = min(
-            (i for i in (text.find(_OPEN, pos), text.find(_CLOSE, pos)) if i >= 0),
-            default=-1,
-        )
-        if nxt < 0 or nxt >= at:
-            break
-        if text[nxt] == _OPEN:
-            stack.append(text[nxt + 1 : text.index(" ", nxt)])
-        elif stack:
-            stack.pop()
-        pos = nxt + 1
+    law, else ``""``.
+
+    Each kind of mark is looked for once past the last one, a mark runs to
+    the space after it, which serves every mark before it, and only the
+    innermost mark is copied out. A page can carry the mark characters as
+    it carries any other, and looked for again from each mark, each copied
+    up to the next space, a page of them cost the square of its length in
+    time and in memory.
+    """
+    stack: list[tuple[int, int]] = []
+    opening = text.find(_OPEN, 0, at)
+    closing = text.find(_CLOSE, 0, at)
+    space = -1
+    while opening >= 0 or closing >= 0:
+        if closing < 0 or 0 <= opening < closing:
+            if space < opening:
+                space = text.index(" ", opening)
+            stack.append((opening + 1, space))
+            opening = text.find(_OPEN, opening + 1, at)
+        else:
+            if stack:
+                stack.pop()
+            closing = text.find(_CLOSE, closing + 1, at)
     if not stack:
         raise ExciseLawError("no entry into force around the rate")
-    day, month, year = stack[-1][:10].split("-")
-    return date(int(year), int(month), int(day)), stack[-1][10:]
+    start, end = stack[-1]
+    mark = text[start:end]
+    day, month, year = mark[:10].split("-")
+    return date(int(year), int(month), int(day)), mark[10:]
 
 
 def _steps(text: str, start: int, end: int) -> tuple[tuple[date, float], ...]:
@@ -288,23 +303,96 @@ def parse(page: str) -> dict[str, tuple[tuple[date, float], ...]]:
         raise ExciseLawError(f"unreadable article: {err}") from err
 
 
+def _span(page: str, start: str, *ends: str) -> tuple[int, int] | None:
+    """Where the first ``start`` is in ``page`` and where the first of
+    ``ends`` after it begins, or ``None``.
+
+    Found with ``str.find`` rather than as ``start(.*?)end``: with no end
+    after it, that pattern read to the end of the page from every later
+    ``start`` too, which cost the square of the page. No later one can
+    reach an end the first did not.
+    """
+    at = page.find(start)
+    if at < 0:
+        return None
+    found = [i for i in (page.find(end, at + len(start)) for end in ends) if i >= 0]
+    return (at, min(found)) if found else None
+
+
+def _superscripts(text: str, bracket: str, mark: Callable[[str], str | None]) -> str:
+    """``text`` with each ``bracket`` and the superscript after it replaced
+    by what ``mark`` makes of the superscript, or kept where that is None.
+
+    A superscript runs to the first ``</sup>`` after it, and a bracket
+    inside one belongs to it. Looked for as a pattern, each bracket was read
+    to that ``</sup>``, or to the end of the text where none follows, and so
+    was each one inside a superscript the pattern refused, which it refused
+    too, since it reads part of the same span: a page of brackets cost the
+    square of its length, where this reads the text once.
+    """
+    opener = f"{bracket}<sup>"
+    closer = "</sup>"
+    out: list[str] = []
+    pos = 0
+    while (at := text.find(opener, pos)) >= 0:
+        end = text.find(closer, at + len(opener))
+        if end < 0:
+            break
+        new = mark(text[at + len(opener) : end])
+        after = end + len(closer)
+        out.append(text[pos:after] if new is None else text[pos:at] + new)
+        pos = after
+    out.append(text[pos:])
+    return "".join(out)
+
+
+def _opening(title: str) -> str | None:
+    """The mark of an opening bracket whose superscript gives the
+    amendment's entry into force: its date and a space."""
+    match = _IN_FORCE_RE.search(title)
+    return None if match is None else f"{_OPEN}{match[1]}-{match[2]}-{match[3]} "
+
+
+def _footnotes(article: str) -> dict[str, str]:
+    """The date each footnote of an archived copy gives its number, followed
+    by the dossier number of the law it links before that date, if any.
+
+    Each footnote is read in its own span, to the next one. As one pattern
+    from every footnote, one with no date was read again from each link in
+    it, which cost the square of its length.
+    """
+    out: dict[str, str] = {}
+    for head in _FOOTNOTE_RE.finditer(article):
+        start = head.end()
+        nxt = _FOOTNOTE_START_RE.search(article, start)
+        when = _FOOTNOTE_IN_FORCE_RE.search(
+            article, start, len(article) if nxt is None else nxt.start()
+        )
+        if when is None:
+            continue
+        law = _FOOTNOTE_LAW_RE.search(article, start, when.start())
+        dossier = "" if law is None else law[1]
+        out[head[1]] = f"{when[1]}-{when[2]}-{when[3]}{dossier}"
+    return out
+
+
 def _household(page: str) -> tuple[str, int, int, int, int]:
     """Article 419 as read, and where its household rates sit: the end of
     the protected customer's label, the start and the end of the others'
     label, and the end of the paragraph."""
-    match = _ARTICLE_RE.search(page)
-    if match is None:
+    span = _span(page, _ARTICLE, *_NEXT_ARTICLES)
+    if span is None:
         raise ExciseLawError("article 419 not found")
+    article = page[span[0] + len(_ARTICLE) : span[1]]
+    if len(article) > _MAX_ARTICLE_CHARS:
+        raise ExciseLawError(f"article 419 runs to {len(article)} characters")
     # An opening is marked with its entry into force, then the amending
     # law's dossier number where a footnote links it, and a space.
-    dated = {
-        number: f"{when}{dossier}"
-        for number, dossier, when in _FOOTNOTE_RE.findall(match.group(1))
-    }
-    marked = _CLOSE_RE.sub(_CLOSE, match.group(1))
-    marked = _OPEN_RE.sub(lambda m: f"{_OPEN}{m[1]}-{m[2]}-{m[3]} ", marked)
+    dated = _footnotes(article)
+    marked = _superscripts(article, "]", lambda _sup: _CLOSE)
+    marked = _superscripts(marked, "[", _opening)
     marked = _NUMBERED_RE.sub(lambda m: f"{_OPEN}{dated.get(m[1], _UNDATED)} ", marked)
-    text = " ".join(unescape(_TAG_RE.sub(" ", marked)).split())
+    text = " ".join(unescape(strip_tags(marked)).split())
     start = text.find(_ELECTRICITY)
     if start < 0:
         raise ExciseLawError("no electricity paragraph")
@@ -330,13 +418,24 @@ def _parse(page: str) -> dict[str, tuple[tuple[date, float], ...]]:
 
 def _until(page: str) -> date:
     """The day article 419's archived wording stopped being in force."""
-    note = _NOTE_RE.search(page)
-    if note is None:
+    span = _span(page, _NOTE, _NOTE_END)
+    if span is None:
         raise ExciseLawError("no note on the archived article")
-    text = " ".join(unescape(_TAG_RE.sub(" ", note.group())).split())
-    for match in _UNTIL_RE.finditer(text):
-        if "419" in (article.strip() for article in match[1].split("***")):
-            return date(int(match[4]), int(match[3]), int(match[2]))
+    note = page[span[0] : span[1] + len(_NOTE_END)]
+    text = " ".join(unescape(strip_tags(note)).split())
+    # A list runs from its "Art." to the first end date after it, and the
+    # next list starts past that date. One with no date after it ends the
+    # note, since no later list can have one; as a single pattern, the date
+    # was looked for to the end of the note again from every later "Art.".
+    pos = 0
+    while (at := text.find("Art.", pos)) >= 0:
+        until = _UNTIL_RE.search(text, at + len("Art."))
+        if until is None:
+            break
+        articles = text[at + len("Art.") : until.start()].split("***")
+        if "419" in (article.strip() for article in articles):
+            return date(int(until[3]), int(until[2]), int(until[1]))
+        pos = until.end()
     raise ExciseLawError("no end to article 419")
 
 
@@ -417,7 +516,7 @@ def after_transitions(schedule: Schedule, dossier: str, page: str) -> Schedule:
     rate: a page that dropped or reworded it would otherwise bill the
     schedule from that law's entry into force, over the days its rate was.
     """
-    text = " ".join(unescape(_TAG_RE.sub(" ", page)).split())
+    text = " ".join(unescape(strip_tags(page)).split())
     if dossier not in _DOSSIER_RE.findall(text):
         raise ExciseLawError(f"not the law numbered {dossier}")
     transitions = list(_TRANSITION_RE.finditer(text))

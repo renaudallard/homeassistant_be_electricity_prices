@@ -220,6 +220,10 @@ def _load_providers() -> dict[str, types.ModuleType]:
     global _EXCISE_LAW, _CONTRIBUTION_ZEROED_FROM
     _EXCISE_LAW = importlib.import_module("be_pkg.excise_law")
     _CONTRIBUTION_ZEROED_FROM = const.FEDERAL_CONTRIBUTION_ZEROED_FROM
+    # And its tag stripper, the one the excise law reads Justel with, which
+    # _page_text reads the operators' pages with.
+    global _strip_tags
+    _strip_tags = importlib.import_module("be_pkg.providers._markup").strip_tags
     loaded = {
         supplier: _load(
             f"be_pkg.providers.{supplier}", PKG / "providers" / f"{supplier}.py"
@@ -3325,13 +3329,53 @@ _ORES_IMPACT_URL = "https://www.ores.be/comprendre-ma-facture/impact/"
 _HOUR_RANGE_RE = re.compile(
     r"(\d{1,2})\s*(?:h|uur)?\s*(?:à|tot|et)\s*(\d{1,2})\s*(?:h|uur)"
 )
-_PAGE_NOISE_RE = re.compile(r"<(script|style)\b.*?</\1>", re.S | re.I)
-_TAG_RE = re.compile(r"<[^>]+>")
+# A script or style block runs from its opening tag to the first closing tag
+# of the same name in any case. The opening is read as the pattern
+# "<(script|style)\b.*?</\1>" read it, and the close is looked for in a copy
+# folded the way that pattern compared it: A to Z, and the capital I with a
+# dot, which folds to "i".
+_NOISE_OPEN_RE = re.compile(r"<(script|style)\b", re.I)
+_TAG_CASE = {**{c: c + 32 for c in range(ord("A"), ord("Z") + 1)}, 0x130: ord("i")}
+
+
+def _without_noise(page: str) -> str:
+    """``page`` with each script and style block replaced by a space.
+
+    A block with no closing tag after it stays as it is and the next opening
+    is looked for past its "<", as the pattern did. A closing tag is looked
+    for once and serves every opening before it: the pattern read to the end
+    of the page from each opening with no close, the square of a page of
+    them.
+    """
+    folded = page.translate(_TAG_CASE)
+    found: dict[str, int] = {}
+    out: list[str] = []
+    kept = pos = 0
+    while (opening := _NOISE_OPEN_RE.search(page, pos)) is not None:
+        close = f"</{opening[1].translate(_TAG_CASE)}>"
+        end = found.get(close)
+        if end is None or 0 <= end < opening.end():
+            end = found[close] = folded.find(close, opening.end())
+        if end < 0:
+            pos = opening.start() + 1
+            continue
+        out.append(page[kept : opening.start()])
+        out.append(" ")
+        kept = pos = end + len(close)
+    out.append(page[kept:])
+    return "".join(out)
+
+
+# Bound by _load_providers to providers/_markup.strip_tags, the integration's
+# own tag stripper, rather than a copy of its pattern here: a page of stray
+# "<" cost that copy the square of its length.
+def _strip_tags(_page: str) -> str:
+    raise RuntimeError("providers not loaded")
 
 
 def _page_text(page: str) -> str:
     """An HTML page as one line of visible text."""
-    return " ".join(unescape(_TAG_RE.sub(" ", _PAGE_NOISE_RE.sub(" ", page))).split())
+    return " ".join(unescape(_strip_tags(_without_noise(page))).split())
 
 
 def _published_hours(sentence: str) -> set[int]:

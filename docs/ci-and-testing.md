@@ -72,7 +72,7 @@ machinery.
 | `tests/test_energyknights.py` | Energy Knights extractor |
 | `tests/test_energyvision.py` | EnergyVision extractor |
 | `tests/test_engie.py` | Engie extractor |
-| `tests/test_excise_law.py` | The federal excise read from article 419 on Justel (`excise_law.py`), the household schedule read from its archived copy, started after the transition its law fixed and billed on a card standing in for one of its months, their store round trip, and `resolve_federal_excise` billing the law |
+| `tests/test_excise_law.py` | The federal excise read from article 419 on Justel (`excise_law.py`), the household schedule read from its archived copy, started after the transition its law fixed and billed on a card standing in for one of its months, their store round trip, `resolve_federal_excise` billing the law, and a crafted page read in time linear in its length |
 | `tests/test_brugel.py` | Brugel's published Sibelga power term (`brugel.py`) and the card it completes, and a custom Brussels entry's network read off the same sheet, on the real 2026 sheet |
 | `tests/test_fluvius.py` | The VREG network ceiling and capacity floor read off Fluvius's yearly tariff sheet (`fluvius.py`), on two real workbooks, the analog meter's kWh surcharge and a custom entry's network rates read off the entry's own area sheet, the year before standing in for a sheet not read, and the restart that has to put the ceiling back on a stored card, from the entry's store while Fluvius does not answer, and each sheet parsed off the event loop |
 | `tests/test_cwape.py` | The CWaPE's approved Walloon grids (`cwape.py`): each operator's 2026 grid against the CWaPE's own summary, REW's off its PDF, the transport grid, the grid valid on a month and the year before standing in, RESA's 2027 sheet whose period ends in January, and the listing, the reads and the backoff on the real files and listing of 5 November 2026, a sheet listed many times read once, and a listing past its cap refused before it is parsed |
@@ -136,6 +136,7 @@ machinery.
 | `tests/test_window_service.py` | The window search behind the `cheapest_window` and `most_expensive_window` services |
 | `tests/test_pdf_helpers.py` | Shared PDF fetching and text extraction (`providers/_pdf.py`, `providers/_pdf_render.py`) |
 | `tests/test_redirect_hops.py` | Every redirect hop is checked before it is asked (`checked_request`, `providers/_pdf.py`), over a local TLS server and a stand-in LAN device that records every connection |
+| `tests/test_markup.py` | The tags taken out of a fetched page (`providers/_markup.py`): every real page the suite holds reads as through the plain pattern, and a page of stray brackets costs its length |
 | `tests/test_parse.py` | The shared card readers of `providers/_parse.py` on crafted card text: the Brussels OSP table, the ORES sub-area rows and the degressive excise rows cost the length of the text, and `LINE_BREAK` reads what `\s*\n\s*` reads |
 | `tests/test_module_size.py` | Every module of the integration stays under a thousand lines |
 | `tests/test_manifest.py` | The Home Assistant floor `hacs.json` declares, and the README and `docs/architecture.md` repeat, is the release `requirements-dev.txt` pins for the suite |
@@ -1695,7 +1696,8 @@ card's own ceiling, an area sheet's analog kWh rate no longer reading
 (`_check_fluvius_analog`), which leaves analog meters on the peak-metered rate, and an
 operator's published hours no longer matching the ones the
 integration bills by (`_check_dso_schedules`). That last one reads Fluvius's day and night page
-and ORES's bi-hourly and Impact pages, turns each sentence into the hours it covers and holds
+and ORES's bi-hourly and Impact pages as text, their tags taken out by the integration's own
+`strip_tags`, turns each sentence into the hours it covers and holds
 them against what `day_night.is_offpeak` and `pricing.dso_impact_band` return on the next
 working day; Brussels is not watched, since sibelga.be answers 403.
 All are supplier- or maintainer-side rather than a break here, which is why they share a thread

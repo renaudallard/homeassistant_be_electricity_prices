@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import logging
+import time
+import tracemalloc
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import date, timedelta
@@ -123,7 +125,10 @@ def test_an_amendment_rewriting_only_the_rate_is_dated_by_its_own_bracket(
 
 
 def test_a_page_with_no_bracket_around_the_rate_is_refused(page: str) -> None:
-    unbracketed = excise_law._OPEN_RE.sub("[", page)
+    unbracketed = excise_law._superscripts(
+        page, "[", lambda title: None if excise_law._opening(title) is None else "["
+    )
+    assert unbracketed != page
     with pytest.raises(excise_law.ExciseLawError, match="entry into force"):
         excise_law.parse(unbracketed)
 
@@ -142,6 +147,67 @@ def test_a_page_that_is_not_the_article_is_refused() -> None:
     """What Justel serves GitHub's runners is a bot check, not the law."""
     with pytest.raises(excise_law.ExciseLawError, match="article 419"):
         excise_law.parse("<html><body>Please enable JavaScript</body></html>")
+
+
+def test_an_article_far_longer_than_the_law_is_refused_unread(page: str) -> None:
+    """Article 419 runs to 22,921 characters on the page as served. One
+    past 120,000, over four times the longest seen, is not the law, and
+    nothing is read of it: the page is parsed in the coroutine that fetched
+    it."""
+    at = page.index("NAME='Art.419'") + len("NAME='Art.419'")
+    padded = f"{page[:at]}{' ' * 120_000}{page[at:]}"
+    with pytest.raises(excise_law.ExciseLawError, match="runs to 142921 characters"):
+        excise_law.parse(padded)
+
+
+def _pumped(unit: str, size: int = 100_000) -> str:
+    return (unit * (size // len(unit) + 1))[:size]
+
+
+def _article(body: str) -> str:
+    return f"NAME='Art.419'{body}NAME='Art.420'"
+
+
+# What a host serving the law could send instead: about 100,000 characters of
+# what made a pattern read the rest of the page again from every place a
+# match could start. Each took from seconds to minutes before, in the
+# coroutine; read once, each takes a few milliseconds.
+@pytest.mark.parametrize(
+    "crafted",
+    [
+        pytest.param(_pumped("NAME='Art.419'"), id="article names, none ending"),
+        pytest.param(_article(_pumped(" ]<sup>")), id="closing brackets"),
+        pytest.param(_article(_pumped("[<sup><")), id="opening brackets"),
+        pytest.param(_article(f"{_pumped('[<sup>')}</sup>"), id="one superscript"),
+        pytest.param(
+            _article(f"(<font color=red>1</font>)&lt;{_pumped('cn_search=1')}"),
+            id="footnote links",
+        ),
+        pytest.param(_article(_pumped("<")), id="stray tags"),
+    ],
+)
+def test_a_crafted_page_is_read_in_time_linear_in_its_length(crafted: str) -> None:
+    started = time.perf_counter()
+    with pytest.raises(excise_law.ExciseLawError):
+        excise_law.parse(crafted)
+    assert time.perf_counter() - started < 2.0
+
+
+def test_marks_before_a_rate_cost_their_length() -> None:
+    """A rate is dated by walking the marks before it. A page can carry the
+    mark characters as it carries any other, and 20,000 of them before one
+    space were each copied out up to it, 200 MB, and each looked for again."""
+    text = f"{chr(1) * 20_000} {chr(1)}01-08-2026 the rate"
+    tracemalloc.start()
+    started = time.perf_counter()
+    try:
+        dated = excise_law._amendment(text, text.index("the rate"))
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert dated == (date(2026, 8, 1), "")
+    assert peak < 20_000_000
+    assert time.perf_counter() - started < 2.0
 
 
 def test_a_month_takes_the_rate_in_force_on_its_first_day() -> None:
@@ -781,6 +847,44 @@ def _without_transition(amending: str) -> tuple[str, str]:
         + amending[amending.index("Titre 4", at) :]
     )
     return cut, amending.replace("pour la période du", "pour la periode du")
+
+
+def test_a_transition_cited_twice_is_read_once(archive: str, amending: str) -> None:
+    """The period is looked for up to the next citation of the household
+    rate, and a citation stopped there leaves the period to that one."""
+    cited = "prévu à l'article 419, k), 2), b), i), de la loi-programme"
+    assert amending.count(cited) == 1
+    twice = amending.replace(
+        cited,
+        "prévu à l'article 419, k), 2), b), i), et à l'article 419, k), 2), b), i), de la loi-programme",
+    )
+    schedule, dossier = excise_law.parse_archive(archive)
+    held = excise_law.after_transitions(schedule, dossier, twice)
+    assert held == replace(schedule, start=date(2023, 7, 1))
+
+
+# The archive and the law that wrote its wording, the same way.
+@pytest.mark.parametrize(
+    "crafted",
+    [
+        pytest.param(_pumped('id="note" '), id="notes, none ending"),
+        pytest.param(f'id="note">{_pumped("Art. ")}</div>', id="lists, none ending"),
+    ],
+)
+def test_a_crafted_archive_is_read_in_time_linear_in_its_length(crafted: str) -> None:
+    started = time.perf_counter()
+    with pytest.raises(excise_law.ExciseLawError):
+        excise_law.parse_archive(crafted)
+    assert time.perf_counter() - started < 2.0
+
+
+def test_a_crafted_law_is_read_in_time_linear_in_its_length(archive: str) -> None:
+    schedule, dossier = excise_law.parse_archive(archive)
+    crafted = f"Dossier numéro : {dossier} {_pumped('article 419, k), 2), b),0')}"
+    started = time.perf_counter()
+    with pytest.raises(excise_law.ExciseLawError, match="no household transition"):
+        excise_law.after_transitions(schedule, dossier, crafted)
+    assert time.perf_counter() - started < 2.0
 
 
 @pytest.mark.usefixtures("schedule_held")
