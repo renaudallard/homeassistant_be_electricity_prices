@@ -89,7 +89,7 @@ from .const import (
     VREG_CAPACITY_FLOOR_KW,
 )
 from .providers._parse import to_float
-from .providers._pdf import USER_AGENT, fetch_text, guard_redirect, read_capped
+from .providers._pdf import USER_AGENT, checked_request, fetch_text, read_capped
 from .synergrid import WorkbookZip, _resolve_sheet_path, _shared_strings, sheet_rows
 
 _LOGGER = logging.getLogger(__name__)
@@ -691,12 +691,9 @@ async def _fetch_workbook(
     if sheet is None:
         return None
     url = _SITE + sheet.group(1)
-    async with session.get(
-        url,
-        headers={"User-Agent": USER_AGENT},
-        timeout=aiohttp.ClientTimeout(total=_TIMEOUT),
+    async with checked_request(
+        session, url, timeout=_TIMEOUT, headers={"User-Agent": USER_AGENT}
     ) as resp:
-        guard_redirect(url, resp)
         resp.raise_for_status()
         return await read_capped(resp, url)
 

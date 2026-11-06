@@ -27,15 +27,19 @@
 
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import json
 import logging
 import re
-from collections.abc import Awaitable, Callable, Iterator
-from contextlib import contextmanager
+import socket
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 
 import aiohttp
+from yarl import URL
 
 from ._parse import (
     to_float,
@@ -184,38 +188,148 @@ async def read_text_capped(resp: aiohttp.ClientResponse, url: str) -> str:
         return payload.decode("utf-8", errors="replace")
 
 
-def _require_https(url: str) -> None:
-    """Refuse to fetch an address that is not https.
+def _internal_address(host: str) -> bool:
+    """Whether ``host`` is an address literal off the public internet.
 
-    Most links are read off a supplier's page, and only energie.be's reader
-    checks the scheme of the ones it takes. A plain http link would be
-    fetched, and :func:`guard_redirect` could not tell a redirect from it to
-    an address only the Home Assistant host can reach from the supplier's
-    own answer. Every card, listing and API the extractors read is served
-    over https, so this refuses nothing real.
+    Private, loopback, link-local, reserved, multicast and unspecified
+    addresses are, IPv4 or IPv6, an IPv4 address written as IPv6 included,
+    and so is the shared range carrier-grade NAT and Tailscale number
+    devices in. The short and numeric spellings of IPv4 the C library reads
+    as an address ("10.1", "0x7f.1", "2130706433") count as the address
+    they spell. A name is not looked up: over https the host it leads to
+    still has to show a certificate the client trusts for that name, so a
+    redirect by name reaches only a host holding a public certificate for
+    it.
     """
-    if not url.lower().startswith("https://"):
-        raise ExtractorError(f"refusing {url}: not an https address")
+    name = host.removesuffix(".")
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address
+    try:
+        address = ipaddress.ip_address(name)
+    except ValueError:
+        try:
+            address = ipaddress.IPv4Address(socket.inet_aton(name))
+        except (OSError, ValueError):
+            return False
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.ipv4_mapped is not None:
+            address = address.ipv4_mapped
+        elif address.is_site_local:
+            return True
+    return (
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_reserved
+        or address.is_multicast
+        or address.is_unspecified
+        or not address.is_global
+    )
 
 
-def guard_redirect(url: str, resp: aiohttp.ClientResponse) -> None:
-    """Refuse an answer a redirect carried off https.
+def _refusal(url: URL) -> str | None:
+    """Why ``url`` is not fetched, or None when it may be.
 
-    :func:`_require_https` holds the address asked for, but aiohttp follows
-    a redirect wherever it points, plain http included, and from there to
-    an address only the Home Assistant host can reach, whose first bytes
-    would then land in last_error. Over https such a host would also need
-    a certificate the client trusts. The redirect is not held to the
-    requested site: energie.be's document API on azurewebsites.net answers
-    with a redirect to its storage on blob.core.windows.net.
+    Every card, listing and API the integration reads is served over https
+    by a public name, so this refuses nothing real. Most links are read off
+    a supplier's page, and a plain http one could be answered by anything
+    on the way; a redirect to one, or to a LAN address, is how a host the
+    integration trusts could send Home Assistant into the LAN. An address
+    carrying a login is refused too, since aiohttp would send it along.
     """
-    if not resp.history:
-        return
-    if any(hop.url.scheme != "https" for hop in (*resp.history, resp)):
-        # The target can be a LAN appliance or a captive portal, so it goes
-        # to the debug log only, not to last_error or the diagnostics.
-        _LOGGER.debug("%s redirected to %s", url, resp.url)
-        raise ExtractorError(f"{url} redirected off https; refusing to read the answer")
+    if url.scheme != "https":
+        return "not an https address"
+    if url.user is not None or url.password is not None:
+        return "an address carrying credentials"
+    if not url.host or _internal_address(url.host):
+        return "not a public address"
+    return None
+
+
+# How many redirects one fetch follows; aiohttp's own limit was ten. On
+# 2026-11-06 no listing, API or card the integration reads answered with
+# more than one: energie.be's document API sends each card on to its
+# storage, and Eneco's, EBEM's and Brusol's pages moved. Five leaves room
+# for a CDN in between.
+MAX_REDIRECTS = 5
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+
+
+@asynccontextmanager
+async def checked_request(
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    timeout: float,
+    head: bool = False,
+    params: Mapping[str, str] | None = None,
+    headers: Mapping[str, str] | None = None,
+) -> AsyncIterator[aiohttp.ClientResponse]:
+    """GET ``url``, or HEAD it, and yield the answer, following a redirect
+    only once :func:`_refusal` has let its address through.
+
+    aiohttp sends the request on to wherever a redirect points before its
+    caller can see where that is, so checking the answer afterwards was too
+    late: the LAN device had already been asked, path, query and login
+    included. Each hop is therefore asked on its own, with aiohttp's
+    redirects off, and the next one is checked before it is asked. A
+    redirect may leave the site it came from: energie.be's document API on
+    azurewebsites.net answers with one to its storage on
+    blob.core.windows.net.
+
+    The hops share ``timeout``, as they did when aiohttp followed them, and
+    a chain longer than :data:`MAX_REDIRECTS` raises aiohttp's
+    TooManyRedirects as its own limit did, so a caller's handling of a
+    timeout or a client error holds as it was. A refused address raises an
+    ExtractorError naming ``url``; where the redirect pointed goes to the
+    debug log only, since that can be a device on the LAN.
+    """
+    try:
+        refused = _refusal(URL(url))
+    except ValueError:
+        refused = "not an address"
+    if refused is not None:
+        raise ExtractorError(f"refusing {url}: {refused}")
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    send = session.head if head else session.get
+    target: str | URL = url
+    history: list[aiohttp.ClientResponse] = []
+    while True:
+        left = deadline - loop.time()
+        if left <= 0:
+            raise TimeoutError
+        async with send(
+            target,
+            params=params,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=left),
+            allow_redirects=False,
+        ) as resp:
+            location = (
+                resp.headers.get("Location")
+                if resp.status in _REDIRECT_STATUSES
+                else None
+            )
+            if not location:
+                yield resp
+                return
+            history.append(resp)
+            if len(history) > MAX_REDIRECTS:
+                raise aiohttp.TooManyRedirects(history[0].request_info, tuple(history))
+            try:
+                # Read against the address that answered, as aiohttp reads
+                # a relative Location.
+                hop = URL(location)
+                if not hop.scheme:
+                    hop = resp.url.join(hop)
+                refused = _refusal(hop)
+            except ValueError:
+                refused = "not an address"
+        if refused is not None:
+            _LOGGER.debug("%s redirected to %s", url, location)
+            raise ExtractorError(f"refusing {url}: its redirect is {refused}")
+        # The query was the first address's; the redirect carries its own.
+        target, params = hop, None
 
 
 def _strip_pdf_prefix(payload: bytes) -> bytes:
@@ -278,14 +392,10 @@ async def _fetch_validated_pdf_bytes(
     :func:`is_transient_fetch_error` keys on it to decide whether to retry -
     so only this function and :func:`fetch_text` may write it.
     """
-    _require_https(url)
     try:
-        async with session.get(
-            url,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=timeout),
+        async with checked_request(
+            session, url, timeout=timeout, headers={"User-Agent": USER_AGENT}
         ) as resp:
-            guard_redirect(url, resp)
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             payload = await read_capped(resp, url)
@@ -425,19 +535,14 @@ async def head_freshness_key(
     EnergyVision passes ``prefer=("ETag", "Last-Modified")`` for the
     listing page it probes; every other supplier keeps the default order.
 
-    Held to https like the fetches: an address that is not, or an answer a
-    redirect carried off it, is no signal either. Aspiravi probes the links
-    its listing prints.
+    Checked hop by hop like the fetches (:func:`checked_request`): an
+    address refused there, the first or one a redirect points to, is no
+    signal either. Aspiravi probes the links its listing prints.
     """
     try:
-        _require_https(url)
-        async with session.head(
-            url,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=10),
-            allow_redirects=True,
+        async with checked_request(
+            session, url, head=True, timeout=10, headers={"User-Agent": USER_AGENT}
         ) as resp:
-            guard_redirect(url, resp)
             if resp.status >= 400:
                 return None
             for key in prefer:
@@ -450,7 +555,7 @@ async def head_freshness_key(
         # builtins.TimeoutError on 3.11+), which is NOT a ClientError;
         # without this a slow HEAD would break the documented
         # None-on-failure contract and bubble out of the probe path.
-        # ExtractorError is the https guards refusing the address.
+        # ExtractorError is checked_request refusing an address.
         return None
 
 
@@ -470,18 +575,16 @@ async def head_or_raise(
     a probe folding both cases into "not there" had a CDN blip cached as a
     month with no archive.
 
-    Held to https like the fetches, by :func:`_require_https` and
-    :func:`guard_redirect`.
+    Checked hop by hop like the fetches, by :func:`checked_request`.
     """
-    _require_https(url)
     try:
-        async with session.head(
+        async with checked_request(
+            session,
             url,
+            head=True,
+            timeout=timeout,
             headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=timeout),
-            allow_redirects=True,
         ) as resp:
-            guard_redirect(url, resp)
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             return resp.headers.get("Last-Modified")
@@ -681,15 +784,14 @@ async def fetch_text(
     memo_key = url if not params else f"{url}?{sorted(params.items())}"
     if memo is not None and memo_key in memo:
         return memo[memo_key]
-    _require_https(url)
     try:
-        async with session.get(
+        async with checked_request(
+            session,
             url,
+            timeout=timeout,
             params=params,
             headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=timeout),
         ) as resp:
-            guard_redirect(url, resp)
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {url}")
             body = await read_text_capped(resp, url)

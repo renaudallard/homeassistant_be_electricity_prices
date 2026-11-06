@@ -75,7 +75,7 @@ from typing import Final
 import aiohttp
 from homeassistant.util import dt as dt_util
 
-from .providers._pdf import read_capped
+from .providers._pdf import checked_request, read_capped
 from .providers._pdf_render import extract_pdf_text
 from .providers._render_thread import render_in_thread
 
@@ -366,8 +366,8 @@ async def read_network_terms(
 
 async def _read_pdf(session: aiohttp.ClientSession, url: str) -> str | None:
     """A Brugel PDF as text, or ``None`` when it is not served; raises on a
-    network error or a body that is not a PDF."""
-    async with session.get(url, timeout=aiohttp.ClientTimeout(_TIMEOUT)) as r:
+    network error, an address refused or a body that is not a PDF."""
+    async with checked_request(session, url, timeout=_TIMEOUT) as r:
         if r.status != 200:
             _LOGGER.debug("Brugel sheet %s answered %d", url, r.status)
             return None

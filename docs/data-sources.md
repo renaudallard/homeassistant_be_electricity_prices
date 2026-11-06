@@ -67,16 +67,23 @@ securityToken = <api key>
 
 `_fmt` (`api.py`) converts the caller's datetimes to UTC and formats them as
 `%Y%m%d%H%M`, the compact stamp ENTSO-E expects. The request carries a 30-second
-total timeout (`api.py`).
+total timeout (`api.py`). It goes through `checked_request` (`providers/_pdf.py`),
+like the energy-charts and SMARD requests: a redirect is followed only to an https
+address on a public host, checked before it is asked.
 
 ### Response handling and error modes
 
 ```
 resp.status == 401          -> EntsoeAuthError("ENTSO-E rejected the API key")
-resp.status >= 400          -> EntsoeError("HTTP <status>: <body[:200]>")  (redacted)
+resp.status >= 400          -> EntsoeError("HTTP <status>")
 aiohttp.ClientError         -> EntsoeError(str(err))  (redacted)
 TimeoutError                -> EntsoeError(str(err))  (redacted)
 ```
+
+The body of an error answer, and the start of an energy-charts or SMARD answer
+that is not JSON, go to the debug log only (`_answered`, `api.py`). That text is
+whatever the server chose to send, and the message reaches `last_error`, the
+Repairs card and diagnostics.
 
 These messages do not name ENTSO-E, and neither does a "No matching data"
 acknowledgement's `EntsoeNoDataError("no data (<reason>)")`: whoever shows one

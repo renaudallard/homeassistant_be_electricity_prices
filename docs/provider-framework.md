@@ -887,25 +887,36 @@ Internals worth knowing:
   `Font.from_font_resource`, which the bound counts too. pypdf 6.20.0 moved
   its font module into its `generic` package, and the bound takes it from
   either place.
-- `_require_https` (`_pdf.py`) refuses to fetch a card or page whose address
-  is not https, before any request. Most links are read off a supplier's page
-  and only energie.be checked their scheme, so a plain http link was fetched
-  and nothing could tell a redirect from it to a LAN address from the
-  supplier's own answer. Every card, listing and API the extractors read is
-  served over https. The HEAD probes (`head_freshness_key`, `head_or_raise`,
-  `head_ok`) are held to it and to `guard_redirect` too: Aspiravi probes the
-  links its listing prints. `head_freshness_key` answers `None` there, no
-  signal, `head_or_raise` raises an `ExtractorError` and `head_ok` answers
-  `False`.
-- `guard_redirect` (`_pdf.py`) refuses a card or page that a redirect carried
-  off https, whatever scheme the chain started on. aiohttp follows a redirect
-  wherever it points, plain http included, and from there to an address only
-  the Home Assistant host can reach, whose first bytes would then land in
-  `last_error`. The redirect is not held to the requested site,
-  since a supplier legitimately leaves it: energie.be's document API on
-  azurewebsites.net redirects to its storage on blob.core.windows.net. Every
-  redirect the live cards, listings and APIs answered on 2026-10-08 stayed on
-  https. The target goes to the debug log only.
+- `checked_request` (`_pdf.py`) sends the integration's GETs and HEADs: the
+  four helpers here (`fetch_text`, `_fetch_validated_pdf_bytes`,
+  `head_freshness_key`, `head_or_raise`), the ENTSO-E, energy-charts and SMARD
+  clients (`api.py`), the Brugel sheets, the CREG rate file, Synergrid's page
+  and workbooks, and the CWaPE and Fluvius workbooks. It turns aiohttp's
+  redirects off and follows them itself,
+  one hop at a time, checking each address with `_refusal` before it is asked.
+  aiohttp sent the request on to wherever a redirect pointed before anything
+  could look at it, so a host the integration trusts could make Home Assistant
+  GET or HEAD any LAN address, path, query and login included, and checking the
+  answer afterwards only kept that answer out of `last_error`. `_refusal`
+  refuses an address that is not https, one carrying a login (aiohttp would
+  send it as Basic credentials) and one whose host is an address literal off
+  the public internet: private, loopback, link-local, reserved, multicast,
+  unspecified or carrier-shared, IPv4 or IPv6, an IPv4 address written as IPv6
+  included, and the short or numeric IPv4 spellings the C library reads as an
+  address. A name is not looked up: over https the host it leads to still has
+  to show a certificate the client trusts for that name. Every card, listing and
+  API the extractors read is served over https by a public name, so this refuses
+  nothing real. The redirect is not held to the requested site, since a supplier
+  legitimately leaves it: energie.be's document API on azurewebsites.net
+  answers with a redirect to its storage on blob.core.windows.net. The hops
+  share the caller's timeout, a chain of more than `MAX_REDIRECTS` (5) raises
+  aiohttp's `TooManyRedirects` as aiohttp's own limit of ten did, and on
+  2026-11-06 no source answered with more than one. A refused address raises an
+  `ExtractorError` that names the address asked; where a redirect pointed goes
+  to the debug log only. The HEAD probes are held to it like the fetches:
+  Aspiravi probes the links its listing prints. `head_freshness_key` answers
+  `None` there, no signal, `head_or_raise` raises an `ExtractorError` and
+  `head_ok` answers `False`.
 - `is_transient_fetch_error(message: str) -> bool` (`_pdf.py`) classifies an
   `ExtractorError` message: `network error fetching` and `storage error fetching`
   are always transient; among HTTP statuses, 5xx plus 408/429/403 are transient

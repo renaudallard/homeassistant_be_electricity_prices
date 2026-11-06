@@ -132,6 +132,7 @@ machinery.
 | `tests/test_archive_errors.py` | Every provider's archive lookup (`fetch_for_month`) raises on a transient failure |
 | `tests/test_window_service.py` | The window search behind the `cheapest_window` and `most_expensive_window` services |
 | `tests/test_pdf_helpers.py` | Shared PDF fetching and text extraction (`providers/_pdf.py`, `providers/_pdf_render.py`) |
+| `tests/test_redirect_hops.py` | Every redirect hop is checked before it is asked (`checked_request`, `providers/_pdf.py`), over a local TLS server and a stand-in LAN device that records every connection |
 | `tests/test_module_size.py` | Every module of the integration stays under a thousand lines |
 | `tests/test_manifest.py` | The Home Assistant floor `hacs.json` declares, and the README and `docs/architecture.md` repeat, is the release `requirements-dev.txt` pins for the suite |
 | `tests/test_live_check_harness.py` | The live check (`scripts/live_check.py`): its failure containment, the expectations it holds cards to, and the workflow's retry loop |
@@ -875,8 +876,9 @@ publication, and are appended to the daily report by `_render_metrics`
 Reading a row correctly needs three facts about which hook feeds which column:
 
 - **Fetches / Fetch time** come from `on_request_end`, which fires once per request that reached
-  its final response headers, after the redirect chain and **before** the body is read. So the
-  latency figure is time-to-headers, and a 302-to-CDN fetch counts as one.
+  its response headers, **before** the body is read. So the latency figure is time-to-headers.
+  The fetch helpers follow a redirect themselves, one request per hop (`checked_request`,
+  `_pdf.py`), so a 302-to-CDN fetch counts as two, and its time is the sum of both.
 - **Bytes received** are summed by `_counting_reads` (`scripts/live_check.py`), which wraps
   `read_capped` in the providers' `_pdf` and counts each body it returns, rather than read from
   `Content-Length`, because that header is None on chunked responses and would silently count as

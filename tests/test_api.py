@@ -897,8 +897,39 @@ async def test_an_entsoe_http_error_is_labelled_once() -> None:
             _TOMORROW_START,
         )
     msg = str(excinfo.value)
-    assert msg.startswith("ENTSO-E: HTTP 503: Service Unavailable; fallback: ")
+    assert msg.startswith("ENTSO-E: HTTP 503; fallback: ")
     assert msg.count("ENTSO-E") == 1
+    # What the server said goes to the debug log, not to last_error.
+    assert "Service Unavailable" not in msg
+
+
+@pytest.mark.parametrize("answer", ["energy-charts page", "energy-charts 500", "smard"])
+async def test_what_a_source_answered_stays_out_of_its_error(
+    caplog: pytest.LogCaptureFixture, answer: str
+) -> None:
+    """energy-charts and SMARD copied up to 200 characters of an answer that
+    did not read into the error, which reaches last_error, the Repairs card
+    and diagnostics. That text is whatever the server chose to send: it goes
+    to the debug log instead."""
+    page = "<html><a href='https://x.test/'>secret</a></html>"
+
+    class _Answering(_FakeSession):
+        def get(self, url: str, **kwargs: object) -> _CM:
+            if "energy-charts" in url and answer == "energy-charts 500":
+                return _CM(resp=_Resp(500, page))
+            return super().get(url, **kwargs)
+
+    session = _Answering(
+        entsoe="", fallback_body=page, smard={"index_quarterhour.json": page}
+    )
+    client = SmardClient if answer == "smard" else EnergyChartsClient
+    caplog.set_level("DEBUG", logger=api.__name__)
+    with pytest.raises(EntsoeError) as excinfo:
+        await client(session).fetch_day_ahead(  # type: ignore[arg-type]
+            _TODAY_START, _TOMORROW_START
+        )
+    assert "secret" not in str(excinfo.value)
+    assert "secret" in caplog.text
 
 
 def test_key_validation_does_not_use_the_fallback() -> None:

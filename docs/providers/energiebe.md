@@ -40,8 +40,9 @@ https://energie-production-api.azurewebsites.net/api/v1/data/document?key=Dynami
 ```
 
 A GET on that URL answers `302 Found` and redirects to the current month's versioned Azure
-blob (e.g. `energie.blob.core.windows.net/cms/assets/..._Dynamisch_<hash>.pdf`); aiohttp
-follows the redirect automatically, so the extractor treats it as a single stable URL
+blob (e.g. `energie.blob.core.windows.net/cms/assets/..._Dynamisch_<hash>.pdf`); the
+fetch helper follows the redirect (`checked_request`, `_pdf.py`, once it has checked the
+storage address is https and public), so the extractor treats it as a single stable URL
 whose body is replaced each month. This is the DATS 24 fetch shape: no HTML scraping, no
 discovery, no cheap probe. Past months come from a separate month-scoped listing (see
 [Probe and archive](#probe-and-archive)).

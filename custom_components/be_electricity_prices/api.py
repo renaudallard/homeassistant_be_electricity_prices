@@ -58,7 +58,7 @@ from .const import (
     SMARD_BE_URL,
     SMARD_QUARTERS_FROM,
 )
-from .providers._pdf import error_text, read_text_capped
+from .providers._pdf import checked_request, error_text, read_text_capped
 from .providers.base import ExtractorError
 
 _NS = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
@@ -84,6 +84,16 @@ class EntsoeNoDataError(EntsoeError):
     falls back like on any outage. The historical walk catches it on its
     own, since a past window with no data stays that way.
     """
+
+
+def _answered(what: str, body: str) -> None:
+    """Log the start of an answer that did not read, at debug level only.
+
+    The message raised for it reaches last_error, the Repairs card and
+    diagnostics, and the answer's text is whatever the server chose to
+    send, so the message names the failure and the text stays here.
+    """
+    _LOGGER.debug("%s answered %r", what, body[:200])
 
 
 class EntsoeClient:
@@ -130,17 +140,18 @@ class EntsoeClient:
             "securityToken": self._api_key,
         }
         try:
-            async with self._session.get(
-                ENTSOE_BASE_URL, params=params, timeout=aiohttp.ClientTimeout(total=30)
+            async with checked_request(
+                self._session, ENTSOE_BASE_URL, params=params, timeout=30
             ) as resp:
                 if resp.status == 401:
                     raise EntsoeAuthError("ENTSO-E rejected the API key")
                 if resp.status >= 400:
                     body = await read_text_capped(resp, ENTSOE_BASE_URL)
+                    _answered(f"ENTSO-E HTTP {resp.status}", self._redact(body))
                     # Unlabelled, as every message raised here: whoever shows
                     # it names ENTSO-E, and labelling it twice read "ENTSO-E:
                     # ENTSO-E: ENTSO-E HTTP 503" on the sensor.
-                    raise EntsoeError(self._redact(f"HTTP {resp.status}: {body[:200]}"))
+                    raise EntsoeError(f"HTTP {resp.status}")
                 payload = await read_text_capped(resp, ENTSOE_BASE_URL)
         except (aiohttp.ClientError, TimeoutError, ExtractorError) as err:
             # aiohttp.ClientTimeout fires asyncio.TimeoutError, which is
@@ -510,10 +521,8 @@ class EnergyChartsClient:
             "end": end_day.isoformat(),
         }
         try:
-            async with self._session.get(
-                ENERGY_CHARTS_URL,
-                params=params,
-                timeout=aiohttp.ClientTimeout(total=30),
+            async with checked_request(
+                self._session, ENERGY_CHARTS_URL, params=params, timeout=30
             ) as resp:
                 if resp.status == 429:
                     cooldown = _retry_after(resp.headers.get("Retry-After"))
@@ -524,7 +533,8 @@ class EnergyChartsClient:
                     )
                 if resp.status >= 400:
                     body = await read_text_capped(resp, ENERGY_CHARTS_URL)
-                    raise EntsoeError(f"energy-charts HTTP {resp.status}: {body[:200]}")
+                    _answered(f"energy-charts HTTP {resp.status}", body)
+                    raise EntsoeError(f"energy-charts HTTP {resp.status}")
                 payload = await read_text_capped(resp, ENERGY_CHARTS_URL)
         except (aiohttp.ClientError, TimeoutError, ExtractorError) as err:
             raise EntsoeError(f"energy-charts: {error_text(err)}") from err
@@ -553,9 +563,7 @@ class SmardClient:
 
     async def _get_json(self, url: str) -> object:
         try:
-            async with self._session.get(
-                url, timeout=aiohttp.ClientTimeout(total=30)
-            ) as resp:
+            async with checked_request(self._session, url, timeout=30) as resp:
                 if resp.status >= 400:
                     raise EntsoeError(f"smard HTTP {resp.status}")
                 body = await read_text_capped(resp, url)
@@ -564,7 +572,8 @@ class SmardClient:
         try:
             return json.loads(body)
         except json.JSONDecodeError as err:
-            raise EntsoeError(f"smard: non-JSON response: {body[:120]!r}") from err
+            _answered(f"smard {url}", body)
+            raise EntsoeError("smard: non-JSON response") from err
 
     async def fetch_day_ahead(
         self,
@@ -631,7 +640,8 @@ def _parse_energy_charts(
     try:
         doc = json.loads(body)
     except json.JSONDecodeError as err:
-        raise EntsoeError(f"energy-charts: non-JSON response: {body[:120]!r}") from err
+        _answered("energy-charts", body)
+        raise EntsoeError("energy-charts: non-JSON response") from err
     if not isinstance(doc, dict):
         raise EntsoeError("energy-charts: response was not an object")
     seconds = doc.get("unix_seconds")

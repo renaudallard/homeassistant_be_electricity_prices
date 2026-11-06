@@ -85,7 +85,7 @@ import aiohttp
 from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
 from defusedxml.common import DefusedXmlException  # type: ignore[import-untyped]
 
-from .providers._pdf import USER_AGENT, read_text_capped
+from .providers._pdf import USER_AGENT, checked_request, read_text_capped
 from .providers._rates import RlpBlend
 from .providers.base import ExtractorError
 
@@ -291,10 +291,8 @@ async def _listed_url(
     last match is the current one.
     """
     try:
-        async with session.get(
-            _PAGE_URL,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=30),
+        async with checked_request(
+            session, _PAGE_URL, timeout=30, headers={"User-Agent": USER_AGENT}
         ) as resp:
             if resp.status >= 400:
                 return None
@@ -351,10 +349,8 @@ async def _download(
         tmp.write(data)
 
     try:
-        async with session.get(
-            url,
-            headers={"User-Agent": USER_AGENT},
-            timeout=aiohttp.ClientTimeout(total=_TIMEOUT),
+        async with checked_request(
+            session, url, timeout=_TIMEOUT, headers={"User-Agent": USER_AGENT}
         ) as resp:
             if resp.status >= 400:
                 raise aiohttp.ClientResponseError(
@@ -373,11 +369,16 @@ async def _download(
                     buf.clear()
             if buf:
                 await asyncio.to_thread(_flush, bytes(buf))
-    except BaseException:
+    except BaseException as err:
         # close() flushes, so it is a write too; unlink is a syscall. Both go
         # through the executor like everything else on this path.
         await asyncio.to_thread(tmp.close)
         await asyncio.to_thread(Path(tmp.name).unlink, True)
+        if isinstance(err, ExtractorError):
+            # An address checked_request refused. The callers log a failed
+            # download and degrade on the ValueError the size cap raises,
+            # and a refusal is one more such failure.
+            raise ValueError(str(err)) from err
         raise
     await asyncio.to_thread(tmp.close)
     return Path(tmp.name)

@@ -71,7 +71,7 @@ import aiohttp
 from homeassistant.util import dt as dt_util
 
 from .const import DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW
-from .providers._pdf import USER_AGENT, fetch_text, guard_redirect, read_capped
+from .providers._pdf import USER_AGENT, checked_request, fetch_text, read_capped
 from .providers._pdf_render import extract_pdf_text_layout
 from .synergrid import WorkbookZip, _shared_strings, sheet_paths, sheet_rows
 
@@ -471,12 +471,9 @@ async def read_transports(
 
 
 async def _download(session: aiohttp.ClientSession, url: str) -> bytes:
-    async with session.get(
-        url,
-        headers={"User-Agent": USER_AGENT},
-        timeout=aiohttp.ClientTimeout(total=_TIMEOUT),
+    async with checked_request(
+        session, url, timeout=_TIMEOUT, headers={"User-Agent": USER_AGENT}
     ) as resp:
-        guard_redirect(url, resp)
         resp.raise_for_status()
         return await read_capped(resp, url)
 
