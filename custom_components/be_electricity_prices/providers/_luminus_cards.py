@@ -33,6 +33,7 @@ Luminus charges for power, as opposed to what it collects for someone else.
 from __future__ import annotations
 
 import re
+from bisect import bisect_left
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import date
@@ -113,14 +114,29 @@ def _extract_promo(text: str, card_month: str = "") -> dict[str, object]:
     # the way, which takes a night-metered household to nothing. Pairing from
     # the gate backwards cannot span a sentence boundary that way, because the
     # nearest anchor is by definition the one the gate belongs to.
+    #
+    # Read so that a card costs its length. The anchor before each gate is
+    # found by bisection, and a span is kept only when it is a sentence's
+    # length and does not end where the span kept before it ends: such a span
+    # is a tail of that one, so none of the amounts can read in it where they
+    # read nothing in the longer one. A sentence on every card on file is at
+    # most 290 characters (November 2026); a span past _PROMO_SPAN_MAX is no
+    # sentence and is left unread. Without both, a card of anchors and gates
+    # with one full stop at its end kept a span from every anchor to that
+    # stop and read each one: the square of its length.
     starts = [m.start() for m in _PROMO_ANCHOR_RE.finditer(flat)]
     spans: list[tuple[int, str]] = []
+    kept_end = -1
     for gate_at in _PROMO_GATE_RE.finditer(flat):
-        before = [s for s in starts if s < gate_at.start()]
+        before = bisect_left(starts, gate_at.start())
         if not before:
             continue
-        start = before[-1]
-        spans.append((start, flat[start : flat.find(".", gate_at.start()) + 1]))
+        start = starts[before - 1]
+        end = flat.find(".", gate_at.start()) + 1
+        if not end or end == kept_end or end - start > _PROMO_SPAN_MAX:
+            continue
+        kept_end = end
+        spans.append((start, flat[start:end]))
 
     sentence = payout = valuation = ""
     pct = kwh = eur = None
@@ -136,8 +152,9 @@ def _extract_promo(text: str, card_month: str = "") -> dict[str, object]:
                 continue
             pct, kwh, eur = found_pct, found_kwh, found_eur
             sentence = span
-            payout = flat[start + len(span) :][:240]
-            valuation = flat[start + len(span) :][:600]
+            end = start + len(span)
+            payout = flat[end : end + 240]
+            valuation = flat[end : end + 600]
             break
         if sentence:
             break
@@ -517,7 +534,11 @@ def _belpex_h_pair(
     found = block.search(text)
     if found is None:
         return None
-    rows = list(_BELPEX_H_ROW_RE.finditer(found.group(0)))
+    rows = [
+        row
+        for row in _BELPEX_H_ROW_RE.finditer(found.group(0))
+        if row.group(1) is not None
+    ]
     pairs = {
         (to_float(row.group(1)), parse_sign(row.group(2)) * to_float(row.group(3)))
         for row in rows
@@ -679,6 +700,8 @@ _PROMO_GATE_RE = re.compile(
     re.IGNORECASE,
 )
 _PROMO_ANCHOR_RE = re.compile(r"En\s+tant\s+que\s+nouveau\s+client", re.IGNORECASE)
+# The longest span read as a campaign sentence (``_extract_promo``).
+_PROMO_SPAN_MAX = 2_000
 _PROMO_PCT_RE = re.compile(r"remise\s+de\s+(\d+(?:[,.]\d+)?)\s*%", re.IGNORECASE)
 # A campaign stated as a flat amount: April's Comfy card prints "une remise de
 # 60,00 EUR TVA incl." in its own sentence, under the same signing gate as the
@@ -750,15 +773,25 @@ _DYNAMIC_INJECTION_BLOCK_RE = re.compile(
 )
 # The feed-in row, one figure per meter register: single, then a bi-hourly
 # meter's day and night, all on the one line ("(c€/kWh)2 6,71 8,64 3,75 -").
+# The gap to the figures stops at the next label, whose own gap reaches the
+# same figures: run on to them from each, a run of labels with no figure
+# after them was read to the end again from every one.
+_INJECTION_ROW_LABEL = (
+    r"(?:Tarif\s+de|Compensation\s+pour)\s+l[\"'’©]énergie\s+injectée"
+)
 _INJECTION_ROW_RE = re.compile(
-    rf"(?:Tarif\s+de|Compensation\s+pour)\s+l[\"'’©]énergie\s+injectée"
-    rf"[^0-9-]*(?:\d+\s+)?({_NUM})(?:[ \t]+({_NUM})[ \t]+({_NUM}))?"
+    rf"{_INJECTION_ROW_LABEL}(?:(?!{_INJECTION_ROW_LABEL})[^0-9-])*"
+    rf"(?:\d+\s+)?({_NUM})(?:[ \t]+({_NUM})[ \t]+({_NUM}))?"
 )
 # One register's row with its label, which runs back to the block's colon or
 # to the row before it: "Injection (Compteur mono-horaire et bi-horaire) =
-# 0,1019 x Belpex H - 1,2737".
+# 0,1019 x Belpex H - 1,2737". Every place in a label reaches the same "=",
+# so a label that leads to no row is taken whole by the second branch, which
+# _belpex_h_pair drops: tried from each of its characters, it was read to
+# that "=" from every one.
 _BELPEX_H_ROW_RE = re.compile(
-    rf"[^\s=;:.][^=;:]*?=\s*({_NUM})\s*x\s*Belpex\s*H\s*([{SIGN_CHARS}])\s*({_NUM})",
+    rf"[^\s=;:.](?:[^=;:]*?=\s*({_NUM})\s*x\s*Belpex\s*H\s*([{SIGN_CHARS}])\s*({_NUM})"
+    r"|[^=;:]*)",
     re.S,
 )
 # A non-dynamic card's feed-in formula, accepted ONLY when that same block
@@ -815,8 +848,11 @@ _MONTHLY_RLP_RE = re.compile(
 # block that ends it is headed "pour la compensation de" until December 2025.
 # The cards reissued on 29 October 2026 print the block's "Index (HTVA)" line
 # above its heading instead of below, so a line right above belongs to it.
+# That line is read from its last "Index (HTVA)", which reaches the same line
+# break: read on from each, a line of them was read to its end again from
+# every one.
 _ENERGY_FORMULA_BLOCK_RE = re.compile(
-    r"(?:Index\s*\(HTVA\)[^\n]*\n\s*)?"
+    r"(?:Index\s*\(HTVA\)(?:(?!Index\s*\(HTVA\))[^\n])*\n\s*)?"
     r"Formules\s+tarifaires\s+pour\s+le\s+co[uû]t\s+de\s+l['\u2019\u00a9]\s*[ée]nergie"
     r"(?:(?!Formule\s+tarifaire\s+(?:pour\s+la\s+compensation\s+)?de).)*",
     re.S,
@@ -827,11 +863,13 @@ _ENERGY_BANDS: tuple[tuple[str, str], ...] = (
     # cards: "Compteur mono-\nhoraire". The cards until July 2025 name each
     # row after its meter instead, "Jour (compteur de jour)", "Jour (compteur
     # de jour et de nuit)" and "et nuit" or "Nuit", the feed-in block closing
-    # the day row's parenthesis twice.
+    # the day row's parenthesis twice. The peak label's bracket stops at the
+    # next one, which closes on the same bracket: read on to it from each, a
+    # run of open brackets was read to the end again from every one.
     ("single", r"(?:Compteur\s+mono-\s*horaire|Jour\s*\(compteur\s+de\s+jour\))"),
     (
         "peak",
-        r"(?:Heures\s+pleines(?:\s*\([^)]*\))?"
+        r"(?:Heures\s+pleines(?:\s*\((?:(?!Heures\s+pleines\s*\()[^)])*\))?"
         r"|Jour\s*\(compteur\s+de\s+jour\s+et\s+de\s+nuit\)+)",
     ),
     ("offpeak", r"(?:Heures\s+creuses|(?<!Exclusif\s)\b[Nn]uit)"),
@@ -869,8 +907,10 @@ _HAPPY_SUNDAY_LABEL = r"Pr[ée]l[èe]vement\s+Happy\s+Sunday"
 # du 1re trimestre 2026)". A MONTH attribution is the discriminator that works
 # on the SmartFlex card, whose energy block carries no cadence sentence of its
 # own: the sentence sits under the injection block and governs that tariff.
+# The blanks before the month are taken whole: given back one at a time, each
+# place in a long run of them looked ahead over the rest of it again.
 _MONTHLY_INDEX_ATTRIBUTION_RE = re.compile(
-    r"valeur\s+de\s+l['\u2019\u00a9]indice\s+de\s+(?!\s*\d)\w+", re.IGNORECASE
+    r"valeur\s+de\s+l['\u2019\u00a9]indice\s+de\s++(?!\s*\d)\w+", re.IGNORECASE
 )
 # ComfyFlex's: "(valeur de l'indice du 3ieme trimestre 2026)", and "1re",
 # "2ieme" and "4ieme" on the cards of 2026.

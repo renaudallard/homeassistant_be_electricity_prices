@@ -89,15 +89,22 @@ def _tax_block_values(text: str, region: str) -> list[str]:
     # 'Composition du prix' legend (no colon, no region) and once for the
     # actual tax table (`3 Taxes et redevances : WAL/FL`). Anchor on the
     # colon to only match the second one.
+    #
+    # The region names are taken whole and the block stops short of the next
+    # table heading, which reaches the same end: given back a blank or a name
+    # at a time, or scanned on to the end from every heading, a block with no
+    # end was read again from each. A value sits alone on its own line: let
+    # free to run over blank lines, a run of them was walked again from each.
     block = re.search(
-        r"3 Taxes et redevances\s*:\s*((?:(?:WAL|FL|BRU)\b[ \t]*)+).+?"
+        r"3 Taxes et redevances\s*:\s*((?:(?:WAL|FL|BRU)\b[ \t]*)++)"
+        r"(?:(?!3 Taxes et redevances\s*:\s*(?:WAL|FL|BRU)\b).)+?"
         r"(?=INFORMATION SUR VOTRE TARIF|Conditions\b)",
         text,
         re.S,
     )
     if not block:
         return []
-    values = re.findall(rf"^\s*(-|{_NUM})\s*$", block.group(0), re.MULTILINE)
+    values = re.findall(rf"^[^\S\n]*(-|{_NUM})[^\S\n]*$", block.group(0), re.MULTILINE)
     columns = block.group(1).split()
     if len(columns) < 2:
         return values
@@ -203,10 +210,16 @@ def _extract_flanders_renewables(text: str) -> float:
 
     Caller gates on REGION_FLANDERS so a miss is a layout drift, not a
     'no levy on this card' case. Raise rather than silently zero.
+
+    Each gap stops at the next row of its kind, which leads to the same
+    figures, and the blanks between figures are one run: scanned on to the
+    end from every row, or split between runs of blanks either side of an
+    optional line break, a long card was read again from each place.
     """
     match = re.search(
-        rf"Coûts énergie verte.*?Coûts cogénération.*?FL\s*\n?\s*"
-        rf"({_NUM})\s*\n?\s*({_NUM})",
+        r"Coûts énergie verte(?:(?!Coûts énergie verte).)*?"
+        r"Coûts cogénération(?:(?!Coûts cogénération).)*?"
+        rf"FL\s*({_NUM})\s*({_NUM})",
         text,
         re.S,
     )
@@ -214,7 +227,7 @@ def _extract_flanders_renewables(text: str) -> float:
         return (to_float(match.group(1)) + to_float(match.group(2))) / 100.0
     # Some fixed cards may print only the green-energy line.
     fallback = re.search(
-        rf"Coûts énergie verte\s*\(c€/kWh\)[^A-Z]*?FL\s*\n?\s*({_NUM})",
+        rf"Coûts énergie verte\s*\(c€/kWh\)[^A-Z]*?FL\s*({_NUM})",
         text,
         re.S,
     )
@@ -235,10 +248,13 @@ def _extract_wallonia_renewables(text: str) -> float:
     / -". A Flemish card has no WAL row, which is what the Dynamic card was
     until April 2025, when the product was sold in Flanders alone.
     """
+    # The blanks before the figure are one run: as two either side of an
+    # optional line break, a run of blank lines was split between them in
+    # every way before the figure failed.
     match = re.search(
         rf"Coûts énergie verte\s*\(c€/kWh\)[^A-Z]*?"
         rf"(?:Coûts cogénération\s*\(c€/kWh\)[^A-Z]*?FL\s+{_NUM}\s+{_NUM}\s+)?"
-        rf"WAL\s*\n?\s*({_NUM})",
+        rf"WAL\s*({_NUM})",
         text,
         re.S,
     )

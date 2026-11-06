@@ -366,7 +366,9 @@ bi-horaire)` and `Heures creuses` in August 2025; `Jour (compteur de jour)`,
 `Jour (compteur de jour et de nuit)` and `et nuit` from January 2024 to July
 2025. Every row is read and a card whose rows disagree is refused, since a
 `DynamicRates` leg bills one formula on every meter; every card on file prints
-the same one on each register. Reading the later spelling alone left every card
+the same one on each register. A label is read once: one that leads to no row
+is passed over to its `=`, `;` or `:`, where tried from each of its characters
+it was read to that sign again from every one. Reading the later spelling alone left every card
 before September 2025 unparsed, so a contract signed on one billed each month's
 own card and those months stood in on the current one; their printed annual
 estimates reproduce at the Belpex H each expects for the year ahead
@@ -751,6 +753,25 @@ print a single value and offer no exclusive-night), so the standard fee applies.
 - **Fail-loud policy**: yearly fee, injection, per-kWh taxes, and both regional
   renewables all raise on a miss rather than defaulting to 0 and silently
   mispricing (`_luminus_cards.py`, `_luminus_overlays.py`).
+- **A card costs its length**: the month of the index attribution
+  (`_MONTHLY_INDEX_ATTRIBUTION_RE`), the energy block's `Index (HTVA)` line
+  (`_ENERGY_FORMULA_BLOCK_RE`), the feed-in row (`_INJECTION_ROW_RE`), the peak
+  row's bracket (`_ENERGY_BANDS`), the tax block (`_tax_block_values`) and the
+  green energy rows (`_luminus_overlays.py`) are read from where a label or a
+  figure starts. Each gap stops at the next label of its kind, the tax block's
+  region names are taken whole and its values sit on their own lines, and the
+  blanks around an optional line break are one run. Tried from every place of
+  a long run of blanks, line breaks or labels, each read the rest of it again.
+  The new-customer campaign (`_extract_promo`) finds the anchor before each
+  gate by bisection, reads a span only up to `_PROMO_SPAN_MAX` (2,000)
+  characters, where no campaign sentence on file runs past 290, and skips a
+  span that ends where the one before it ended, a tail of it: a card of
+  anchors and gates before one full stop kept a span from every anchor and
+  read each one.
+  A crafted card of 100,000 characters takes milliseconds where it took
+  seconds to minutes (`test_a_crafted_card_is_read_in_time_linear_in_its_length`,
+  `test_a_crafted_block_is_read_in_time_linear_in_its_length`,
+  `tests/test_luminus.py`).
 
 ## Test fixtures
 

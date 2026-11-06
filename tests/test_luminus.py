@@ -28,6 +28,8 @@
 from __future__ import annotations
 
 import asyncio
+import time
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import date
 from typing import Any
@@ -286,6 +288,120 @@ def test_a_dynamic_card_pricing_its_registers_apart_is_refused() -> None:
     assert apart != text
     with pytest.raises(ExtractorError, match="meter register"):
         parse_snapshot("luminus_dynamic", apart, "flanders")
+
+
+# A block a host could serve instead, about 100,000 characters: a label with
+# no "=" after it, and one whose "=" leads to no formula. Each place in it was
+# tried as a row's start and read to the end of the label.
+@pytest.mark.parametrize(
+    "label",
+    [
+        pytest.param("€" * 100_000, id="no sign"),
+        pytest.param("a" * 100_000 + "= 1", id="no row"),
+    ],
+)
+def test_a_crafted_block_is_read_in_time_linear_in_its_length(label: str) -> None:
+    from custom_components.be_electricity_prices.providers import _luminus_cards
+
+    text = f"Formules tarifaires pour le coût de l'énergie {label}"
+    started = time.perf_counter()
+    pair = _luminus_cards._belpex_h_pair(text, _luminus_cards._DYNAMIC_ENERGY_BLOCK_RE)
+    assert pair is None
+    assert time.perf_counter() - started < 2.0
+
+
+_HEAD = "Formules tarifaires pour le coût de l'énergie "
+
+
+# Card text a host could serve instead, about 100,000 characters each: runs
+# of blanks, of line breaks and of labels, on which every place was tried as
+# the start of a row, a block or a figure and read the rest of the run again,
+# and the new-customer campaign's anchor and gate over and over before one
+# full stop, or one anchor before many gates, each of whose spans was read.
+@pytest.mark.parametrize(
+    ("reader", "crafted"),
+    [
+        pytest.param(
+            "promo",
+            "En tant que nouveau client pour Luminus " * 2_500 + ".",
+            id="campaign gates",
+        ),
+        pytest.param(
+            "promo",
+            "En tant que nouveau client " + "nouveau client pour Luminus. " * 3_450,
+            id="campaign stops",
+        ),
+        pytest.param(
+            "tou", _HEAD + "valeur de l'indice de" + "\xa0" * 100_000, id="month blanks"
+        ),
+        pytest.param("tou", "Index (HTVA)" * 25_000, id="index headings"),
+        pytest.param(
+            "injection", 'Tarif de l"énergie injectée' * 3_700, id="feed-in labels"
+        ),
+        pytest.param("bands", "Heures pleines(" * 10_000, id="open brackets"),
+        pytest.param(
+            "taxes", "3 Taxes et redevances : FL" + " " * 100_000, id="tax blanks"
+        ),
+        pytest.param("taxes", "3 Taxes et redevances : FL " * 3_700, id="tax headings"),
+        pytest.param(
+            "taxes",
+            "3 Taxes et redevances : FL\n" + "\n" * 100_000 + "Conditions",
+            id="tax lines",
+        ),
+        pytest.param(
+            "flanders",
+            "Coûts énergie verteCoûts cogénérationFL0" + "\n" * 100_000,
+            id="renewables lines",
+        ),
+        pytest.param(
+            "flanders",
+            "Coûts énergie verte (c€/kWh) FL" + "\n" * 100_000,
+            id="green lines",
+        ),
+        pytest.param(
+            "flanders",
+            "Coûts énergie verte Coûts cogénération " * 2_500,
+            id="green labels",
+        ),
+        pytest.param(
+            "wallonia",
+            "Coûts énergie verte (c€/kWh) WAL\n" + "\n" * 100_000,
+            id="walloon lines",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    reader: str, crafted: str
+) -> None:
+    from custom_components.be_electricity_prices.providers import (
+        _luminus_cards,
+        _luminus_overlays,
+    )
+
+    bands = (
+        _luminus_cards._band_formula_re,
+        _luminus_cards._quarterly_band_formula_re,
+        _luminus_cards._rlp_band_formula_re,
+    )
+    readers: dict[str, Callable[[str], object]] = {
+        "tou": _luminus_cards._monthly_tou_coefficients,
+        "injection": lambda text: _luminus_cards._extract_injection(text, "fixed"),
+        "bands": lambda text: any(
+            _luminus_cards._formula_pairs(text, _luminus_cards._ENERGY_BANDS, band, 1.0)
+            for band in bands
+        ),
+        "taxes": lambda text: _luminus_overlays._tax_block_values(text, "flanders"),
+        "flanders": _luminus_overlays._extract_flanders_renewables,
+        "wallonia": _luminus_overlays._extract_wallonia_renewables,
+        "promo": _luminus_cards._extract_promo,
+    }
+    started = time.perf_counter()
+    try:
+        found = readers[reader](crafted)
+    except ExtractorError:
+        found = None
+    assert not found
+    assert time.perf_counter() - started < 2.0
 
 
 async def test_the_archive_serves_a_dynamic_month_before_september_2025(
