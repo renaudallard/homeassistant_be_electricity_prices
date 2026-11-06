@@ -161,6 +161,21 @@ class NetworkTerms:
     fixed_le13: float
     fixed_gt13: float
 
+    def overlay_fields(self) -> dict[str, float | None]:
+        """The DSO overlay fields this network sets, excluding VAT. A single
+        meter pays the day rate and an exclusive-night circuit the night one,
+        and the yearly charge carries the power term, with the band above 13
+        kVA beside it."""
+        return {
+            "distribution_single": self.day,
+            "distribution_peak": self.day,
+            "distribution_offpeak": self.night,
+            "distribution_exclusive_night": self.night,
+            "transport": self.transport,
+            "data_management_per_year": self.fixed_le13,
+            "brussels_power_term_above_13kva": self.fixed_gt13,
+        }
+
 
 # Successes are kept for the life of the process: the figure is annual and
 # the sheet does not change under us. A failure is kept only briefly, so a
@@ -337,14 +352,32 @@ async def _sheet_text(session: aiohttp.ClientSession, year: int) -> str | None:
     return text
 
 
+async def read_network_terms(
+    session: aiohttp.ClientSession, year: int
+) -> NetworkTerms | None:
+    """The year's network as its final sheet gives it, or ``None`` where
+    Brugel does not serve the sheet or it does not read. Raises where the
+    download or the reader fails, for the live check to tell a network error
+    from a sheet gone."""
+    text = await _read_pdf(session, _URL.format(published=year - 1, year=year))
+    return None if text is None else _parse_network(text)
+
+
+async def _read_pdf(session: aiohttp.ClientSession, url: str) -> str | None:
+    """A Brugel PDF as text, or ``None`` when it is not served; raises on a
+    network error or a body that is not a PDF."""
+    async with session.get(url, timeout=aiohttp.ClientTimeout(_TIMEOUT)) as r:
+        if r.status != 200:
+            _LOGGER.debug("Brugel sheet %s answered %d", url, r.status)
+            return None
+        payload = await read_capped(r, url)
+    return await asyncio.to_thread(extract_pdf_text, payload)
+
+
 async def _pdf_text(session: aiohttp.ClientSession, url: str) -> str | None:
     """A Brugel PDF as text, or ``None`` when it is not served or not a PDF."""
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(_TIMEOUT)) as r:
-            if r.status == 200:
-                payload = await read_capped(r, url)
-                return await asyncio.to_thread(extract_pdf_text, payload)
-            _LOGGER.debug("Brugel sheet %s answered %d", url, r.status)
+        return await _read_pdf(session, url)
     except Exception as err:  # see ensure_power_term
         # Broad on purpose. The reader raises ExtractorError for a body
         # that is not a PDF, which is what a maintenance page or a

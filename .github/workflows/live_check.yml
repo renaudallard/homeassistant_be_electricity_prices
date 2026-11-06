@@ -638,9 +638,22 @@ jobs:
             cat tmp/report/network_report.md
           } > network_issue_body.md
 
+          # Titled after what failed, as the tax issue is. A regulator's
+          # sheet that no longer reads, or reads other figures than the cards
+          # print, is code to change here, where a card's figure is its
+          # supplier's to reprint. Each title has its own label, for the
+          # reason the products step gives.
+          if [ -s tmp/report/network_failures.txt ] \
+            && ! grep -qv '^_network: ' tmp/report/network_failures.txt; then
+            title="[live-check] a regulator's network sheet is unreadable or disagrees"
+            label='live-check-network-sheet'
+          else
+            title="[live-check] a supplier's network figure disagrees"
+            label='live-check-network'
+          fi
           bash scripts/file_ci_issue.sh \
-            --label 'live-check-network' \
-            --title "[live-check] a supplier's network figure disagrees" \
+            --label "$label" \
+            --title "$title" \
             --body network_issue_body.md \
             --fingerprint tmp/report/network_failures.txt \
             --workflow .github/workflows/live_check.yml

@@ -478,6 +478,22 @@ already looked at go in `_KNOWN_NETWORK_FIGURES`, keyed on the exact figure and 
 Antwerpen distribution rate and Mega's Halle-Vilvoorde prosumer tariff. The rows go to
 `network_report.md` and file their own issue.
 
+`_check_network_sheets` (`scripts/live_check.py`) holds the sheets a custom entry can take its
+whole network from to the same cards: every Fluvius area's sheet, Brugel's, and each Walloon
+operator's CWaPE grid with the transport grid, read for this year through the integration's own
+readers (`read_area_terms`, `read_network_terms`, `read_listing` and `read_network`), which
+raise on a network error where the integration logs. A sheet that no longer reads files one row
+per regulator, `_network: <regulator> <year> network sheet unreadable`, naming each DSO left
+short: such an entry then bills the figures typed into it, with a log line for the only sign. A
+fetch that failed the way a later one recovers from passes. A sheet that reads is compared field
+by field, in the overlay field the resolver bills each figure in (`overlay_fields`, which
+`_resolve_fluvius_network`, `_resolve_brugel_network` and `_resolve_cwape_network` bill
+through), with what the cards of the archive's month print for the DSO, ex VAT and within the
+same 1%, where at least two suppliers print it and outnumber any other figure: a column read as
+another stays in bounds, and only the cards show it. Only a month of the sheets' year is
+compared. On 6 November 2026 all fourteen read and agreed with the October cards. Those rows
+file under their own title when they are the only failures.
+
 ### The keyless day-ahead fallback
 
 `_check_spot_fallback` (`scripts/live_check.py`) asks whether energy-charts and SMARD still serve
@@ -1596,6 +1612,7 @@ the script through a fake `gh`.
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax-fluvius` | `[live-check] the Fluvius tariff sheet can no longer be read`, when the sheet or its analog kWh rate are the only failures |
 | bit 1 (rc 2/3/6/7) | Open or update tax-block issue | `live-check-tax-schedule` | `[live-check] an operator's published hours no longer match`, when every failure is a schedule row |
 | bit 1 (rc 2/3/6/7) | Open or update network-figure issue | `live-check-network` | `[live-check] a supplier's network figure disagrees` |
+| bit 1 (rc 2/3/6/7) | Open or update network-figure issue | `live-check-network-sheet` | `[live-check] a regulator's network sheet is unreadable or disagrees`, when every failure is a sheet row |
 | bit 1 (rc 2/3/6/7) | Open or update card-editions issue | `live-check-editions` | `[live-check] a supplier's French and Dutch cards disagree` |
 
 A TotalEnergies variable card's "A titre indicatif" block, which a keyless entry bills as

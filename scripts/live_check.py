@@ -194,6 +194,17 @@ def _load_providers() -> dict[str, types.ModuleType]:
     # And its reader of each area's analog kWh rate, over the areas it knows.
     _READ_ANALOG_SURCHARGE = fluvius.read_analog_surcharge
     _FLUVIUS_AREAS = tuple(fluvius._AREA_SLUGS.values())
+    # And the readers a custom entry takes its whole network from in each
+    # region, which the network sheet rows hold against the cards.
+    global _READ_AREA_TERMS, _FLUVIUS_AREA_KEYS, _READ_BRUGEL_NETWORK
+    global _READ_CWAPE_LISTING, _READ_CWAPE_NETWORK, _CWAPE_DSOS
+    _READ_AREA_TERMS = fluvius.read_area_terms
+    _FLUVIUS_AREA_KEYS = dict(fluvius._AREA_SLUGS)
+    _READ_BRUGEL_NETWORK = _load("be_pkg.brugel", PKG / "brugel.py").read_network_terms
+    cwape = _load("be_pkg.cwape", PKG / "cwape.py")
+    _READ_CWAPE_LISTING = cwape.read_listing
+    _READ_CWAPE_NETWORK = cwape.read_network
+    _CWAPE_DSOS = tuple(cwape._OPERATORS)
     # And the hours it bills by, which the schedule watch holds against what
     # the operators publish.
     global _DAY_NIGHT, _IMPACT_BAND
@@ -397,6 +408,17 @@ _FLUVIUS_AREAS: tuple[str, ...] = ()
 # Sized on the slip it catches, a factor of ten on the 2 to 4 c/kWh an analog
 # meter pays over a peak-metered one, not on what that ought to be.
 _MAX_ANALOG_SURCHARGE = 0.2
+# Bound by _load_providers to the readers a custom entry takes its whole
+# network from, each raising on a network error where the integration logs:
+# fluvius.read_area_terms over the areas it knows, by DSO key,
+# brugel.read_network_terms, and cwape.read_listing and read_network over the
+# operators it knows.
+_READ_AREA_TERMS: Any = None
+_FLUVIUS_AREA_KEYS: dict[str, str] = {}
+_READ_BRUGEL_NETWORK: Any = None
+_READ_CWAPE_LISTING: Any = None
+_READ_CWAPE_NETWORK: Any = None
+_CWAPE_DSOS: tuple[str, ...] = ()
 # Bound by _load_providers to the day_night module and pricing.dso_impact_band.
 _DAY_NIGHT: Any = None
 _IMPACT_BAND: Any = None
@@ -3853,35 +3875,46 @@ def _check_archive_row_months(archive: Path | None) -> None:
         )
 
 
-def _check_network_consensus(archive: Path | None, today: date | None = None) -> None:
-    """Assert every supplier prints the same regulated network figures.
+@dataclass(frozen=True)
+class _NetworkVote:
+    """What the month's cards print for one DSO's network field: each
+    supplier's printed figure with its ex-VAT value and the number of its
+    cards printing it, and those figures grouped within
+    ``_NETWORK_TOLERANCE`` of each other, the most voters first."""
 
-    Distribution, transport, metering, capacity and prosumer tariffs are set
-    per DSO by the regulators, so for one month and one DSO every card carries
-    the same figures. The integration bills each card as printed, so a card
-    carrying a stale or mistyped row bills its households that figure: Bolt's
-    professional card printed the Pic rate in the Medium column for four
-    Walloon DSOs, which billed every Medium hour of an Impact entry at Pic,
-    and nothing reported it.
+    figures: dict[tuple[str, float], list[Any]]
+    ranked: list[list[tuple[str, float]]]
 
-    Read from the card archive like the federal check, and on the month most
-    cards are filed under, for the same reasons. Each row is put on the
-    ex-VAT basis first: a residential card stores the figure including VAT,
-    at the rate it states or else the month's (:func:`_residential_vat`), and
-    a professional one the regulator's ex-VAT figure. Figures within
-    ``_NETWORK_TOLERANCE`` of each other are one figure, the supplier is the
-    voter, and a tie is not reported.
+
+def _voters(cluster: list[tuple[str, float]]) -> set[str]:
+    return {supplier for supplier, _ in cluster}
+
+
+def _same_network_figure(figure: float, anchor: float) -> bool:
+    return figure == anchor or (
+        bool(anchor) and abs(figure / anchor - 1.0) < _NETWORK_TOLERANCE
+    )
+
+
+def _network_votes(
+    archive: Path,
+) -> tuple[str, dict[tuple[str, str, str], _NetworkVote]] | None:
+    """The month most cards are filed under and, by region, DSO and field,
+    what its cards print, or ``None`` for an archive with no row.
+
+    Each row is put on the ex-VAT basis first: a residential card stores the
+    figure including VAT, at the rate it states or else the month's
+    (:func:`_residential_vat`), and a professional one the regulator's ex-VAT
+    figure. The social tariff's rows and the figures a card's structure sets
+    apart (``_NETWORK_STRUCTURAL``) do not vote.
     """
-    if archive is None:
-        return
-    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
     rows = [
         row
         for row in sorted(archive.glob("cards/*/*/*/????-??.json"))
         if row.parts[-4] not in _OFF_MARKET_SUPPLIERS
     ]
     if not rows:
-        return
+        return None
     counts: dict[str, int] = {}
     for row in rows:
         counts[row.stem] = counts.get(row.stem, 0) + 1
@@ -3925,28 +3958,51 @@ def _check_network_consensus(archive: Path | None, today: date | None = None) ->
                     (supplier, printed), [printed / basis, 0]
                 )
                 entry[1] += 1
-    for (region, dso, field), figures in sorted(seen.items()):
+    votes: dict[tuple[str, str, str], _NetworkVote] = {}
+    for key, figures in seen.items():
         clusters: list[list[tuple[str, float]]] = []
-        for key in sorted(figures, key=lambda k: figures[k][0]):
+        for voted in sorted(figures, key=lambda k: figures[k][0]):
             for cluster in clusters:
-                anchor = figures[cluster[0]][0]
-                figure = figures[key][0]
-                if figure == anchor or (
-                    anchor and abs(figure / anchor - 1.0) < _NETWORK_TOLERANCE
-                ):
-                    cluster.append(key)
+                if _same_network_figure(figures[voted][0], figures[cluster[0]][0]):
+                    cluster.append(voted)
                     break
             else:
-                clusters.append([key])
-        if len(clusters) < 2:
+                clusters.append([voted])
+        ranked = sorted(clusters, key=lambda c: (-len(_voters(c)), figures[c[0]][0]))
+        votes[key] = _NetworkVote(figures, ranked)
+    return month, votes
+
+
+def _check_network_consensus(archive: Path | None, today: date | None = None) -> None:
+    """Assert every supplier prints the same regulated network figures.
+
+    Distribution, transport, metering, capacity and prosumer tariffs are set
+    per DSO by the regulators, so for one month and one DSO every card carries
+    the same figures. The integration bills each card as printed, so a card
+    carrying a stale or mistyped row bills its households that figure: Bolt's
+    professional card printed the Pic rate in the Medium column for four
+    Walloon DSOs, which billed every Medium hour of an Impact entry at Pic,
+    and nothing reported it.
+
+    Read from the card archive like the federal check, and on the month most
+    cards are filed under, for the same reasons, each figure on the ex-VAT
+    basis (:func:`_network_votes`). Figures within ``_NETWORK_TOLERANCE`` of
+    each other are one figure, the supplier is the voter, and a tie is not
+    reported.
+    """
+    if archive is None:
+        return
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    held = _network_votes(archive)
+    if held is None:
+        return
+    month, votes = held
+    for (region, dso, field), vote in sorted(votes.items()):
+        figures, ranked = vote.figures, vote.ranked
+        if len(ranked) < 2:
             continue
-
-        def voters(cluster: list[tuple[str, float]]) -> set[str]:
-            return {supplier for supplier, _ in cluster}
-
-        ranked = sorted(clusters, key=lambda c: (-len(voters(c)), figures[c[0]][0]))
         top, runner_up = ranked[0], ranked[1]
-        if len(voters(top)) == len(voters(runner_up)):
+        if len(_voters(top)) == len(_voters(runner_up)):
             continue
         agreed = figures[top[0]][0]
         for cluster in ranked[1:]:
@@ -3955,7 +4011,7 @@ def _check_network_consensus(archive: Path | None, today: date | None = None) ->
                     f"{region} {dso}: {field} {printed} "
                     f"({figures[(supplier, printed)][0]:.6f} ex VAT) on "
                     f"{figures[(supplier, printed)][1]} card(s) against "
-                    f"{agreed:.6f} ex VAT on {len(voters(top))} suppliers' cards"
+                    f"{agreed:.6f} ex VAT on {len(_voters(top))} suppliers' cards"
                 )
                 allowed = _network_allowance(supplier, dso, field, printed, today)
                 if allowed is not None:
@@ -3966,6 +4022,163 @@ def _check_network_consensus(archive: Path | None, today: date | None = None) ->
                     detail,
                     kind="network",
                 )
+
+
+# Each regulator a custom entry can take its whole network from, by region,
+# and the module that reads its sheet, for the row to send the triager to.
+_NETWORK_SHEETS: dict[str, tuple[str, str]] = {
+    "flanders": ("Fluvius", "fluvius.py"),
+    "brussels": ("Brugel", "brugel.py"),
+    "wallonia": ("CWaPE", "cwape.py"),
+}
+# How many suppliers have to print a figure before a sheet giving another one
+# is read as misread. One card is not a fleet: a stale one would call a sheet
+# read right wrong.
+_NETWORK_SHEET_QUORUM: int = 2
+
+
+def _sheet_error(err: BaseException) -> str:
+    """What a sheet read raised, in the words ``is_transient_fetch_error``
+    reads: an ExtractorError keeps its own text, a status its code, and a
+    connection or a timeout aiohttp raised is a network error."""
+    if isinstance(err, _EXTRACTOR_ERROR):
+        return str(err)
+    if isinstance(err, aiohttp.ClientResponseError):
+        return f"HTTP {err.status} fetching {err.request_info.real_url}"
+    if isinstance(err, (aiohttp.ClientError, TimeoutError)):
+        return f"network error fetching: {type(err).__name__}: {err}"
+    return f"{type(err).__name__}: {err}"
+
+
+async def _network_sheets(
+    session: aiohttp.ClientSession, today: date | None = None
+) -> tuple[dict[tuple[str, str], dict[str, float | None]], dict[tuple[str, str], str]]:
+    """What each regulator's sheet gives a custom entry this year, by region
+    and DSO key, as the overlay fields it bills, excluding VAT, read through
+    the integration's own readers; and for each key a sheet left short, what
+    went wrong."""
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    sheets: dict[tuple[str, str], dict[str, float | None]] = {}
+    problems: dict[tuple[str, str], str] = {}
+    for dso, area in sorted(_FLUVIUS_AREA_KEYS.items()):
+        try:
+            terms = await _READ_AREA_TERMS(session, today.year, area)
+        except Exception as err:
+            problems[("flanders", dso)] = _sheet_error(err)
+            continue
+        if terms is None:
+            problems[("flanders", dso)] = "not listed or not read"
+        else:
+            sheets[("flanders", dso)] = terms.overlay_fields()
+    try:
+        network = await _READ_BRUGEL_NETWORK(session, today.year)
+        failure = "not served or not read"
+    except Exception as err:
+        network, failure = None, _sheet_error(err)
+    for dso in sorted(_BRUSSELS_DSO_KEYS):
+        if network is None:
+            problems[("brussels", dso)] = failure
+        else:
+            sheets[("brussels", dso)] = network.overlay_fields()
+    try:
+        documents = await _READ_CWAPE_LISTING(session)
+    except Exception as err:
+        documents, failure = None, _sheet_error(err)
+    for dso in _CWAPE_DSOS:
+        key = ("wallonia", dso)
+        if documents is None:
+            problems[key] = failure
+            continue
+        try:
+            read = await _READ_CWAPE_NETWORK(session, documents, today, dso)
+        except Exception as err:
+            problems[key] = _sheet_error(err)
+            continue
+        fields: dict[str, float | None] = {}
+        missing: list[str] = []
+        for what, terms in zip(("grid", "transport grid"), read, strict=True):
+            if terms is None:
+                missing.append(f"no {what} read")
+            else:
+                fields.update(terms.overlay_fields())
+        if fields:
+            sheets[key] = fields
+        if missing:
+            problems[key] = ", ".join(missing)
+    return sheets, problems
+
+
+def _check_network_sheets(
+    sheets: Mapping[tuple[str, str], Mapping[str, float | None]],
+    problems: Mapping[tuple[str, str], str],
+    archive: Path | None,
+    today: date | None = None,
+) -> None:
+    """Assert each regulator's sheet still reads, and reads as the cards do.
+
+    A custom entry can take its whole network off its Fluvius area sheet,
+    Brugel's sheet or its operator's CWaPE grid, and without the sheet it
+    bills the figures typed into it, with a log line in Home Assistant for
+    the only sign. One row per regulator says a sheet stopped reading; a
+    fetch that failed the way a later one recovers from passes, as for the
+    Fluvius ceiling.
+
+    A sheet can also read and be misread, one column taken for another,
+    which no bound refuses. So each figure, in the overlay field the
+    resolver bills it in (``overlay_fields``), is held to what the cards
+    print for the DSO in the archive's month, on the ex-VAT basis and within
+    the tolerance of the network consensus, where at least
+    ``_NETWORK_SHEET_QUORUM`` suppliers print it and outnumber any other
+    figure. Only a month of this year is compared, the year the sheets are
+    read for.
+    """
+    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
+    for region, (reader, module) in _NETWORK_SHEETS.items():
+        unread: list[str] = []
+        passed: list[str] = []
+        for (where, dso), problem in sorted(problems.items()):
+            if where == region:
+                healing = _is_transient_fetch_error(problem)
+                (passed if healing else unread).append(f"{dso}: {problem}")
+        label = f"_network: {reader} {today.year} network sheet unreadable"
+        if unread:
+            _record(
+                label,
+                False,
+                f"{reader}'s sheet could not be read ({'; '.join(unread)}), so a "
+                "custom entry taking its network from it bills the figures "
+                f"typed into it; see {module}",
+                kind="network",
+            )
+        elif passed:
+            _record(label, True, "; ".join(passed), kind="network")
+    held = None if archive is None else _network_votes(archive)
+    if held is None or int(held[0][:4]) != today.year:
+        return
+    month, votes = held
+    for (region, dso), fields in sorted(sheets.items()):
+        reader, module = _NETWORK_SHEETS[region]
+        for field, value in sorted(fields.items()):
+            vote = votes.get((region, dso, field))
+            if value is None or vote is None:
+                continue
+            top = vote.ranked[0]
+            voters = len(_voters(top))
+            if voters < _NETWORK_SHEET_QUORUM or (
+                len(vote.ranked) > 1 and voters == len(_voters(vote.ranked[1]))
+            ):
+                continue
+            agreed = vote.figures[top[0]][0]
+            if _same_network_figure(value, agreed):
+                continue
+            _record(
+                f"_network: {reader} {dso} {field} disagrees with the cards for {month}",
+                False,
+                f"the sheet gives {value:.6f} ex VAT where {voters} suppliers' "
+                f"cards print {agreed:.6f}, so a custom entry taking its network "
+                f"from the sheet is billed the sheet's figure; see {module}",
+                kind="network",
+            )
 
 
 async def _check_card_freshness(
@@ -6053,6 +6266,17 @@ async def _run(texts: Path | None = None) -> int:
             except Exception as err:
                 _record(
                     "_network: consensus check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                )
+            # The sheets a custom entry takes its network from, held to the
+            # same cards.
+            try:
+                network_sheets, sheet_problems = await _network_sheets(session)
+                _check_network_sheets(network_sheets, sheet_problems, texts)
+            except Exception as err:
+                _record(
+                    "_network: sheet check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                 )

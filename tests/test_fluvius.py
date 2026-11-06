@@ -295,6 +295,21 @@ async def test_a_custom_entry_reads_its_areas_rates_off_its_sheet() -> None:
     assert session.asked == []
 
 
+async def test_the_live_check_reads_an_areas_rates_as_they_are_now() -> None:
+    """``read_area_terms`` holds nothing, gives nothing for a year not
+    listed, and raises where the listing does not answer, where the
+    integration logs, so the live check can tell the two apart."""
+    session: Any = _Session()
+    terms = await fluvius.read_area_terms(session, 2026, "zenne-dijle")
+    assert terms == fluvius.parse_area_terms(_SHEET_2026, 2026)
+    assert fluvius.cached_area_terms(2026, "fluvius_zenne_dijle") is None
+    assert await fluvius.read_area_terms(session, 2027, "zenne-dijle") is None
+    fluvius._listing = None
+    del session.pages[fluvius._LISTING_URL]
+    with pytest.raises(Exception, match="404"):
+        await fluvius.read_area_terms(session, 2026, "zenne-dijle")
+
+
 def test_the_store_keeps_the_area_rates() -> None:
     """What an entry's store kept stands in after a restart, and a row that
     does not read as an area's rates is skipped."""

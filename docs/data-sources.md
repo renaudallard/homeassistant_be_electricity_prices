@@ -1384,6 +1384,9 @@ outside its bounds.
 `ensure_area_terms` reads it in the tick and the backfill like the analog
 rate, for every year a window spans, with the same year-before stand-in,
 backoff and store (`cached_area_terms`, the `area` part of `held_table`).
+The live check reads every area's through `read_area_terms`, which raises on
+a network error where the integration logs, and holds it to the cards (see
+"Network figures" in [ci-and-testing.md](ci-and-testing.md)).
 
 ### Caching and failure
 
@@ -1494,7 +1497,9 @@ The tick asks for this year, the backfill for every year its window spans and
 custom contract covers. `_resolve_brugel_network` (`snapshot_resolve.py`) puts
 the figures on the basis the entry typed on (`on_card_basis`), before
 `resolve_brussels_power_term`, which then leaves the yearly charge alone since
-the band above 13 kVA is set.
+the band above 13 kVA is set. The live check reads the sheet through
+`read_network_terms`, which raises where the download or the reader fails,
+and holds it to the cards.
 
 The parser is tested on the 2026 sheet as Brugel served it on 2026-11-05
 (`tests/fixtures/brugel_elec_2026.pdf`).
@@ -1576,7 +1581,10 @@ not covered, so the listing is asked again every six hours for a grid that
 would take over. `_resolve_cwape_network` (`snapshot_resolve.py`) puts every
 register and Impact band, the fixed term and the prosumer rate on the basis the
 entry typed on (`on_card_basis`); the entry's meter and tariff mode decide
-which it bills, and `fees.py` bills no fixed term on Impact.
+which it bills, and `fees.py` bills no fixed term on Impact. The live check
+reads every operator's grid and the transport grid through `read_listing` and
+`read_network`, which raise where the integration logs, and holds them to the
+cards.
 
 The parser is tested on the five operators' 2026 grids, ORES's and RESA's for
 2027 and the 2026 transport grid as the CWaPE served them on 2026-11-05

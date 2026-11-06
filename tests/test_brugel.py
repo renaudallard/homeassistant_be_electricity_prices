@@ -43,6 +43,7 @@ from custom_components.be_electricity_prices.providers._resolve import (
 )
 from custom_components.be_electricity_prices.providers.base import (
     DsoOverlay,
+    ExtractorError,
     TaxOverlay,
 )
 from tests import FakeBody, make_snapshot
@@ -506,6 +507,22 @@ async def test_the_network_comes_with_the_power_term_in_one_request() -> None:
     assert held.transport == pytest.approx(0.0214403)
     assert brugel.cached_network_terms(2027) == held
     assert brugel.cached_network_terms(2025) is None
+
+
+async def test_the_live_check_reads_the_network_as_it_is_now() -> None:
+    """``read_network_terms`` holds nothing, gives nothing for a sheet Brugel
+    does not serve, and raises for a body that is not a PDF, where the
+    integration logs, so the live check can tell a sheet gone from a reader
+    that broke."""
+    session = _Session(_SHEET_2026)
+    terms = await brugel.read_network_terms(session, 2026)  # type: ignore[arg-type]
+    assert terms == brugel._parse_network(_sheet_text())
+    assert brugel.cached_network_terms(2026) is None
+    missing = _Session(b"", status=404)
+    assert await brugel.read_network_terms(missing, 2026) is None  # type: ignore[arg-type]
+    page = _Session(b"<html>maintenance</html>")
+    with pytest.raises(ExtractorError):
+        await brugel.read_network_terms(page, 2026)  # type: ignore[arg-type]
 
 
 async def test_the_indicative_grid_gives_no_network() -> None:

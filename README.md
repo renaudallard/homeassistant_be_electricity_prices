@@ -2064,9 +2064,11 @@ changed since the morning's archive walk is rendered again:
   files `[live-check] supplier drift detected`, and a card whose federal tax
   block, stated VAT rate, Flemish network ceiling or regulated network figure
   disagrees with the month's other cards files its own issue, as does a
-  Fluvius tariff sheet the ceiling can no longer be read from, and a Fluvius
-  or ORES page whose published day/night or Impact hours stop matching the
-  ones the integration bills by. A TotalEnergies card
+  Fluvius tariff sheet the ceiling can no longer be read from, a Fluvius
+  area sheet, Brugel's sheet or a CWaPE grid a custom entry takes its network
+  from that no longer reads or gives other figures than the cards print, and
+  a Fluvius or ORES page whose published day/night or Impact hours stop
+  matching the ones the integration bills by. A TotalEnergies card
   whose Dutch edition reads differently from the French one, or stands in for
   a French card that does not read, files one too.
 

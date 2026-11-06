@@ -2054,6 +2054,8 @@ def _drive_run(
         "_check_federal_tax_consensus": _sync_no_op,
         "_check_vat_consensus": _sync_no_op,
         "_check_network_consensus": _sync_no_op,
+        "_network_sheets": _async_no_sheets,
+        "_check_network_sheets": _sync_no_op,
         "_check_card_freshness": _async_no_op,
         "_check_spot_fallback": _async_no_op,
     }
@@ -2404,6 +2406,16 @@ def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
             "tax",
             "a/federal tax block disagrees for 2026-09\n",
         ),
+        (
+            "Open or update network-figure issue",
+            "network",
+            "_network: CWaPE 2026 network sheet unreadable\n",
+        ),
+        (
+            "Open or update network-figure issue",
+            "network",
+            "a/ores distribution_medium 0.1518 disagrees for 2026-09\n",
+        ),
     )
     labels: dict[str, str] = {}
     for n, (step, kind, failures) in enumerate(cases):
@@ -2411,8 +2423,8 @@ def test_every_issue_title_files_under_its_own_label(tmp_path: Path) -> None:
         root.mkdir()
         title = _file_catalog_issue(root, failures, step, kind)
         labels[title] = (root / "label").read_text()
-    assert len(labels) == 6
-    assert len(set(labels.values())) == 6, labels
+    assert len(labels) == 8
+    assert len(set(labels.values())) == 8, labels
 
     archive = (
         Path(__file__).resolve().parents[1] / ".github/workflows/archive_cards.yml"
@@ -3842,7 +3854,204 @@ def test_a_network_disagreement_files_apart_from_the_tax_block(
     steps = {s.get("name", ""): s for s in workflow["jobs"]["file"]["steps"]}
     run = steps["Open or update network-figure issue"]["run"]
     assert "--fingerprint tmp/report/network_failures.txt" in run
-    assert "--label 'live-check-network'" in run
+    assert "label='live-check-network'" in run
+
+
+def test_a_network_sheet_files_under_its_own_title(tmp_path: Path) -> None:
+    """A regulator's sheet that stops reading, or reads other figures than
+    the cards, is code to change here, where a card's figure is its
+    supplier's to reprint: filed under a supplier's title it would send the
+    triager looking for a card. A run where both fail keeps the card's."""
+    step = "Open or update network-figure issue"
+    sheet = tmp_path / "sheet"
+    sheet.mkdir()
+    assert _file_catalog_issue(
+        sheet,
+        "_network: CWaPE 2026 network sheet unreadable\n"
+        "_network: Brugel sibelga transport disagrees with the cards for 2026-11\n",
+        step,
+        "network",
+    ) == ("[live-check] a regulator's network sheet is unreadable or disagrees")
+    both = tmp_path / "both"
+    both.mkdir()
+    assert _file_catalog_issue(
+        both,
+        "_network: CWaPE 2026 network sheet unreadable\n"
+        "a/ores distribution_medium 0.1518 disagrees for 2026-11\n",
+        step,
+        "network",
+    ) == ("[live-check] a supplier's network figure disagrees")
+
+
+def test_a_network_sheet_that_stops_reading_is_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A custom entry taking its network from a regulator's sheet bills the
+    figures typed into it once the sheet stops reading, with only a log line
+    in Home Assistant to say so. One network row per regulator, naming each
+    DSO left short; a fetch that heals on its own passes."""
+    monkeypatch.setattr(lc, "_is_transient_fetch_error", is_transient_fetch_error)
+    today = date(2026, 11, 6)
+    lc._check_network_sheets({}, {}, None, today)
+    assert lc.CHECKS == []
+    dns = (
+        "network error fetching https://www.cwape.be/rest/documents: Cannot "
+        "connect to host www.cwape.be:443"
+    )
+    lc._check_network_sheets(
+        {},
+        {
+            ("flanders", "fluvius_west"): "not listed or not read",
+            ("wallonia", "ores"): dns,
+            ("wallonia", "rew"): "no transport grid read",
+        },
+        None,
+        today,
+    )
+    fluvius, cwape = lc.CHECKS
+    assert fluvius.label == "_network: Fluvius 2026 network sheet unreadable"
+    assert not fluvius.ok and fluvius.kind == "network"
+    assert "fluvius_west: not listed or not read" in fluvius.detail
+    assert fluvius.detail.endswith("see fluvius.py")
+    assert cwape.label == "_network: CWaPE 2026 network sheet unreadable"
+    assert not cwape.ok and "rew: no transport grid read" in cwape.detail
+    assert dns not in cwape.detail
+    lc.CHECKS.clear()
+    lc._check_network_sheets({}, {("brussels", "sibelga"): dns}, None, today)
+    (row,) = lc.CHECKS
+    assert row.label == "_network: Brugel 2026 network sheet unreadable"
+    assert row.ok and dns in row.detail
+
+
+def test_each_network_sheet_is_read_through_the_integration_s_reader(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every Fluvius area, Brugel's sheet and every Walloon operator, read
+    through the readers that raise where the integration logs, and kept as
+    the overlay fields the resolver bills. A grid read without its transport
+    grid keeps what it read and says what it did not."""
+
+    class _Fetch(Exception):
+        pass
+
+    def _terms(**fields: float | None) -> SimpleNamespace:
+        return SimpleNamespace(overlay_fields=lambda: dict(fields))
+
+    asked: list[tuple[str, object]] = []
+
+    async def _area(_session: Any, year: int, area: str) -> Any:
+        asked.append(("fluvius", (year, area)))
+        if area == "west":
+            raise _Fetch("network error fetching the listing: timeout")
+        return None if area == "kempen" else _terms(distribution_single=0.05)
+
+    async def _brugel(_session: Any, year: int) -> Any:
+        asked.append(("brugel", year))
+        return _terms(transport=0.0214403)
+
+    async def _listing(_session: Any) -> list[str]:
+        return ["listed"]
+
+    async def _cwape(_session: Any, documents: Any, day: date, dso: str) -> Any:
+        asked.append(("cwape", (documents, day, dso)))
+        if dso == "aieg":
+            raise ValueError("not a workbook")
+        grid = _terms(distribution_medium=0.102191)
+        return (grid, None) if dso == "rew" else (grid, _terms(transport=0.0258728))
+
+    monkeypatch.setattr(lc, "_EXTRACTOR_ERROR", _Fetch)
+    monkeypatch.setattr(lc, "_READ_AREA_TERMS", _area)
+    monkeypatch.setattr(
+        lc,
+        "_FLUVIUS_AREA_KEYS",
+        {"fluvius_kempen": "kempen", "fluvius_west": "west", "fluvius_x": "x"},
+    )
+    monkeypatch.setattr(lc, "_READ_BRUGEL_NETWORK", _brugel)
+    monkeypatch.setattr(lc, "_BRUSSELS_DSO_KEYS", frozenset({"sibelga"}))
+    monkeypatch.setattr(lc, "_READ_CWAPE_LISTING", _listing)
+    monkeypatch.setattr(lc, "_READ_CWAPE_NETWORK", _cwape)
+    monkeypatch.setattr(lc, "_CWAPE_DSOS", ("aieg", "ores", "rew"))
+    today = date(2026, 11, 6)
+    sheets, problems = asyncio.run(lc._network_sheets(None, today))  # type: ignore[arg-type]
+    assert sheets == {
+        ("flanders", "fluvius_x"): {"distribution_single": 0.05},
+        ("brussels", "sibelga"): {"transport": 0.0214403},
+        ("wallonia", "ores"): {"distribution_medium": 0.102191, "transport": 0.0258728},
+        ("wallonia", "rew"): {"distribution_medium": 0.102191},
+    }
+    assert problems == {
+        ("flanders", "fluvius_kempen"): "not listed or not read",
+        ("flanders", "fluvius_west"): "network error fetching the listing: timeout",
+        ("wallonia", "aieg"): "ValueError: not a workbook",
+        ("wallonia", "rew"): "no transport grid read",
+    }
+    assert ("brugel", 2026) in asked and ("fluvius", (2026, "x")) in asked
+    assert ("cwape", (["listed"], today, "ores")) in asked
+
+
+def test_a_sheet_read_that_raised_is_told_apart_by_its_cause() -> None:
+    """aiohttp raises its own errors from a download no helper wrapped: a
+    connection or a timeout heals, a 404 says the sheet moved."""
+    gone = aiohttp.ClientResponseError(
+        SimpleNamespace(real_url="https://brugel.brussels/x.pdf"),  # type: ignore[arg-type]
+        (),
+        status=404,
+    )
+    assert lc._sheet_error(gone) == "HTTP 404 fetching https://brugel.brussels/x.pdf"
+    assert not is_transient_fetch_error(lc._sheet_error(gone))
+    for err in (aiohttp.ClientConnectionError("reset"), TimeoutError()):
+        assert is_transient_fetch_error(lc._sheet_error(err))
+    assert lc._sheet_error(ValueError("no row")) == "ValueError: no row"
+
+
+def test_a_network_sheet_is_held_to_what_the_cards_print(tmp_path: Path) -> None:
+    """A sheet can read and be misread, one column taken for another, which
+    no bound refuses. Each figure is held to the cards' for its DSO in the
+    archive's month, ex VAT and within the consensus tolerance, where two
+    suppliers or more print it and outnumber any other figure; a field the
+    sheet leaves to the typed figures is not compared, nor a month of another
+    year than the sheets'."""
+    archive = _network_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "wallonia"): (
+                0.0,
+                {"distribution_medium": 0.1083, "distribution_eco": 0.0509},
+            ),
+            ("b", "b_fixed", "wallonia"): (0.0, {"distribution_medium": 0.1083}),
+            ("c", "c_pro", "wallonia"): (0.21, {"distribution_medium": 0.1022}),
+            ("d", "d_fixed", "flanders"): (0.0, {"distribution_peak": 0.0601}),
+            ("e", "e_fixed", "flanders"): (0.0, {"distribution_peak": 0.0601}),
+        },
+    )
+    today = date(2026, 11, 6)
+    read = {
+        ("wallonia", "ores"): {"distribution_medium": 0.102191},
+        ("flanders", "fluvius_antwerpen"): {"distribution_peak": None},
+    }
+    lc._check_network_sheets(read, {}, archive, today)
+    assert lc.CHECKS == []
+    # The Pic rate read into the Medium column; and Eco, which one card
+    # alone prints, is not a fleet to hold the sheet to.
+    misread = {
+        ("wallonia", "ores"): {
+            "distribution_medium": 0.156366,
+            "distribution_eco": 0.09,
+        }
+    }
+    lc._check_network_sheets(misread, {}, archive, today)
+    (row,) = lc.CHECKS
+    assert row.label == (
+        "_network: CWaPE ores distribution_medium disagrees with the cards for 2026-09"
+    )
+    assert not row.ok and row.kind == "network"
+    assert "gives 0.156366 ex VAT where 3 suppliers' cards print 0.102170" in (
+        row.detail
+    )
+    assert row.detail.endswith("see cwape.py")
+    lc.CHECKS.clear()
+    lc._check_network_sheets(misread, {}, archive, date(2027, 1, 2))
+    assert lc.CHECKS == []
 
 
 def test_a_card_edition_disagreement_files_apart(

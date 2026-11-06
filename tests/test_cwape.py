@@ -280,6 +280,26 @@ async def test_a_year_is_read_once_off_one_listing() -> None:
     assert session.asked == [], "a year held was read again"
 
 
+async def test_the_live_check_reads_a_year_as_it_is_now() -> None:
+    """``read_network`` holds nothing and picks what ``cached_network``
+    would, a year with no grid of its own gives nothing, and a listing that
+    does not answer raises, where the integration logs, so the live check can
+    tell a network error from a grid that stopped reading."""
+    session: Any = _Session()
+    documents = await cwape.read_listing(session)
+    grid, transport = await cwape.read_network(
+        session, documents, date(2026, 11, 1), DSO_ORES
+    )
+    assert grid == _grid("ores")
+    assert transport is not None and round(transport.rate * 106, 5) == 2.74252
+    assert cwape.cached_network(date(2026, 11, 1), DSO_ORES) == (None, None)
+    nothing = await cwape.read_network(session, documents, date(2030, 1, 1), DSO_ORES)
+    assert nothing == (None, None)
+    del session.pages[cwape._LISTING_URL]
+    with pytest.raises(Exception, match="404"):
+        await cwape.read_listing(session)
+
+
 async def test_a_year_without_its_transport_grid_reads_the_year_before_s() -> None:
     """The 2027 grids are out, the 2027 transport grid is not: the 2026 one is
     read to stand in, and nothing else of 2026."""
@@ -334,5 +354,6 @@ def test_the_listing_is_parsed_off_the_event_loop() -> None:
     """Close to 2 MB of JSON: the HA family rule for big bodies."""
     import inspect
 
-    source = inspect.getsource(cwape._listed)
+    assert "read_listing(session)" in inspect.getsource(cwape._listed)
+    source = inspect.getsource(cwape.read_listing)
     assert "asyncio.to_thread(parse_listing" in source

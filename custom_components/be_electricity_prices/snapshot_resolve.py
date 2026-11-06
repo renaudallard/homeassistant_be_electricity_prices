@@ -110,7 +110,7 @@ from .providers._resolve import (
     resolve_welcome_credit_meter,
 )
 from .providers._settlement_grid import resolve_settlement_grid
-from .providers.base import SupplierSnapshot
+from .providers.base import DsoOverlay, SupplierSnapshot
 
 # Where a compare-page proxy (``compare_inputs._quote_entry``) freezes the
 # household's measured yearly export. The proxy carries no coordinator, and no
@@ -324,20 +324,7 @@ def _resolve_fluvius_network(
     overlay = snap.dsos.get(dso)
     if terms is None or overlay is None:
         return snap
-
-    def basis(rate: float) -> float:
-        return on_card_basis(snap, month, rate)
-
-    sheet = replace(
-        overlay,
-        distribution_single=basis(terms.kwh_normal),
-        distribution_peak=None,
-        distribution_offpeak=None,
-        distribution_exclusive_night=basis(terms.kwh_exclusive_night),
-        transport=0.0,
-        capacity_eur_per_kw_year=basis(terms.capacity_per_kw_year),
-        data_management_per_year=basis(terms.data_management_per_year),
-    )
+    sheet = _on_sheet(snap, month, overlay, terms.overlay_fields())
     return replace(snap, dsos={**snap.dsos, dso: sheet})
 
 
@@ -372,20 +359,7 @@ def _resolve_brugel_network(
     overlay = snap.dsos.get(dso)
     if terms is None or overlay is None:
         return snap
-
-    def basis(rate: float) -> float:
-        return on_card_basis(snap, month, rate)
-
-    sheet = replace(
-        overlay,
-        distribution_single=basis(terms.day),
-        distribution_peak=basis(terms.day),
-        distribution_offpeak=basis(terms.night),
-        distribution_exclusive_night=basis(terms.night),
-        transport=basis(terms.transport),
-        data_management_per_year=basis(terms.fixed_le13),
-        brussels_power_term_above_13kva=basis(terms.fixed_gt13),
-    )
+    sheet = _on_sheet(snap, month, overlay, terms.overlay_fields())
     return replace(snap, dsos={**snap.dsos, dso: sheet})
 
 
@@ -420,27 +394,27 @@ def _resolve_cwape_network(
     overlay = snap.dsos.get(dso)
     if overlay is None or (grid is None and transport is None):
         return snap
-
-    def basis(rate: float) -> float:
-        return on_card_basis(snap, month, rate)
-
     sheet = overlay
-    if grid is not None:
-        sheet = replace(
-            sheet,
-            distribution_single=basis(grid.single),
-            distribution_peak=basis(grid.peak),
-            distribution_offpeak=basis(grid.offpeak),
-            distribution_exclusive_night=basis(grid.exclusive_night),
-            distribution_pic=basis(grid.pic),
-            distribution_medium=basis(grid.medium),
-            distribution_eco=basis(grid.eco),
-            data_management_per_year=basis(grid.fixed_per_year),
-            prosumer_eur_per_kva_year=basis(grid.prosumer_per_kva_year),
-        )
-    if transport is not None:
-        sheet = replace(sheet, transport=basis(transport.rate))
+    for terms in (grid, transport):
+        if terms is not None:
+            sheet = _on_sheet(snap, month, sheet, terms.overlay_fields())
     return replace(snap, dsos={**snap.dsos, dso: sheet})
+
+
+def _on_sheet(
+    snap: SupplierSnapshot,
+    month: date,
+    overlay: DsoOverlay,
+    fields: Mapping[str, float | None],
+) -> DsoOverlay:
+    """``overlay`` with the fields a regulator's sheet sets, each put on the
+    basis the entry typed on, and the typed figure dropped where the sheet
+    leaves a field ``None``."""
+    changes: dict[str, Any] = {
+        field: None if value is None else on_card_basis(snap, month, value)
+        for field, value in fields.items()
+    }
+    return replace(overlay, **changes)
 
 
 async def ensure_custom_network(

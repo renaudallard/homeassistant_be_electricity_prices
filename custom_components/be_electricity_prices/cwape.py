@@ -149,6 +149,22 @@ class GridTerms:
     fixed_per_year: float
     prosumer_per_kva_year: float
 
+    def overlay_fields(self) -> dict[str, float | None]:
+        """The DSO overlay fields this grid sets, excluding VAT: every
+        register and Impact band, for the entry's meter and tariff mode to
+        choose from, the fixed term and the prosumer rate."""
+        return {
+            "distribution_single": self.single,
+            "distribution_peak": self.peak,
+            "distribution_offpeak": self.offpeak,
+            "distribution_exclusive_night": self.exclusive_night,
+            "distribution_pic": self.pic,
+            "distribution_medium": self.medium,
+            "distribution_eco": self.eco,
+            "data_management_per_year": self.fixed_per_year,
+            "prosumer_eur_per_kva_year": self.prosumer_per_kva_year,
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class TransportTerms:
@@ -158,6 +174,10 @@ class TransportTerms:
     valid_from: date
     valid_to: date
     rate: float
+
+    def overlay_fields(self) -> dict[str, float | None]:
+        """The DSO overlay field this grid sets, excluding VAT."""
+        return {"transport": self.rate}
 
 
 @dataclass(frozen=True, slots=True)
@@ -316,14 +336,20 @@ async def _listed(session: aiohttp.ClientSession) -> list[_Document]:
     if _listing is not None and (now - _listing[0]).total_seconds() < _FAILURE_RETRY_S:
         return _listing[1]
     try:
-        text = await fetch_text(session, _LISTING_URL, timeout=_TIMEOUT)
-        # Close to 2 MB of JSON, parsed off the event loop.
-        documents = await asyncio.to_thread(parse_listing, text)
+        documents = await read_listing(session)
     except Exception as err:  # the docstring promises no raise
         _LOGGER.warning("CWaPE document listing could not be read: %s", err)
         documents = []
     _listing = (now, documents)
     return documents
+
+
+async def read_listing(session: aiohttp.ClientSession) -> list[_Document]:
+    """Every document the service lists, read now. Raises where the service
+    does not answer, for the live check to tell that from a listing changed."""
+    text = await fetch_text(session, _LISTING_URL, timeout=_TIMEOUT)
+    # Close to 2 MB of JSON, parsed off the event loop.
+    return await asyncio.to_thread(parse_listing, text)
 
 
 def parse_listing(text: str) -> list[_Document]:
@@ -356,14 +382,8 @@ def parse_listing(text: str) -> list[_Document]:
 
 async def _read(session: aiohttp.ClientSession, doc: _Document, dso: str) -> None:
     """Read one document into the caches, or note it for the backoff."""
-    terms: GridTerms | TransportTerms | None
     try:
-        payload = await _download(session, doc.url)
-        if doc.kind == _TRANSPORT_TYPE:
-            terms = await asyncio.to_thread(parse_transport, payload)
-        else:
-            pdf = not doc.url.lower().endswith(".xlsx")
-            terms = await asyncio.to_thread(parse_grid, payload, pdf=pdf)
+        terms = await read_document(session, doc)
     except Exception as err:  # the docstring promises no raise
         _LOGGER.warning("CWaPE %s could not be read: %s", doc.url, err)
         _failed_at[doc.url] = dt_util.utcnow()
@@ -375,6 +395,40 @@ async def _read(session: aiohttp.ClientSession, doc: _Document, dso: str) -> Non
         _transport[doc.url] = terms
     else:
         _grids.setdefault(dso, {})[doc.url] = terms
+
+
+async def read_document(
+    session: aiohttp.ClientSession, doc: _Document
+) -> GridTerms | TransportTerms | None:
+    """What one listed document gives, or ``None`` where it does not read as
+    a household's network. Raises on a network error or a file that is no
+    workbook or PDF."""
+    payload = await _download(session, doc.url)
+    if doc.kind == _TRANSPORT_TYPE:
+        return await asyncio.to_thread(parse_transport, payload)
+    pdf = not doc.url.lower().endswith(".xlsx")
+    return await asyncio.to_thread(parse_grid, payload, pdf=pdf)
+
+
+async def read_network(
+    session: aiohttp.ClientSession,
+    documents: Sequence[_Document],
+    day: date,
+    dso: str,
+) -> tuple[GridTerms | None, TransportTerms | None]:
+    """``dso``'s grid and the transport grid valid on ``day``, read now off
+    the listed documents of its year, as :func:`cached_network` picks them.
+    Raises on a network error, for the live check; ``KeyError`` for a key
+    that is not a Walloon operator."""
+    grids: list[GridTerms] = []
+    transports: list[TransportTerms] = []
+    for doc in _wanted(documents, day.year, _OPERATORS[dso], False, False):
+        terms = await read_document(session, doc)
+        if isinstance(terms, GridTerms):
+            grids.append(terms)
+        elif isinstance(terms, TransportTerms):
+            transports.append(terms)
+    return _valid_on(grids, day), _valid_on(transports, day)
 
 
 async def _download(session: aiohttp.ClientSession, url: str) -> bytes:

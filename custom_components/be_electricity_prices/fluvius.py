@@ -198,6 +198,21 @@ class AreaTerms:
     capacity_per_kw_year: float
     data_management_per_year: float
 
+    def overlay_fields(self) -> dict[str, float | None]:
+        """The DSO overlay fields these rates set, excluding VAT. Transmission
+        is included in the rates and a peak-metered connection pays one rate
+        day and night, so transport is nothing and the day/night split is
+        dropped for the single rate."""
+        return {
+            "distribution_single": self.kwh_normal,
+            "distribution_peak": None,
+            "distribution_offpeak": None,
+            "distribution_exclusive_night": self.kwh_exclusive_night,
+            "transport": 0.0,
+            "capacity_eur_per_kw_year": self.capacity_per_kw_year,
+            "data_management_per_year": self.data_management_per_year,
+        }
+
 
 # Successes are kept for the life of the process: the figures are set per
 # calendar year. A failure is kept only briefly, so a blocked or slow Fluvius
@@ -587,8 +602,7 @@ async def _fetch_area_terms(
     listing = await _fetch_listing(session)
     publication = _AREA_PUBLICATION_RE.format(area=area, year=year)
     if re.search(publication, listing) is not None:
-        payload = await _fetch_workbook(session, listing, publication)
-        terms = None if payload is None else parse_area_terms(payload, year)
+        terms = await read_area_terms(session, year, area)
         if terms is None:
             _LOGGER.warning(
                 "Fluvius %d tariff sheet for %s gives no network rates", year, area
@@ -611,11 +625,28 @@ async def read_analog_surcharge(
     """One area's analog surcharge for ``year`` as its sheet gives it, or
     ``None`` where the listing has no such sheet or it does not read. Raises on
     a network error, for the live check to tell the two apart."""
+    payload = await _area_workbook(session, year, area)
+    return None if payload is None else parse_analog_surcharge(payload, year)
+
+
+async def read_area_terms(
+    session: aiohttp.ClientSession, year: int, area: str
+) -> AreaTerms | None:
+    """One area's network rates for ``year`` as its sheet gives them, or
+    ``None`` where the listing has no such sheet or it does not read. Raises on
+    a network error, as :func:`read_analog_surcharge` does."""
+    payload = await _area_workbook(session, year, area)
+    return None if payload is None else parse_area_terms(payload, year)
+
+
+async def _area_workbook(
+    session: aiohttp.ClientSession, year: int, area: str
+) -> bytes | None:
+    """One area's workbook for ``year`` off the listing, or ``None``."""
     listing = await _fetch_listing(session)
-    payload = await _fetch_workbook(
+    return await _fetch_workbook(
         session, listing, _AREA_PUBLICATION_RE.format(area=area, year=year)
     )
-    return None if payload is None else parse_analog_surcharge(payload, year)
 
 
 async def _fetch_listing(session: aiohttp.ClientSession) -> str:
