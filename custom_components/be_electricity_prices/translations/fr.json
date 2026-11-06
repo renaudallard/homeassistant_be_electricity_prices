@@ -787,7 +787,7 @@
         },
         "start": {
           "name": "Début",
-          "description": "Première heure à reconstituer. Par défaut: le début de la fenêtre du coût de l'année, soit le 1er janvier 00:00 de l'année locale en cours, soit la date de début du contrat si l'entrée, ou un contrat conservé lors d'un changement de fournisseur enregistré, facture à partir de celle-ci."
+          "description": "Première heure à reconstituer. Par défaut: le début de la fenêtre du coût de l'année, soit le 1er janvier 00:00 de l'année locale en cours, soit la date de début du contrat si l'entrée, ou un contrat conservé lors d'un changement de fournisseur enregistré, facture à partir de celle-ci. Pas avant le 1er février 2022, le mois le plus ancien d'une carte que cette intégration lit."
         },
         "end": {
           "name": "Fin",
@@ -824,6 +824,9 @@
     },
     "snapshot_not_loaded": {
       "message": "L'instantané du fournisseur n'est pas encore chargé; rafraîchissez l'entrée d'abord."
+    },
+    "backfill_start_too_early": {
+      "message": "Le backfill ne peut pas commencer avant le {earliest} : aucune carte que cette intégration lit ne remonte plus loin, de sorte qu'un jour antérieur ne pourrait être tarifé que sur la carte d'aujourd'hui."
     }
   },
   "issues": {

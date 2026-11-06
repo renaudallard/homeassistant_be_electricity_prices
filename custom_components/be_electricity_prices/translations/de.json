@@ -787,7 +787,7 @@
         },
         "start": {
           "name": "Beginn",
-          "description": "Erste Stunde des Backfills. Standard: der Beginn des Zeitraums dieses Jahres, also der 1. Januar 00:00 des aktuellen Jahres oder der Vertragsbeginn, wenn der Eintrag oder ein bei einem erfassten Lieferantenwechsel behaltener Vertrag ab dann abrechnet."
+          "description": "Erste Stunde des Backfills. Standard: der Beginn des Zeitraums dieses Jahres, also der 1. Januar 00:00 des aktuellen Jahres oder der Vertragsbeginn, wenn der Eintrag oder ein bei einem erfassten Lieferantenwechsel behaltener Vertrag ab dann abrechnet. Nicht vor dem 1. Februar 2022, dem ältesten Monat einer Karte, die diese Integration liest."
         },
         "end": {
           "name": "Ende",
@@ -824,6 +824,9 @@
     },
     "snapshot_not_loaded": {
       "message": "Der Lieferanten-Snapshot ist noch nicht geladen; aktualisieren Sie den Eintrag zuerst."
+    },
+    "backfill_start_too_early": {
+      "message": "Der Backfill kann nicht vor dem {earliest} beginnen: Keine Karte, die diese Integration liest, reicht weiter zurück, daher könnte ein Tag davor nur mit der heutigen Karte bepreist werden."
     }
   },
   "issues": {

@@ -735,7 +735,7 @@ refused; an automation, which has no user, is not. Fields (`services.yaml`):
 | Field | Required | Selector | Default |
 | --- | --- | --- | --- |
 | `entry_id` | no | `config_entry` | first loaded entry |
-| `start` | no | datetime | the year-to-date window start (`ytd_window_reset`): Jan 1 00:00 of the current local year, or the contract start date on an entry that bills from it, or of a contract a recorded switch kept that billed from it (`ytd_billed_from`) |
+| `start` | no | datetime | the year-to-date window start (`ytd_window_reset`): Jan 1 00:00 of the current local year, or the contract start date on an entry that bills from it, or of a contract a recorded switch kept that billed from it (`ytd_billed_from`); never before `_BACKFILL_FIRST_MONTH` (`backfill_window.py`), 1 February 2022, the oldest month any source this integration reads has a card for, which `_normalize_window` enforces with the translated `backfill_start_too_early` error; a start after now is brought back to now, so the window is empty and no date late in year 9999 is converted to UTC |
 | `end` | no | datetime (exclusive) | the current hour, never past the newest hour the recorder has compiled |
 | `clear` | no | boolean | false |
 

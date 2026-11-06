@@ -787,7 +787,7 @@
         },
         "start": {
           "name": "Start",
-          "description": "Eerste uur om aan te vullen. Standaard: het begin van het venster van dit jaar, 1 januari 00:00 van het huidige lokale jaar, of de startdatum van het contract als de invoer, of een contract bewaard bij een geregistreerde leverancierswissel, daarvan uitgaat."
+          "description": "Eerste uur om aan te vullen. Standaard: het begin van het venster van dit jaar, 1 januari 00:00 van het huidige lokale jaar, of de startdatum van het contract als de invoer, of een contract bewaard bij een geregistreerde leverancierswissel, daarvan uitgaat. Niet vroeger dan 1 februari 2022, de oudste maand van een kaart die deze integratie leest."
         },
         "end": {
           "name": "Eind",
@@ -824,6 +824,9 @@
     },
     "snapshot_not_loaded": {
       "message": "De leveranciersmomentopname is nog niet geladen; vernieuw de invoer eerst."
+    },
+    "backfill_start_too_early": {
+      "message": "Het aanvullen kan niet vroeger beginnen dan {earliest}: geen enkele kaart die deze integratie leest gaat verder terug, dus een dag daarvoor kon alleen op de kaart van vandaag geprijsd worden."
     }
   },
   "issues": {

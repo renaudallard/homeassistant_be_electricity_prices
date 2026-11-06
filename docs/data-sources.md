@@ -863,6 +863,24 @@ service schema puts no upper bound on `end`, so a mistyped year was enough: an
 end one year out produced 8760 phantom hours. The `end=None` default always
 stopped at now; an explicit end now gets the same bound.
 
+The start has a lower bound too. A start before local midnight on
+`_BACKFILL_FIRST_MONTH`, 1 February 2022, is refused with the translated
+`backfill_start_too_early` `ServiceValidationError`. That is the oldest month
+any configuration can be priced on figures of its own, measured live on
+6 November 2026 through each supplier's own archive: Luminus's price-list
+archive serves its ComfyFlex card from February 2022, energy, network and
+excise read, and nothing its parser reads for the five months before; Mega,
+OCTA+ and Cociter give nothing for January 2022, Eneco nothing for January
+2022. The card archive keeps November 2023 onwards (`_KEEP_MONTHS`,
+`scripts/archive_cards.py`), and the CREG's social tariff quarters and the
+excise held for any month start in October 2022 (`FIRST_MONTH`,
+`excise_law.py`). Without the bound a mistyped year walked every hour on the
+event loop (1,111,935 hours for a 1900 start, 4.6 s of stall), looked up a card
+for every closed month, and on a dynamic contract asked ENTSO-E for every week. The
+bounds are compared before anything is converted to UTC, and an end before the
+start is raised to it, since converting a date in year 1 or 9999 can overflow
+where an aware comparison cannot.
+
 `_backfill_range` then holds the end to the newest hour the recorder has
 compiled (`_compiled_until`, `backfill_window.py`), read off its newest
 statistics run, or an hour before the clock when that cannot be read. The

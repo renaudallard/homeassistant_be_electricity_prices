@@ -34,7 +34,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -2703,6 +2703,139 @@ def test_normalize_window_clamps_a_future_end_to_now() -> None:
     past = now - timedelta(days=30)
     _start, end = bf._normalize_window(None, past, default_start)
     assert end == bf._floor_to_hour_utc(past)
+
+
+_NOV_6_2026 = datetime(2026, 11, 6, 12, 0, tzinfo=BRUSSELS)
+_FLOOR = datetime(2022, 2, 1, 0, 0, tzinfo=BRUSSELS)
+
+
+@pytest.mark.parametrize(
+    "start",
+    [
+        _FLOOR - timedelta(minutes=1),
+        datetime(1970, 1, 1),
+        datetime(1900, 1, 1),
+        date(1, 1, 1),
+        datetime(1, 1, 1, tzinfo=timezone(timedelta(hours=14))),
+    ],
+)
+def test_normalize_window_refuses_a_start_older_than_any_card(
+    start: datetime | date,
+) -> None:
+    """No source this integration reads has a card from before February 2022,
+    Luminus's own archive going furthest, so a start before it could only be
+    priced on today's card. It is refused, a year 1 one too, rather than raise
+    OverflowError from the conversion to UTC."""
+    with (
+        patch.object(dt_util, "now", return_value=_NOV_6_2026),
+        pytest.raises(ServiceValidationError) as raised,
+    ):
+        bf._normalize_window(start, None, _JAN1_2026)
+    assert raised.value.translation_key == "backfill_start_too_early"
+    assert raised.value.translation_placeholders == {"earliest": "2022-02-01"}
+
+
+def test_normalize_window_takes_the_oldest_month_a_card_is_read_for() -> None:
+    """The floor is fixed, not rolling: the CREG's social quarters from
+    October 2022 and Luminus's cards from February 2022 still bill."""
+    with patch.object(dt_util, "now", return_value=_NOV_6_2026):
+        start_utc, end_utc = bf._normalize_window(_FLOOR, None, _JAN1_2026)
+    assert start_utc == datetime(2022, 1, 31, 23, 0, tzinfo=UTC)
+    assert end_utc == datetime(2026, 11, 6, 11, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "end",
+    [
+        datetime(1, 1, 1),
+        date(1, 1, 1),
+        datetime(9999, 12, 31, 23, 59, tzinfo=timezone(timedelta(hours=-12))),
+    ],
+)
+def test_normalize_window_takes_any_end_without_overflowing(
+    end: datetime | date,
+) -> None:
+    """An end before the start leaves the window empty, as it always did, and
+    one past the year 9999 in UTC is clamped to now like any future end:
+    neither may raise OverflowError on the way."""
+    with patch.object(dt_util, "now", return_value=_NOV_6_2026):
+        start_utc, end_utc = bf._normalize_window(None, end, _JAN1_2026)
+    assert start_utc == _JAN1_2026.astimezone(UTC)
+    assert end_utc in (start_utc, datetime(2026, 11, 6, 11, 0, tzinfo=UTC))
+
+
+@pytest.mark.parametrize(
+    "start",
+    [
+        datetime(9999, 12, 31, 23, 0, tzinfo=timezone(timedelta(hours=-5))),
+        datetime(9999, 12, 31, 23, 30),
+        datetime(2026, 11, 6, 13, 0, tzinfo=BRUSSELS),
+    ],
+)
+def test_normalize_window_leaves_a_start_after_now_empty(start: datetime) -> None:
+    """A start late in year 9999 has no UTC time, and converting it raised
+    OverflowError. A start after now is brought back to now, so the window
+    is empty whatever its end."""
+    with patch.object(dt_util, "now", return_value=_NOV_6_2026):
+        start_utc, end_utc = bf._normalize_window(start, None, _JAN1_2026)
+    assert start_utc == end_utc == datetime(2026, 11, 6, 11, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("expected_lingering_timers", [True])
+async def test_an_old_start_is_refused_before_anything_is_walked(
+    hass: HomeAssistant, hass_admin_user: Any, freezer: Any
+) -> None:
+    """Through the service: a 1900 start held the event loop for seconds
+    building the hour list, and would have looked up a card for every month
+    since. It is refused before any of that, and a start on the floor still
+    runs."""
+    from homeassistant.config_entries import ConfigEntryState
+    from homeassistant.core import Context
+
+    from custom_components.be_electricity_prices import async_setup
+
+    freezer.move_to(_NOV_6_2026)
+    assert await async_setup(hass, {})
+    entry = make_entry(contract="power_fix_one")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._set_snapshot(make_snapshot())
+    entry.mock_state(hass, ConfigEntryState.LOADED)
+    entry.runtime_data = coord
+    spans = AsyncMock(return_value=[])
+    walked: list[int] = []
+
+    async def _prices(_h: Any, _e: Any, _c: Any, hours: list[Any], *_a: Any) -> Any:
+        walked.append(len(hours))
+        return {}
+
+    with (
+        patch.object(bf, "_compiled_until", AsyncMock(return_value=dt_util.utcnow())),
+        patch.object(bf, "_stand_in_spans", spans),
+        patch.object(bf, "_backfill_price_sensors", _prices),
+        patch.object(bf, "_backfill_cost_sensor", AsyncMock(return_value={})),
+    ):
+        with pytest.raises(ServiceValidationError) as raised:
+            await hass.services.async_call(
+                DOMAIN,
+                "backfill_statistics",
+                {"start": "1900-01-01T00:00:00"},
+                blocking=True,
+                context=Context(user_id=hass_admin_user.id),
+            )
+        assert raised.value.translation_key == "backfill_start_too_early"
+        assert spans.await_count == 0
+        assert walked == []
+        await hass.services.async_call(
+            DOMAIN,
+            "backfill_statistics",
+            {"start": "2022-02-01T00:00:00"},
+            blocking=True,
+            context=Context(user_id=hass_admin_user.id),
+        )
+    assert spans.await_count == 1
+    # 1 February 2022 local, 23:00 UTC the day before, to the hour now.
+    assert walked == [41748]
 
 
 def test_backfill_credits_the_card_indicative_for_an_spp_card_without_a_profile() -> (

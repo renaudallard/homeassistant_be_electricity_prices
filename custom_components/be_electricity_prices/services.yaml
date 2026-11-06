@@ -114,7 +114,10 @@ backfill_statistics:
         First hour to backfill. Default = the start of the year-to-date
         window: Jan 1 00:00 of the current local year, or the contract
         start date if the entry, or a contract kept by a recorded
-        supplier switch, bills from it.
+        supplier switch, bills from it. No earlier than 1 February 2022:
+        no card this integration reads reaches further back, so a day
+        before it could only be priced on today's card, and an earlier
+        start is refused.
       example: "2026-01-01T00:00:00+01:00"
       selector:
         datetime:

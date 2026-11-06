@@ -39,11 +39,12 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
 from itertools import groupby
-from typing import Any
+from typing import Any, Final
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
@@ -159,6 +160,24 @@ def _floor_to_hour_utc(when: datetime) -> datetime:
     return when.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
 
 
+# The first month a backfill may start in: the oldest month any configuration
+# can be priced on figures of its own. Measured live on 6 November 2026, one
+# card per month through each supplier's own archive: Luminus's price-list
+# archive serves its ComfyFlex card from February 2022, energy, network and
+# excise all read, and nothing its parser reads for the five months before;
+# Mega, OCTA+ and Cociter give nothing for January 2022 or June 2021, Eneco
+# nothing for January 2022. The card archive keeps November 2023 onwards (the
+# running month and the thirty-six before it), and the CREG's social tariff
+# quarters and the excise held for any month start in October 2022
+# (excise_law.FIRST_MONTH). A day before it could only be priced on today's
+# card. The floor also caps what one call costs: every hour of the window is
+# walked on the event loop, every closed month's card is looked up, and a
+# dynamic contract asks ENTSO-E for every week. A 1900 start meant 1,111,935
+# hours, which held the loop 4.6 s, a lookup for each of 1,522 months and some
+# 6,600 weekly requests.
+_BACKFILL_FIRST_MONTH: Final = date(2022, 2, 1)
+
+
 def _normalize_window(
     start: datetime | date | None,
     end: datetime | date | None,
@@ -171,6 +190,12 @@ def _normalize_window(
     start date for an entry that bills its year-to-date from there. End is
     exclusive so we don't write a row for the in-progress hour the
     live coordinator is about to fill itself.
+
+    A start before ``_BACKFILL_FIRST_MONTH`` is refused with a
+    ``ServiceValidationError``. Both bounds are compared before anything is
+    converted to UTC: an aware comparison never overflows, where converting a
+    date in year 1 or 9999 can, so no date the service schema accepts raises
+    anything else.
     """
     now_local = dt_util.now()
     if start is None:
@@ -197,6 +222,18 @@ def _normalize_window(
         end_local = datetime.combine(
             end, datetime.min.time(), tzinfo=dt_util.DEFAULT_TIME_ZONE
         )
+    earliest = dt_util.start_of_local_day(_BACKFILL_FIRST_MONTH)
+    if start_local < earliest:
+        raise ServiceValidationError(
+            f"the backfill can start no earlier than {earliest.date().isoformat()}",
+            translation_domain=DOMAIN,
+            translation_key="backfill_start_too_early",
+            translation_placeholders={"earliest": earliest.date().isoformat()},
+        )
+    # A start after now leaves the window empty, as an end before the start
+    # does. Bounded here, before it is converted: a start late in year 9999
+    # has no UTC time, and the conversion raised OverflowError.
+    start_local = min(start_local, now_local)
     start_utc = _floor_to_hour_utc(start_local)
     # Clamp the end to the current hour. compute_breakdown happily evaluates a
     # future hour for a fixed / variable / TOU / Impact contract, so an end
@@ -204,8 +241,11 @@ def _normalize_window(
     # schema has no upper bound) wrote a full year of phantom price rows and
     # kept the cost sensor's fee, capacity and prosumer accrual running into
     # hours that have not happened. The None default already stopped at now;
-    # an explicit end now gets the same bound.
-    end_utc = min(_floor_to_hour_utc(end_local), _floor_to_hour_utc(now_local))
+    # an explicit end now gets the same bound. An end before the start leaves
+    # the window empty, as it always did, and is raised to the start first so
+    # that converting it cannot overflow either.
+    end_local = max(min(end_local, now_local), start_local)
+    end_utc = _floor_to_hour_utc(end_local)
     return start_utc, end_utc
 
 

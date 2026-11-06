@@ -787,7 +787,7 @@
         },
         "start": {
           "name": "Start",
-          "description": "First hour to backfill. Defaults to the start of the year-to-date window: Jan 1 00:00 of the current local year, or the contract start date if the entry, or a contract kept by a recorded supplier switch, bills from it."
+          "description": "First hour to backfill. Defaults to the start of the year-to-date window: Jan 1 00:00 of the current local year, or the contract start date if the entry, or a contract kept by a recorded supplier switch, bills from it. No earlier than 1 February 2022, the oldest month a card this integration reads is from."
         },
         "end": {
           "name": "End",
@@ -824,6 +824,9 @@
     },
     "snapshot_not_loaded": {
       "message": "The supplier snapshot is not loaded yet; refresh the entry first."
+    },
+    "backfill_start_too_early": {
+      "message": "The backfill can start no earlier than {earliest}: no card this integration reads reaches further back, so a day before it could only be priced on today's card."
     }
   },
   "issues": {
