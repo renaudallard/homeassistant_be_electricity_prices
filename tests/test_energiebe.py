@@ -27,6 +27,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import time
 from datetime import UTC, date
 from typing import Any
 from unittest.mock import AsyncMock
@@ -319,6 +321,114 @@ def test_missing_injection_is_fatal() -> None:
     text = _text().replace("Terugleveringsvergoeding", "XXX")
     with pytest.raises(ExtractorError, match="injection formula"):
         parse_snapshot(text, "test://energiebe-jul")
+
+
+@pytest.mark.parametrize(
+    ("reader", "crafted"),
+    [
+        pytest.param(
+            "_extract_sentence_injection", "injectievergoeding " * 5_300, id="sentence"
+        ),
+        pytest.param(
+            "_extract_injection", "Terugleveringsvergoeding " * 8_000, id="header"
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    reader: str, crafted: str
+) -> None:
+    """About 100,000 characters of the word the feed-in sentence starts with,
+    and 200,000 of the header the older cards' formula follows, since each
+    costs less, with no formula: each was read to the end of the card again."""
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    started = time.perf_counter()
+    with pytest.raises(ExtractorError, match="injection formula"):
+        getattr(energiebe, reader)(crafted)
+    assert time.perf_counter() - started < 2.0
+
+
+_ROW = "Energieprijs Vaste vergoeding Terugleveringsvergoeding GSC WKK\n0 0"
+
+
+def _fee_of(text: str) -> None:
+    """The standing charge reader on ``text``, whatever it makes of it."""
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    with contextlib.suppress(ExtractorError):
+        energiebe._yearly_fee(text)
+
+
+@pytest.mark.parametrize(
+    ("pattern", "crafted"),
+    [
+        pytest.param(
+            "_ENERGY_RE", "formule (excl BTW)" + "\xa0" * 100_000, id="energy formula"
+        ),
+        pytest.param("_PRICE_ROW_RE", _ROW + "\xa0" * 100_000, id="price row"),
+        pytest.param("_ROW_GSC_RE", _ROW + "\xa0" * 100_000, id="row green levy"),
+        pytest.param("_ROW_WKK_RE", _ROW + "\xa0" * 100_000, id="row cogeneration"),
+        pytest.param(
+            "_INJECTION_CURRENT_RE", "Zonnestroom " + "\n" * 100_000, id="indicative"
+        ),
+        pytest.param(
+            "_EXCISE_RE",
+            "Bijzondere accijns op Energie () " + "\xa0" * 100_000,
+            id="excise blanks",
+        ),
+        pytest.param(
+            "_EXCISE_RE", "Bijzondere accijns op Energie (" * 32_000, id="excise labels"
+        ),
+        pytest.param(
+            "_CONTRIB_RE",
+            "Bijdrage op de Energie (a" * 40_000,
+            id="contribution labels",
+        ),
+        pytest.param(
+            "_FUND_RE",
+            "Bijdrage Energiefonds Residentieel ()" + "\n" * 100_000,
+            id="fund blanks",
+        ),
+        pytest.param(
+            "_FUND_RE",
+            "Bijdrage Energiefonds Residentieel (" * 28_000,
+            id="fund labels",
+        ),
+    ],
+)
+def test_a_crafted_row_is_read_in_time_linear_in_its_length(
+    pattern: str, crafted: str
+) -> None:
+    """Runs of blanks where a row expects its figure, and labels of a row with
+    no closing bracket, about 100,000 characters each and a million for the
+    labels, which each cost less: each was read again from every place a
+    match could start."""
+    from custom_components.be_electricity_prices.providers import energiebe
+
+    started = time.perf_counter()
+    getattr(energiebe, pattern).search(crafted)
+    assert time.perf_counter() - started < 2.0
+
+
+@pytest.mark.parametrize(
+    "crafted",
+    [
+        pytest.param("Vaste vergoeding 0" + "0" * 100_000, id="digits"),
+        pytest.param("Vaste vergoeding 0(j" * 5_000, id="labels"),
+        pytest.param("Vaste vergoeding 1 " + "(" * 100_000, id="brackets"),
+        pytest.param("Vaste vergoeding 1" + " " * 100_000, id="blanks"),
+    ],
+)
+def test_a_crafted_standing_charge_is_read_in_time_linear_in_its_length(
+    crafted: str,
+) -> None:
+    """A long number, a line of labels, a line of opening brackets and a run
+    of blanks after the label, about 100,000 characters each: the number was
+    read again from every digit, the line from every label and every
+    bracket, and the blanks split in every way."""
+    started = time.perf_counter()
+    _fee_of(crafted)
+    assert time.perf_counter() - started < 2.0
 
 
 def test_dynamic_body_wording_alone_is_not_the_anchor() -> None:

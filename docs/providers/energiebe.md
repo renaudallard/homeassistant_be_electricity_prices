@@ -244,12 +244,16 @@ lines after its "(1,12 x Belpex_RLP +". On that template:
   `_ENERGY_RE`;
 - the feed-in formula is found by its own sentence (`_INJECTION_SENTENCE_RE`,
   "injectievergoeding op kwartierbasis volgens de formule:" or "terugleververgoeding
-  volgens de formule:"). `_INJECTION_RE` anchors on "Terugleveringsvergoeding", which
-  now heads the price row above the energy formula, so on the dynamic card it read the
-  energy formula as the feed-in;
+  volgens de formule:"), read up to the next word that could start one, so a card of
+  those words with no formula costs its length. `_INJECTION_RE` anchors on
+  "Terugleveringsvergoeding", which now heads the price row above the energy formula,
+  so on the dynamic card it read the energy formula as the feed-in;
 - the standing charge, the fixed card's rate, the variable and fixed cards' feed-in
   indicative and GSC and WKK come from the price row (`_ROW_GSC_RE`, `_ROW_WKK_RE` for the
-  shared tax reader); `_WKK_RE` would read the energy price there;
+  shared tax reader); `_WKK_RE` would read the energy price there. The blanks before the
+  feed-in value's optional sign are read as one run, as before the older cards'
+  "Zonnestroom" figure (`_INJECTION_CURRENT_RE`): split with the blanks after the sign, a
+  long run of them was cut in every way before the figure failed;
 - the month comes from the title (`_TITLE_RE`), and a DSO row whose label is printed under
   its figures, Fluvius (West), is joined to them (`_LABEL_BELOW_RE`).
 
@@ -278,7 +282,9 @@ wrong would 10x the energy leg. See the conversion in `_extract_energy`
 
 `_extract_energy` (`providers/energiebe.py`) parses the formula row with `_ENERGY_RE`
 (`providers/energiebe.py`), anchored on "formule (excl. BTW):" so it binds the energy
-formula and not the injection one that shares the `(factor x Belpex +/- base)` shape:
+formula and not the injection one that shares the `(factor x Belpex +/- base)` shape (the
+colon and the blanks after it are one optional piece, so a run of blanks there costs its
+length):
 
 ```
 de formule (excl. BTW): (<factor_pdf> x Belpex <sign> <base_cents>) c€/kWh
@@ -317,7 +323,13 @@ itself stays `\([^)]*jaar`, matching the tax regexes: the same cards render the 
 energy-fund unit as "(€/maand )" with a stray space, and a missing fee is fatal, so pinning
 the € glyph exactly would take both contracts offline over a renderer quirk.
 `test_fee_unit_spelling_is_not_load_bearing` and `test_fee_row_on_a_single_line_still_binds`
-pin both halves.
+pin both halves. The number is read whole, the rest of its line runs to the next "Vaste
+vergoeding <digit>" at most, the line break is one optional piece and the unit is the
+bracket holding "jaar" with no other bracket in it. Each of those took the square of a
+crafted row before: a long number shared with the rest of its line, a run of blanks split
+between the line and the break, a line of opening brackets each read to the next closing
+one, and a line of labels each read to its end
+(`test_a_crafted_standing_charge_is_read_in_time_linear_in_its_length`).
 
 ### Variable energy (`_extract_variable_energy`)
 
@@ -399,9 +411,11 @@ the energy path already fetches, so `current` stays `None`. `_extract_injection`
 Terugleveringsvergoeding ... (<factor_pdf> x Belpex <sign> <base_cents>)
 ```
 
-The regex skips with `.*?` (DOTALL) to the first `(factor x Belpex +/- base)` after its
-anchor, because the card interleaves the unit label "(c€/kWh)" between "de formule:" and
-the parenthesised formula. The anchor sits below the energy formula, which guarantees the
+The regex skips (DOTALL) to the first `(factor x Belpex +/- base)` after its anchor,
+because the card interleaves the unit label "(c€/kWh)" between "de formule:" and the
+parenthesised formula. The skip stops at the next anchor, which finds the same formula, so
+a card of anchors with no formula after them costs its length; skipping on, it was read to
+its end again from each. The anchor sits below the energy formula, which guarantees the
 injection formula is matched and not the energy one. Injection is VAT-exempt
 (`_rates.py`) and Belpex is in c€/kWh, so
 (`providers/energiebe.py`):
@@ -486,8 +500,11 @@ VAT-exempt), so `vat_rate=0.0` is set explicitly (`test_taxes_vat_rate_zero`).
 
 Note the label differences from Frank: energie.be prints the unit as `(c€/kWh)` (Frank uses
 `(EURct/kWh)`) and the contribution as "Bijdrage op **de** Energie" (Frank omits "de"). The
-tax regexes tolerate the unit with `\([^)]*\)` so a font quirk in the `€` glyph does not
-break them. `_FUND_RE` anchors on "Residentieel" immediately after "Energiefonds", so the
+tax regexes tolerate the unit with any text up to its closing bracket so a font quirk in the
+`€` glyph does not break them. That text stops at the next label with its bracket, which
+reads the same unit and figure, and a footnote star with the blanks after it is one optional
+piece: open to the closing bracket, a run of labels without one was read to its end again
+from each (`test_a_crafted_row_is_read_in_time_linear_in_its_length`). `_FUND_RE` anchors on "Residentieel" immediately after "Energiefonds", so the
 sibling "Niet-Residentieel" (VAT-exempt, non-residential) row cannot match; the residential
 fund is 0 (`test_taxes_energy_fund_residential_zero`).
 

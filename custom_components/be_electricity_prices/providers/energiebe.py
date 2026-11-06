@@ -208,8 +208,12 @@ _NUM = NUM_NO_THOUSANDS
 # variable formula against the per-slot spot. This supplier already serves one
 # stale card at a legacy key, so a mixed-up URL is not hypothetical, and the
 # failure is a wrong price rather than a missing one.
+#
+# The colon and the blanks after it are one optional piece: as runs of blanks
+# either side of an optional colon, a run of blanks was split between the two
+# in every way before the bracket failed.
 _ENERGY_RE = re.compile(
-    rf"formule\s*\(excl\.?\s*BTW\)\s*:?\s*"
+    rf"formule\s*\(excl\.?\s*BTW\)\s*(?::\s*)?"
     rf"\(\s*{_NUM}\s*x\s*Belpex(?P<rlp>_RLP)?\s*([{SIGN_CHARS}])\s*{_NUM}\)",
     re.IGNORECASE,
 )
@@ -217,9 +221,12 @@ _ENERGY_RE = re.compile(
 # parenthesised injection formula, so anchor on the section header both cards
 # share and skip to the first "(factor x Belpex +/- base)" that follows. The
 # body wording differs ("injectievergoeding" on the dynamic card,
-# "terugleververgoeding" on the variable one) and the header does not.
+# "terugleververgoeding" on the variable one) and the header does not. The
+# formula is looked for up to the next header: a card of headers with no
+# formula after them was read to its end again from each, and a header
+# stopped short leaves the formula to the next, which reads the same.
 _INJECTION_RE = re.compile(
-    rf"Terugleveringsvergoeding.*?"
+    r"Terugleveringsvergoeding(?:(?!Terugleveringsvergoeding).)*?"
     rf"(\(\s*{_NUM}\s*x\s*Belpex(?P<spp>_SPP)?\s*([{SIGN_CHARS}])\s*{_NUM}\))",
     re.IGNORECASE | re.DOTALL,
 )
@@ -228,20 +235,23 @@ _INJECTION_RE = re.compile(
 # running text. pdfplumber's layout reading runs those columns together line
 # by line and breaks the formulas apart, so on that card they are read off
 # the plain reading, where each sentence is whole: ``fetch`` reads it when
-# the row is there. The feed-in value is signed, as _INJECTION_CURRENT_RE's.
+# the row is there. The feed-in value is signed, as _INJECTION_CURRENT_RE's,
+# and the blanks before its sign are taken whole: shared with those after it
+# when no sign is printed, a run of blanks was split between the two in every
+# way before the figure failed.
 _ROW_HEADS = (
     r"Energieprijs\s+Vaste\s+vergoeding\s+Terugleveringsvergoeding\s+GSC\s+WKK"
     r"[ \t]*\n\s*"
 )
 _ROW_VALUE = r"\d+(?:[.,]\d+)?"
 _PRICE_ROW_RE = re.compile(
-    _ROW_HEADS + rf"{_NUM}\s+{_NUM}\s+([{SIGN_CHARS}]?)\s*{_NUM}\s+{_NUM}\s+{_NUM}"
+    _ROW_HEADS + rf"{_NUM}\s+{_NUM}\s++([{SIGN_CHARS}]?)\s*{_NUM}\s+{_NUM}\s+{_NUM}"
 )
 # The row's two levies for the shared tax reader, which takes one pattern
 # per levy: GSC is the fourth value and WKK the fifth. On that row the
 # older _WKK_RE would read the energy price under its heading.
 _ROW_LEVY = (
-    _ROW_HEADS + rf"{_ROW_VALUE}\s+{_ROW_VALUE}\s+[{SIGN_CHARS}]?\s*{_ROW_VALUE}\s+"
+    _ROW_HEADS + rf"{_ROW_VALUE}\s+{_ROW_VALUE}\s+(?:[{SIGN_CHARS}]\s*)?{_ROW_VALUE}\s+"
 )
 _ROW_GSC_RE = re.compile(_ROW_LEVY + _NUM)
 _ROW_WKK_RE = re.compile(_ROW_LEVY + rf"{_ROW_VALUE}\s+{_NUM}")
@@ -249,9 +259,14 @@ _ROW_WKK_RE = re.compile(_ROW_LEVY + rf"{_ROW_VALUE}\s+{_NUM}")
 # kwartierbasis volgens de formule: (1,01 x Belpex – 0,98)" on the dynamic
 # card, "terugleververgoeding volgens de formule: (0,60 x Belpex_SPP –
 # 0,80)" on the variable one. The heading _INJECTION_RE starts from now
-# heads the price row, above the energy formula. Same groups.
+# heads the price row, above the energy formula. Same groups. The sentence is
+# read up to the next word that could start one: a run of those words with no
+# formula after them was read to the next parenthesis again from each, and a
+# word stopped short leaves its formula to the next, which reads the same.
+_INJECTION_WORD = r"(?:injectievergoeding|terugleververgoeding)"
 _INJECTION_SENTENCE_RE = re.compile(
-    r"(?:injectievergoeding|terugleververgoeding)[^()]*?volgens\s+de\s+formule\s*:\s*"
+    rf"{_INJECTION_WORD}(?:(?!{_INJECTION_WORD})[^()])*?"
+    r"volgens\s+de\s+formule\s*:\s*"
     rf"(\(\s*{_NUM}\s*x\s*Belpex(?P<spp>_SPP)?\s*([{SIGN_CHARS}])\s*{_NUM}\))",
     re.IGNORECASE,
 )
@@ -268,9 +283,10 @@ _VASTE_PRIJS_RE = re.compile(r"energieprijs\s+is\s+een\s+vaste\s+prijs", re.IGNO
 # energie.be's own published table is 1,65. A sign-blind pattern would not
 # mis-price such a card, it would fail to read it at all and take the whole
 # contract offline - the opposite of what InjectionRates and _validate_injection
-# both say a monthly indicative is allowed to do.
+# both say a monthly indicative is allowed to do. The blanks before the sign
+# are taken whole, as on the price row.
 _INJECTION_CURRENT_RE = re.compile(
-    rf"Zonnestroom\s+([{SIGN_CHARS}]?)\s*{_NUM}", re.IGNORECASE
+    rf"Zonnestroom\s++([{SIGN_CHARS}]?)\s*{_NUM}", re.IGNORECASE
 )
 # The fee's number is followed by its "(EUR/jaar)" unit, which the dynamic card
 # puts on the next line and the variable card puts on the next line too - but
@@ -280,19 +296,44 @@ _INJECTION_CURRENT_RE = re.compile(
 # cards render the sibling energy-fund unit as "(€/maand )" with a stray space,
 # and pinning the € glyph exactly would take both contracts offline over a
 # renderer quirk, since a missing fee is fatal.
+#
+# The number is read whole, the rest of its line up to the next label at most,
+# the line break and the blanks after it as one optional piece, and the unit
+# as the bracket holding "jaar" with no other bracket in it. Shared with the
+# rest of the line, a long number was read again from every digit; with the
+# rest of the line and the blanks after it both free to take them, a run of
+# blanks was split between the two in every way; with the bracket open to the
+# next closing one, a line of opening brackets was read to its end again from
+# each; and run to the end of the line, a line of labels was read again from
+# every one.
 _FEE_RE = re.compile(
-    rf"Vaste\s+vergoeding\s+{_NUM}[^\n]*\n?\s*\([^)]*jaar", re.IGNORECASE
+    rf"Vaste\s+vergoeding\s+(?>{_NUM})(?:(?!Vaste\s+vergoeding\s+\d)[^\n])*"
+    r"(?:\n\s*)?\([^()]*jaar",
+    re.IGNORECASE,
 )
 _GSC_RE = re.compile(rf"\bGSC\b\s+{_NUM}")
 _WKK_RE = re.compile(rf"\bWKK\b\s+{_NUM}")
+# Each levy's unit bracket runs to the next label with its bracket at most,
+# which reads the same unit and figure, and a footnote star with the blanks
+# after it is one optional piece. Open to the next closing bracket, a run of
+# labels without one was read to its end again from each; as runs of blanks
+# either side of an optional star, a run of blanks was split between the two
+# in every way.
 _EXCISE_RE = re.compile(
-    rf"Bijzondere\s+accijns\s+op\s+Energie\s*\([^)]*\)\s*\*{{0,2}}\s*{_NUM}"
+    r"Bijzondere\s+accijns\s+op\s+Energie\s*\("
+    r"(?:(?!Bijzondere\s+accijns\s+op\s+Energie\s*\()[^)])*"
+    rf"\)\s*(?:\*{{1,2}}\s*)?{_NUM}"
 )
-_CONTRIB_RE = re.compile(rf"Bijdrage\s+op\s+de\s+Energie\s*\([^)]*\)\s*{_NUM}")
+_CONTRIB_RE = re.compile(
+    r"Bijdrage\s+op\s+de\s+Energie\s*\("
+    rf"(?:(?!Bijdrage\s+op\s+de\s+Energie\s*\()[^)])*\)\s*{_NUM}"
+)
 # Anchored on "Residentieel" right after "Energiefonds"; the sibling
 # "Niet-Residentieel" row (VAT-exempt, non-residential) cannot match.
 _FUND_RE = re.compile(
-    rf"Bijdrage\s+Energiefonds\s+Residentieel\s*\([^)]*\)\s*\*?\s*{_NUM}"
+    r"Bijdrage\s+Energiefonds\s+Residentieel\s*\("
+    r"(?:(?!Bijdrage\s+Energiefonds\s+Residentieel\s*\()[^)])*"
+    rf"\)\s*(?:\*\s*)?{_NUM}"
 )
 # The residential title, "Elektriciteit [dynamisch tarief|vast] particulier
 # online - juni 2026" until September 2026. The October dynamic card dropped
