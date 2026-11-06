@@ -15247,6 +15247,244 @@ async def test_a_first_year_walk_the_recorder_did_not_answer_is_not_kept(
     assert walks == [None, 120.0, None, 171.0]
 
 
+async def test_a_first_year_across_1_january_takes_each_years_load_curve(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The load curve is keyed by local (month, day, hour) without its year,
+    and the walk of a first contract year is handed the one the coordinator
+    holds, the running year's. A year begun in April 2026 priced its 2026
+    months on 2027's weekdays. Cut at 1 January, each piece takes its own
+    year's curve where the store holds it, and nothing is downloaded for it:
+    the tick walks this every hour. A walk the cut would not change is left
+    whole, a compare candidate's own blend among them."""
+    from custom_components.be_electricity_prices import first_year
+    from custom_components.be_electricity_prices.coordinator_profiles import (
+        _profile_cache,
+    )
+
+    freezer.move_to("2027-05-15 12:00:00+02:00")
+    entry = _entry(region="flanders", contract="test")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    held = {(6, 15, 10): 2027.0}
+    own = {(6, 15, 10): 2026.0}
+    coord._rlp_weights, coord._rlp_weights_year, coord._rlp_blend = (
+        held,
+        2027,
+        "flanders",
+    )
+    _profile_cache(hass)[("rlp", 2026, "flanders")] = (own, dt_util.utcnow())
+    # Another blend of that year, which is not the entry's.
+    _profile_cache(hass)[("rlp", 2026, "distinct")] = (
+        {(6, 15, 10): 1.0},
+        dt_util.utcnow(),
+    )
+    # And the running year's row refreshed by another entry: this one's
+    # 2027 piece stays on the curve the rest of its bill is priced on.
+    _profile_cache(hass)[("rlp", 2027, "flanders")] = (
+        {(6, 15, 10): 2027.5},
+        dt_util.utcnow(),
+    )
+    entry.runtime_data = coord
+    first, last = date(2026, 4, 10), date(2027, 4, 9)
+    walk: dict[str, Any] = {"rlp_weights": held, "spp_weights": None}
+
+    def curves(on: Any, handed: dict[str, Any]) -> list[tuple[date, date, Any]]:
+        return [
+            (start, end, piece.get("rlp_weights"))
+            for start, end, piece in first_year._year_pieces(on, first, last, handed)
+        ]
+
+    cut = [(first, date(2026, 12, 31), own), (date(2027, 1, 1), last, held)]
+    assert curves(entry, walk) == cut
+    pieces = first_year._year_pieces(entry, first, last, walk)
+    assert pieces[0][2] == {
+        "rlp_weights": own,
+        "rlp_index_weights": None,
+        "spp_weights": None,
+    }
+    assert pieces[1][2] is walk
+    # The entry's own curve as the index too is the same walk.
+    assert curves(entry, {**walk, "rlp_index_weights": held}) == cut
+    # Left whole: another blend's index, no curve, no coordinator, and an
+    # earlier year the installation does not hold.
+    foreign = {**walk, "rlp_index_weights": {(6, 15, 10): 5.0}}
+    assert first_year._year_pieces(entry, first, last, foreign) == [
+        (first, last, foreign)
+    ]
+    assert first_year._year_pieces(entry, first, last, {}) == [(first, last, {})]
+    proxy = _entry(region="flanders", contract="test")
+    assert first_year._year_pieces(proxy, first, last, walk) == [(first, last, walk)]
+    del _profile_cache(hass)[("rlp", 2026, "flanders")]
+    assert first_year._year_pieces(entry, first, last, walk) == [(first, last, walk)]
+
+
+async def test_a_kept_first_year_is_walked_again_when_its_years_curve_moves(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A closed first year is kept for as long as what it was priced on stays
+    the same, and a piece cut at 1 January is priced on its own year's curve.
+    That curve arriving in the store, as a backfill into that year fetches
+    it, is a change, and the year is walked again on it."""
+    from custom_components.be_electricity_prices import first_year
+    from custom_components.be_electricity_prices.coordinator_profiles import (
+        _profile_cache,
+    )
+
+    freezer.move_to("2027-05-15 12:00:00+02:00")
+    entry = _entry(region="flanders", contract="test")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    held = {(6, 15, 10): 2027.0}
+    coord._rlp_weights, coord._rlp_weights_year, coord._rlp_blend = (
+        held,
+        2027,
+        "flanders",
+    )
+    entry.runtime_data = coord
+    walked = AsyncMock(side_effect=[171.0, 172.0, 173.0])
+
+    async def charges() -> float | None:
+        return await first_year.first_year_charges(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            make_snapshot(),
+            entry,
+            date(2026, 4, 10),
+            date(2027, 4, 9),
+            rlp_weights=held,
+        )
+
+    with patch.object(first_year, "_walked_charges", walked):
+        assert await charges() == 171.0
+        assert await charges() == 171.0
+        _profile_cache(hass)[("rlp", 2026, "flanders")] = (
+            {(6, 15, 10): 2026.0},
+            dt_util.utcnow(),
+        )
+        assert await charges() == 172.0
+        assert await charges() == 172.0
+    assert walked.await_count == 2
+    assert len(walked.await_args_list[1].args[5]) == 2
+
+
+async def test_a_first_year_cut_at_1_january_adds_up_its_pieces(
+    hass: HomeAssistant,
+) -> None:
+    """Each piece is billed on its own and the year is their sum, stretched
+    over what none of them priced as one walk stretches it. A piece that
+    priced nothing eligible leaves the year unknown, as the one walk did."""
+    from custom_components.be_electricity_prices import first_year, ytd_cost
+
+    entry = _entry(region="flanders", contract="test")
+    windows: list[tuple[date, date, Any]] = []
+
+    async def bill(*_a: Any, breakdown: dict[str, float], **walk: Any) -> float:
+        start, end = walk.pop("window_start_override"), walk.pop("window_end")
+        windows.append((start, end, walk.get("rlp_weights")))
+        days = float((end - start).days + 1)
+        if walk.get("rlp_weights") != "none":
+            breakdown["welcome_credit_eligible_eur"] = days
+        breakdown["energy_component_ytd_eur"] = days / 2.0
+        breakdown["green_component_ytd_eur"] = days / 10.0
+        breakdown["days_priced"] = days - 10.0
+        breakdown["days_elapsed"] = days
+        return 0.0
+
+    pieces = [
+        (date(2026, 4, 10), date(2026, 12, 31), {"rlp_weights": "2026"}),
+        (date(2027, 1, 1), date(2027, 4, 9), {"rlp_weights": "2027"}),
+    ]
+    with patch.object(ytd_cost, "_compute_current_year_cost", bill):
+        got = await first_year._walked_charges(
+            hass,
+            None,  # type: ignore[arg-type]
+            make_stub_extractor(),
+            make_snapshot(),
+            entry,
+            pieces,
+        )
+        # 266 and 99 days, 20 of them unpriced.
+        assert got == pytest.approx(365.0 + 365.0 * 0.6 * (365.0 / 345.0 - 1.0))
+        assert windows == [
+            (date(2026, 4, 10), date(2026, 12, 31), "2026"),
+            (date(2027, 1, 1), date(2027, 4, 9), "2027"),
+        ]
+        pieces[1] = (date(2027, 1, 1), date(2027, 4, 9), {"rlp_weights": "none"})
+        assert (
+            await first_year._walked_charges(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                make_snapshot(),
+                entry,
+                pieces,
+            )
+            is None
+        )
+
+
+async def test_a_first_year_bill_cut_at_1_january_is_the_same_bill(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """What the cut adds up is what one walk of the year bills: the energy
+    and the green levy per day, the standing charge per day of each month.
+    So a year cut at 1 January on one curve is the year walked whole, and
+    only a different curve changes it."""
+    entry = _entry(
+        region="wallonia",
+        solar_regime="none",
+        meter="mono",
+        contract="test",
+        consumption_kwh="sensor.cons_total",
+    )
+    snap = replace(
+        _snapshot(
+            prosumer=None,
+            capacity=None,
+            energy=FixedRates(single=0.10, yearly_fixed_fee=36.5),
+        ),
+        welcome_credit_eur=200.0,
+    )
+
+    async def _fake_daily(
+        _hass: object, entity_id: str, start: date, end: date
+    ) -> dict[date, float]:
+        if entity_id != "sensor.cons_total":
+            return {}
+        days = (end - start).days + 1
+        return {
+            start + timedelta(days=n): 2.0
+            if (start + timedelta(days=n)).month in (11, 12, 1, 2)
+            else 0.5
+            for n in range(days)
+        }
+
+    async def eligible(first: date, last: date) -> float:
+        stats: dict[str, float] = {}
+        with patch.object(energy_meters, "_recorder_daily_kwh", new=_fake_daily):
+            await _compute_current_year_cost(
+                hass,
+                None,  # type: ignore[arg-type]
+                make_stub_extractor(),
+                snap,
+                entry,
+                breakdown=stats,
+                window_start_override=first,
+                window_end=last,
+            )
+        return stats["welcome_credit_eligible_eur"]
+
+    freezer.move_to("2027-07-15 12:00:00+02:00")
+    whole = await eligible(date(2026, 5, 10), date(2027, 5, 9))
+    cut = await eligible(date(2026, 5, 10), date(2026, 12, 31)) + await eligible(
+        date(2027, 1, 1), date(2027, 5, 9)
+    )
+    assert whole > 0.0
+    assert cut == pytest.approx(whole)
+
+
 @pytest.mark.parametrize(
     ("start", "wait", "paid"),
     [

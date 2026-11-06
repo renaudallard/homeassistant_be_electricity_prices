@@ -301,6 +301,21 @@ class _ProfilesMixin:
         curves, _stamps = await self._shared_rlp_blends(year)
         return curves.get(blend) or held
 
+    def rlp_weights_held_for_year(self, year: int) -> RlpWeights | None:
+        """The entry's blend of ``year``'s load curve as the installation
+        holds it, or ``None``, downloading nothing.
+
+        For the hourly tick's walk of a first contract year that began the
+        year before (``first_year._year_pieces``): the shared store keeps that
+        year's curve (``_kept_year``), and :meth:`rlp_weights_for_year`, which
+        a backfill asks, would retry its download on every tick while it
+        cannot be had.
+        """
+        if year == self._rlp_weights_year:
+            return self._rlp_weights or None
+        row = _profile_cache(self.hass).get(("rlp", year, self._rlp_blend))
+        return row[0] if row is not None and row[0] else None
+
     async def spp_weights_for_year(self, year: int) -> SppWeights | None:
         """The solar curve the hours of ``year`` are weighted on: that year's
         own for a year before the one held, else the one held.

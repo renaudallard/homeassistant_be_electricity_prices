@@ -30,7 +30,8 @@ EnergyVision's April to June 2026 cards cap the credit they pay at the
 anniversary at what that first year charged for the components it may come
 off (``fees.lump_held_to_first_year``), and Mega's per-kWh half rides what it
 drew. That year straddles 1 January, so it is walked or read on its own by
-the year-to-date bill, and kept once it is over.
+the year-to-date bill, a calendar year at a time on each year's own load
+curve, and kept once it is over.
 """
 
 from __future__ import annotations
@@ -107,6 +108,7 @@ async def first_year_charges(
     while month <= last:
         months.append(month)
         month = (month + timedelta(days=32)).replace(day=1)
+    pieces = _year_pieces(entry, first, last, walk)
     inputs = (
         tuple(
             cached_month_card(
@@ -114,8 +116,10 @@ async def first_year_charges(
             )
             for m in months
         ),
-        walk.get("rlp_weights"),
-        walk.get("rlp_index_weights"),
+        tuple(
+            (piece.get("rlp_weights"), piece.get("rlp_index_weights"))
+            for _start, _end, piece in pieces
+        ),
         walk.get("spp_weights"),
         walk.get("cached_only", False),
     )
@@ -133,11 +137,64 @@ async def first_year_charges(
     # left the lump on the stretched estimate until 31 December.
     with noting_failed_reads() as failed:
         eligible = await _walked_charges(
-            hass, session, extractor, snapshot, entry, first, last, **walk
+            hass, session, extractor, snapshot, entry, pieces
         )
     if memo is not None and closed and not failed and eligible is not None:
         memo[slot] = (inputs, eligible)
     return eligible
+
+
+def _year_pieces(
+    entry: ConfigEntry, first: date, last: date, walk: dict[str, Any]
+) -> list[tuple[date, date, dict[str, Any]]]:
+    """``[first, last]`` cut at each 1 January that changes the load curve,
+    each piece with the walk that prices it.
+
+    The curve is keyed by local (month, day, hour) without its year, and the
+    walk is handed the one the coordinator holds, the running year's, so a
+    first year begun in April priced the months before 1 January on the next
+    year's weekdays: 0,3 to 7,8% on an RLP-indexed month's index. A piece
+    takes its own year's curve where the walk carries the entry's own and
+    the installation holds that year's (``rlp_weights_held_for_year``), which
+    the shared store keeps for the year before the running one. Fetching it
+    here would retry the download on every tick while it cannot be had.
+
+    Uncut where nothing would change: the walk carries no curve, or an index
+    curve that is not the entry's (a candidate on the compare page, whose
+    blend this does not know), or no coordinator is there to hold one.
+    """
+    held = walk.get("rlp_weights")
+    index = walk.get("rlp_index_weights")
+    curve_of = getattr(
+        getattr(entry, "runtime_data", None), "rlp_weights_held_for_year", None
+    )
+    if curve_of is None or held is None or (index is not None and index is not held):
+        return [(first, last, walk)]
+    pieces: list[tuple[date, date, dict[str, Any]]] = []
+    for year in range(first.year, last.year + 1):
+        own = curve_of(year)
+        piece = walk
+        if own is not None and own is not held:
+            piece = {**walk, "rlp_weights": own, "rlp_index_weights": None}
+        pieces.append(
+            (max(first, date(year, 1, 1)), min(last, date(year, 12, 31)), piece)
+        )
+    if all(piece is walk for _start, _end, piece in pieces):
+        return [(first, last, walk)]
+    return pieces
+
+
+# What a piece's bill reports that the year adds up, each a sum over its days
+# or hours.
+_SUMMED = (
+    "welcome_credit_eligible_eur",
+    "energy_component_ytd_eur",
+    "green_component_ytd_eur",
+    "days_priced",
+    "hours_priced",
+    "days_elapsed",
+    "hours_elapsed",
+)
 
 
 async def _walked_charges(
@@ -146,30 +203,35 @@ async def _walked_charges(
     extractor: SupplierExtractor,
     snapshot: SupplierSnapshot,
     entry: ConfigEntry,
-    first: date,
-    last: date,
-    **walk: Any,
+    pieces: list[tuple[date, date, dict[str, Any]]],
 ) -> float | None:
-    """:func:`first_year_charges` with no memo: the walk itself."""
+    """:func:`first_year_charges` with no memo: the walk itself, one bill per
+    piece (``_year_pieces``), added up."""
     # Late: the year-to-date engine is what asks for these charges.
     from .ytd_cost import _compute_current_year_cost
 
     year: dict[str, float] = {}
-    if (
-        await _compute_current_year_cost(
-            hass,
-            session,
-            extractor,
-            snapshot,
-            entry,
-            breakdown=year,
-            window_start_override=first,
-            window_end=last,
-            **walk,
-        )
-        is None
-    ):
-        return None
+    for start, end, walk in pieces:
+        piece: dict[str, float] = {}
+        if (
+            await _compute_current_year_cost(
+                hass,
+                session,
+                extractor,
+                snapshot,
+                entry,
+                breakdown=piece,
+                window_start_override=start,
+                window_end=end,
+                **walk,
+            )
+            is None
+            or "welcome_credit_eligible_eur" not in piece
+        ):
+            return None
+        for key in _SUMMED:
+            if key in piece:
+                year[key] = year.get(key, 0.0) + piece[key]
     eligible = year.get("welcome_credit_eligible_eur")
     priced = year.get("days_priced", year.get("hours_priced", 0.0))
     elapsed = year.get("days_elapsed", year.get("hours_elapsed", 0.0))

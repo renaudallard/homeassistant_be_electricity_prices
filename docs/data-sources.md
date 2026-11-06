@@ -1008,6 +1008,16 @@ that is not RLP-indexed fetches no earlier year. Only the year before the
 running one is kept beside it (`_kept_year`), so an older year's curve lives
 for the run that fetched it.
 
+The first contract year a capped welcome credit is held to also reaches into
+the year before (`first_year_charges`): signed in April 2026, it runs to
+March 2027. Its walk is cut at 1 January (`_year_pieces`, `first_year.py`) and
+each piece billed on its own year's curve, the pieces' charges added up. The
+earlier year's is taken from the store and never downloaded there
+(`rlp_weights_held_for_year`), since the walk runs on every tick and a past
+year's fetch has no back-off; held by an entry that ran that year, or fetched
+by a backfill into it, it is there. A walk whose index curve is not the
+entry's own blend, a candidate's on the compare page, is not cut.
+
 ### Where the profiles are kept
 
 Both curves live in one store shared by the whole installation
