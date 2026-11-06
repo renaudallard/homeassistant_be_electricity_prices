@@ -377,6 +377,26 @@ EUR/MWh.
   EUR/MWh, giving c€/kWh, so that is how it is read: the factor times 10, the
   base divided by 100, which is October's formula again.
 
+  OCTA+ put the November cards up again on 5 November 2026 at 15:10 UTC, under
+  the same addresses and the same *"en €/kWh HTVA"*, with the factor printed
+  for the parameter in c€/kWh that the card's own rule divides by 10: *"Epex
+  SPP M * 0,8790 – 1,61"*, *"Epex SPP M * 0,8520 – 1,34"* on Smart Variable,
+  *"Epex 15' * 0,9220 – 1,31"* on the dynamic cards. The first-page estimates
+  (6,63, 6,65 and 12,12 c€/kWh) come out of those factors as printed, and Boost
+  Flex's and the dynamic card's are the ones the 1 November cards printed, so
+  the wording does not tell the two printings apart. The factor is
+  therefore read on whichever parameter puts it between 0,15 and 2 of the index
+  (`_feed_in_factor`), the bound the live check already holds it to: times 10
+  for the first printing, as printed for the second. The two readings are ten
+  times apart and the bound's ends 13,3, so only a factor printed between 0,15
+  and 0,2 could fit both; that one, like a factor that fits neither, is refused
+  and the monthly credit keeps the printed estimate
+  (`test_a_feed_in_factor_either_reading_could_be_is_refused`). Read times 10,
+  as it was until the fix, the second printing credited 8,79 on the solar index
+  and 9,22 on the dynamic cards' spot, ten times the feed-in, from that
+  afternoon on; the fix came with snapshot schema v89
+  (`test_the_reissued_november_2026_cards_credit_what_october_did`).
+
 Checked against the V-test values OCTA+ publishes for the month
 (`paramètres_forward_fr.pdf`, behind octaplus.be/prixattendus, in EUR/MWh): every
 estimate on the first page of the sixteen November 2026 cards, 61 figures, comes
@@ -628,6 +648,13 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
   feed-in factor ten times too small: the live check's floor on a feed-in factor
   catches the second, nothing bounds a base that tightly, and the first-page
   estimates show both. See [Formula units](#formula-units).
+- **5 November 2026, the feed-in factor printed for the other parameter.** The
+  cards put up again that afternoon print the feed-in factor for the parameter
+  in c€/kWh under the wording the first November cards used for the parameter
+  in EUR/MWh, and read the same way they credited ten times the feed-in. The
+  live check's ceiling on a feed-in factor catches it; the factor is now read on
+  the parameter that keeps it inside that bound. See
+  [Formula units](#formula-units).
 - **Consumption vs injection formula collision**: both dynamic formulas share the
   `Epex 15'` shape; `_dynamic_consumption_formula` must skip the injection one by
   offset, robust to paragraph reordering.
@@ -683,6 +710,9 @@ cards unless the row names another month):
 | `octaplus_ecoboostflex_v_oct.pdf` | OCTA+ Eco Boost Flex, Flanders, **October 2026**. `Epex RLP M` formula per meter, `Epex SPP M * 0,8790 – 16,15` feed-in. |
 | `octaplus_dynamic_v_nov.pdf` | OCTA+ Dynamic, Flanders, **November 2026**. The consumption formula in c€/kWh, the feed-in one under a misprinted €/kWh, and the first-page estimates the month's V-test values reproduce. |
 | `octaplus_boostflex_w_nov.pdf` | OCTA+ Boost Flex, Wallonia, **November 2026**. Meter and Impact formulas in c€/kWh, `Epex SPP M * 0,0879 – 1,61` feed-in under €/kWh. |
+| `octaplus_boostflex_w_nov_reissue.pdf` | OCTA+ Boost Flex, Wallonia, **November 2026**, the card put up again on 5 November: `Epex SPP M * 0,8790 – 1,61` under the same €/kWh, the factor for the parameter in c€/kWh. The same bytes as the card archive's row for the month. |
+| `octaplus_smartvariable_w_nov.pdf` | OCTA+ Smart Variable, Wallonia, **November 2026**, of 5 November: `Epex SPP M * 0,8520 – 1,34` under €/kWh. The same bytes as the card archive's row for the month. |
+| `octaplus_dynamic_v_nov_reissue.pdf` | OCTA+ Dynamic, Flanders, **November 2026**, of 5 November: `Epex 15' * 0,9220 – 1,31` under €/kWh. The same bytes as the card archive's row for the month. |
 
 Fixture text is read through `extract_pdf_text_aligned(..., x_join_threshold=1.0)`
 in the test helper `_text` (`test_octaplus.py`), matching the production

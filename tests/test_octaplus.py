@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 from collections.abc import Callable
 from dataclasses import fields
 from datetime import date
@@ -450,6 +451,96 @@ def test_the_november_2026_variable_card_is_read_in_its_own_units() -> None:
     feed_in = inj.factor * _V_TEST_NOVEMBER_2026["injection weighted"] / 1000
     assert feed_in + inj.base == pytest.approx(0.0663, abs=5e-5)
     assert inj.current == pytest.approx(0.0663)
+
+
+@pytest.mark.parametrize(
+    ("name", "contract", "region", "printed", "factor", "base", "v_test", "estimate"),
+    [
+        (
+            "octaplus_boostflex_w_nov_reissue.pdf",
+            "octaplus_boostflex",
+            "wallonia",
+            "Epex SPP M * 0,8790 – 1,61",
+            0.879,
+            -0.0161,
+            "injection weighted",
+            0.0663,
+        ),
+        (
+            "octaplus_smartvariable_w_nov.pdf",
+            "octaplus_smartvariable",
+            "wallonia",
+            "Epex SPP M * 0,8520 – 1,34",
+            0.852,
+            -0.0134,
+            "injection weighted",
+            0.0665,
+        ),
+        (
+            "octaplus_dynamic_v_nov_reissue.pdf",
+            "octaplus_dynamic",
+            "flanders",
+            "Epex 15' * 0,9220 –",
+            0.922,
+            -0.0131,
+            "injection arithmetic",
+            0.1212,
+        ),
+    ],
+    ids=["boostflex", "smartvariable", "dynamic"],
+)
+def test_the_reissued_november_2026_cards_credit_what_october_did(
+    name: str,
+    contract: str,
+    region: str,
+    printed: str,
+    factor: float,
+    base: float,
+    v_test: str,
+    estimate: float,
+) -> None:
+    """OCTA+ put up its November cards again on 5 November with the feed-in
+    factor printed for the parameter in c€/kWh, "Epex SPP M * 0,8790 – 1,61"
+    where the cards of 1 November printed "0,0879 – 1,61", under the same "en
+    €/kWh HTVA". Read as the first ones were, every card credited ten times
+    the feed-in: 8,79 on the solar index, 9,22 on the dynamic cards' spot. The
+    estimate on the first page comes out of the factor read now at the month's
+    V-test value, as it does on the first cards."""
+    text = _text(name)
+    assert printed in " ".join(text.split())
+    snap = parse_snapshot(contract, text, region)
+    assert snap.publication_label == "11/2026"
+    inj = snap.injection
+    assert inj is not None
+    assert inj.factor is not None
+    assert inj.base is not None
+    assert inj.factor == pytest.approx(factor)
+    assert inj.base == pytest.approx(base)
+    assert inj.factor * _V_TEST_NOVEMBER_2026[v_test] / 1000 + inj.base == (
+        pytest.approx(estimate, abs=5e-5)
+    )
+
+
+def test_a_feed_in_factor_either_reading_could_be_is_refused() -> None:
+    """Under "€/kWh" the factor is read on whichever parameter puts it between
+    0,15 and 2 of the index. A factor both readings put there, or neither, is
+    refused: the monthly credit keeps the printed estimate rather than one of
+    two credits ten times apart."""
+    from custom_components.be_electricity_prices.providers._octaplus_formulas import (
+        _feed_in_factor,
+    )
+
+    assert _feed_in_factor(0.0879) == pytest.approx(0.879)
+    assert _feed_in_factor(0.879) == pytest.approx(0.879)
+    assert _feed_in_factor(0.18) is None
+    assert _feed_in_factor(5.0) is None
+    text = _text("octaplus_boostflex_w_nov_reissue.pdf")
+    ambiguous = re.sub(r"(Epex SPP M? ?\* ?)0,8790", r"\g<1>0,1800", text)
+    assert ambiguous != text
+    snap = parse_snapshot("octaplus_boostflex", ambiguous, "wallonia")
+    assert snap.injection is not None
+    assert snap.injection.factor is None
+    assert snap.injection.current == pytest.approx(0.0663)
 
 
 def test_a_formula_in_a_unit_no_card_has_used_is_not_read() -> None:

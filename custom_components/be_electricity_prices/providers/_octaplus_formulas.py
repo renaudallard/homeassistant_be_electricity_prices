@@ -167,7 +167,11 @@ _CONSUMPTION_SCALES: dict[tuple[bool, str], tuple[float, float]] = {
     (False, "MWh"): (1.0, 1000.0),
     (True, "kWh"): (1.0, 100.0),
 }
-_FEED_IN_SCALES = {**_CONSUMPTION_SCALES, (False, "kWh"): (10.0, 100.0)}
+# The share of the index a feed-in formula pays back, as the live check bounds
+# it (_INJECTION_FACTOR_BOUNDS in scripts/live_check.py). Its ends are 13,3
+# times apart, so a printed factor and ten times it both fall inside only
+# between 0,15 and 0,2.
+_FEED_IN_FACTOR_RANGE = (0.15, 2.0)
 
 
 def _formula_coefficients(
@@ -179,12 +183,10 @@ def _formula_coefficients(
     A formula stated in EUR/MWh keeps its factor and divides its base by 1000.
     The November 2026 cards state c€/kWh and say that a parameter published in
     EUR/MWh is divided by 10 before the formula applies, so the factor stays
-    as printed and the base divides by 100. Their feed-in formulas say €/kWh
-    over a factor and a base both a tenth of October's, "Epex SPP M * 0,0879 –
-    1,61" where October printed "0,8790 – 16,15" in €/MWh. The estimates on
-    their first page come out of that factor applied to the parameter in
-    EUR/MWh, giving c€/kWh, so that is how it is read: ten times the factor and
-    the base over 100. A formula stated in any other unit answers None.
+    as printed and the base divides by 100. Their feed-in formulas say €/kWh,
+    meaning c€/kWh, with the base over 100 either way, and the factor has been
+    printed for both parameters under that one wording (``_feed_in_factor``).
+    A formula stated in any other unit answers None.
     """
     start = match.start(1)
     stated = list(_UNIT_RE.finditer(text, max(0, start - _UNIT_REACH), start))
@@ -193,11 +195,31 @@ def _formula_coefficients(
         unit = (bool(last.group(1) or last.group(3)), last.group(2) or last.group(4))
     else:
         unit = (False, "MWh")
-    scale = (_FEED_IN_SCALES if feed_in else _CONSUMPTION_SCALES).get(unit)
+    printed = to_float(match.group(1))
+    base = parse_sign(match.group(2)) * to_float(match.group(3))
+    if feed_in and unit == (False, "kWh"):
+        factor = _feed_in_factor(printed)
+        return None if factor is None else (factor, base / 100.0)
+    scale = _CONSUMPTION_SCALES.get(unit)
     if scale is None:
         return None
     times, per = scale
-    return (
-        to_float(match.group(1)) * times,
-        parse_sign(match.group(2)) * to_float(match.group(3)) / per,
-    )
+    return printed * times, base / per
+
+
+def _feed_in_factor(printed: float) -> float | None:
+    """The factor of a feed-in formula stated in €/kWh, on an index in EUR/kWh.
+
+    The cards of 1 November 2026 printed "Epex SPP M * 0,0879 – 1,61", a factor
+    on the parameter in EUR/MWh that gives c€/kWh, so 0,879. The ones OCTA+
+    put up on 5 November print "Epex SPP M * 0,8790 – 1,61" under the same
+    words, on the parameter in c€/kWh that their own sentence says to divide
+    by 10 first, so 0,879 again. Their first-page estimate of 6,63 c€/kWh comes
+    out of each at the V-test value of 93,78 EUR/MWh. Read the first way, the
+    second card credited ten times the feed-in. The reading taken is the one
+    that puts the factor in ``_FEED_IN_FACTOR_RANGE``; a factor both readings
+    put there, or neither, answers None.
+    """
+    low, high = _FEED_IN_FACTOR_RANGE
+    fits = [factor for factor in (printed * 10.0, printed) if low <= factor <= high]
+    return fits[0] if len(fits) == 1 else None

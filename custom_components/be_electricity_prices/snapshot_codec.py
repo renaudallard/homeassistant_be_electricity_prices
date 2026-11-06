@@ -503,7 +503,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # energy row, and their figures took it in. The cards that still found an
 # archived card printing the cost billed it a second time on top, and the
 # others did not parse. TaxOverlay carries renewables_in_energy for them.
-_SNAPSHOT_SCHEMA_VERSION = 88
+# v89: OCTA+'s November 2026 cards put up again on 5 November print their
+# feed-in factor for the parameter in c€/kWh under the same €/kWh wording;
+# read like the first ones, every feed-in credit came out ten times too high.
+_SNAPSHOT_SCHEMA_VERSION = 89
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
