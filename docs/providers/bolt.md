@@ -172,7 +172,8 @@ the French sentence is the residential one carried over: the October 2026 French
 Plenty Fixe card states its 10,0 c€/kWh *"TVA comprise"* on a card priced HTVA throughout, where
 the Dutch edition says *"10,0 c€/kWh (excl. btw) korting"*, so the cut is 10,0 c€/kWh before VAT.
 The two editions agree in August (*"470 € (TVA incluse)"*, *"€ 470 (incl. btw) korting"*), and that
-lump stays 388,43 EUR before VAT. The Dutch label counts only for the figure the French card
+lump stays 388,43 EUR before VAT. The Dutch figure is read from the start of its digits
+(`_PROMO_DUTCH_RE`). The Dutch label counts only for the figure the French card
 prints; a Dutch card that is not there, or names no such figure, leaves the French words as
 printed, and a timeout fails the fetch so the tick retries. The feed-in bonus is *"hors TVA"*
 everywhere and is carried as printed. The archive replays a row captured before the Dutch card
@@ -354,7 +355,8 @@ it links for residential electricity, matching `_CARD_URL_RE` (`bolt.py`) and fi
 `res` segment, so it still diffs on folder/slug alone. That pattern is shared with the version
 resolver, and keeping it usable by both is why the version group is `\w+` and the match is
 case-insensitive: pinning it to `\d+` for the resolver's benefit silently narrowed discovery, and a
-slug this pattern cannot see is a new product the catalog diff reports as silence. `live_check.py`
+slug this pattern cannot see is a new product the catalog diff reports as silence. The file name is
+checked to end at `.pdf` before it is split, so a long name with no `.pdf` is read once. `live_check.py`
 diffs that against the registry's `{c.folder + '/' + c.slug for c in _CONTRACTS}` set, so a new Bolt
 product or a renamed slug surfaces as a coverage gap. On fetch failure it returns an empty set
 rather than raising.
@@ -404,7 +406,10 @@ January 2026.
 >
 > `_extract_legacy_energy` (`_bolt_cards.py`) reads the older shape, keyed on which
 > anchor the card actually carries rather than on a date, so it neither guesses at
-> the boundary nor needs revisiting the next time Bolt redesigns. The tax reader
+> the boundary nor needs revisiting the next time Bolt redesigns. A label's value
+> is the first `c` of the line below it, or else the last `c€` value on its own line
+> (`_LEGACY_VALUE_RE`), and a line holding the label twice is read once, since the
+> second can only find what the first did. The tax reader
 > takes either column shape. Before this, `parse_snapshot` raised on those months,
 > `fetch_for_month` swallowed the error, and January through March silently billed
 > at the CURRENT card's rate: 16,71 c€/kWh against January's actual 13,27.
@@ -486,7 +491,8 @@ Bolt's price model has two convention quirks the parser normalizes:
 Bi-hourly (Jour / Nuit) rates come from a separate `Prix de l'électricité verte` block that prints
 two `Jour Nuit` subheads: the first pair is for consumption, the second is for injection
 (`_bolt_cards.py`). The bi-horaire consumption row is the LAST same-line adjacent-number pair between
-the two subheads, so the parser scopes a `re.S` span between them and takes `pairs[-1]`. This is the
+the two subheads, so the parser takes the span between them (`_green_block`: the first subhead after
+the first block heading and the first after that) and takes `pairs[-1]`. This is the
 stable invariant because `pdfplumber` sometimes renders the annual-estimate column vertically above
 the row (variable cards) and sometimes drops it entirely (fixed cards), so a fixed positional offset
 would break. `test_variable_uses_current_monthly_not_annual_estimate` (`tests/test_bolt.py`)
@@ -532,8 +538,9 @@ alone rather than losing the credit.
 Two land mines are baked into the anchor (`_bolt_cards.py`):
 
 - The consumption side also has a `Prix mensuel` line ABOVE the injection block, so the parser
-  anchors on the `Injection` header (`re.S` across to the injection `Prix mensuel`) rather than
-  counting occurrences. A third consumption-side row therefore cannot shift the match.
+  anchors on the first `Injection` header and reads the first `Prix mensuel` row after it
+  (`_INJECTION_MONTHLY_RE`) rather than counting occurrences. A third consumption-side row therefore
+  cannot shift the match.
 - The July 2026 fix cards print a NEGATIVE second column (`Prix mensuel 3,40 -0,43`, the "Exclusif
   nuit" injection column). Only the first column is billed, but the second is a required anchor
   token, so the regex allows an optional minus on it (`-?[\d.,]+`).
@@ -610,7 +617,8 @@ and a dashed **excise** still raises too, since that levy is never zero (issue #
 The connection-fee row (`Redevance de raccordement`) is Wallonia-only on real cards, so a miss is
 permitted (returns 0). Its regex eats up to three integer footnote markers ahead of the FL/WAL/BX
 values (`_bolt_overlays.py`); the `{0,4}` cap deliberately stops a future integer-only Flanders value from
-being mistaken for a footnote and silently shifting the columns.
+being mistaken for a footnote and silently shifting the columns. A marker is a whole run of digits,
+never part of one.
 
 The professional cards of October to December 2025 (`fix_pro_el_fr_2025{10,11,12}.pdf`, read by
 `bolt_pro_fix` and `bolt_pro_plenty_fix`) break two values in their text layer: the Flemish
@@ -800,6 +808,15 @@ case-insensitive helper handles. A missing Sibelga row returns an empty dict (pe
 - **Exclusive-night everywhere.** `Prix mensuel` group 2 and Fluvius group 4 and the Sibelga column
   are all dedicated night-circuit rates, not day/peak rates (`_bolt_cards.py`,
   `_bolt_overlays.py`).
+- **A card costs its length.** A pattern tried from every place it could start read the rest of a
+  long run again from each: digits before the Dutch offer's basis or the VAT rate, a legacy label
+  with no value on its line, block headings with no second subhead, feed-in headings with no row,
+  quarter headings with no `Simple` row after them, the energy fund's label over and over on one
+  line, blank lines before the archive's `Non-résidentiel` row or between the green certificates'
+  figures. A connection-fee footnote of one long digit run was cut between up to four footnotes in
+  every way. Each is now read once, so a crafted card of 100,000 characters takes milliseconds where
+  it took seconds to hours (`test_a_crafted_card_is_read_in_time_linear_in_its_length`,
+  `test_a_crafted_connection_row_is_read_in_time_and_the_card_s_own_kept`).
 
 ## Test fixtures
 
@@ -967,7 +984,8 @@ A closed quarter's months settle on the indices the next quarter's card prints, 
 (`settle_month`, `bolt.py`, flagged with `settles_on_next_card`). Billed on its own card, a
 keyless entry ran a quarter behind: September 2026 printed 14,18 c/kWh at the second quarter's
 100,09 EUR/MWh, where the third quarter's 139,36 gives 19,05, 25% low on every September kWh.
-`quarter_indices` (`_bolt_cards.py`) reads the next card's table, one index per meter register
+`quarter_indices` (`_bolt_cards.py`) reads the next card's table, from its first quarter heading
+and the first `Simple` row after it (`_quarter_mono_index`), one index per meter register
 and CWaPE band, and `settled_registers` (`_settle.py`) rebuilds each rate on the month's own
 formula at its own index, recording the mono one as `index_realised`. Every variable card on file
 prints the same seven indices for a quarter, the professional and Plenty Online cards included.

@@ -56,7 +56,7 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from ._parse import excise_tier_bands, parse_brussels_osp, to_float
+from ._parse import LINE_BREAK, excise_tier_bands, parse_brussels_osp, to_float
 from .base import (
     DsoOverlay,
     ExtractorError,
@@ -240,9 +240,14 @@ def _extract_taxes(text: str, region: str) -> tuple[float, float, float]:
     # future card with an integer-only Flanders value from being mistaken for
     # a footnote and silently shifting the columns. Matching bare integers
     # only made every archived month bill Wallonia's connection fee at zero.
+    # A footnote is a whole digit run: split between footnotes, a long run
+    # was cut in every way up to four times over before the row failed. The
+    # gap to the unit stops at the next label on the line, whose own gap reads
+    # on from there: run past it, a line of labels was read from each.
     connection_match = re.search(
-        r"Redevance de raccordement[^\n]*?\(c€/kWh\)\s*"
-        r"(?:(?:\(\*+\)|\d+)\s*){0,4}"
+        r"Redevance de raccordement"
+        r"(?:(?!Redevance de raccordement)[^\n])*?\(c€/kWh\)\s*"
+        r"(?:(?:\(\*+\)|\d++)\s*){0,4}"
         r"(-|[\d.,]+)\s+(-|[\d.,]+)\s+(-|[\d.,]+)",
         _join_split_decimals(text),
     )
@@ -301,19 +306,24 @@ def _extract_energy_fund(text: str, *, professional: bool = False) -> float:
     single-line label billed 0,00 where the card says 10,07: re-opening,
     for those months, the bug the non-residential row was added to fix.
     """
+    # The archive's row is read from its own line's start: spanning lines, a
+    # run of blank lines was walked again from each one. The residential
+    # label's gap stops at the next label on its line, which reads the same
+    # value: run to the line's end, a line of labels was read from each.
     if professional:
         match = re.search(
             r"Cotisation Fond énergie, non-résidentiel\s*\(€/mois\)\s*"
             r"(?:\d+\s+)?([\d.,-]+)",
             text,
         ) or re.search(
-            r"^\s*Non-r[ée]sidentiel\s+([\d.,-]+)",
+            r"^[^\S\n]*Non-r[ée]sidentiel\s+([\d.,-]+)",
             text,
             re.MULTILINE,
         )
     else:
         match = re.search(
-            r"Cotisation Fond énergie, résidentiel[^\n]*\n\s*([\d.,-]+)",
+            r"Cotisation Fond énergie, résidentiel"
+            r"(?:(?!Cotisation Fond énergie, résidentiel)[^\n])*\n\s*([\d.,-]+)",
             text,
         )
     if match is None or match.group(1).strip() == "-":
@@ -324,7 +334,8 @@ def _extract_energy_fund(text: str, *, professional: bool = False) -> float:
 def _extract_renewables(text: str) -> tuple[float, float, float]:
     """Three columns under 'Certificats verts' + Flanders-only WKK row."""
     cert = re.search(
-        r"Certificats verts\s*\(c€/kWh\)[^\n]*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)",
+        r"Certificats verts\s*\(c€/kWh\)[^\n]*\n\s*"
+        rf"([\d.,]+){LINE_BREAK}([\d.,]+){LINE_BREAK}([\d.,]+)",
         text,
         re.S,
     )

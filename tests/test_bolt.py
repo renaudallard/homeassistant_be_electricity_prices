@@ -28,7 +28,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
+import time
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from typing import Any
@@ -37,7 +40,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.be_electricity_prices.pricing import compute_breakdown
-from custom_components.be_electricity_prices.providers import EXTRACTORS, effective_kind
+from custom_components.be_electricity_prices.providers import (
+    EXTRACTORS,
+    _bolt_cards,
+    _bolt_overlays,
+    effective_kind,
+)
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.providers._pdf import (
     is_transient_fetch_error,
@@ -1686,6 +1694,107 @@ def test_a_dutch_card_naming_another_figure_says_nothing() -> None:
     assert _dutch_basis(dutch, 9.0) is None
     assert _promotion_basis("(excl. btw)", professional=True) == 1.0
     assert _promotion_basis("(incl. btw)", professional=True) == pytest.approx(1 / 1.21)
+
+
+def _energy_of(body: str) -> None:
+    """``_extract_energy`` on a card of ``body`` after the two rows it reads
+    before the block it looks for, whatever it then makes of it."""
+    with contextlib.suppress(ExtractorError):
+        bolt_mod._extract_energy(
+            f"€ 10,99 / mois\nPrix mensuel 1,0 2,0\n{body}", "variable"
+        )
+
+
+def _renewables_of(text: str) -> None:
+    with contextlib.suppress(ExtractorError):
+        _bolt_overlays._extract_renewables(text)
+
+
+# Card text a host could serve instead, about 100,000 characters each, on
+# which a pattern was tried again from every place it could start: digits
+# before the Dutch offer's basis and the VAT rate, a legacy label with no
+# value after it on its line and a line of labels, block headings with no
+# second subhead (300,000, since each costs less), and feed-in headings with
+# no row. Then the quarter table's heading with no row after it (200,000),
+# the energy fund's label over and over on one line (1,000,000, since each
+# costs little) and a run of blank lines before the archive's row, and blank
+# lines between the green certificates' figures, and a listing whose card
+# name runs on with no ".pdf". The module's long timeout is for laying cards
+# out; these read text.
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    "read",
+    [
+        pytest.param(lambda: _bolt_cards._dutch_basis("0" * 100_000, 10.0), id="offer"),
+        pytest.param(
+            lambda: _bolt_cards._VAT_PHRASE_RE.search("0" * 100_000), id="vat"
+        ),
+        pytest.param(
+            lambda: _bolt_cards._extract_legacy_energy(
+                "Coût de l'énergie Simple" + "a" * 100_000, "fixed", 0.0
+            ),
+            id="legacy value",
+        ),
+        pytest.param(
+            lambda: _bolt_cards._extract_legacy_energy(
+                "Coût de l'énergie Simple " * 4_000, "fixed", 0.0
+            ),
+            id="legacy labels",
+        ),
+        pytest.param(
+            lambda: _energy_of("Prix de l'électricité verte " * 10_700),
+            id="green block",
+        ),
+        pytest.param(
+            lambda: bolt_mod._extract_injection("Injection " * 10_000), id="injection"
+        ),
+        pytest.param(
+            lambda: _bolt_cards.quarter_indices("Belpex Q3 2026 " * 13_400),
+            id="quarter headings",
+        ),
+        pytest.param(
+            lambda: _bolt_overlays._extract_energy_fund(
+                "Cotisation Fond énergie, résidentiel " * 27_000
+            ),
+            id="fund labels",
+        ),
+        pytest.param(
+            lambda: _bolt_overlays._extract_energy_fund(
+                "\n" * 100_000, professional=True
+            ),
+            id="fund blank lines",
+        ),
+        pytest.param(
+            lambda: _renewables_of("Certificats verts (c€/kWh)\n1\n" + "\n" * 100_000),
+            id="certificates",
+        ),
+        pytest.param(
+            lambda: bolt_mod._CARD_URL_RE.findall(
+                "pricelists/fix/bolt" + "_res_el_fr_" * 9_000
+            ),
+            id="listing",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[], object],
+) -> None:
+    started = time.perf_counter()
+    read()
+    assert time.perf_counter() - started < 2.0
+
+
+# A connection fee row whose footnote is one long run of digits, printed above
+# a real card: split between up to four footnotes in every way before the row
+# failed, and the card's own row is still the one read.
+@pytest.mark.timeout(60)
+def test_a_crafted_connection_row_is_read_in_time_and_the_card_s_own_kept() -> None:
+    real = fixture_text("bolt_fix.pdf", layout=True)
+    crafted = "Redevance de raccordement (c€/kWh) " + "1" * 100_000 + " x\n"
+    started = time.perf_counter()
+    taxes = _bolt_overlays._extract_taxes(crafted + real, "wallonia")
+    assert time.perf_counter() - started < 2.0
+    assert taxes == _bolt_overlays._extract_taxes(real, "wallonia")
 
 
 def test_the_professional_fetch_reads_the_dutch_edition_beside_it() -> None:

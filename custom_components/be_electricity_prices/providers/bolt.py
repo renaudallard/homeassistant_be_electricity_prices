@@ -146,8 +146,13 @@ _LISTING_URL = "https://www.boltenergie.be/fr/listes-des-prix"
 # discovery as a side effect, and a slug it cannot see is a new product the
 # catalog diff reports as silence. _resolve_variable_suffix does its own
 # numeric filtering instead, which it needs regardless for max(key=int).
+#
+# The file name is one run of word characters ending at ".pdf", which is
+# checked first: split at each "_res_el_fr_" in it, a long name with no
+# ".pdf" after it was read to its end again from every one.
 _CARD_URL_RE = re.compile(
-    r"pricelists/(fix|var)/([a-z_]+)_(res|pro)_el_fr_(\w+)\.pdf", re.IGNORECASE
+    r"pricelists/(fix|var)/(?=\w*\.pdf)([a-z_]+)_(res|pro)_el_fr_(\w+)\.pdf",
+    re.IGNORECASE,
 )
 # Bolt's fix cards print "Carte Tarifaire Bolt Fixe <Month> <Year>" in
 # the header but never expose a parseable valid_until, so the archive

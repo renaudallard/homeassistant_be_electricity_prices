@@ -126,10 +126,21 @@ def _extract_legacy_energy(
         # Values render as "c€13,27/kWh", the label sometimes on the line
         # above and sometimes inline, so allow a bounded gap but never cross
         # into another label's value.
-        m = re.search(
-            rf"{label}[^\n]*\n?[^c\n]*c€\s*([\d.,]+)\s*/\s*kWh", text, re.IGNORECASE
-        )
-        return to_float(m.group(1)) / 100.0 if m else None
+        #
+        # A later label on a line can only find a value the first one on it
+        # found, so a line is read once: tried from each, its rest was read
+        # again from every label and every place in it, the square of a long
+        # line.
+        tried = -1
+        for head in re.finditer(label, text, re.IGNORECASE):
+            if head.end() <= tried:
+                continue
+            m = _LEGACY_VALUE_RE.match(text, head.end())
+            if m is not None:
+                return to_float(m.group(1)) / 100.0
+            line_end = text.find("\n", head.end())
+            tried = len(text) if line_end < 0 else line_end
+        return None
 
     mono = _rate(r"Co[ûu]t de l['’]énergie\s+Simple")
     if mono is None:
@@ -193,18 +204,14 @@ def _extract_energy(
     # that row (variable cards) and sometimes drops it entirely (fixed
     # cards), so we can't anchor on a fixed offset; restricting to the
     # span between the two subheads is the stable invariant.
-    span = re.search(
-        r"Prix de l'électricité verte.*?Jour\s+Nuit(.*?)Jour\s+Nuit",
-        text,
-        re.S,
-    )
+    span = _green_block(text)
     pairs = (
         re.findall(
             r"^[ \t]*([\d.,]+)[ \t]+([\d.,]+)[ \t]*$",
-            span.group(1),
+            span,
             re.MULTILINE,
         )
-        if span
+        if span is not None
         else []
     )
     if inline_bihourly:
@@ -385,12 +392,13 @@ def check_quarter_table(text: str, energy: EnergyRates, label: str) -> None:
         or energy.formula_factor is None
     ):
         return
-    match = _QUARTER_MONO_INDEX_RE.search(text)
-    if match is None:
+    found = _quarter_mono_index(text)
+    if found is None:
         return
-    index = to_float(match.group(2)) / 1000.0
+    head, row = found
+    index = to_float(row.group(1)) / 1000.0
     priced = energy.formula_factor * index + (energy.formula_base or 0.0)
-    named = " ".join(match.group(1).split())
+    named = " ".join(head.group(1).split())
     if abs(priced - energy.current) > _TABLE_TOLERANCE and named != _quarter_before(
         label
     ):
@@ -399,6 +407,22 @@ def check_quarter_table(text: str, energy: EnergyRates, label: str) -> None:
             f"prices its monthly rate at {priced * 100.0:.2f} c/kWh, but it "
             f"prints {energy.current * 100.0:.2f}"
         )
+
+
+def _quarter_mono_index(text: str) -> tuple[re.Match[str], re.Match[str]] | None:
+    """The card's first quarter heading and the first single-meter row after
+    it, or ``None``.
+
+    Found one after the other: as one lazy pattern, a card naming the quarter
+    over and over with no row after it was read to its end again from each
+    heading. The first heading is the one to read from, since a row after a
+    later heading is after the first one too.
+    """
+    head = _QUARTER_INDEX_RE.search(text)
+    if head is None:
+        return None
+    row = _QUARTER_MONO_ROW_RE.search(text, head.end())
+    return None if row is None else (head, row)
 
 
 def quarter_indices(text: str) -> tuple[str, dict[str, float]] | None:
@@ -412,9 +436,10 @@ def quarter_indices(text: str) -> tuple[str, dict[str, float]] | None:
     or one of its meter rows does not read. The card of the quarter after
     prints the indices a quarter's months settle at (``bolt.settle_month``).
     """
-    head = _QUARTER_MONO_INDEX_RE.search(text)
-    if head is None:
+    found = _quarter_mono_index(text)
+    if found is None:
         return None
+    head = found[0]
     table = text[head.start() :]
     indices: dict[str, float] = {}
     for field, label in _REGISTER_ROWS:
@@ -640,7 +665,10 @@ def _extract_injection(text: str) -> InjectionRates | None:
     a month that ever prints a negative feed-in indicative is captured
     instead of failing the match and dropping the credit.
     """
-    m = re.search(r"Injection\b.*?Prix mensuel\s+(-?[\d.,]+)\s+-?[\d.,]+", text, re.S)
+    # The first row after the first "Injection": as one pattern, a card with
+    # no row after it was read to its end again from every later one.
+    head = _INJECTION_HEAD_RE.search(text)
+    m = None if head is None else _INJECTION_MONTHLY_RE.search(text, head.end())
     if m:
         current = to_float(m.group(1)) / 100.0
         return _with_slot_formula(text, current)
@@ -686,11 +714,9 @@ _QUARTER_INDEX_RE = re.compile(r"Belpex\s+(Q[1-4]\s+\d{4})")
 _LEGACY_INJECTION_TABLE_RE = re.compile(
     r"Belpex\s+(Q[1-4]\s+\d{4})\s*\(€/MWh\)\s*(-?[\d,]+)\s+(-?[\d,]+)\s+(-?[\d,]+)"
 )
-# The same table's single-meter row: the quarter it names and its index,
-# "Belpex Q3 2026 ... Simple 139,36 €/MWh".
-_QUARTER_MONO_INDEX_RE = re.compile(
-    r"Belpex\s+(Q[1-4]\s+\d{4}).*?Simple\s+([\d.,]+)\s*€/MWh", re.S
-)
+# The same table's single-meter row, "Belpex Q3 2026 ... Simple 139,36 €/MWh":
+# its index, read after the quarter heading (``_quarter_mono_index``).
+_QUARTER_MONO_ROW_RE = re.compile(r"Simple\s+([\d.,]+)\s*€/MWh")
 # The table's meter rows, by the rate each prices: "Simple 139,36 €/MWh",
 # "Jour 147,78", "Nuit 132,12" and "Exclusif nuit 132,12" on the October 2026
 # card, each label at the start of its line, which keeps the injection rows
@@ -732,7 +758,40 @@ _IMPACT_INJECTION_FIELDS = ("impact_eco", "impact_medium", "impact_pic")
 # every residential entry bills on, and a helper default is where a reader
 # would not look for it.
 _RESIDENTIAL_VAT = 1.0 + VAT_RATE_REDUCED
-_VAT_PHRASE_RE = re.compile(r"(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE)
+# Read from the start of the digits: tried from each digit of a long run, the
+# run was read again from every one.
+_VAT_PHRASE_RE = re.compile(r"(?<!\d)(\d+)\s*%\s*(?:TVA|BTW)", re.IGNORECASE)
+# A legacy card's value after its label: the first "c" of the line below, or
+# else the last "c€" on the label's own line that reads as one. Spelt
+# "[^\n]*\n?[^c\n]*c€", the two scans shared that line and each "c" was tried
+# again from every place before it.
+_LEGACY_VALUE_RE = re.compile(
+    r"(?:[^\n]*\n[^c\n]*|[^\n]*)c€\s*([\d.,]+)\s*/\s*kWh", re.IGNORECASE
+)
+# The "Prix de l'électricité verte" block and its two "Jour Nuit" subheads.
+_GREEN_BLOCK = "Prix de l'électricité verte"
+_JOUR_NUIT_RE = re.compile(r"Jour\s+Nuit")
+# The feed-in's "Prix mensuel" row, the first after its heading.
+_INJECTION_HEAD_RE = re.compile(r"Injection\b")
+_INJECTION_MONTHLY_RE = re.compile(r"Prix mensuel\s+(-?[\d.,]+)\s+-?[\d.,]+")
+
+
+def _green_block(text: str) -> str | None:
+    """What lies between the two "Jour Nuit" subheads of the first "Prix de
+    l'électricité verte" block, or ``None``.
+
+    The first subhead after the block and the first after that. As one
+    pattern, a card with no second subhead was read to its end again from
+    every later block heading and subhead.
+    """
+    at = text.find(_GREEN_BLOCK)
+    if at < 0:
+        return None
+    first = _JOUR_NUIT_RE.search(text, at + len(_GREEN_BLOCK))
+    if first is None:
+        return None
+    second = _JOUR_NUIT_RE.search(text, first.end())
+    return None if second is None else text[first.end() : second.start()]
 
 
 @dataclass(frozen=True)
@@ -797,9 +856,11 @@ _PROMO_INJECTION_RE = re.compile(
 # The Dutch edition's sentence for the same offer: "geniet je van 10,0 c€/kWh
 # (excl. btw) korting" in October 2026, "van € 470 (incl. btw) korting" in
 # August. Only its basis is read, and only where its figure is the French
-# card's.
+# card's. The figure is read from the start of its digits: tried from each
+# digit of a long run, the run was read again from every one.
 _PROMO_DUTCH_RE = re.compile(
-    r"(\d+(?:,\d+)?)\s*(?:c€\s*/\s*kWh\s*)?(\(\s*(?:incl|excl)\.?\s*btw\s*\))\s*korting",
+    r"(?<!\d)(\d+(?:,\d+)?)\s*(?:c€\s*/\s*kWh\s*)?"
+    r"(\(\s*(?:incl|excl)\.?\s*btw\s*\))\s*korting",
     re.IGNORECASE,
 )
 
