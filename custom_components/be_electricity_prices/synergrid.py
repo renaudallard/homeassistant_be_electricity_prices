@@ -65,7 +65,7 @@ import struct
 import tempfile
 import zipfile
 import zlib
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -434,6 +434,7 @@ class WorkbookZip:
             self._file.close()
             raise
         self._left = budget
+        self._vet: Callable[[bytes], None] | None = None
 
     def __enter__(self) -> WorkbookZip:
         return self
@@ -445,8 +446,9 @@ class WorkbookZip:
         self._zip.close()
         self._file.close()
 
-    def open(self, name: str, mode: str = "r") -> _Member:
-        """Member ``name`` as a file whose reads count against the budget."""
+    def open(self, name: str, mode: str = "r") -> _Member | io.BytesIO:
+        """Member ``name`` as a file whose reads count against the budget,
+        read whole and vetted first once :meth:`allow` was given a vet."""
         if mode != "r":
             raise ValueError(f"workbook members are read only, not {mode!r}")
         info = self._zip.getinfo(name)
@@ -454,18 +456,28 @@ class WorkbookZip:
             raise ValueError(
                 f"workbook member {name} is not plainly stored or deflated"
             )
-        return _Member(self._zip.open(info), self)
+        member = _Member(self._zip.open(info), self)
+        if self._vet is None:
+            return member
+        with member:
+            data = member.read()
+        self._vet(data)
+        return io.BytesIO(data)
 
     def read(self, name: str) -> bytes:
         """Member ``name`` whole, counted against the budget."""
         with self.open(name) as member:
             return member.read()
 
-    def allow(self, more: int) -> None:
+    def allow(self, more: int, vet: Callable[[bytes], None] | None = None) -> None:
         """Let the reads that follow inflate ``more`` bytes besides what the
         budget has left: a sheet gets its own, past what the parts read
-        before it were allowed."""
+        before it were allowed. With ``vet``, a member opened from then on is
+        read whole and passed to it first, so a reader that builds what a
+        sheet's records say as it opens the sheet, as pyxlsb does, is never
+        handed one ``vet`` refuses."""
         self._left += more
+        self._vet = vet
 
     def _take(self, fh: IO[bytes], size: int) -> bytes:
         """Up to ``size`` bytes of a member, all of it for a negative size.
@@ -733,6 +745,23 @@ _RLP_FIRST_CURVE_COLUMN = 7
 _RLP_MONTH_COLUMN, _RLP_DAY_COLUMN, _RLP_HOUR_COLUMN = 2, 3, 4
 _RLP_YEAR_COLUMN = 1
 _RLP_CURVE_ROUNDING = 12
+# The sheet's size, measured on 6 November 2026 over the 2024 to 2026 files:
+# 32 columns, and 35.041 to 35.139 rows, one per quarter-hour of the year
+# under its header rows. pyxlsb builds every row as wide as the dimension
+# the sheet declares, and every row up to the last one a record numbers,
+# empty or not, so both are held to these: a 596 byte file declaring four
+# billion columns ran 27 s and took 1,4 GB.
+_RLP_MAX_COLUMNS: Final = 64
+_RLP_MAX_ROWS: Final = 40_000
+# And its records, measured on the same files: 1.261.502 to 1.265.018, three
+# of them column records (BrtColInfo). pyxlsb walks every record as it reads
+# the sheet, and keeps every column record ahead of the data: a 153 KB file
+# of three and a half million of them held 376 MB for 132 s inside the
+# budget. So the sheet is scanned before pyxlsb is handed it, and refused past
+# a column record per column it may declare, or past the records the largest
+# sheet it may declare holds, a row record and a cell per column a row.
+_BIFF12_COLUMN: Final = 0x003C
+_RLP_MAX_RECORDS: Final = _RLP_MAX_ROWS * (_RLP_MAX_COLUMNS + 1)
 
 
 def _parse_rlp_blends(path: Path, blends: Collection[str]) -> dict[str, RlpWeights]:
@@ -751,9 +780,9 @@ def _parse_rlp_blends(path: Path, blends: Collection[str]) -> dict[str, RlpWeigh
         WorkbookZip(path, _PARTS_MAX_UNPACKED_BYTES) as z,
         Workbook(fp=z) as workbook,
     ):
-        z.allow(_RLP_MAX_UNPACKED_BYTES)
+        z.allow(_RLP_MAX_UNPACKED_BYTES, vet=_check_rlp_records)
         with workbook.get_sheet(_RLP_SHEET) as sheet:
-            groups = _rlp_groups_from_rows([c.v for c in row] for row in sheet.rows())
+            groups = _rlp_groups_from_rows(_rlp_rows(sheet))
     out: dict[str, RlpWeights] = {}
     for blend in dict.fromkeys(blends):
         try:
@@ -763,6 +792,60 @@ def _parse_rlp_blends(path: Path, blends: Collection[str]) -> dict[str, RlpWeigh
     if not out:
         raise ValueError("RLP sheet yielded no usable blend")
     return out
+
+
+def _check_rlp_records(data: bytes) -> None:
+    """Refuse an RLP sheet holding more records or column records than the
+    RLP sheet may, or a record running past the sheet's end. Each record's
+    type and size are read as pyxlsb's reader reads them: the type's bytes
+    low first while the top bit is set, the size seven bits a byte, at most
+    four bytes each, and a type or size cut short ends the sheet."""
+    at, end = 0, len(data)
+    records = columns = 0
+    while at < end:
+        kind = 0
+        for shift in (0, 8, 16, 24):
+            if at == end:
+                return
+            byte = data[at]
+            at += 1
+            kind += byte << shift
+            if not byte & 0x80:
+                break
+        size = 0
+        for shift in (0, 7, 14, 21):
+            if at == end:
+                return
+            byte = data[at]
+            at += 1
+            size += (byte & 0x7F) << shift
+            if not byte & 0x80:
+                break
+        at += size
+        if at > end:
+            raise ValueError("RLP sheet holds a record running past its end")
+        records += 1
+        if records > _RLP_MAX_RECORDS:
+            raise ValueError(f"RLP sheet holds more than {_RLP_MAX_RECORDS} records")
+        if kind == _BIFF12_COLUMN:
+            columns += 1
+            if columns > _RLP_MAX_COLUMNS:
+                raise ValueError(
+                    f"RLP sheet holds more than {_RLP_MAX_COLUMNS} column records"
+                )
+
+
+def _rlp_rows(sheet: Any) -> Iterator[list[Any]]:
+    """The sheet's rows as values, refusing a sheet wider or longer than the
+    RLP's: the width before a row is built, the length as the rows come."""
+    dimension = sheet.dimension
+    width = None if dimension is None else dimension.c + dimension.w
+    if width is None or width > _RLP_MAX_COLUMNS:
+        raise ValueError(f"RLP sheet declares {width} columns")
+    for count, row in enumerate(sheet.rows(), 1):
+        if count > _RLP_MAX_ROWS:
+            raise ValueError(f"RLP sheet holds more than {_RLP_MAX_ROWS} rows")
+        yield [c.v for c in row]
 
 
 def _rlp_groups_from_rows(rows: Iterable[list[Any]]) -> _RlpGroups:

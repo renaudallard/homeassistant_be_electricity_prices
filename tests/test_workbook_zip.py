@@ -397,3 +397,90 @@ def test_an_ex_ante_sheet_past_its_shape_is_refused(
     not the ex-ante curve, and what reading it costs is held to that."""
     with pytest.raises(ValueError, match=refusal):
         _spp(_ex_ante(body), tmp_path)
+
+
+def _xlsb(sheet: bytes) -> bytes:
+    """An RLP workbook holding ``sheet``."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, part in _rlp_parts().items():
+            z.writestr(name, part)
+        z.writestr("xl/worksheets/sheet1.bin", sheet)
+    return buf.getvalue()
+
+
+# A quarter-hour of 1 July 2026 at midnight, local time, in the sheet's
+# layout: CET, Year, Month, Day, h, Min, Date, then two curves.
+_RLP_QUARTER = [46204.0, 2026.0, 7.0, 1.0, 0.0, 0.0, 46204.0, 0.25, 0.25]
+
+
+def test_an_rlp_sheet_of_the_real_width_reads(tmp_path: Path) -> None:
+    """32 columns, as every sheet from 2024 to 2026 declares: a header row,
+    two rows with no figures, then four quarters of one hour."""
+    rows = [(0, [0.0] * 9)] + [(r, _RLP_QUARTER) for r in range(3, 7)]
+    sheet = _rlp_sheet((0, 6, 0, 31), rows)
+    assert _rlp(_xlsb(sheet), tmp_path) == {"distinct": {(7, 1, 0): 1.0}}
+
+
+def test_an_rlp_sheet_declaring_more_columns_is_refused_unbuilt(
+    tmp_path: Path,
+) -> None:
+    """pyxlsb builds every row as wide as the dimension declares, so the
+    width is held before a row is built: 596 bytes declaring four billion
+    columns ran 27 s and took 1,4 GB."""
+    sheet = _rlp_sheet((0, 1, 0, 99_999), [(0, [0.0]), (1, _RLP_QUARTER)])
+    with pytest.raises(ValueError, match="declares 100000 columns"):
+        _rlp(_xlsb(sheet), tmp_path)
+
+
+def test_an_rlp_sheet_numbering_a_row_past_a_year_is_refused(tmp_path: Path) -> None:
+    """pyxlsb builds every row up to the one a record numbers, empty rows
+    included, whatever the dimension says: the rows are counted as they
+    come and the sheet refused past a year's quarter-hours."""
+    sheet = _rlp_sheet((0, 1, 0, 31), [(0, [0.0]), (50_000, _RLP_QUARTER)])
+    with pytest.raises(ValueError, match="more than 40000 rows"):
+        _rlp(_xlsb(sheet), tmp_path)
+
+
+def test_an_rlp_sheet_of_column_records_is_refused_before_pyxlsb_keeps_them(
+    tmp_path: Path,
+) -> None:
+    """pyxlsb keeps every column record ahead of the sheet data: a 153 KB
+    file of three and a half million of them held 376 MB for 132 s inside the
+    budget. The sheet's records are scanned before pyxlsb is handed it."""
+    column = _record(0x003C, struct.pack("<IIII", 0, 0, 0, 0))
+    sheet = (
+        _record(0x0181)
+        + _record(0x0194, struct.pack("<IIII", 0, 1, 0, 31))
+        + column * 300_000
+        + _record(0x0191)
+        + _record(0x0192)
+        + _record(0x0182)
+    )
+    raised, peak = _held(lambda: _rlp(_xlsb(sheet), tmp_path))
+    assert isinstance(raised, ValueError), raised
+    assert "more than 64 column records" in str(raised)
+    assert peak < 24 * _MIB, f"held {peak / _MIB:.0f} MiB"
+
+
+def test_an_rlp_sheet_of_more_records_than_the_rlp_s_is_refused(tmp_path: Path) -> None:
+    """pyxlsb walks every record of the sheet, so the sheet holds no more
+    than a row record and a cell per column for each row it may hold."""
+    begin, other = _record(0x0181), _record(0x0895)
+    sheet = _rlp_sheet((0, 1, 0, 31), [(0, [0.0])])
+    assert sheet.startswith(begin)
+    sheet = begin + other * 2000 + sheet[len(begin) :]
+    with (
+        patch.object(synergrid, "_RLP_MAX_RECORDS", 1000, create=True),
+        pytest.raises(ValueError, match="more than 1000 records"),
+    ):
+        _rlp(_xlsb(sheet), tmp_path)
+
+
+def test_an_rlp_sheet_whose_last_record_runs_past_its_end_is_refused(
+    tmp_path: Path,
+) -> None:
+    rows = [(0, [0.0] * 9)] + [(r, _RLP_QUARTER) for r in range(3, 7)]
+    sheet = _rlp_sheet((0, 6, 0, 31), rows) + _record(0x0005, b"\0" * 16)[:-4]
+    with pytest.raises(ValueError, match="running past its end"):
+        _rlp(_xlsb(sheet), tmp_path)

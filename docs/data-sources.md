@@ -938,7 +938,8 @@ distributienetbeheerders". `fetch_rlp_blends` downloads
 (the 2026 address; Synergrid has moved the file every year, so when that address
 answers an HTTP error `_listed_url` reads the year's link off Synergrid's download
 page instead; about 3,4 MB, a binary workbook read with `pyxlsb`, the one runtime
-dependency added for it), `_rlp_groups_from_rows` reduces its `RLP96UbyDGO` sheet
+dependency added for it, its size held as [what a workbook may unpack to](#what-a-workbook-may-unpack-to)
+says), `_rlp_groups_from_rows` reduces its `RLP96UbyDGO` sheet
 to its distinct DSO curves, and each DSO **blend** the caller asks for is built
 from those as one hourly curve keyed by LOCAL (month, day, hour), all from the one
 download.
@@ -1228,6 +1229,26 @@ its value's own end event. A sheet of more rows than a year's quarter-hours
 under a header (`_SPP_MAX_ROWS`, 40.000 against the 35.137 of 2024) or nested
 deeper than `_SPP_MAX_DEPTH` is refused, so the work a sheet of empty rows asks
 for is bounded with the memory.
+
+pyxlsb builds every row of the RLP sheet as wide as the dimension the sheet
+declares, and every row up to the last one a record numbers, empty ones
+included: a 596 byte file declaring four billion columns ran 27 s and took
+1,4 GB. So `_rlp_rows` holds the declared width to `_RLP_MAX_COLUMNS`, 64,
+before a row is built, where every sheet from 2024 to 2026 declares 32, and
+counts the rows as they come against `_RLP_MAX_ROWS`, 40.000, where those
+sheets hold 35.041 to 35.139.
+
+pyxlsb also walks every record of the sheet as it opens it, and keeps every
+column record ahead of the data: a 153 KB file of three and a half million of
+them held 376 MB for 132 s inside the budget. So the sheet is scanned before
+pyxlsb is handed it (`_check_rlp_records`, the vet `WorkbookZip.allow` takes),
+each record's type and size read as pyxlsb's reader reads them, and refused
+past 64 column records, past `_RLP_MAX_RECORDS`, the 2.600.000 records of
+40.000 rows of a row record and 64 cells, or at a record running past its end.
+The real sheets hold 1.261.502 to 1.265.018 records, three of them column
+records, so one inside the bounds walks at most about twice the records a
+real one does. The scan takes 1,1 s on a sheet whose parse takes 17 to 18 s
+of CPU on a Raspberry Pi.
 
 ## Part 4: the CREG home charging reimbursement rate (`creg_ev.py`)
 
