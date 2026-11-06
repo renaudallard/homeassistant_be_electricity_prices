@@ -6449,6 +6449,16 @@ BYTES_WARN_THRESHOLD = 5_000_000
 #     plus, since the reissue of that day prints no green energy cost, the
 #     archived card of each it is read from, 20 more at ~175 KB, and the
 #     archive's product listings. Allow 10 MB.
+#   * energyvision: ~6.43 MB measured on 6 November 2026 (issue #164), 64
+#     fetches of which 14 bodies: eleven November cards at 423-614 KB, nine
+#     EnergyVision and two Brusol, where the October ones were 221-246 KB
+#     but one; the withdrawn one-year Walloon contract's October card,
+#     236 KB; and two Brusol pages. The daily total rose from 4.4 MB on 1
+#     November to 6.43 MB on the 6th. Allow 8 MB, which still holds a
+#     November card in place of the withdrawn one. Latency stays on the 90 s
+#     default: from 1 to 6 November the pass summed 24-66 s on every run but
+#     the 5th's, whose 103-116 s came with failing fetches, so the drift
+#     check skipped it.
 _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     # bolt, engie and mega each gained a professional edition of most of
     # their catalogue (August 2026), which roughly doubles the number of
@@ -6463,6 +6473,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     "octaplus": 40_000_000,
     "frank": 30_000_000,
     "luminus": 10_000_000,
+    "energyvision": 8_000_000,
 }
 
 # Per-supplier latency budgets (override the global). NOTE: elapsed_s
