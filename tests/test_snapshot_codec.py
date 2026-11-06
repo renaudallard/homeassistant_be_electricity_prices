@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import copy
+import json
+import re
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from custom_components.be_electricity_prices import snapshot_months
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     EnergyRates,
@@ -17,9 +24,21 @@ from custom_components.be_electricity_prices.providers._rates import (
     TimeOfUseRates,
     VariableRates,
 )
+from custom_components.be_electricity_prices.providers.base import (
+    DsoOverlay,
+    SupplierSnapshot,
+    TaxOverlay,
+)
 from custom_components.be_electricity_prices.snapshot_codec import (
+    _MAX_PER_KWH,
+    _figure_bound,
+    _figure_fields,
     _snapshot_from_dict,
     _snapshot_to_dict,
+)
+from custom_components.be_electricity_prices.snapshot_months import (
+    ArchivedCard,
+    _archived_card_from_github,
 )
 from tests import make_snapshot
 
@@ -448,3 +467,107 @@ def test_every_snapshot_field_survives_the_round_trip() -> None:
     back = _snapshot_from_dict(_snapshot_to_dict(snap, NOW))
     for name in values:
         assert getattr(back, name) == getattr(snap, name), name
+
+
+# A row of the card archive as the repository serves it, for Trevion Groene
+# Stroom Flex in Flanders, September 2026.
+_ARCHIVED_ROW = json.loads(
+    (
+        Path(__file__).parent
+        / "fixtures"
+        / "archive_row_trevion_groene_stroom_flex_flanders_2026_09.json"
+    ).read_text(encoding="utf-8")
+)
+
+
+async def _served(row: dict[str, Any]) -> ArchivedCard | None:
+    """``row`` served by the card archive, through the reader that bills it."""
+    # json.dumps writes a NaN as the literal json.loads reads back.
+    body = json.dumps(row)
+
+    async def _body(*_args: object, **_kw: object) -> str:
+        return body
+
+    with patch.object(snapshot_months, "fetch_text", _body):
+        return await _archived_card_from_github(
+            MagicMock(), "trevion", "groene_stroom_flex", "flanders", date(2026, 9, 1)
+        )
+
+
+async def test_a_real_archive_row_still_reads() -> None:
+    card = await _served(_ARCHIVED_ROW)
+    assert card is not None
+    assert card.snapshot.publication_label == "2026-09"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [987.654, float("nan"), -5.0, "0.0159"],
+    ids=["absurd", "NaN", "negative", "text"],
+)
+async def test_an_archive_row_whose_rates_are_not_figures_reads_as_missing(
+    value: object,
+) -> None:
+    """The archive is billed as it reads: a row whose energy leg holds 987,654
+    EUR/kWh, NaN or -5 was billed as it stood. Such a row is refused as one
+    that does not decode, so the month is asked elsewhere."""
+    row = copy.deepcopy(_ARCHIVED_ROW)
+    for key, figure in row["energy"].items():
+        if isinstance(figure, float):
+            row["energy"][key] = value
+    assert await _served(row) is None
+
+
+@pytest.mark.parametrize(
+    ("where", "value"),
+    [
+        (("dsos", "fluvius_antwerpen", "transport"), float("inf")),
+        (("dsos", "fluvius_antwerpen", "brussels_osp_by_tier"), {"t1": -1e6}),
+        (("taxes", "vat_rate"), 1.5),
+        (("taxes", "federal_excise_bands"), [[20000, float("nan")]]),
+        (("injection", "factor"), 5000.0),
+        (("welcome_credit_eur",), 1e9),
+    ],
+    ids=["network", "OSP tier", "VAT", "excise band", "feed-in factor", "credit"],
+)
+async def test_an_archive_row_holding_any_figure_past_its_unit_reads_as_missing(
+    where: tuple[str, ...], value: object
+) -> None:
+    """Every figure a row holds is held to its unit, the network, the taxes,
+    the feed-in and the credits as much as the energy leg."""
+    row = copy.deepcopy(_ARCHIVED_ROW)
+    part = row
+    for key in where[:-1]:
+        part = part[key]
+    part[where[-1]] = value
+    assert await _served(row) is None
+
+
+def test_every_figure_held_as_a_rate_per_kwh_is_named_as_one() -> None:
+    """A figure the bounds do not name is held as a rate per kWh, the tightest
+    of them, so a field added in another unit and left out of the table would
+    refuse every row that sets it. No field so held is named for another
+    unit."""
+    other_unit = re.compile(
+        r"year|month|_eur$|kva|_kw_|vat|pct|share|osp|power_term|factor"
+        r"|(?<!per_)kwh(?!_rate)"
+    )
+    held = [
+        (cls.__name__, name)
+        for cls in (
+            FixedRates,
+            VariableRates,
+            DynamicRates,
+            SpotMonthlyRates,
+            TimeOfUseRates,
+            ImpactRates,
+            InjectionRates,
+            DsoOverlay,
+            TaxOverlay,
+            SupplierSnapshot,
+        )
+        for name, _optional in _figure_fields(cls)
+        if _figure_bound(name) == _MAX_PER_KWH
+    ]
+    assert held, "no figure is held as a rate per kWh"
+    assert not [f"{cls}.{name}" for cls, name in held if other_unit.search(name)]

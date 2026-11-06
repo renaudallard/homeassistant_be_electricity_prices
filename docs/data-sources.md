@@ -602,6 +602,15 @@ not hold (`names_other_month`, `providers/_validity.py`): the archive files a li
 the month its title names, so such a row was written over, as the replay of 3 November 2026
 did to four October rows with November's cards (issue #156). A row mirrored from a supplier's
 archive is not held to it, since Ecopower's dynamic card stays in force across months.
+A row holding a figure that is not a finite number of its unit's size counts as one the
+archive does not hold too (`_archived_snapshot_from_dict`, `snapshot_codec.py`): the archive is
+billed as it reads, and a broken or tampered row would bill a NaN, a string or 987 EUR/kWh. A
+rate per kWh is held within 2 EUR either side of zero, a yearly, monthly or one-off sum within
+10.000 EUR, a factor within 100, a fraction within 1 and a quantity in kWh or months within
+100 million (`_MAX_PER_KWH` and the rest), where the 4.894 rows on file on 6 November 2026 run
+-0,04 to 0,44 EUR/kWh, 0 to 1.089 EUR, 0 to 9,22, 0 to 0,33 and 12 to 1.000.000. The figures
+are found from the dataclasses' annotations, so a field added later is held too, as a rate per
+kWh unless `_FIGURE_BOUNDS` names its unit.
 A month's card whose network table lacks the entry's area while printing
 others (`_short_of`) keeps its own energy, taxes and fees and takes that one
 area's overlay from the nearest card of the same calendar year that prints it

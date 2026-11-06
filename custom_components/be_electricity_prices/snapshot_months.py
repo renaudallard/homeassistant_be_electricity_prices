@@ -73,8 +73,8 @@ from .providers.base import (
 )
 from .snapshot_areas import _search_end, _short_of, _with_nearest_area
 from .snapshot_codec import (
-    _DEGRADED_MIN_SCHEMA_VERSION,
     _SNAPSHOT_SCHEMA_VERSION,
+    _archived_snapshot_from_dict,
     _snapshot_from_dict,
     _snapshot_to_dict,
 )
@@ -479,9 +479,11 @@ async def _archived_card_from_github(
     a month the project's archive does not hold.
 
     None on a 404, which is a month the archive predates, a contract it does
-    not cover or a row never written, on a row that no longer decodes, and
-    on a live row whose card names another month. A transient failure propagates so the caller's negative cache
-    treats it like a supplier archive blip and asks again later.
+    not cover or a row never written, on a row that no longer decodes or
+    holds a figure that is not a finite number of its unit's size, and on a
+    live row whose card names another month. A transient failure propagates
+    so the caller's negative cache treats it like a supplier archive blip and
+    asks again later.
     """
     url = (
         f"{CARD_ARCHIVE_URL}/{supplier}/{contract}/{region}/"
@@ -495,9 +497,7 @@ async def _archived_card_from_github(
         return None
     try:
         row = json.loads(body)
-        snapshot = _snapshot_from_dict(
-            row, min_schema_version=_DEGRADED_MIN_SCHEMA_VERSION
-        )
+        snapshot = _archived_snapshot_from_dict(row)
     except (KeyError, TypeError, ValueError) as err:
         _LOGGER.debug("card archive row %s does not decode: %s", url, err)
         return None

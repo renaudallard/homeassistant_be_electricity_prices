@@ -37,7 +37,7 @@ from __future__ import annotations
 import logging
 from dataclasses import fields
 from datetime import date, datetime
-from typing import Any, override
+from typing import Any, get_args, get_type_hints, override
 
 from homeassistant.helpers.storage import Store
 
@@ -827,6 +827,126 @@ def _snapshot_from_dict(
             data.get("welcome_credit_signing_month")
         ),
     )
+
+
+# How far a figure of a row read off the card archive may run, by its unit.
+# The archive is billed as it reads, so a row holding a figure that is not a
+# finite number of its unit's size is refused whole, as a row that does not
+# decode is. Measured on 6 November 2026 over the 4.894 rows on file: the
+# rates per kWh run -0,04 to 0,44 EUR, the yearly, monthly and one-off sums 0
+# to 1.089 EUR, the factors 0 to 9,22, the fractions 0 to 0,33 and the
+# quantities, in kWh or months, 12 to 1.000.000.
+_MAX_PER_KWH = 2.0
+_MAX_SUM = 10_000.0
+_MAX_FACTOR = 100.0
+_MAX_FRACTION = 1.0
+_MAX_QUANTITY = 1e8
+# The figures in another unit than EUR per kWh, by name. Every other figure a
+# row holds is a rate per kWh, save a factor, which is named as one.
+_FIGURE_BOUNDS = {
+    **dict.fromkeys(
+        (
+            "yearly_fixed_fee",
+            "yearly_fixed_fee_exclusive_night",
+            "data_management_per_year",
+            "capacity_eur_per_kw_year",
+            "prosumer_eur_per_kva_year",
+            "brussels_osp_by_tier",
+            "brussels_power_term_above_13kva",
+            "energy_fund_eur_per_month",
+            "supplier_prosumer_eur_per_kva_year",
+            "welcome_credit_eur",
+            "welcome_credit_cap_eur",
+            "welcome_credit_direct_debit_eur",
+            "direct_debit_discount_eur",
+        ),
+        _MAX_SUM,
+    ),
+    **dict.fromkeys(
+        (
+            "vat_rate",
+            "published_vat_rate",
+            "card_vat_rate",
+            "assumed_vat_rate",
+            "welcome_credit_pct_of_energy",
+            "tier_formula_share",
+        ),
+        _MAX_FRACTION,
+    ),
+    **dict.fromkeys(
+        ("tier_kwh", "welcome_credit_kwh", "welcome_credit_after_months"),
+        _MAX_QUANTITY,
+    ),
+}
+
+
+def _figure_bound(name: str) -> float:
+    """How far figure ``name`` may run either side of zero."""
+    if "factor" in name:
+        return _MAX_FACTOR
+    return _FIGURE_BOUNDS.get(name, _MAX_PER_KWH)
+
+
+# Each class's figure fields, read off its annotations once: reading them
+# for every part of every row took 40 ms a row.
+_FIGURE_FIELDS: dict[type, tuple[tuple[str, bool], ...]] = {}
+
+
+def _figure_fields(cls: type) -> tuple[tuple[str, bool], ...]:
+    """The fields of ``cls`` holding one figure, each with whether it may be
+    None. Read off the annotations, so a field added later is held too."""
+    held = _FIGURE_FIELDS.get(cls)
+    if held is None:
+        found = []
+        for name, hint in get_type_hints(cls).items():
+            kinds = get_args(hint) or (hint,)
+            if float in kinds or int in kinds:
+                found.append((name, type(None) in kinds))
+        held = _FIGURE_FIELDS[cls] = tuple(found)
+    return held
+
+
+def _check_figure(name: str, value: object, bound: float) -> None:
+    # A NaN fails both comparisons, and a bool is an int that is no figure.
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not -bound <= value <= bound
+    ):
+        # The row is the archive's: what it holds is quoted short.
+        raise ValueError(f"{name} = {value!r:.40} is not a figure of its unit")
+
+
+def _check_figures(snap: SupplierSnapshot) -> None:
+    """Refuse a card from the archive one of whose figures is not a finite
+    number of its unit's size. Raises ValueError, as a row that does not
+    decode does."""
+    parts: list[object] = [snap, snap.energy, snap.taxes, *snap.dsos.values()]
+    if snap.injection is not None:
+        parts.append(snap.injection)
+    for part in parts:
+        for name, optional in _figure_fields(type(part)):
+            value = getattr(part, name)
+            if not (optional and value is None):
+                _check_figure(name, value, _figure_bound(name))
+    for overlay in snap.dsos.values():
+        tiers = overlay.brussels_osp_by_tier
+        if tiers is not None and not isinstance(tiers, dict):
+            raise ValueError(f"brussels_osp_by_tier = {tiers!r:.40} is not a table")
+        for value in (tiers or {}).values():
+            _check_figure("brussels_osp_by_tier", value, _MAX_SUM)
+    for threshold, rate in snap.taxes.federal_excise_bands or ():
+        _check_figure("federal_excise_bands", threshold, _MAX_QUANTITY)
+        _check_figure("federal_excise_bands", rate, _MAX_PER_KWH)
+
+
+def _archived_snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
+    """A row of the remote card archive, read at the degraded schema floor
+    and refused, raising ValueError, when one of its figures is not a finite
+    number of its unit's size (``_check_figures``)."""
+    snap = _snapshot_from_dict(data, min_schema_version=_DEGRADED_MIN_SCHEMA_VERSION)
+    _check_figures(snap)
+    return snap
 
 
 def _iso_date(value: Any) -> date | None:
