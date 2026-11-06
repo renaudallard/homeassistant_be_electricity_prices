@@ -37,7 +37,7 @@ from dataclasses import replace
 from datetime import date
 from typing import Any
 
-from ._parse import SIGN_CHARS, parse_sign, to_float
+from ._parse import LINE_BREAK, SIGN_CHARS, parse_sign, to_float
 from ._pdf import _MONTH_NAMES, vat_multiplier
 from ._rates import (
     DynamicRates,
@@ -141,10 +141,16 @@ def _extract_energy(
     # raise if neither matches: every residential Engie card the
     # integration covers carries a yearly fee, so a miss is a layout drift
     # rather than a fee-free contract.
-    fee_match = re.search(r"(\d+[,.]\d+)\s*€/an\s*\n?\s*Type\s*\n?\s*d[©']usage", text)
+    #
+    # The fee is read from the start of its digits, and the blanks before
+    # "Type" and "d'usage", a line break among them, as one run: tried from
+    # each digit of a long number, and with "\s*\n?\s*" free to split a run
+    # of blanks at any place, each cost the square of its run. The Empower
+    # row's line break is read one way for the same reason.
+    fee_match = re.search(r"(?<!\d)(\d+[,.]\d+)\s*€/an\s*Type\s*d[©']usage", text)
     if fee_match is None:
         fee_match = re.search(
-            r"Prix\s+mensuels\s*\n\s*(\d+[,.]\d+)\s+Consommation", text
+            rf"Prix\s+mensuels{LINE_BREAK}(\d+[,.]\d+)\s+Consommation", text
         )
     if fee_match is None:
         raise ExtractorError("Engie: yearly fee row not found")
@@ -438,9 +444,11 @@ def _extract_injection(
 #
 # The index is eSpot_15 from the October 2025 card on and the hourly eSpot
 # before it ("1,3163 + (0,1019 x eSpot)" in September 2025), so the fifth
-# group records which one the card names.
+# group records which one the card names. The blanks before the base's sign
+# are taken whole: shared with those after it when no sign is printed, a run
+# of blanks was split between the two in every way.
 _FORMULA_RE = re.compile(
-    rf"Formule de prix\s+hors\s+TVA\s+([{SIGN_CHARS}]?)\s*([\d,.]+)\s*\+\s*"
+    rf"Formule de prix\s+hors\s+TVA\s++([{SIGN_CHARS}]?)\s*([\d,.]+)\s*\+\s*"
     rf"\(([{SIGN_CHARS}]?)\s*([\d,.]+)\s*x\s*eSpot(_15)?\)"
 )
 # Empower Variable / Empty House index BOTH legs on the monthly EPEXDAM and say
@@ -456,10 +464,17 @@ _FORMULA_RE = re.compile(
 #   Empty House "3,2150 + (0,2150 x EPEXDAM)", bare, one row full stop
 # Easy Variable prints the first over ENDEX101: "- Normal = 2,6113 + (0,1152 x
 # ENDEX101)".
+#
+# A row starts at its dash, its sign or its first digit, never inside a run of
+# blanks or digits, and the label starts past the blanks after its dash. A
+# formula found from a blank or from inside a number is the one found from
+# where these start, but each place of a long run was a start of its own and
+# read the rest of the run again: the square of the run.
 _INDEX_FORMULA_RES: dict[str, re.Pattern[str]] = {
     index: re.compile(
-        rf"(?:[-\u2013]\s*([^=\n]{{1,44}}?)\s*=\s*)?"
-        rf"([{SIGN_CHARS}]?)\s*(\d+[,.]\d+)\s*\+\s*\((\d+[,.]\d+)\s*x\s*{index}\)",
+        rf"(?:[-\u2013]\s*([^=\s][^=\n]{{0,43}}?)\s*=\s*)?"
+        rf"(?:([{SIGN_CHARS}])\s*)?(?<!\d)(\d+[,.]\d+)\s*\+\s*"
+        rf"\((\d+[,.]\d+)\s*x\s*{index}\)",
         re.IGNORECASE,
     )
     for index in ("EPEXDAM", "ENDEX101")
@@ -507,18 +522,27 @@ def _card_index(text: str, index: str) -> float | None:
 # "(Mars 2026: 92,57 EUR/MWh)" - the index the printed prices were computed at,
 # and Easy Variable's "calcule sur la base du parametre ENDEX101 du mois =
 # 118,12 EUR/MWh, d'application pour Aout 2026", the delivery month's own.
+# The EPEXDAM value is read from the start of its digits, its bracket stops at
+# the next "EPEXDAM connue (", which reads the same value, and in both the euro
+# sign with the blanks after it is one optional piece: tried from each digit
+# of a long run, run on from every heading, or with runs of blanks either side
+# of an optional sign, each read its run again from every place in it.
 _INDEX_VALUE_RES: dict[str, re.Pattern[str]] = {
     "EPEXDAM": re.compile(
-        r"EPEXDAM\s+connue\s*\([^)]*?(\d+[,.]\d+)\s*€?\s*/\s*MWh", re.IGNORECASE
+        r"EPEXDAM\s+connue\s*\((?:(?!EPEXDAM\s+connue\s*\()[^)])*?"
+        r"(?<!\d)(\d+[,.]\d+)\s*(?:€\s*)?/\s*MWh",
+        re.IGNORECASE,
     ),
     "ENDEX101": re.compile(
-        r"ENDEX101\s+du\s+mois\s*=\s*(\d+[,.]\d+)\s*€?\s*/\s*MWh", re.IGNORECASE
+        r"ENDEX101\s+du\s+mois\s*=\s*(\d+[,.]\d+)\s*(?:€\s*)?/\s*MWh",
+        re.IGNORECASE,
     ),
 }
 # The same sentence with the month it names: "connue (Septembre 2026: 156,41
 # EUR/MWh)", with or without a space before the colon.
 _EPEXDAM_NAMED_RE = re.compile(
-    r"EPEXDAM\s+connue\s*\(\s*([^\W\d_]+)\s+(20\d{2})\s*:\s*(\d+[,.]\d+)\s*€?\s*/\s*MWh",
+    r"EPEXDAM\s+connue\s*\(\s*([^\W\d_]+)\s+(20\d{2})\s*:\s*(\d+[,.]\d+)"
+    r"\s*(?:€\s*)?/\s*MWh",
     re.IGNORECASE,
 )
 
@@ -562,5 +586,7 @@ def _vat_multiplier(text: str, *, professional: bool = False) -> float:
     return vat_multiplier(text, _VAT_RE)
 
 
-_VAT_RE = re.compile(r"(\d+)\s*%\s*de\s*tva\s*comprise", re.IGNORECASE)
+# Read from the start of the digits: tried from each digit of a long run, the
+# run was read again from every one.
+_VAT_RE = re.compile(r"(?<!\d)(\d+)\s*%\s*de\s*tva\s*comprise", re.IGNORECASE)
 _VAT_EXCLUDED_RE = re.compile(r"Prix\s+tva\s+exclue", re.IGNORECASE)

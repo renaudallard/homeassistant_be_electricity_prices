@@ -121,8 +121,12 @@ def _extract_federal_excise(
             for _lower, upper, rate in tiers
         )
         return bands[0][1], bands
+    # The rest of the heading's line stops at the next heading on it, which
+    # reaches the same line break: read on from each, a line of headings was
+    # read to its end again from every one.
     flat = re.search(
-        r"Accise\s+f[ée]d[ée]rale[^\n]*\n\s*Toutes\s+consommations\s+([\d,.]+)",
+        r"Accise\s+f[ée]d[ée]rale(?:(?!Accise\s+f[ée]d[ée]rale)[^\n])*\n"
+        r"\s*Toutes\s+consommations\s+([\d,.]+)",
         text,
     )
     if flat:
@@ -151,9 +155,13 @@ def _extract_energy_contribution(text: str) -> float:
     excise, so the August cards drop the row entirely. An absent row is the
     abolished levy, not a layout drift: return 0 rather than failing the
     fetch and taking every Engie contract offline.
+
+    The separator and the blanks after it are one optional piece: as runs of
+    blanks either side of an optional separator, a run of blanks was split
+    between the two in every way before the digits failed.
     """
     match = re.search(
-        r"Cotisation sur l['©]énergie\s+0\s*[,.]?\s*(\d{4,6})",
+        r"Cotisation sur l['©]énergie\s+0\s*(?:[,.]\s*)?(\d{4,6})",
         text,
     )
     if not match:
@@ -186,6 +194,12 @@ def _extract_energy_fund(
     return to_float(match.group(1)) if match else 0.0
 
 
+# The digital meter's table, from its heading to the analog meter's or to the
+# supplements that follow it.
+_DIGITAL_HEADING_RE = re.compile(r"Compteur\s+digital")
+_DIGITAL_END_RE = re.compile(r"Compteur\s+analogique|Suppléments")
+
+
 def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     """Read the Compteur digital Fluvius table.
 
@@ -193,13 +207,17 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     integration only uses the digital one. Distribution rates already
     include transport ('incluant déjà les coûts de transport') so we set
     ``transport=0`` and put the full c€/kWh into ``distribution_single``.
+
+    The table runs from the first heading to the first end past it. Found as
+    one pattern, a card with no end was scanned to its close again from every
+    heading.
     """
-    digital_block = re.search(
-        r"Compteur\s+digital(.+?)(?=Compteur\s+analogique|Suppléments)",
-        text,
-        re.S,
-    )
-    block_text = digital_block.group(1) if digital_block else text
+    block_text = text
+    heading = _DIGITAL_HEADING_RE.search(text)
+    if heading is not None:
+        end = _DIGITAL_END_RE.search(text, heading.end() + 1)
+        if end is not None:
+            block_text = text[heading.end() : end.start()]
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():
         row = numeric_row(block_text, label, 5)
@@ -280,8 +298,11 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     # sub-areas match it so a future sub-area tariff split is caught here
     # rather than silently billing every ORES customer at the Brab. Wal.
     # rate (mirrors the Ecofix ORES guard).
+    # A sub-area's bracket stops where the next row's label opens a bracket
+    # of its own, which closes on the same one: read on to it from each, a
+    # column of open brackets was read to the end again from every one.
     ores_rows = re.findall(
-        r"^ORES\s*\([^)]+\)[^\S\n]+((?:[\d,.]+[^\S\n]+){8,}[\d,.]+)",
+        r"^ORES\s*\((?:(?!^ORES\s*\([^)])[^)])+\)[^\S\n]+((?:[\d,.]+[^\S\n]+){8,}[\d,.]+)",
         text,
         re.MULTILINE | re.IGNORECASE,
     )

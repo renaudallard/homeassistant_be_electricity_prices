@@ -28,6 +28,8 @@
 from __future__ import annotations
 
 import asyncio
+import time
+from collections.abc import Callable
 from datetime import date
 from typing import Any
 
@@ -677,6 +679,118 @@ def test_epexdam_bands_are_not_lifted_from_the_other_leg() -> None:
     assert injection["peak"][0] == pytest.approx(0.0528 * 10.0)
     # And a price no block reproduces binds nothing at all.
     assert _index_formulas(text, 0.999, 1.06) == {}
+
+
+# Card text a host could serve instead, about 100,000 characters each: runs
+# of blanks and of digits, and a run of blanks after a row's dash or its "=",
+# on which every place was tried as the start of a formula or of the VAT rate
+# and read the rest of the run again.
+@pytest.mark.parametrize(
+    ("name", "crafted"),
+    [
+        pytest.param("formula", "\n " * 50_000, id="formula blanks"),
+        pytest.param("formula", "0" * 100_000, id="formula digits"),
+        pytest.param("formula", "-" + " " * 100_000 + "x", id="label blanks"),
+        pytest.param("formula", "- a =" + " " * 100_000 + "x", id="value blanks"),
+        pytest.param("vat", "0" * 100_000, id="vat digits"),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    name: str, crafted: str
+) -> None:
+    from custom_components.be_electricity_prices.providers import _engie_cards
+
+    patterns = {
+        "formula": _engie_cards._INDEX_FORMULA_RES["EPEXDAM"],
+        "vat": _engie_cards._VAT_RE,
+    }
+    started = time.perf_counter()
+    assert patterns[name].findall(crafted) == []
+    assert time.perf_counter() - started < 2.0
+
+
+@pytest.mark.parametrize(
+    "crafted",
+    [
+        pytest.param("0" * 100_000, id="digits"),
+        pytest.param("1,1€/an" + " " * 100_000, id="blanks"),
+        pytest.param("Prix mensuels" + "\n" * 100_000, id="line breaks"),
+    ],
+)
+def test_a_crafted_fee_row_is_read_in_time_linear_in_its_length(crafted: str) -> None:
+    from custom_components.be_electricity_prices.providers import _engie_cards
+
+    started = time.perf_counter()
+    with pytest.raises(ExtractorError, match="yearly fee"):
+        _engie_cards._extract_energy(crafted, "dynamic")
+    assert time.perf_counter() - started < 2.0
+
+
+_FEE_ROW = "65,00 €/an Type d'usage "
+
+
+# Card text a host could serve instead, about 100,000 characters each or more
+# where one label costs little: runs of blanks and of digits after a formula,
+# an index or a levy, and runs of headings, on which every place was tried as
+# the start of a figure or a table and read the rest of the run again.
+@pytest.mark.parametrize(
+    ("reader", "crafted"),
+    [
+        pytest.param(
+            "formula",
+            "Formule de prix hors TVA" + "\xa0" * 100_000,
+            id="formula blanks",
+        ),
+        pytest.param(
+            "index", "EPEXDAM connue (0,0€" + "0" * 100_000, id="index digits"
+        ),
+        pytest.param(
+            "index", "EPEXDAM connue (0,0" + "\xa0" * 100_000, id="index blanks"
+        ),
+        pytest.param("index", "EPEXDAM connue (0,0€ " * 10_000, id="index headings"),
+        pytest.param(
+            "endex", "ENDEX101 du mois = 0,0 " + "\xa0" * 100_000, id="endex blanks"
+        ),
+        pytest.param(
+            "named", "EPEXDAM connue (a 2000: 0,0" + "\xa0" * 100_000, id="month blanks"
+        ),
+        pytest.param(
+            "contribution",
+            "Cotisation sur l'énergie 0 " + "\xa0" * 100_000,
+            id="levy blanks",
+        ),
+        pytest.param("excise", "Accise fédérale" * 20_000, id="excise headings"),
+        pytest.param("flanders", "Compteur digital " * 6_000, id="table headings"),
+        pytest.param("wallonia", "ORES(\n" * 25_000, id="open brackets"),
+    ],
+)
+def test_a_crafted_row_is_read_in_time_linear_in_its_length(
+    reader: str, crafted: str
+) -> None:
+    from custom_components.be_electricity_prices.providers import (
+        _engie_cards,
+        _engie_overlays,
+    )
+
+    readers: dict[str, Callable[[str], object]] = {
+        "formula": lambda text: _engie_cards._extract_energy(
+            _FEE_ROW + text, "dynamic"
+        ),
+        "index": lambda text: _engie_cards._card_index(text, "EPEXDAM"),
+        "endex": lambda text: _engie_cards._card_index(text, "ENDEX101"),
+        "named": _engie_cards.published_index,
+        "contribution": _engie_overlays._extract_energy_contribution,
+        "excise": _engie_overlays._extract_federal_excise,
+        "flanders": _engie_overlays._extract_flanders_dsos,
+        "wallonia": _engie_overlays._extract_wallonia_dsos,
+    }
+    started = time.perf_counter()
+    try:
+        found = readers[reader](crafted)
+    except ExtractorError:
+        found = None
+    assert not found
+    assert time.perf_counter() - started < 2.0
 
 
 def test_easy_variable_carries_its_endex101_formulas() -> None:

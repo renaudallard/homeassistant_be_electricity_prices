@@ -629,6 +629,22 @@ No supplier-side PV / prosumer forfait: Engie does not populate
 - Partial-region resilience: `parse_snapshot` accepts a single-region map so a
   snapshot still builds if Engie's API is down for one region (test
   `test_parse_snapshot_with_partial_regions_still_works` `tests/test_engie.py`).
+- A card costs its length. The index formulas (`_INDEX_FORMULA_RES`), the VAT
+  phrase (`_VAT_RE`) and the yearly fee are read from where a row, a number or
+  a label can start, never from inside a run of blanks or digits, where each
+  place of the run was a start of its own and read the rest of it again. The
+  dynamic formula's sign (`_FORMULA_RE`), the index values (`_INDEX_VALUE_RES`,
+  `_EPEXDAM_NAMED_RE`) and the energy contribution read the blanks around an
+  optional sign or separator as one run, and the Empower fee row its line
+  break one way. The EPEXDAM value's bracket stops at the next "EPEXDAM
+  connue (", the flat excise row at the next heading on its line,
+  the digital meter's table runs from its heading to the first end past it
+  (`_DIGITAL_HEADING_RE`, `_DIGITAL_END_RE`), and an ORES sub-area's bracket
+  stops at the next row's. A crafted card of 100,000 characters takes
+  milliseconds where it took seconds to minutes
+  (`test_a_crafted_card_is_read_in_time_linear_in_its_length`,
+  `test_a_crafted_fee_row_is_read_in_time_linear_in_its_length`,
+  `test_a_crafted_row_is_read_in_time_linear_in_its_length`).
 
 ## Test fixtures
 
