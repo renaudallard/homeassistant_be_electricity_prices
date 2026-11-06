@@ -229,13 +229,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           [ -s tmp/ocr/ocr_failed.txt ] || exit 0
+          # The list comes from the walk, which runs third-party code on what
+          # the suppliers serve, so it goes in a code block no line of it can
+          # close: a CR would end a line there, so it goes, and every line
+          # starts with "- ".
           {
             echo "## Cards the OCR could not read"
             echo
             echo "Each line is the card and the error:"
             echo
             echo '```'
-            cat tmp/ocr/ocr_failed.txt
+            tr '\r' ' ' < tmp/ocr/ocr_failed.txt | sed 's/^/- /'
             echo '```'
             echo
             echo "The OCR leaves out every line it refused a mark on, so a figure"
@@ -258,6 +262,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           [ -s tmp/ocr/unlearnt.txt ] || exit 0
+          # From the walk too, so quoted the same way.
           {
             echo "## Glyphs the OCR library has not learnt"
             echo
@@ -266,7 +271,7 @@ jobs:
             echo "the font and the characters:"
             echo
             echo '```'
-            cat tmp/ocr/unlearnt.txt
+            tr '\r' ' ' < tmp/ocr/unlearnt.txt | sed 's/^/- /'
             echo '```'
             echo
             echo "Learn them in ocr_price_cards with \`ocr-price-cards specimen\` on one of"

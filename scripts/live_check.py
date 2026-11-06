@@ -5965,12 +5965,31 @@ def _render_metrics(metrics: dict[str, dict[str, float]]) -> str:
     return "\n".join(rows) + "\n"
 
 
+def _code_span(text: str) -> str:
+    """``text`` as a code span for a table cell, or nothing when it is blank.
+
+    A detail quotes what a supplier serves (a product name off its listing,
+    an address off its pages, an error about its card), and a label can
+    carry a card's file name or what the card archive holds, which its walk
+    writes; the reports are posted as issues. Inside a code span GitHub
+    renders no mention, link, image, issue reference or HTML. A backtick
+    would close the span, so none is kept. A CR or LF would end the table
+    row, and the runner splits the printed report on either, so what
+    followed could start a workflow command. A pipe ends the cell even
+    inside a span, so it keeps its escape.
+    """
+    flat = text.replace("`", "").replace("\r", " ").replace("\n", " ")
+    if not flat.strip():
+        return ""
+    escaped = flat.replace("|", "\\|")
+    return f"`{escaped}`"
+
+
 def _check_table(checks: Iterable[Check]) -> list[str]:
     """A report table of checks and their failure details."""
     rows = ["| Check | Detail |", "| --- | --- |"]
     for c in checks:
-        detail = (c.detail or "").replace("|", "\\|").replace("\n", " ")
-        rows.append(f"| `{c.label}` | {detail} |")
+        rows.append(f"| {_code_span(c.label)} | {_code_span(c.detail or '')} |")
     return rows
 
 
@@ -6046,7 +6065,7 @@ def _render_report(
     rows.append("")
     for c in checks:
         marker = "[x]" if c.ok else "[ ]"
-        rows.append(f"- {marker} {c.label}")
+        rows.append(f"- {marker} {_code_span(c.label)}")
     out = "\n".join(rows) + "\n"
     if metrics:
         out += _render_metrics(metrics)

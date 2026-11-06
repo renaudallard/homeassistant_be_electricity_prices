@@ -386,7 +386,10 @@ jobs:
             echo
             echo "Failed on every attempt of the retry loop:"
             echo
-            sed 's/^/- `/; s/$/`/' tmp/report/persistent_failures.txt
+            # A label can carry a card's file name or what the card archive
+            # holds, which its walk writes, so it loses the backticks and CRs
+            # that would let it out of its code span.
+            tr -d '\r`' < tmp/report/persistent_failures.txt | sed 's/^/- `/; s/$/`/'
             echo
             echo "## Last report"
             echo
@@ -405,7 +408,10 @@ jobs:
               # reported. Only the rows are filtered; the count in the
               # heading is the raw one, and the omission is stated at the end
               # so nothing disappears silently.
-              awk 'NR==FNR{keep[$0]=1; next}
+              # A label reaches the table as its code span writes it, without
+              # backticks, a CR as a space and a pipe escaped, so both sides
+              # are read that way before they are compared.
+              awk 'NR==FNR{gsub(/`/, ""); gsub(/\r/, " "); keep[$0]=1; next}
                    /^## All checks$/{skip=1; next}
                    /^## /{skip=0; infail=($0=="## Failures")}
                    skip{next}
@@ -414,6 +420,7 @@ jobs:
                        row=$0
                        sub(/^\| `/, "", row)
                        sub(/` \|.*$/, "", row)
+                       gsub(/\\[|]/, "|", row)
                        if (!(row in keep)) { dropped++; next }
                      }
                      print

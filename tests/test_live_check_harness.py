@@ -2291,13 +2291,9 @@ def test_the_products_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
     ) == ("[live-check] a registered product left the supplier listing")
 
 
-def test_the_extractor_issue_names_the_rows_an_earlier_attempt_passed(
-    tmp_path: Path,
-) -> None:
-    """report.md is rewritten by every attempt, so the table the issue quotes
-    is the last attempt's and a row missing from the persistent list passed
-    in an EARLIER attempt. The note said a later one, which sent the triager
-    looking past the run's end for a pass that came before it."""
+def _extractor_issue_body(tmp_path: Path, persistent: str, report: str) -> str:
+    """The body the extractor issue step writes from these two hand-overs,
+    read as bytes, since text mode would turn a CR into a line ending."""
     import yaml  # type: ignore[import-untyped]
 
     workflow = yaml.safe_load(
@@ -2313,20 +2309,66 @@ def test_the_extractor_issue_names_the_rows_an_earlier_attempt_passed(
     script = re.sub(r"\$\{\{[^}]*\}\}", "x", script)
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts" / "file_ci_issue.sh").write_text("exit 0\n")
-    report = tmp_path / "tmp" / "report"
-    report.mkdir(parents=True)
-    (report / "persistent_failures.txt").write_text("eneco/power_fix: fetch\n")
-    (report / "report.md").write_text(
+    handed = tmp_path / "tmp" / "report"
+    handed.mkdir(parents=True)
+    (handed / "persistent_failures.txt").write_bytes(persistent.encode())
+    (handed / "report.md").write_bytes(report.encode())
+    subprocess.run(["bash", "-c", script], cwd=tmp_path, check=True)
+    return (tmp_path / "issue_body.md").read_bytes().decode()
+
+
+def test_the_extractor_issue_names_the_rows_an_earlier_attempt_passed(
+    tmp_path: Path,
+) -> None:
+    """report.md is rewritten by every attempt, so the table the issue quotes
+    is the last attempt's and a row missing from the persistent list passed
+    in an EARLIER attempt. The note said a later one, which sent the triager
+    looking past the run's end for a pass that came before it."""
+    body = _extractor_issue_body(
+        tmp_path,
+        "eneco/power_fix: fetch\n",
         "# Live extractor check: 1 pass, 2 fail\n\n## Failures\n\n"
         "| Check | Detail |\n| --- | --- |\n"
         "| `eneco/power_fix: fetch` | HTTP 404 |\n"
-        "| `ebem/dyn: fetch` | TimeoutError |\n\n## All checks\n\n- [x] a\n"
+        "| `ebem/dyn: fetch` | TimeoutError |\n\n## All checks\n\n- [x] a\n",
     )
-    subprocess.run(["bash", "-c", script], cwd=tmp_path, check=True)
-    body = (tmp_path / "issue_body.md").read_text()
     assert "`eneco/power_fix: fetch` | HTTP 404" in body
     assert "ebem/dyn" not in body
     assert "1 transient failure(s) that an earlier attempt passed" in body
+
+
+@pytest.mark.parametrize(
+    "label", ["eneco/a|b/flanders: fetch", "eneco/a`b/flanders: fetch\r"]
+)
+def test_a_persistent_failure_keeps_its_row_whatever_its_label_holds(
+    tmp_path: Path, label: str
+) -> None:
+    """The filter compared the label as the persistent list holds it with
+    the label as its code span writes it in the table, so one holding a
+    pipe, a backtick or a CR read as two labels and its failing row was
+    dropped as transient."""
+    body = _extractor_issue_body(
+        tmp_path,
+        f"{label}\n",
+        lc._render_report([lc.Check(label, False, "HTTP 404")]),
+    )
+    assert "`HTTP 404`" in body
+    assert "transient failure(s)" not in body
+
+
+def test_a_persistent_failure_is_listed_as_one_code_span(tmp_path: Path) -> None:
+    """The persistent failures are labels, and a label can carry what the
+    card archive holds, which its walk writes: a backtick in one closed its
+    code span in the list the issue leads with, and a CR ended its line."""
+    label = "_archive: x`@renaudallard [l](https://evil.example)`/c/r/2026-11 holds it"
+    body = _extractor_issue_body(
+        tmp_path, f"{label}\r\n", "# Live extractor check: 0 pass, 1 fail\n"
+    )
+    assert "\r" not in body
+    assert (
+        "\n- `_archive: x@renaudallard [l](https://evil.example)/c/r/2026-11 holds it`\n"
+        in body
+    )
 
 
 def test_the_tax_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
@@ -5656,6 +5698,55 @@ def test_a_card_served_its_ocr_text_is_reported_unreadable(tmp_path: Path) -> No
     assert "1 unreadable (expected)" in report
     assert "## Unreadable cards" in report
     lc.CHECKS.clear()
+
+
+def test_a_detail_is_shown_as_one_code_span() -> None:
+    """A Mega product id is any attribute value its listing carries, and the
+    new-products issue posted it as it came: a mention, a link, an image and
+    an issue reference all rendered, and a CR ended the table row. A detail
+    is one code span in its cell: no backtick of its own to close it, no
+    line ending, and its pipes escaped. A blank one leaves the cell empty."""
+    label = "mega/catalog: no new products at supplier"
+    detail = (
+        "Zen `Plus` @renaudallard [Fix the card here](https://evil.example/phish) "
+        "![](https://evil.example/pixel.png) see #1 a|b <!-- x"
+        "\r::warning title=spoofed::fake\nend"
+    )
+    report = lc._render_report(
+        [
+            lc.Check(label, False, detail, kind="catalog"),
+            lc.Check("mega/catalog: has a baseline", False, "``", kind="catalog"),
+        ]
+    )
+    assert "\r" not in report
+    rows = [row for row in report.split("\n") if row.startswith("| `mega/catalog")]
+    assert rows == [
+        f"| `{label}` | `Zen Plus @renaudallard [Fix the card here]"
+        "(https://evil.example/phish) ![](https://evil.example/pixel.png) "
+        "see #1 a\\|b <!-- x ::warning title=spoofed::fake end` |",
+        "| `mega/catalog: has a baseline` |  |",
+    ]
+
+
+def test_a_label_is_shown_as_one_code_span() -> None:
+    """A label can carry a card's file name, off the address a supplier's
+    listing gives, or what the card archive holds, which its walk writes. A
+    backtick in it closed the label's span in a table, and the "All checks"
+    list, which the new-products, tax, network and editions issues post,
+    showed it as markdown. Both show a label as one code span, and one of
+    the harness's own exactly as before in the table."""
+    crafted = (
+        "ecofix: EL_x`@renaudallard [x](https://evil.example)`.pdf has a text layer"
+    )
+    plain = "eneco/power_fix/flanders: fetch"
+    report = lc._render_report(
+        [lc.Check(crafted, False, "page images"), lc.Check(plain, False, "HTTP 404")]
+    )
+    clean = "`ecofix: EL_x@renaudallard [x](https://evil.example).pdf has a text layer`"
+    assert f"| {clean} | `page images` |" in report
+    assert f"- [ ] {clean}\n" in report
+    assert f"| `{plain}` | `HTTP 404` |" in report
+    assert f"- [ ] `{plain}`\n" in report
 
 
 @pytest.mark.parametrize("marker", lc._EXPECTED_MARKERS)

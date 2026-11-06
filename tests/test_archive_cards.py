@@ -4346,6 +4346,48 @@ def test_a_card_a_release_of_its_month_holds_is_recorded_not_uploaded(
     }
 
 
+@pytest.mark.parametrize(
+    ("step", "listed"),
+    [
+        ("Report cards the OCR could not read", "ocr_failed.txt"),
+        ("Report glyphs the OCR library has not learnt", "unlearnt.txt"),
+    ],
+)
+def test_the_walk_s_lists_stay_in_their_code_block(
+    tmp_path: Path, step: str, listed: str
+) -> None:
+    """The ocr job files the lists the walk hands over, and the walk runs
+    third-party code on what the suppliers serve. Pasted into a code block
+    as they came, a line of three backticks, or a CR before one, closed the
+    block, and what followed rendered: a mention, a link, a remote image.
+    No line of a list can close its block."""
+    work = tmp_path / "work"
+    (work / "tmp" / "ocr").mkdir(parents=True)
+    (work / "tmp" / "ocr" / listed).write_bytes(
+        b"ecofix/a/flanders: x\r```\n```\n"
+        b"@renaudallard [x](https://evil.example) ![](https://evil.example/p.png)\n"
+    )
+    (work / "scripts").mkdir()
+    (work / "scripts" / "file_ci_issue.sh").write_text(
+        'while [ $# -gt 0 ]; do case "$1" in --body) cp "$2" filed_body.md ;; esac; '
+        "shift; done\n"
+    )
+    script = next(
+        s["run"] for s in _archive_jobs()["ocr"]["steps"] if s.get("name") == step
+    )
+    subprocess.run(["bash", "-e", "-c", script], cwd=work, check=True)
+    # Read as bytes: text mode would turn a CR into a line ending.
+    lines = (work / "filed_body.md").read_bytes().decode("utf-8").split("\n")
+    assert not any("\r" in line for line in lines)
+    fences = [i for i, line in enumerate(lines) if line.startswith("```")]
+    assert len(fences) == 2
+    assert lines[fences[0] + 1 : fences[1]] == [
+        "- ecofix/a/flanders: x ```",
+        "- ```",
+        "- @renaudallard [x](https://evil.example) ![](https://evil.example/p.png)",
+    ]
+
+
 def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
     """The upload step ran under bash -e, so one failed upload ended it
     before the month's landed files reached pdfs.json, and the push step,

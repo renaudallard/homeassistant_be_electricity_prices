@@ -1398,7 +1398,10 @@ A card the engine cannot read, or whose reading fails the parse, is also named f
 its own, since the live check has no reading of such a card and only notes it. The walk writes
 those failures to the file `--ocr-failures` names (`_ocr_failure`, `scripts/archive_cards.py`),
 and the `ocr` job files them under the `archive-cards-ocr` label, fingerprinted on the cards so
-the same card failing again within the week adds nothing.
+the same card failing again within the week adds nothing. That list, and the glyphs the walk
+finds its library lacks, come from a job that runs third-party code on what the suppliers serve,
+so each is posted in a code block no line of it can close: its CRs go and every line starts with
+`- ` (`test_the_walk_s_lists_stay_in_their_code_block`).
 
 A card that even it cannot read is named in `unparsed.json`, by the row it would have become,
 with the url it was downloaded from beside each digest. That url is the half that matters later:
@@ -1727,6 +1730,24 @@ the `## All checks` checklist: the full report outgrew GitHub's 65,536-character
 which made `gh issue create` fail and file nothing (`.github/workflows/live_check.yml`). A
 defensive cap truncates the body at a line boundary near 60,000 bytes in case a mass failure
 inflates the failures table itself. The full report is always in the run log.
+
+Every table of a report shows a row's detail as one code span (`_code_span`,
+`scripts/live_check.py`), because a detail quotes what a supplier serves: a product id off its
+listing, a card finder's address off its pages, an error about its card. Posted as it came, a
+crafted Mega listing put a mention, a link, a remote image and an issue reference into the
+new-products issue, and a CR in it ended the table row; GitHub renders none of those inside a
+code span. The detail loses its backticks, which would close the span, and its CRs and LFs,
+which would end the row and, in the printed report, start a line the runner reads as a workflow
+command, and its pipes keep their escape (`test_a_detail_is_shown_as_one_code_span`). A
+row's label is shown the same way, in the tables and in the `## All checks` list the
+new-products, tax, network and editions issues post: a label can carry a card's file name, off
+the address a supplier's listing gives, or what the card archive holds, which its walk writes,
+so a folder named there could have closed the label's span
+(`test_a_label_is_shown_as_one_code_span`). The persistent failures the extractor issue leads
+with lose their backticks and CRs before each is put in its span
+(`test_a_persistent_failure_is_listed_as_one_code_span`), and the filter that drops a failing
+row an earlier attempt passed reads the list and the table's labels the same way, a pipe
+included (`test_a_persistent_failure_keeps_its_row_whatever_its_label_holds`).
 
 On `pull_request` events the `file` job is skipped; instead a final step of `check` fails the PR
 check if any bit other than the catalog-only bit is set (`rc & ~2`), since a new-product signal is
