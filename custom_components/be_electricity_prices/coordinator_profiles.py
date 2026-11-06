@@ -301,6 +301,25 @@ class _ProfilesMixin:
         curves, _stamps = await self._shared_rlp_blends(year)
         return curves.get(blend) or held
 
+    async def spp_weights_for_year(self, year: int) -> SppWeights | None:
+        """The solar curve the hours of ``year`` are weighted on: that year's
+        own for a year before the one held, else the one held.
+
+        Keyed by UTC (month, day, hour) without its year, like the load
+        profile (:meth:`rlp_weights_for_year`), and Synergrid estimates the
+        curve again every year: on 2026's the months of 2025 came out 0,01 to
+        0,14 EUR/MWh off the Belpex-SPP-M Energy Knights published, which
+        2025's own reproduces to 0,004. The held curve stands in for a later
+        year and for an earlier one whose file cannot be had or read.
+        """
+        held: SppWeights | None = self._spp_weights or None
+        if self._spp_weights_year is None or year >= self._spp_weights_year:
+            return held
+        weights, _stamp = await self._shared_profile(
+            "spp", year, "", _SPP_REFRESH_DAYS, fetch_spp_weights, year
+        )
+        return weights or held
+
     def quoted_rlp_weights(self, blend: str) -> RlpWeights | None:
         """The RLP curve a comparison weights a card's index by, or ``None``.
 

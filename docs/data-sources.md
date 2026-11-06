@@ -1102,13 +1102,21 @@ ENTSO-E prices it already caches.
 Synergrid publishes the profile as a public, no-login workbook at
 `synergrid.be/images/downloads/SLP-RLP-SPP/<year>/SPP_ex-ante_and_ex-post_<year>.xlsx`,
 the 2026 address, with the same fallback to the download page's link as the RLP
-file. The 2025 workbook found that way has no `SPP_ex-ante` sheet and parses to
-`{}`, so the fallback only helps a year that keeps the 2026 layout. The file is ~52 MB, almost entirely the ex-post sheet the fetcher never touches:
+file, which is where the 2025 workbook is found. The file is ~52 MB, almost entirely the ex-post sheet the fetcher never touches:
 `fetch_spp_weights` streams the download to a temp file (never into memory) and
-parses only the small `SPP_ex-ante` sheet with the stdlib `zipfile` +
+parses only the ex-ante sheet with the stdlib `zipfile` +
 `ElementTree` (no new dependency), keeping peak memory around 20 MB. The sheet is
-resolved by name-prefix and the value column by header text, so a minor layout
-change degrades to an empty result rather than a wrong one. The 15-minute weights
+resolved by name-prefix and the value column by header text (`_SHEET_PREFIXES`,
+`_VALUE_HEADERS`), so a layout change degrades to an empty result rather than a
+wrong one. 2026 names them `SPP_ex-ante_2026` and `SPPExanteBE`. 2025's sheet,
+`Ex-ante 2025 (IP8)`, carries one curve per grid area beside the national model,
+`ModelBE`, which is the one read: 2025's suppliers settled on a national figure,
+and on it the twelve months of 2025 reproduce the Belpex-SPP-M Energy Knights
+publishes to 0,004 EUR/MWh, its own two decimals. 2024's sheet has the areas
+alone, and Energy Knights published 8 to 11 different figures a month by area
+that year, so it is refused at its header row rather than read off one area. The
+2025 sheet is four times 2026's, an 18 s parse on a Raspberry Pi off the event
+loop against 5 s. The 15-minute weights
 are aggregated to hourly, keyed by UTC `(month, day, hour)` to line up with the
 coordinator's hourly spot cache. Any failure (download, format drift, a 404 for a
 not-yet-published year) returns `{}` so the caller falls back to the plain mean.
@@ -1128,13 +1136,14 @@ stamp (`_shared_profile` hands it back beside the weights, as `_shared_rlp_blend
 does per blend), so it asks again when the row is due and not thirty days after the
 adoption: stamped as fetched today, a row adopted on its 29th day was held to 59.
 
-A statistics backfill reaching into an earlier year credits it on the curve
-held, where the load profile takes that year's own, although the solar curve is
-keyed by UTC (month, day, hour) without its year as well. A solar profile
-follows the sun rather than the weekday calendar: over May to October 2025 the
-2025 and 2026 curves set the SPP-weighted mean 0,03 to 0,14 EUR/MWh apart,
-against 0,2 to 5,2 for the load profile, and the 2025 file, 59 MB, has the
-layout the reader does not read.
+A statistics backfill reaching into an earlier year credits it on that year's
+own curve (`spp_weights_for_year`, `_build_context`), as the load profile takes
+that year's own (`rlp_weights_for_year`): both are keyed without their year. A
+solar profile follows the sun rather than the weekday calendar, but Synergrid
+estimates it again each year, and on 2026's curve the months of 2025 came out
+0,01 to 0,14 EUR/MWh off Energy Knights' figures. The curve held stands in for
+a later year and for an earlier one whose file cannot be had or read, 2024's
+among them.
 
 Two things bound what a cold profile costs. **The first tick never waits on
 one**: it runs inside config-entry setup, and the RLP workbook alone is 18 s of

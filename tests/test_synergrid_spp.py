@@ -82,15 +82,22 @@ def _col(i: int) -> str:
 _EXCEL_EPOCH = datetime(1899, 12, 30)
 
 
-def _build_xlsx(rows: list[tuple[datetime, float]]) -> bytes:
+def _build_xlsx(
+    rows: list[tuple[datetime, float]],
+    *,
+    sheet_name: str = "SPP_ex-ante_2026",
+    headers: tuple[str, ...] = _HEADERS,
+) -> bytes:
     """A one-sheet workbook mimicking the Synergrid ex-ante layout.
 
     Column A (UTC) carries the true UTC instant as an Excel serial; the
     Year/Month/Day/Hour columns are written as a deliberately-wrong LOCAL time
-    (UTC + 2h) so a test can prove the parser keys on the UTC column.
+    (UTC + 2h) so a test can prove the parser keys on the UTC column. The
+    last column carries the row's value and any between it and the time
+    columns 99.0, as 2025's per-area curves stand beside its national one.
     """
     header_cells = "".join(
-        f'<c r="{_col(i)}1" t="s"><v>{i}</v></c>' for i in range(len(_HEADERS))
+        f'<c r="{_col(i)}1" t="s"><v>{i}</v></c>' for i in range(len(headers))
     )
     body = f'<row r="1">{header_cells}</row>'
     for n, (utc_dt, value) in enumerate(rows, start=2):
@@ -103,6 +110,7 @@ def _build_xlsx(rows: list[tuple[datetime, float]]) -> bytes:
             local.day,
             local.hour,
             utc_dt.minute,
+            *[99.0] * (len(headers) - 7),
             value,
         )
         cells = "".join(
@@ -111,15 +119,15 @@ def _build_xlsx(rows: list[tuple[datetime, float]]) -> bytes:
         body += f'<row r="{n}">{cells}</row>'
     sheet = f'<?xml version="1.0"?><worksheet {_NS}><sheetData>{body}</sheetData></worksheet>'
     shared = (
-        f'<?xml version="1.0"?><sst {_NS} count="{len(_HEADERS)}" '
-        f'uniqueCount="{len(_HEADERS)}">'
-        + "".join(f"<si><t>{h}</t></si>" for h in _HEADERS)
+        f'<?xml version="1.0"?><sst {_NS} count="{len(headers)}" '
+        f'uniqueCount="{len(headers)}">'
+        + "".join(f"<si><t>{h}</t></si>" for h in headers)
         + "</sst>"
     )
     workbook = (
         f'<?xml version="1.0"?><workbook {_NS} '
         'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-        '<sheets><sheet name="SPP_ex-ante_2026" sheetId="1" r:id="rId1"/></sheets>'
+        f'<sheets><sheet name="{sheet_name}" sheetId="1" r:id="rId1"/></sheets>'
         "</workbook>"
     )
     wb_rels = (
@@ -142,9 +150,9 @@ def _build_xlsx(rows: list[tuple[datetime, float]]) -> bytes:
     return data
 
 
-def _write_xlsx(rows: list[tuple[datetime, float]]) -> Path:
+def _write_xlsx(rows: list[tuple[datetime, float]], **layout: Any) -> Path:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
-        tmp.write(_build_xlsx(rows))
+        tmp.write(_build_xlsx(rows, **layout))
     return Path(tmp.name)
 
 
@@ -177,15 +185,66 @@ def test_parse_keys_by_utc_not_local() -> None:
 
 def test_parse_missing_value_column_raises() -> None:
     # A sheet whose header lacks SPPExanteBE must raise (caught by fetch).
-    global _HEADERS
-    saved = _HEADERS
-    _HEADERS = ("UTC", "Year", "Month", "Day", "Hour", "Min", "Other")
+    path = _write_xlsx(
+        [(datetime(2026, 6, 1, 12, 0), 1.0)],
+        headers=("UTC", "Year", "Month", "Day", "Hour", "Min", "Other"),
+    )
     try:
-        path = _write_xlsx([(datetime(2026, 6, 1, 12, 0), 1.0)])
         with pytest.raises(KeyError):
             synergrid._parse_hourly_weights(path)
     finally:
-        _HEADERS = saved
+        path.unlink(missing_ok=True)
+
+
+# 2025's header row, two of its grid areas' EAN columns standing in for all.
+_HEADERS_2025 = (
+    "UTC",
+    "Year",
+    "Month",
+    "Day",
+    "Hour",
+    "Minute",
+    "5414488000608",
+    "5414488000707",
+    "ModelBE",
+)
+
+
+def test_the_2025_layout_is_read_off_its_national_model() -> None:
+    """2025's workbook names its sheet "Ex-ante 2025 (IP8)" and carries one
+    curve per grid area beside the national model, ModelBE. The suppliers
+    settled 2025 on one national figure, which that column reproduces: read
+    by the 2026 names alone the file came out empty, and a backfill into
+    2025 was credited on 2026's curve."""
+    path = _write_xlsx(
+        [
+            (datetime(2025, 6, 15, 8, 0), 0.5),
+            (datetime(2025, 6, 15, 8, 15), 0.25),
+        ],
+        sheet_name="Ex-ante 2025 (IP8)",
+        headers=_HEADERS_2025,
+    )
+    try:
+        weights = synergrid._parse_hourly_weights(path)
+    finally:
+        path.unlink(missing_ok=True)
+    assert weights == {(6, 15, 8): pytest.approx(0.75)}
+
+
+def test_a_sheet_with_the_grid_areas_alone_is_refused() -> None:
+    """2024's ex-ante sheet has the per-area curves and no national one, and
+    Energy Knights published 8 to 11 different figures a month by area that
+    year. Read off any one column it would be one area's index billed to
+    every other, so the header refuses it."""
+    path = _write_xlsx(
+        [(datetime(2024, 6, 15, 8, 0), 0.5)],
+        sheet_name="Ex-ante 2024 (IP8)",
+        headers=_HEADERS_2025[:-1],
+    )
+    try:
+        with pytest.raises(KeyError):
+            synergrid._parse_hourly_weights(path)
+    finally:
         path.unlink(missing_ok=True)
 
 
@@ -633,6 +692,43 @@ async def test_a_restart_in_a_new_year_keeps_last_years_spp_profile(
     assert reloaded._spp_weights == fake
     assert reloaded._spp_weights_year == 2026
     assert reloaded._spp_failed_at is not None
+
+
+async def test_an_earlier_year_is_credited_on_its_own_solar_curve(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The solar curve is keyed by UTC (month, day, hour) without its year, and
+    the coordinator holds the running year's, so a backfill reaching into 2025
+    credited it on 2026's: 0,01 to 0,14 EUR/MWh off the Belpex-SPP-M Energy
+    Knights published for those months, which 2025's own curve reproduces to
+    0,004. An earlier year takes its own file now. The year held stands in
+    for a later one and for an earlier one whose file cannot be read."""
+    from custom_components.be_electricity_prices.coordinator_profiles import (
+        _profile_cache,
+    )
+
+    freezer.move_to("2026-09-15 12:00:00+02:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def fetch(_session: Any, year: int) -> dict[tuple[int, int, int], float]:
+        return {} if year == 2024 else {(6, 15, 10): float(year)}
+
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_profiles.fetch_spp_weights",
+        new=AsyncMock(side_effect=fetch),
+    ) as mock:
+        assert await coord.spp_weights_for_year(2025) is None  # nothing held yet
+        await coord._ensure_spp_weights()
+        held = await coord.spp_weights_for_year(2026)
+        later = await coord.spp_weights_for_year(2027)
+        earlier = await coord.spp_weights_for_year(2025)
+        unread = await coord.spp_weights_for_year(2024)
+    assert held == later == unread == {(6, 15, 10): 2026.0}
+    assert earlier == {(6, 15, 10): 2025.0}
+    assert [call.args[1] for call in mock.await_args_list] == [2026, 2025, 2024]
+    assert {year for _kind, year, _blend in _profile_cache(hass)} == {2025, 2026}
 
 
 async def test_the_shared_store_keeps_this_year_and_the_last(

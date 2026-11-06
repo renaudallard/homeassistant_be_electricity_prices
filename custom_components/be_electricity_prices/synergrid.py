@@ -37,7 +37,10 @@ in 2026; the address has changed every year, so when it is not served the
 year's file is looked up on Synergrid's download page (``_listed_url``).
 The file is ~52 MB, almost entirely the ex-post sheet, which we never touch: we
 stream the download to a temp file and parse only the ex-ante sheet (a few MB of
-XML) with the stdlib, keeping peak memory around 20 MB. The ex-post half lags by
+XML) with the stdlib, keeping peak memory around 20 MB. The 2025 file carries
+the national curve beside one per grid area, as ``ModelBE`` (``_VALUE_HEADERS``),
+and on it 2025's months reproduce Energy Knights' Belpex-SPP-M to 0,004
+EUR/MWh, where 2026's curve misses them by up to 0,14. The ex-post half lags by
 about a year (the 2026 file stops in 2025S1), and that costs nothing: the
 suppliers' own settled indices are computed on the ex-ante profile too, and
 weighting it against the hourly day-ahead reproduces the Belpex-SPP-M Energy
@@ -94,10 +97,14 @@ _PAGE_URL = f"{_SITE}nl/documentencentrum/statistieken-gegevens/profielen-slp-sp
 _HREF_RE = re.compile(r'href="([^"]+)"', re.IGNORECASE)
 _RLP_TOKENS = ("rlp", "elec", "all", "dso")
 _SPP_TOKENS = ("spp", "ex-ante")
-# The ex-ante sheet name and its value column header. Resolved by prefix / text
-# rather than hardcoded position so a minor layout change doesn't silently break.
-_SHEET_PREFIX = "SPP_ex-ante"
-_VALUE_HEADER = "SPPExanteBE"
+# The ex-ante sheet's name and the national curve's column header, resolved by
+# prefix and text rather than position so a layout change fails rather than
+# misreads. 2026 names them SPP_ex-ante_2026 and SPPExanteBE. 2025 names its
+# sheet "Ex-ante 2025 (IP8)" and carries one column per grid area beside the
+# national model, ModelBE. 2024's has the areas alone, as Energy Knights'
+# per-area 2024 indices show, and is refused rather than read off one area.
+_SHEET_PREFIXES = ("SPP_ex-ante", "Ex-ante")
+_VALUE_HEADERS = ("SPPExanteBE", "ModelBE")
 # The workbook's first column is the true UTC instant (an Excel date serial);
 # its Year/Month/Day/Hour columns are LOCAL Belgian wall-clock, so we key on
 # this column to line up with the coordinator's UTC-keyed spot cache.
@@ -351,9 +358,11 @@ async def _download(
     return Path(tmp.name)
 
 
-def _resolve_sheet_path(z: zipfile.ZipFile, prefix: str = _SHEET_PREFIX) -> str:
-    """Map the first sheet whose name starts with ``prefix`` (the ex-ante
-    sheet by default) to its worksheet XML member."""
+def _resolve_sheet_path(
+    z: zipfile.ZipFile, prefix: str | tuple[str, ...] = _SHEET_PREFIXES
+) -> str:
+    """Map the first sheet whose name starts with ``prefix``, or with one of
+    them (the ex-ante sheet by default), to its worksheet XML member."""
     for name, path in sheet_paths(z):
         if name.startswith(prefix):
             return path
@@ -433,11 +442,13 @@ def _parse_hourly_weights(path: Path) -> SppWeights:
     a few tens of MB regardless of the 52 MB file. The UTC instant and value
     columns are resolved from the header row (by name, not fixed position); the
     hour is taken from the UTC column, not the local Year/Month/Day/Hour columns.
+    A header naming neither curve raises there, before the rest of the sheet is
+    read.
     """
     with zipfile.ZipFile(path) as z:
         target = _resolve_sheet_path(z)
         strings = _shared_strings(z)
-        header: dict[str, str] = {}  # header name -> column letter
+        columns: tuple[str, str] | None = None
         weights: SppWeights = {}
         row_cells: dict[str, tuple[str | None, str | None]] = {}
         with z.open(target) as fh:
@@ -452,31 +463,44 @@ def _parse_hourly_weights(path: Path) -> SppWeights:
                     el.clear()
                 elif el.tag == _NS + "row":
                     if int(el.get("r", "0")) == 1:
-                        for col, (ctype, text) in row_cells.items():
-                            name = (
-                                strings[int(text)]
-                                if ctype == "s" and text is not None
-                                else text
-                            )
-                            if name:
-                                header[name] = col
-                    else:
-                        _accumulate_row(row_cells, header, weights)
+                        columns = _header_columns(row_cells, strings)
+                    elif columns is not None:
+                        _accumulate_row(row_cells, columns, weights)
                     row_cells = {}
                     el.clear()
-    if _UTC_HEADER not in header or _VALUE_HEADER not in header:
-        raise KeyError(f"{_UTC_HEADER!r}/{_VALUE_HEADER!r} column not found")
+    if columns is None:
+        raise KeyError("the ex-ante sheet has no header row")
     return weights
+
+
+def _header_columns(
+    cells: dict[str, tuple[str | None, str | None]], strings: list[str]
+) -> tuple[str, str]:
+    """The UTC and national curve column letters off the header row.
+
+    The first of ``_VALUE_HEADERS`` the row names is the curve; a row naming
+    none, or no UTC column, raises KeyError.
+    """
+    header: dict[str, str] = {}
+    for col, (ctype, text) in cells.items():
+        name = strings[int(text)] if ctype == "s" and text is not None else text
+        if name:
+            header[name] = col
+    value = next((header[name] for name in _VALUE_HEADERS if name in header), None)
+    if _UTC_HEADER not in header or value is None:
+        raise KeyError(f"{_UTC_HEADER!r} or one of {_VALUE_HEADERS!r} not found")
+    return header[_UTC_HEADER], value
 
 
 def _accumulate_row(
     cells: dict[str, tuple[str | None, str | None]],
-    header: dict[str, str],
+    columns: tuple[str, str],
     weights: SppWeights,
 ) -> None:
+    utc_column, value_column = columns
     try:
-        serial = _cell_number(cells[header[_UTC_HEADER]])
-        value = _cell_number(cells[header[_VALUE_HEADER]])
+        serial = _cell_number(cells[utc_column])
+        value = _cell_number(cells[value_column])
         if serial is None or value is None:
             return
         # Excel serial -> UTC datetime; +30s absorbs float imprecision before

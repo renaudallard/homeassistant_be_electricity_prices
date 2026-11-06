@@ -988,7 +988,11 @@ async def test_cost_backfill_injection_uses_spp_not_flat_mean(
         return None
 
     coord = SimpleNamespace(
-        hass=None, _snapshot=snap, _session=None, _spp_weights=weights
+        hass=None,
+        _snapshot=snap,
+        _session=None,
+        _spp_weights=weights,
+        spp_weights_for_year=AsyncMock(return_value=weights),
     )
     coord._ensure_spp_weights = _ensure
 
@@ -1629,6 +1633,7 @@ async def _live_and_backfill(
         _ensure_spp_weights=AsyncMock(),
         _ensure_rlp_weights=AsyncMock(),
         rlp_weights_for_year=AsyncMock(return_value=rlp or None),
+        spp_weights_for_year=AsyncMock(return_value=None),
         _billed_peak_kw=lambda: 0.0,
     )
     entry.runtime_data = coordinator
@@ -4624,6 +4629,7 @@ async def test_the_backfill_decides_the_profiles_on_the_signed_leg(
         _ensure_rlp_weights=AsyncMock(),
         rlp_weights_for_year=AsyncMock(return_value={(1, 1, 0): 1.0}),
         _ensure_spp_weights=AsyncMock(),
+        spp_weights_for_year=AsyncMock(return_value={(1, 1, 0): 1.0}),
     )
 
     async def _legs(*_a: object, **_k: object) -> _CohortLegs:
@@ -4640,6 +4646,61 @@ async def test_the_backfill_decides_the_profiles_on_the_signed_leg(
     assert coordinator._ensure_spp_weights.await_count == int(signed_indexed)
     assert (context.rlp_weights is not None) is signed_indexed
     assert (context.spp_weights is not None) is signed_indexed
+
+
+async def test_a_backfill_into_an_earlier_year_credits_it_on_that_years_solar_curve(
+    hass: HomeAssistant,
+) -> None:
+    """The coordinator holds the running year's solar curve, keyed without
+    its year, and the backfill credited every year's hours on it. A run's
+    hours are one calendar year (_contract_segments), and it now asks for
+    that year's curve, as it asks for that year's load profile."""
+    from custom_components.be_electricity_prices import backfill_window
+    from custom_components.be_electricity_prices.providers._rates import (
+        InjectionRates,
+        SpotMonthlyRates,
+    )
+
+    entry = make_entry(
+        supplier="mega",
+        contract="mega_pro_smart_flex",
+        solar_regime="injection",
+        api_key="k",
+    )
+    entry.add_to_hass(hass)
+    snap = make_snapshot(
+        supplier="mega",
+        contract="mega_pro_smart_flex",
+        energy=SpotMonthlyRates(factor=1.113, base=0.0275),
+        injection=InjectionRates(factor=0.8, base=-0.02, spp_indexed=True),
+    )
+    curves = {2025: {(6, 15, 10): 2025.0}, 2026: {(6, 15, 10): 2026.0}}
+    coordinator = SimpleNamespace(
+        hass=hass,
+        entry=entry,
+        _session=None,
+        _snapshot=snap,
+        _snapshot_raw=snap,
+        _rlp_weights={},
+        _spp_weights=curves[2026],
+        _ensure_rlp_weights=AsyncMock(),
+        rlp_weights_for_year=AsyncMock(return_value=None),
+        _ensure_spp_weights=AsyncMock(),
+        spp_weights_for_year=AsyncMock(side_effect=curves.get),
+    )
+
+    async def _legs(*_a: object, **_k: object) -> _CohortLegs:
+        return _CohortLegs(energy=None, injection=None)
+
+    with patch.object(backfill_window, "_cohort_legs", new=_legs):
+        context = await backfill_window._build_context(
+            hass,
+            entry,
+            coordinator,  # type: ignore[arg-type]
+            [datetime(2025, 6, 15, 10, tzinfo=UTC)],
+        )
+    coordinator.spp_weights_for_year.assert_awaited_once_with(2025)
+    assert context.spp_weights == curves[2025]
 
 
 @pytest.mark.parametrize("source", [{}, {"api_key": "k"}])

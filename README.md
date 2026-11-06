@@ -312,7 +312,10 @@ ones and so publish a value about 1 EUR/MWh lower; their closed months are settl
 on the figure their own card prints rather than on this mean. Elegant's EPEXDAMSPP is
 the series EBEM and Trevion publish, and its closed months are settled the same way,
 on the figure its next card prints. It falls back to the plain mean if the profile
-can't be fetched.
+can't be fetched. A backfill reaching into an earlier year weights its months on that
+year's own profile, which for 2025 reproduces Energy Knights' published figures to
+0,004 EUR/MWh; 2024's is published per grid area only and is not read, so its months
+are weighted on the current year's.
 
 ### How often the integration polls
 

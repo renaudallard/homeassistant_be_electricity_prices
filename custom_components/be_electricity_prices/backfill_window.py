@@ -430,10 +430,13 @@ async def _build_context(
             hass, coordinator._session, extractor, contract, region, entry, snap
         )
         gated = cohort.splice(snap)
+    # The calendar year the hours fall in (_contract_segments cuts at each
+    # 1 January), whose own Synergrid curves weight them.
+    hours_year = dt_util.as_local(hours[0]).year if hours else dt_util.now().year
     spp_weights = None
     if _spp_weighting_enabled(entry, gated):
         await coordinator._ensure_spp_weights()
-        spp_weights = coordinator._spp_weights
+        spp_weights = await coordinator.spp_weights_for_year(hours_year)
     # The RLP profile serves two things here: the month mean of an energy leg
     # indexed on it, and the allocation of a compensation entry's yearly net
     # over the year, which is how such a meter is settled. On the entry's own
@@ -459,10 +462,7 @@ async def _build_context(
             # held, and a backfill reaching into an earlier one fetches that
             # year's own. A net is spread over the held one, which is all it
             # reads: the cost series never reaches into an earlier year.
-            rlp_weights = await coordinator.rlp_weights_for_year(
-                dt_util.as_local(hours[0]).year if hours else dt_util.now().year,
-                blend,
-            )
+            rlp_weights = await coordinator.rlp_weights_for_year(hours_year, blend)
     # A cache hit whenever the live tick has run, which resolves the same row
     # to freeze the signed energy rate; identity for an entry with no start
     # date or a supplier with no archive.
