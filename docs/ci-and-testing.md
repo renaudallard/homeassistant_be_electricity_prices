@@ -1615,7 +1615,11 @@ under its pass count, and a tax row's detail counts the other suppliers, so hash
 posted the same open failure again whenever an unrelated row changed), for the drift issue a hash
 of `drift_fingerprint.txt` (the report itself carries the measured seconds and bytes, so hashing it
 never matched the previous day and a supplier over its budget for weeks got a comment a day), and
-the script compares the marker on the issue's latest post with the one it is about to write. A supplier that stays broken therefore gets one issue and one comment a week
+the script compares the marker on the issue's latest post with the one it is about to write.
+Only the bot's own posts count (gh names it `app/github-actions` as an issue's author and
+`github-actions` as a comment's), since anyone can comment and a comment repeating the last
+marker kept the same failure quiet for another week; and only the last marker of a post, the one
+the script writes, since a report can quote one. A supplier that stays broken therefore gets one issue and one comment a week
 rather than one a day, which was the last open piece of the live check's noise problem, while a
 failure that changes shape is still posted the same morning. `tests/test_file_ci_issue.py` drives
 the script through a fake `gh`.

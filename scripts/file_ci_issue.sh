@@ -7,11 +7,11 @@
 # title is only read when an issue is opened, so every title a job files
 # under needs a label of its own, or one problem is posted under the
 # other's open issue. The
-# body carries a fingerprint of what failed; when the open issue's latest
-# post carries the same fingerprint and is younger than the cooldown, the
-# run says so and posts nothing. A permanent upstream outage therefore
-# gets one issue and one comment per cooldown period, not one per day, and
-# a failure that changes shape is posted at once.
+# body carries a fingerprint of what failed; when the bot's latest post on
+# the open issue carries the same fingerprint and is younger than the
+# cooldown, the run says so and posts nothing. A permanent upstream outage
+# therefore gets one issue and one comment per cooldown period, not one per
+# day, and a failure that changes shape is posted at once.
 #
 # usage: file_ci_issue.sh --label L --title T --body FILE [--fingerprint FILE]
 #                         [--cooldown-days N] [--workflow NAME]
@@ -56,11 +56,18 @@ if [ -n "$existing" ]; then
   # The latest post that carries a marker: a comment if there is one, else
   # the body. A post older than the cooldown, or with another fingerprint,
   # is a different situation and gets a fresh comment.
-  latest=$(gh issue view "$existing" --json body,createdAt,comments --jq '
-    ([{body: .body, createdAt: .createdAt}] + [.comments[] | {body: .body, createdAt: .createdAt}])
+  #
+  # Only the bot's own posts count, since anyone can comment, and a comment
+  # repeating the marker kept the next week's runs quiet. gh names the bot
+  # app/github-actions as an issue's author and github-actions as a
+  # comment's. And only the marker this script writes counts, the last of a
+  # post: a report can quote one, from a supplier's page as much as anywhere.
+  latest=$(gh issue view "$existing" --json author,body,createdAt,comments --jq '
+    ([{author: .author, body: .body, createdAt: .createdAt}] + [.comments[] | {author: .author, body: .body, createdAt: .createdAt}])
+    | map(select(.author.login == "github-actions" or .author.login == "app/github-actions"))
     | map(select(.body | test("<!-- ci-fingerprint: [0-9a-f]+ -->")))
     | last // empty
-    | "\(.createdAt) \(.body | capture("<!-- ci-fingerprint: (?<f>[0-9a-f]+) -->").f)"')
+    | "\(.createdAt) \([.body | scan("<!-- ci-fingerprint: ([0-9a-f]+) -->")] | last | .[0])"')
   if [ -n "$latest" ]; then
     posted_at=${latest%% *}
     posted_fingerprint=${latest##* }
