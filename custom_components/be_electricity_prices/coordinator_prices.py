@@ -144,7 +144,7 @@ class _PricesMixin:
         async def _ensure_rlp_weights(self, blend: str = "distinct") -> None: ...
         async def _ensure_spp_weights(self) -> None: ...
         async def _fetch_spot_prices(self) -> dict[datetime, float]: ...
-        async def async_request_refresh(self) -> None: ...
+        async def async_request_reprice(self) -> None: ...
         def _fallback_spots(self) -> dict[datetime, float]: ...
         def _monthly_spot_mean(
             self, year: int, month: int, extra_spots: dict[datetime, float]
@@ -719,7 +719,7 @@ class _PricesMixin:
         after = (len(self._historical_spots), len(self._historical_spot_quarters))
         if self._unloaded or after == before:
             return
-        await self.async_request_refresh()
+        await self.async_request_reprice()
 
     async def _fill_profiles(self, spp: bool, rlp: bool, blend: str) -> None:
         """Fetch the Synergrid profiles, off the setup path.
@@ -747,4 +747,4 @@ class _PricesMixin:
         after = (self._spp_fetched_at, self._rlp_fetched_at, self._rlp_blend)
         if self._unloaded or after == before:
             return
-        await self.async_request_refresh()
+        await self.async_request_reprice()

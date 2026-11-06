@@ -1502,7 +1502,14 @@ Drops the cached supplier snapshot, the month cards the year-to-date is
 billed on, **and today's and tomorrow's** ENTSO-E prices for every loaded entry, or only
 the one `entry_id` names, then re-fetches them immediately. Handy after a tariff card
 update or to clear a transient fetch error without waiting for the next
-hourly tick.
+hourly tick. Only an administrator can call it, as with the backfill below; an
+automation can too.
+
+Asking Home Assistant to update one of the entry's entities fetches nothing
+within a quarter of an hour of the last update that did, and the entities keep
+what they show; the current price still moves on at every slot boundary, and
+the hourly update, an hour after the last one, always fetches. This action and
+the Repairs cards' retry fetch every time.
 
 | Field | Default | Meaning |
 | --- | --- | --- |

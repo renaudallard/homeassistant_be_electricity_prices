@@ -190,8 +190,14 @@ async def async_setup(
             clear_issues(hass, entry.entry_id)
 
     async_dispatcher_connect(hass, SIGNAL_CONFIG_ENTRY_CHANGED, _entry_changed)
-    hass.services.async_register(
-        DOMAIN, SERVICE_REFRESH, _async_refresh_service, schema=REFRESH_SCHEMA
+    # Administrators only, as backfill is. A refresh drops the failure backoff
+    # and the month cards and fetches the card again whatever its age, and
+    # clear_history throws away the day-ahead prices the year to date replays:
+    # they are fetched again from 1 January on the household's own ENTSO-E
+    # key, and the hours before it are not fetched again at all. An
+    # automation, with no user, goes through.
+    async_register_admin_service(
+        hass, DOMAIN, SERVICE_REFRESH, _async_refresh_service, schema=REFRESH_SCHEMA
     )
     hass.services.async_register(
         DOMAIN,
@@ -431,7 +437,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     if coordinator.meter_reads_pending:
         entry.async_create_background_task(
             hass,
-            coordinator.async_request_refresh(),
+            coordinator.async_request_reprice(),
             f"{DOMAIN}_meter_reads_{entry.entry_id}",
         )
 
@@ -531,7 +537,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
     # which waits for it (async_request_refresh_after_tick).
     async def _close_the_month(now: datetime) -> None:
         if (now + timedelta(days=1)).day == 1:
-            await coordinator.async_request_refresh()
+            await coordinator.async_request_reprice()
 
     entry.async_on_unload(
         async_track_time_change(

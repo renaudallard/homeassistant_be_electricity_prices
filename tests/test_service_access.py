@@ -31,8 +31,10 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.auth.const import GROUP_ID_USER
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import Unauthorized
+from homeassistant.setup import async_setup_component
 
 import custom_components.be_electricity_prices as pkg
 from custom_components.be_electricity_prices.const import DOMAIN
@@ -67,3 +69,53 @@ async def test_only_an_administrator_can_backfill(
                 context=context,
             )
     assert backfill.await_count == 2
+
+
+async def test_only_an_administrator_can_refresh(
+    hass: HomeAssistant, hass_read_only_user: Any, hass_admin_user: Any
+) -> None:
+    """A refresh fetches every card again past its age and its backoff, and
+    clear_history throws away the day-ahead prices the year to date replays,
+    the hours before 1 January for good. So a user who is not an
+    administrator is refused, read-only or not. An administrator is not, and
+    neither is an automation: its actions run with no user, even when an
+    event a user fired set it off."""
+    refresh = AsyncMock(return_value=None)
+    household = await hass.auth.async_create_user(
+        "Household", group_ids=[GROUP_ID_USER]
+    )
+    assert not household.is_admin
+    data = {"clear_history": True}
+    with patch.object(pkg, "_async_refresh_service", refresh):
+        assert await pkg.async_setup(hass, {})
+        for user in (hass_read_only_user, household):
+            with pytest.raises(Unauthorized):
+                await hass.services.async_call(
+                    DOMAIN,
+                    pkg.SERVICE_REFRESH,
+                    data,
+                    blocking=True,
+                    context=Context(user_id=user.id),
+                )
+        assert refresh.await_count == 0
+        await hass.services.async_call(
+            DOMAIN,
+            pkg.SERVICE_REFRESH,
+            data,
+            blocking=True,
+            context=Context(user_id=hass_admin_user.id),
+        )
+        assert refresh.await_count == 1
+        assert await async_setup_component(
+            hass,
+            "automation",
+            {
+                "automation": {
+                    "triggers": {"trigger": "event", "event_type": "refresh_now"},
+                    "actions": {"action": f"{DOMAIN}.refresh", "data": data},
+                }
+            },
+        )
+        hass.bus.async_fire("refresh_now", context=Context(user_id=household.id))
+        await hass.async_block_till_done()
+    assert refresh.await_count == 2

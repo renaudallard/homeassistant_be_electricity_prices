@@ -96,6 +96,19 @@ from .synergrid import RlpWeights, SppWeights
 
 _LOGGER = logging.getLogger(__name__)
 
+# The shortest time between two ticks that ask the supplier, ENTSO-E and the
+# rest. Home Assistant's update_entity lets any user who may control an
+# entity ask for a refresh every ten seconds, and every refresh was a full
+# tick: the supplier's probe each time, the card whenever it is due or a
+# failure's backoff has run out, and the day-ahead prices from 11:00 until
+# tomorrow's are out. A refresh within this time of the start of the last
+# full tick publishes what it holds and asks nobody. The hourly tick goes
+# through the same check and is never held: Home Assistant arms it an hour
+# after the end of the last refresh, on the loop clock this is counted on.
+# A tick the integration asks for itself (async_request_reprice) and a
+# forced one (the refresh action, the Repairs card's retry) are not held.
+MIN_FETCH_INTERVAL = timedelta(minutes=15)
+
 
 def _supplier_label(supplier_id: str | None) -> str:
     """The supplier's human-facing label, falling back to its raw id.
@@ -311,6 +324,11 @@ class BePricesCoordinator(
         # latter would block _save_persistent from writing the cached
         # snapshot until the next successful fetch lands.
         self._force_refresh = False
+        # When the last full tick began, on the event loop's clock, and
+        # whether the next refresh was asked for by the integration itself
+        # or forced: MIN_FETCH_INTERVAL holds every other one.
+        self._last_fetch_at: float | None = None
+        self._tick_asked = False
         self._spot_cache: dict[datetime, float] = {}
         # Which source last supplied the live curve: "entsoe" normally,
         # "energy-charts" when the keyless fallback answered for it,
@@ -459,7 +477,43 @@ class BePricesCoordinator(
         """
         return self._card_unreadable
 
+    def fetch_held_for(self) -> timedelta:
+        """How long a refresh nobody asked a tick of would still ask nobody
+        for (``MIN_FETCH_INTERVAL``), zero once the next one asks."""
+        if self._last_fetch_at is None:
+            return timedelta(0)
+        left = (
+            self._last_fetch_at
+            + MIN_FETCH_INTERVAL.total_seconds()
+            - self.hass.loop.time()
+        )
+        return timedelta(seconds=max(left, 0.0))
+
+    async def async_request_reprice(self) -> None:
+        """Request a full tick that MIN_FETCH_INTERVAL does not hold: what
+        the integration asks for itself, when something it prices with has
+        landed or the day or the month turns."""
+        self._tick_asked = True
+        await self.async_request_refresh()
+
     async def _async_update_data(self) -> CoordinatorData:
+        if not self._tick_asked and self.fetch_held_for():
+            # Nothing is priced again either: the slot boundaries push the
+            # current price without a tick, and the next tick, at most an
+            # hour away, reads the meters. A tick that failed still stands,
+            # or the held refresh would mark the entry recovered with
+            # nothing tried, and so does an entry with nothing to publish,
+            # one set up on a card it cannot read: holding only entries
+            # with data let every update of theirs probe the supplier. The
+            # first refresh is never held, since no tick has begun.
+            _LOGGER.debug(
+                "tick less than %s after the last one, held", MIN_FETCH_INTERVAL
+            )
+            if self.data is None or not self.last_update_success:
+                raise UpdateFailed(self._last_error or "the last tick failed")
+            return self.data
+        self._tick_asked = False
+        self._last_fetch_at = self.hass.loop.time()
         # Lifecycle note: a slow tick that started before an OptionsFlow
         # change of supplier / contract / region / meter sensors can
         # finish *after* HA's reload swapped self.entry.runtime_data to
@@ -508,7 +562,7 @@ class BePricesCoordinator(
         """
         async with self._debounced_refresh.async_lock():
             pass
-        await self.async_request_refresh()
+        await self.async_request_reprice()
 
     async def async_force_refresh(
         self, clear_history: bool = False, *, wait: bool = False
@@ -545,6 +599,7 @@ class BePricesCoordinator(
         losing every setting with it.
         """
         self._force_refresh = True
+        self._tick_asked = True
         if clear_history:
             self._historical_spots.clear()
             # Both caches come off the same fetch, so a service that exists to

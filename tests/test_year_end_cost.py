@@ -30,7 +30,12 @@ from custom_components.be_electricity_prices.year_ahead import YearAhead
 from custom_components.be_electricity_prices.year_end_cost import (
     _compute_year_end_cost,
 )
-from tests import make_entry, make_snapshot, make_stub_extractor
+from tests import (
+    let_the_fetch_interval_pass,
+    make_entry,
+    make_snapshot,
+    make_stub_extractor,
+)
 
 _PerDay = Callable[[str, date], float | None]
 
@@ -621,6 +626,7 @@ async def test_the_tick_walks_the_year_end_only_when_its_inputs_move(
     walk = AsyncMock(return_value=812.5)
 
     async def tick() -> float | None:
+        let_the_fetch_interval_pass(coord)
         data = await coord._async_update_data()
         return data.year_end_cost_eur
 
@@ -697,9 +703,11 @@ async def test_a_year_end_walk_the_recorder_did_not_answer_is_walked_again(
     ):
         await coord._async_update_data()
         freezer.tick(timedelta(minutes=5))
+        let_the_fetch_interval_pass(coord)
         await coord._async_update_data()
         assert coord._year_end_memo is None
         busy = False
         freezer.tick(timedelta(minutes=5))
+        let_the_fetch_interval_pass(coord)
         data = await coord._async_update_data()
         assert data.year_end_cost_eur == 812.5

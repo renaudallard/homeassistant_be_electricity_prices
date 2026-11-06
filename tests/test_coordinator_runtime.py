@@ -84,7 +84,12 @@ from custom_components.be_electricity_prices.snapshot_store import (
     _shared_snapshots,
     evict_shared_caches,
 )
-from tests import make_entry, make_snapshot, make_stub_extractor
+from tests import (
+    let_the_fetch_interval_pass,
+    make_entry,
+    make_snapshot,
+    make_stub_extractor,
+)
 
 _SPOTS = "custom_components.be_electricity_prices.coordinator_spots"
 _API = "custom_components.be_electricity_prices.api"
@@ -5484,15 +5489,18 @@ async def test_year_end_walks_again_on_repaired_spots(
         patch.object(coordinator_costs, "_compute_year_end_cost", walk),
     ):
         await coord._async_update_data()
+        let_the_fetch_interval_pass(coord)
         await coord._async_update_data()
         assert walk.await_count == 2
         await coord.async_force_refresh(clear_history=True, wait=True)
         assert coord._historical_spots == {hour: 0.08}
         assert walk.await_count == 3
         coord._merge_spot_window({hour: 0.08}, False)
+        let_the_fetch_interval_pass(coord)
         await coord._async_update_data()
         assert walk.await_count == 3
         coord._merge_spot_window({hour: 0.09}, False)
+        let_the_fetch_interval_pass(coord)
         await coord._async_update_data()
         assert walk.await_count == 4
 

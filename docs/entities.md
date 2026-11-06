@@ -649,6 +649,18 @@ year-to-date walk replays is kept: only `clear_history` drops it
 `_spot_day_retry_at` and `_quarter_grid_days`, `coordinator.py`), since
 refilling it re-fetches every day of the year-to-date window.
 
+It is registered with `async_register_admin_service`, as `backfill_statistics`
+is, so a user who is not an administrator is refused and an automation, which
+has no user, is not. Every call drops the failure backoff and the month cards
+and fetches the card again whatever its age, and `clear_history` refetches the
+year to date from ENTSO-E on the household's own key, while the hours before 1
+January are not fetched again at all.
+
+Home Assistant's `update_entity` on any entity of the entry is held to
+`MIN_FETCH_INTERVAL` (`coordinator.py`), with no error: within a quarter of an
+hour of the last full tick it fetches nothing and the entities keep what they
+show. See [coordinator.md](coordinator.md), section 9.2.
+
 ### `cheapest_window` and `most_expensive_window`
 
 Same shape; one minimizes the window average, the other maximizes. Fields

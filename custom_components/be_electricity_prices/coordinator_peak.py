@@ -30,8 +30,8 @@ either direction and zero shared state, and a module named for spot prices
 containing _billed_peak_kw would be actively misleading.
 
 This file holds the only back-edge to the concrete coordinator,
-reset_monthly_peak calls _save_persistent and async_request_refresh, so both
-stubs live here, with signatures matching DataUpdateCoordinator exactly."""
+reset_monthly_peak calls _save_persistent and async_request_reprice, so both
+stubs live here, with signatures matching the coordinator exactly."""
 
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ class _PeakMixin:
         hass: HomeAssistant
 
         async def _save_persistent(self) -> None: ...
-        async def async_request_refresh(self) -> None: ...
+        async def async_request_reprice(self) -> None: ...
 
     async def reset_monthly_peak(self) -> None:
         """Drop the persisted monthly peak so the next tick rebuilds it.
@@ -102,7 +102,7 @@ class _PeakMixin:
         self._peak_kw = 0.0
         self._peak_history.clear()
         await self._save_persistent()
-        await self.async_request_refresh()
+        await self.async_request_reprice()
 
     async def _track_monthly_peak(self) -> None:
         if not bills_capacity(self.entry.data) or analog_meter(self.entry.data):

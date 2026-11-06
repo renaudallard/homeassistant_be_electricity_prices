@@ -60,7 +60,7 @@ from custom_components.be_electricity_prices.providers._rates import (
     InjectionRates,
 )
 from custom_components.be_electricity_prices.providers.frank import parse_snapshot
-from tests import fixture_text, make_snapshot
+from tests import fixture_text, let_the_fetch_interval_pass, make_snapshot
 
 _SPOTS = "custom_components.be_electricity_prices.coordinator_spots"
 _API = "custom_components.be_electricity_prices.api"
@@ -438,6 +438,7 @@ async def test_setup_reads_no_meter_and_the_figures_follow(
         assert after_setup["rolling_year_consumption_kwh"] is not None
 
         # What an ordinary hourly refresh publishes at the same instant.
+        let_the_fetch_interval_pass(entry.runtime_data)
         await entry.runtime_data.async_refresh()
         assert _figures(entry) == after_setup
 
@@ -545,6 +546,7 @@ async def test_costs_priced_before_an_edit_are_held_under_their_settings(
             return costs
 
         with patch.object(_CostsMixin, "_tick_costs", _priced_then_edited):
+            let_the_fetch_interval_pass(coord)
             await coord.async_refresh()
         assert settings_digest(entry) != before
         assert coord._held_costs is not None
@@ -587,10 +589,12 @@ async def test_a_tick_the_recorder_did_not_answer_keeps_the_last_costs(
 
         freezer.tick(timedelta(minutes=5))
         with patch.object(_CostsMixin, "_tick_costs", _busy):
+            let_the_fetch_interval_pass(coord)
             await coord.async_refresh()
         assert _figures(entry) == before
         assert coord._held_costs == held
 
+        let_the_fetch_interval_pass(coord)
         await coord.async_refresh()
         assert entry.runtime_data.data.current_year_cost_eur is not None
         assert entry.runtime_data.data.current_year_cost_eur != 1.0
@@ -621,11 +625,13 @@ async def test_without_the_recorder_the_costs_are_unknown_and_repairs_says_why(
         assert registry.async_get_issue(DOMAIN, issue_id) is None
 
         with patch.object(energy_meters, "recorder_loaded", lambda _hass: False):
+            let_the_fetch_interval_pass(coord)
             await coord.async_refresh()
             assert all(value is None for value in _figures(entry).values())
             assert coord.data.hourly, "the prices still publish"
             assert registry.async_get_issue(DOMAIN, issue_id) is not None
 
+        let_the_fetch_interval_pass(coord)
         await coord.async_refresh()
         assert coord.data.current_year_cost_eur is not None
         assert registry.async_get_issue(DOMAIN, issue_id) is None

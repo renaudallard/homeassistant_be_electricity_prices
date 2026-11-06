@@ -100,7 +100,8 @@ machinery.
 | `tests/test_coordinator_helpers.py` | Coordinator helper functions in isolation |
 | `tests/test_init.py` | Entry setup: the current-year-cost unique_id migration and the time listeners `async_setup_entry` registers |
 | `tests/test_setup_meter_reads.py` | What setup reads from the recorder (issue #107) |
-| `tests/test_service_access.py` | Who may call the actions: the statistics backfill is for administrators and automations |
+| `tests/test_service_access.py` | Who may call the actions: the refresh and the statistics backfill are for administrators and automations |
+| `tests/test_fetch_pacing.py` | A plain user's `update_entity` within a quarter of an hour of the last tick asks neither the supplier's probe nor ENTSO-E, the hourly tick still does, a failed tick is not read as recovered by a held refresh, an entry set up on a card it cannot read is held too, and a forced refresh, a reprice and the midnight rebuild right after the month's close still tick (`MIN_FETCH_INTERVAL`) |
 | `tests/test_snapshot_codec.py` | The snapshot codec against rows other versions wrote or will write, and an archive row refused when a figure is not one of its unit |
 | `tests/test_month_card_eviction.py` | A month row's first fetch against an eviction of its supplier, contract and region (`month_card`, `evict_shared_caches`) |
 | `tests/test_snapshot_areas.py` | A month's card short of the entry's network area, completed from the nearest card of its calendar year that prints it (`_with_nearest_area`, per supplier on the policy) |

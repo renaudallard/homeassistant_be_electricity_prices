@@ -319,10 +319,17 @@ def make_stub_extractor(
     )
 
 
+def let_the_fetch_interval_pass(coordinator: Any) -> None:
+    """Have the coordinator's next refresh run a full tick, as it does once
+    ``MIN_FETCH_INTERVAL``, a quarter of an hour, has passed since the last."""
+    coordinator._last_fetch_at = None
+
+
 __all__ = [
     "FIXTURES",
     "FakeBody",
     "fixture_text",
+    "let_the_fetch_interval_pass",
     "make_entry",
     "make_snapshot",
     "make_stub_extractor",

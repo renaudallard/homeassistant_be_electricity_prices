@@ -287,7 +287,7 @@ class _CostsMixin:
             keyless: bool = False,
         ) -> None: ...
         async def _ensure_rlp_weights(self, blend: str = "distinct") -> None: ...
-        async def async_request_refresh(self) -> None: ...
+        async def async_request_reprice(self) -> None: ...
         def _billed_peak_kw(self) -> float: ...
         def _ytd_months(self, today: date) -> list[date]: ...
         def _year_months(self, today: date) -> list[date]: ...
@@ -716,7 +716,7 @@ class _CostsMixin:
         after = archived_months_present(self.hass, supplier, contract, region, year)
         if self._unloaded or after == before:
             return
-        await self.async_request_refresh()
+        await self.async_request_reprice()
 
     def _schedule_previous_pricing(
         self, periods: list[ContractPeriod], today: date
@@ -915,4 +915,4 @@ class _CostsMixin:
             rows=keep_settled(self._previous_priced, key, rows),
             peak_kw=peak,
         )
-        await self.async_request_refresh()
+        await self.async_request_reprice()
