@@ -750,7 +750,12 @@ cost. Two rules enforce this:
   (`nearer_card_not_read`, `snapshot_months.py`, which names that card's
   month), and every month of a contract whose signing month is one
   (`month_card_failed`, `snapshot_months.py`, which tells a failed read from a
-  month no archive holds, since `month_card` answers None for both). An
+  month no archive holds, since `month_card` answers None for both), and a
+  month of this year a custom entry taking its network off its region's sheet
+  has none of it for, neither a sheet of that year or an earlier one nor the
+  card archive's copy, the running month included (`network_sheet_unread`,
+  `snapshot_resolve.py`; an earlier year keeps the figures typed, since a
+  regulator may never have published it). An
   earlier contract no archive kept is priced on the stand-in the live walk
   uses, imported at once so the anchor probe finds its
   row on the next restart; the response lists it under `stand_in` and a

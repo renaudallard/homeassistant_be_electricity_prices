@@ -1978,3 +1978,81 @@ async def test_the_dispatcher_reads_the_cwape_s_grids_for_a_walloon_entry() -> N
             2027,
         )
         grids.assert_not_awaited()
+
+
+def test_a_month_of_this_year_no_sheet_was_read_for_is_unread(freezer: Any) -> None:
+    """Ticked, a month of this year with no sheet of its year or an earlier
+    one held, nor the card archive's, is priced on the figures typed while a
+    read that failed may yet work. An earlier year keeps them: a regulator may
+    never have published it."""
+    from datetime import date
+
+    from custom_components.be_electricity_prices import cwape, network_archive
+    from custom_components.be_electricity_prices.snapshot_resolve import (
+        network_sheet_unread,
+    )
+
+    freezer.move_to("2026-11-06 12:00:00+01:00")
+    ticked = _flemish_network(**{const.CONF_CUSTOM_DSO_FROM_FLUVIUS: True})
+    assert network_sheet_unread(ticked, date(2026, 3, 1))
+    assert not network_sheet_unread(ticked, date(2025, 3, 1))
+    assert not network_sheet_unread(_flemish_network(), date(2026, 3, 1))
+    _hold_zenne_dijle_2026()
+    assert not network_sheet_unread(ticked, date(2026, 3, 1))
+    walloon = _walloon_network(**{const.CONF_CUSTOM_DSO_FROM_CWAPE: True})
+    from pathlib import Path
+
+    fixtures = Path(__file__).parent / "fixtures"
+    grid = cwape.parse_grid((fixtures / "cwape_ores_2026.xlsx").read_bytes())
+    assert grid is not None
+    cwape._grids[const.DSO_ORES] = {"grid": grid}
+    try:
+        # The operator's grid without the transport grid is half a network.
+        assert network_sheet_unread(walloon, date(2026, 3, 1))
+        network_archive.hold(
+            {"months": {"2026-03": {"ores": {"transport": 0.0258728}}}}
+        )
+        assert not network_sheet_unread(walloon, date(2026, 3, 1))
+    finally:
+        cwape._grids.clear()
+
+
+async def test_the_backfill_leaves_out_the_months_no_sheet_was_read_for(
+    hass: Any, freezer: Any
+) -> None:
+    """Priced on the figures typed, those days would stay in the recorder once
+    the sheet is read: they are left out for a later run, as a month whose
+    card failed is, the running month included."""
+    from datetime import date
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices import backfill_window
+
+    freezer.move_to("2026-11-06 12:00:00+01:00")
+    data = _flemish_network(**{const.CONF_CUSTOM_DSO_FROM_FLUVIUS: True})
+    entry: Any = SimpleNamespace(data=data, entry_id="custom")
+    card = build_snapshot(data, const.REGION_FLANDERS, "fluvius_zenne_dijle")
+    spans = await backfill_window._months_not_read(
+        hass,
+        None,  # type: ignore[arg-type]
+        entry,
+        card,
+        date(2026, 9, 15),
+        date(2026, 11, 6),
+    )
+    assert [(first, last, failed) for first, last, _why, failed in spans] == [
+        (date(2026, 9, 15), date(2026, 9, 30), True),
+        (date(2026, 10, 1), date(2026, 10, 31), True),
+        (date(2026, 11, 1), date(2026, 11, 6), True),
+    ]
+    assert spans[0][2] == "the network sheet of 2026 could not be read"
+    _hold_zenne_dijle_2026()
+    spans = await backfill_window._months_not_read(
+        hass,
+        None,  # type: ignore[arg-type]
+        entry,
+        card,
+        date(2026, 9, 15),
+        date(2026, 11, 6),
+    )
+    assert spans == []

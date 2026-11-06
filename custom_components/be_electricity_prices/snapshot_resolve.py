@@ -394,6 +394,33 @@ def _resolve_cwape_network(
     return _with_sheet(snap, month, dso, read)
 
 
+def network_sheet_unread(data: Mapping[str, Any], month: date) -> bool:
+    """Whether a custom entry taking its network off its region's sheet has
+    none of it for ``month`` of this year: no sheet of that year or an earlier
+    one held, nor what the card archive kept, so the figures typed stand in.
+
+    This year only, whose sheet every regulator publishes before it starts,
+    or else the year before's stands in: a read that failed just now may work
+    later. An earlier year keeps the figures typed, since a regulator may
+    never have published it (Brugel serves no final sheet for 2025, and the
+    CWaPE's grids are read from 2026).
+    """
+    if not takes_sheet_network(data) or month.year != dt_util.now().year:
+        return False
+    dso = str(data.get(CONF_DSO, ""))
+    archived = archived_network(month, dso)
+    if takes_cwape_network(data):
+        grid, transport = cached_cwape_network(month, dso)
+        return (grid is None and "distribution_single" not in archived) or (
+            transport is None and "transport" not in archived
+        )
+    if takes_fluvius_network(data):
+        held: object = cached_area_terms(month.year, dso)
+    else:
+        held = cached_network_terms(month.year)
+    return held is None and not archived
+
+
 def takes_sheet_network(data: Mapping[str, Any]) -> bool:
     """Whether this entry takes its network off its region's sheet."""
     return (

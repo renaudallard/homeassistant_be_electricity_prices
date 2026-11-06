@@ -99,6 +99,7 @@ from .snapshot_resolve import (
     ensure_custom_network,
     entry_annual_injection_kwh,
     entry_annual_kwh,
+    network_sheet_unread,
 )
 from .spot_stats import (
     _energy_is_rlp_indexed,
@@ -783,6 +784,24 @@ async def _months_not_read(
                     max(first, month),
                     min(last, following - timedelta(days=1)),
                     why,
+                    True,
+                )
+            )
+        month = following
+    # A custom entry taking its network off its region's sheet, the running
+    # month included: a month of this year none of it was read for is priced
+    # on the figures typed, which a read that failed just now replaces once it
+    # works, so it is left out for a later run, as a card that failed is.
+    month = first.replace(day=1)
+    while month <= last:
+        following = (month + timedelta(days=31)).replace(day=1)
+        await ensure_custom_network(session, entry.data, month.year)
+        if network_sheet_unread(entry.data, month):
+            spans.append(
+                (
+                    max(first, month),
+                    min(last, following - timedelta(days=1)),
+                    f"the network sheet of {month.year} could not be read",
                     True,
                 )
             )
