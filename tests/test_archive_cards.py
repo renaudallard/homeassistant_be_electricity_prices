@@ -4223,9 +4223,12 @@ def _archive_jobs() -> dict[str, Any]:
     return jobs
 
 
-def _run_keep_step(tmp_path: Path, gh: str) -> subprocess.CompletedProcess[str]:
+def _run_keep_step(
+    tmp_path: Path, gh: str, token: str = "x"
+) -> subprocess.CompletedProcess[str]:
     """The keep step's own shell in ``tmp_path``, with ``gh`` the body of a
-    stub gh and git answering that the cards repository has a branch."""
+    stub gh, ``token`` the cards token and git answering that the cards
+    repository has a branch."""
     script = next(
         s["run"] for s in _archive_jobs()["keep"]["steps"] if s.get("id") == "keep"
     )
@@ -4239,7 +4242,7 @@ def _run_keep_step(tmp_path: Path, gh: str) -> subprocess.CompletedProcess[str]:
     env = {
         **os.environ,
         "PATH": f"{stubs}:{os.environ['PATH']}",
-        "GH_TOKEN": "x",
+        "GH_TOKEN": token,
         "CARDS_REPO": "o/r",
     }
     return subprocess.run(
@@ -4249,6 +4252,98 @@ def _run_keep_step(tmp_path: Path, gh: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
     )
+
+
+def _releases_gh(state: Path) -> str:
+    """A stub gh body holding the cards repository's releases as JSON files
+    under ``state``, one per tag. ``view`` answers as gh does, running a
+    ``--jq`` program through the real jq, which reads the environment as
+    gh's own does; ``create`` makes an empty release; ``upload`` and every
+    call are logged."""
+    return (
+        f'echo "$*" >> "{state}/calls.log"\n'
+        'case "$1 $2" in\n'
+        '  "release view")\n'
+        f'    rel="{state}/releases/$3"\n'
+        '    [ -f "$rel" ] || exit 1\n'
+        "    shift 3\n"
+        '    while [ $# -gt 0 ] && [ "$1" != --jq ]; do shift; done\n'
+        '    if [ $# -gt 1 ]; then jq -r "$2" "$rel"; else cat "$rel"; fi ;;\n'
+        f'  "release create") echo \'{{"assets": []}}\' > "{state}/releases/$3" ;;\n'
+        f'  "release upload") echo "$3 $4" >> "{state}/uploaded.txt" ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
+
+
+def _release(state: Path, tag: str, *names: str) -> None:
+    releases = state / "releases"
+    releases.mkdir(parents=True, exist_ok=True)
+    (releases / tag).write_text(json.dumps({"assets": [{"name": n} for n in names]}))
+
+
+def test_only_the_cards_the_walk_names_are_uploaded(tmp_path: Path) -> None:
+    """The keep job holds the cards token and takes the walk's files from an
+    artifact. The month's tag went into gh's jq program, so a folder named
+    to close its quote, ``electricity-x"+env.GH_TOKEN+"``, had the token
+    written into pdfs.json once its release existed, and the push sent it to
+    be_price_cards. Only a month folder and a card named as the walk names
+    them are uploaded, and nothing else that came with them."""
+    token = "FAKE-CARDS-TOKEN-0123"
+    state = tmp_path / "gh"
+    crafted = 'electricity-x"+env.GH_TOKEN+"'
+    # Its release is there, as on the run after the one that created it,
+    # and lists its card, so the card is looked up rather than uploaded.
+    _release(state, crafted, f"{'d' * 64}.pdf")
+    cards = {
+        f"{crafted}/{'d' * 64}.pdf": b"%PDF d",
+        f"electricity-2026-1/{'c' * 64}.pdf": b"%PDF c",
+        f"electricity-2026-10/{'e' * 64}.pdf": b"%PDF e",
+        "electricity-2026-10/notes.pdf": b"%PDF n",
+    }
+    for rel, payload in cards.items():
+        path = tmp_path / "tmp" / "pdfs" / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+    done = _run_keep_step(tmp_path, _releases_gh(state), token)
+    assert done.returncode == 0, done.stderr
+    manifest = (tmp_path / "tmp" / "cards" / "electricity" / "pdfs.json").read_text()
+    assert token not in manifest
+    assert json.loads(manifest) == {"e" * 64: f"electricity-2026-10/{'e' * 64}.pdf"}
+    assert (state / "uploaded.txt").read_text().splitlines() == [
+        f"electricity-2026-10 tmp/pdfs/electricity-2026-10/{'e' * 64}.pdf"
+    ]
+    calls = (state / "calls.log").read_text()
+    assert "env.GH_TOKEN" not in calls and "electricity-2026-1 " not in calls
+
+
+def test_a_card_a_release_of_its_month_holds_is_recorded_not_uploaded(
+    tmp_path: Path,
+) -> None:
+    """Every release of the month is read for the files it holds: a card
+    in any of them is recorded where it is, and a new one goes into the
+    last, which still has room."""
+    state = tmp_path / "gh"
+    a, b, c = (f"{x * 64}.pdf" for x in "abc")
+    _release(state, "electricity-2026-10", a)
+    _release(state, "electricity-2026-10-2", b)
+    month = tmp_path / "tmp" / "pdfs" / "electricity-2026-10"
+    month.mkdir(parents=True)
+    for name in (a, b, c):
+        (month / name).write_bytes(b"%PDF")
+    done = _run_keep_step(tmp_path, _releases_gh(state))
+    assert done.returncode == 0, done.stderr
+    assert (state / "uploaded.txt").read_text().splitlines() == [
+        f"electricity-2026-10-2 tmp/pdfs/electricity-2026-10/{c}"
+    ]
+    manifest = json.loads(
+        (tmp_path / "tmp" / "cards" / "electricity" / "pdfs.json").read_text()
+    )
+    assert manifest == {
+        "a" * 64: f"electricity-2026-10/{a}",
+        "b" * 64: f"electricity-2026-10-2/{b}",
+        "c" * 64: f"electricity-2026-10-2/{c}",
+    }
 
 
 def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
@@ -4261,14 +4356,15 @@ def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
     keep = jobs["keep"]["steps"]
     month = tmp_path / "tmp" / "pdfs" / "electricity-2026-10"
     month.mkdir(parents=True)
-    (month / "aaa.pdf").write_bytes(b"%PDF a")
-    (month / "bbb.pdf").write_bytes(b"%PDF b")
-    # No release of the month yet; creating one works, uploading bbb fails.
+    a, b = "a" * 64, "b" * 64
+    (month / f"{a}.pdf").write_bytes(b"%PDF a")
+    (month / f"{b}.pdf").write_bytes(b"%PDF b")
+    # No release of the month yet; creating one works, uploading b fails.
     done = _run_keep_step(
         tmp_path,
         'case "$1 $2" in\n'
         '  "release view") exit 1 ;;\n'
-        '  "release upload") case "$4" in *bbb.pdf) exit 1 ;; esac ;;\n'
+        f'  "release upload") case "$4" in *{b}.pdf) exit 1 ;; esac ;;\n'
         "esac\n"
         "exit 0\n",
     )
@@ -4276,7 +4372,7 @@ def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
     manifest = json.loads(
         (tmp_path / "tmp" / "cards" / "electricity" / "pdfs.json").read_text()
     )
-    assert manifest == {"aaa": "electricity-2026-10/aaa.pdf"}
+    assert manifest == {a: f"electricity-2026-10/{a}.pdf"}
 
     # What landed is handed over even though the step failed, and the index
     # and the push run on the walk's success alone.

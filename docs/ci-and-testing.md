@@ -1802,8 +1802,15 @@ which the first backfill hit when every month's cards were filed under the month
 a month's own cards are about two hundred, so the cap is now far away, but the step still looks
 at every release of the month that exists, uploads into the last one while it has room and opens
 `electricity-YYYY-MM-2` should it ever fill; a file already present in any of them is not
-uploaded again, only recorded. Retention deletes only `electricity-` releases; the gas and
-water integrations' are not this job's. Where each file landed is merged into the manifest once per month
+uploaded again, only recorded. Only a folder named `electricity-YYYY-MM` and a file named by
+its SHA-256 (64 lowercase hex digits and `.pdf`), the names the walk writes, are uploaded;
+anything else in the hand-over is skipped with a line in the log. The job holds the cards token
+and takes those names from the walk's artifact, and the month's tag used to be pasted into the
+jq program that lists a release's files, which can read the environment: a folder named to close
+its quote had the token written into `pdfs.json` once its release existed. The tag now reaches
+jq as an `--arg` (`test_only_the_cards_the_walk_names_are_uploaded`,
+`test_a_card_a_release_of_its_month_holds_is_recorded_not_uploaded`). Retention deletes only
+`electricity-` releases; the gas and water integrations' are not this job's. Where each file landed is merged into the manifest once per month
 directory rather than once per file: a backfill day uploads a thousand files, and rewriting the
 whole manifest for each took longer than some of the uploads. An upload that fails stops the
 uploads and fails the step, but only once the month's files that did land are in the manifest,

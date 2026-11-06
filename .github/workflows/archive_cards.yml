@@ -358,14 +358,26 @@ jobs:
           for dir in tmp/pdfs/electricity-*/; do
             [ -d "$dir" ] || continue
             base=$(basename "$dir")
+            # The walk names a month's folder and its cards; anything else
+            # in the hand-over is not one of them and is not uploaded. The
+            # names come from an artifact the walk built, and they become
+            # release tags, gh arguments and pdfs.json entries in a job
+            # that holds the cards token.
+            if [[ ! "$base" =~ ^electricity-[0-9]{4}-[0-9]{2}$ ]]; then
+              echo "skipping $base: not a month of cards" >&2
+              continue
+            fi
             month=${base#electricity-}
             # Every release of this month that exists (normally one; a
             # month never nears the cap): which file is where, and how full
-            # the last one is.
+            # the last one is. The tag reaches jq as an argument, never as
+            # part of the program: a jq program can read the environment,
+            # the cards token included.
             : > have.txt
             n=1; tag=$base; count=0
-            while gh release view "$tag" --repo "$CARDS_REPO" --json assets --jq ".assets[].name | \"\(.) $tag\"" >> have.txt 2>/dev/null; do
-              count=$(gh release view "$tag" --repo "$CARDS_REPO" --json assets --jq '.assets | length')
+            while gh release view "$tag" --repo "$CARDS_REPO" --json assets > release.json 2>/dev/null; do
+              jq -r --arg tag "$tag" '.assets[].name | "\(.) \($tag)"' release.json >> have.txt
+              count=$(jq '.assets | length' release.json)
               next="$base-$((n + 1))"
               gh release view "$next" --repo "$CARDS_REPO" >/dev/null 2>&1 || break
               n=$((n + 1)); tag=$next
@@ -378,6 +390,10 @@ jobs:
             : > landed.txt
             for pdf in "$dir"*.pdf; do
               name=$(basename "$pdf")
+              if [[ ! "$name" =~ ^[0-9a-f]{64}\.pdf$ ]]; then
+                echo "skipping $name: not a card the walk names" >&2
+                continue
+              fi
               where=$(awk -v f="$name" '$1 == f {print $2; exit}' have.txt)
               if [ -z "$where" ]; then
                 if [ "$count" -ge 1000 ]; then
