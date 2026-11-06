@@ -1700,14 +1700,16 @@ Attach it when reporting an issue.
 
 A `current_year_cost` well under your real bill is almost always the kWh
 side rather than the tariff side, and the integration says so in the log
-rather than quietly billing what it was given. Five messages are worth
-searching for:
+rather than quietly billing what it was given. Each message names the meter
+by the setting that holds it, `day_consumption_kwh` say, rather than by its
+entity id, which diagnostics redact too, so the log can go into an issue as
+it is. Five messages are worth searching for:
 
 - **"negative change"** — Home Assistant restarts the running total behind
   a sensor after an outage longer than `purge_keep_days`, and the restart
   lands as one large negative hour. Adding that up cancels real energy
   elsewhere in the year: a meter that moved 4687 kWh was billed for 942.
-  Those hours are now ignored and the sensor is named; on a consumption
+  Those hours are now ignored and the sensor's setting is named; on a consumption
   sensor the feed-in of that hour or day is left out too, rather than
   credited against no consumption. The rest of the year corrects itself on
   the next refresh, since the year is recomputed from scratch each time, but

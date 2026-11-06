@@ -57,6 +57,7 @@ from .coordinator_persist import settings_digest
 from .energy_meters import (
     _bills_injection,
     _kwh_sensor_ids,
+    meter_settings,
     noting_failed_reads,
 )
 from .excise_law import protected_excise, standard_excise
@@ -304,7 +305,7 @@ class _SnapshotMixin:
             _LOGGER.debug(
                 "%s: annual volume unavailable, the recorder did not answer for %s",
                 self.entry.entry_id,
-                ", ".join(sorted(failed)),
+                meter_settings(self.hass, failed),
             )
             return
         self._annual_kwh = volume.kwh if volume.measured else None

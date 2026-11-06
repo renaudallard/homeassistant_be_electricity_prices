@@ -2905,12 +2905,14 @@ async def test_measured_kwh_refuses_a_dead_half_of_a_register_pair(
     the real bill. A register can be wired, valid and silent, because
     device_class=energy with no state_class compiles no statistics at all and
     nothing upstream rejects it."""
-    entry = SimpleNamespace(
+    entry = MockConfigEntry(
+        domain=DOMAIN,
         data={
             "day_consumption_kwh": "sensor.day",
             "night_consumption_kwh": "sensor.night",
-        }
+        },
     )
+    entry.add_to_hass(hass)
     d0 = date(2026, 1, 1)
 
     async def _dead_night(
@@ -2926,14 +2928,16 @@ async def test_measured_kwh_refuses_a_dead_half_of_a_register_pair(
     ):
         got = await meter_daily._measured_kwh(
             hass,
-            entry,  # type: ignore[arg-type]
+            entry,
             d0,
             d0 + timedelta(days=59),
             warn=True,
         )
-    # Refused outright rather than billed at half, and said out loud.
+    # Refused outright rather than billed at half, and said out loud. The log
+    # names the meter by its setting; the Repairs card names the sensor.
     assert got == meter_daily.MeasuredKwh(0.0, 0, pair_fault="sensor.night")
-    assert "sensor.night" in caplog.text
+    assert "the night_consumption_kwh meter returned no statistics" in caplog.text
+    assert "sensor.night" not in caplog.text
 
 
 async def test_measured_kwh_falls_back_to_the_overlap_when_a_half_stops(
@@ -2996,6 +3000,9 @@ async def test_recorder_deltas_drops_a_negative_change(
         _recorder_deltas,
     )
 
+    MockConfigEntry(
+        domain=DOMAIN, data={"consumption_kwh": "sensor.meter"}
+    ).add_to_hass(hass)
     base = datetime(2026, 3, 1, tzinfo=UTC)
     rows = [
         {"start": (base + timedelta(hours=h)).timestamp(), "change": v}
@@ -3015,9 +3022,10 @@ async def test_recorder_deltas_drops_a_negative_change(
 
     # The three real buckets survive; the impossible one is not billed.
     assert [v for _, v in got] == [4.0, 5.0, 6.0]
-    # And it is said out loud rather than rendered as a small bill.
-    assert "negative change" in caplog.text
-    assert "sensor.meter" in caplog.text
+    # And it is said out loud rather than rendered as a small bill, naming the
+    # meter by its setting: the entity id is the household's own.
+    assert "the consumption_kwh meter reported -297.5 kWh" in caplog.text
+    assert "sensor.meter" not in caplog.text
 
 
 async def test_ytd_breakdown_splits_the_capacity_leg_out_of_fees(
@@ -4234,19 +4242,22 @@ async def _both_sides(
     inj: list[date],
     live: dict[str, float],
     today: date,
+    hass: HomeAssistant | None = None,
 ) -> tuple[Any, Any]:
+    """``hass`` only where a reading makes the walk log a warning, which
+    names the meter by its setting."""
     rows, live_patch = _pair_through_the_recorder(
         {"sensor.cons": cons, "sensor.inj": inj}, live
     )
     with rows, live_patch:
         daily = await meter_daily._resolve_daily_kwh(
-            None,  # type: ignore[arg-type]
+            hass,  # type: ignore[arg-type]
             _TOTALS_BOTH_SIDES,  # type: ignore[arg-type]
             today,
             date(2026, 1, 1),
         )
         sides = await meter_hourly._metered_sides(
-            None,  # type: ignore[arg-type]
+            hass,  # type: ignore[arg-type]
             _TOTALS_BOTH_SIDES,  # type: ignore[arg-type]
             date(2026, 1, 1),
             today,
@@ -4517,7 +4528,7 @@ async def test_feed_in_before_the_consumption_meter_started_is_left_out(
 
 
 async def test_a_dropped_consumption_bucket_leaves_the_feed_in_too(
-    freezer: Any,
+    hass: HomeAssistant, freezer: Any
 ) -> None:
     """A sum chain restart lands as a negative bucket, which is dropped. On a
     register pair that day already left both sides; on a consumption totals
@@ -4527,7 +4538,7 @@ async def test_a_dropped_consumption_bucket_leaves_the_feed_in_too(
     year = [date(2026, 1, 1) + timedelta(days=i) for i in range(265)]
     cons = {d: -50.0 if i == 100 else 1.0 for i, d in enumerate(year)}
     daily, sides = await _both_sides(
-        cons, year, {"sensor.cons": 5.0, "sensor.inj": 3.0}, today
+        cons, year, {"sensor.cons": 5.0, "sensor.inj": 3.0}, today, hass
     )
     assert daily is not None
     assert year[100] not in daily

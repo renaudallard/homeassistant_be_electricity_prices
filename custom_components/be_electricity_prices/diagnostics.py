@@ -38,18 +38,17 @@ from homeassistant.util import dt as dt_util
 from .cohort import ytd_window_start
 from .const import (
     CONF_API_KEY,
-    CONF_CAPACITY_PEAK_SENSOR,
     CONF_CONTRACT,
     CONF_REGION,
     CONF_SUPPLIER,
     MEASURED_FULL_YEAR_DAYS,
-    METER_SENSOR_KEYS,
 )
 from .contract_periods import current_period_start
 from .coordinator import (
     BePricesCoordinator,
 )
 from .energy_meters import (
+    METER_SETTINGS,
     _kwh_sensor_ids,
     _recorder_daily_kwh,
 )
@@ -65,9 +64,8 @@ from .snapshot_store import (
 
 # The meters the household reads are its own entity ids: not needed to debug
 # a price, they should not travel with an issue report. The dump names a
-# sensor by the setting that holds it instead.
-_SENSOR_KEYS = (*METER_SENSOR_KEYS, CONF_CAPACITY_PEAK_SENSOR)
-TO_REDACT = {CONF_API_KEY, *_SENSOR_KEYS}
+# sensor by the setting that holds it instead, as the log does.
+TO_REDACT = {CONF_API_KEY, *METER_SETTINGS}
 
 
 def _scrub_secret(text: str, secret: str | None) -> str:
@@ -189,7 +187,7 @@ async def async_get_config_entry_diagnostics(
                 "injection": sides.injection.read_daily,
             }
 
-    setting_of = {entry.data[key]: key for key in _SENSOR_KEYS if entry.data.get(key)}
+    setting_of = {entry.data[key]: key for key in METER_SETTINGS if entry.data.get(key)}
 
     def _settings(sensors: tuple[str, ...]) -> list[str]:
         return [setting_of.get(sensor, "**REDACTED**") for sensor in sensors]

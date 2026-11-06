@@ -1563,7 +1563,7 @@ async def test_a_busy_recorder_keeps_yesterday_s_ranking(
         async_run_daily_compare,
     )
 
-    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry = MockConfigEntry(domain=DOMAIN, data={"consumption_kwh": "sensor.cons"})
     entry.add_to_hass(hass)
     yesterday = _result(
         rows=(RankedRow(label="Mine", annual=678.69, is_own=True),), own=678.69
@@ -1602,7 +1602,8 @@ async def test_a_busy_recorder_keeps_yesterday_s_ranking(
     ):
         reason = await _SweepEngine(hass, entry, {}).run_full_sweep(coord)
         await async_run_daily_compare(hass, entry, coord)
-    assert reason == "the recorder did not answer for sensor.cons"
+    # Named by its setting, since the scheduled run logs the reason.
+    assert reason == "the recorder did not answer for consumption_kwh"
     assert coord.daily_compare is yesterday
     coord._save_persistent.assert_not_awaited()
 

@@ -4145,7 +4145,9 @@ async def test_a_running_cost_the_recorder_did_not_answer_for_is_not_imported(
         assert not captured
         assert result["rows_written"] == 24
         assert result["sensors"][ids["current_year_cost"]] == 0
-        assert "sensor.cons" in result["skipped"]
+        # Named by the setting that holds the meter, as the log names it.
+        assert "consumption_kwh" in result["skipped"]
+        assert "sensor.cons" not in result["skipped"]
         assert "call the service again" in result["skipped"]
         assert entry.runtime_data._backfill_retry_from is None
 

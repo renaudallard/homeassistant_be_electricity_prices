@@ -149,12 +149,14 @@ async def _metered_hourly_kwh(
     if metered.sensors not in _READ_DAILY_LOGGED:
         _READ_DAILY_LOGGED.add(metered.sensors)
         _LOGGER.warning(
-            "%s reports its kWh once a day rather than hour by hour, so each "
-            "day is spread evenly over its hours, a day/night pair each "
-            "register over the hours of its band: a contract priced by the "
-            "hour bills it at the day's average rather than at the hour the "
-            "reading arrived",
-            ", ".join(metered.sensors),
+            "%s: kWh reported once a day rather than hour by hour, so each day "
+            "is spread evenly over its hours, a day/night pair each register "
+            "over the hours of its band: a contract priced by the hour bills it "
+            "at the day's average rather than at the hour the reading arrived",
+            " and ".join(
+                f"the {energy_meters.meter_setting(hass, sensor)} meter"
+                for sensor in metered.sensors
+            ),
         )
     return replace(metered, read_daily=True)
 

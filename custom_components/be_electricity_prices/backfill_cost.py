@@ -68,7 +68,7 @@ from .const import (
 )
 from .coordinator import BePricesCoordinator
 from .coordinator_data import ytd_window_reset
-from .energy_meters import noting_failed_reads
+from .energy_meters import meter_setting, noting_failed_reads
 from .fees import (
     _annual_static_fees,
     _capped_capacity_monthly_eur,
@@ -312,7 +312,11 @@ async def _backfill_cost_sensor(
             )
     if failed:
         if held is not None:
-            held.setdefault(UNANSWERED, set()).update(failed)
+            # Named by the settings holding them, as every log line names a
+            # household's meters: the reasons are logged and returned.
+            held.setdefault(UNANSWERED, set()).update(
+                meter_setting(hass, entity_id) for entity_id in failed
+            )
         return {sid: 0}
 
     if rows:

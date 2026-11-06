@@ -194,10 +194,12 @@ class _PeakMixin:
                 if unit in ("W", "VA"):
                     value *= 0.001
                 elif unit not in ("", "kW", "kVA"):
+                    # Named by its setting: the sensor is one of the
+                    # household's own entity ids, which diagnostics redact.
                     _LOGGER.warning(
-                        "capacity peak sensor %s reports in %r; "
+                        "the %s sensor reports in %r; "
                         "expected kW/W/VA/kVA, ignoring this update",
-                        entity_id,
+                        CONF_CAPACITY_PEAK_SENSOR,
                         unit,
                     )
                     value = 0.0

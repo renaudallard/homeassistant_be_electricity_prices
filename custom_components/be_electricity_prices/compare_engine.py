@@ -68,7 +68,7 @@ from .const import (
     SPOT_PRICED_CONTRACT_KINDS,
 )
 from .coordinator_persist import settings_digest
-from .energy_meters import memoise_meter_reads, noting_failed_reads
+from .energy_meters import memoise_meter_reads, meter_settings, noting_failed_reads
 from .flow_contracts import (
     _contract_kind,
     _ranking_candidates,
@@ -471,7 +471,10 @@ class _SweepEngine(_HouseholdMixin):
                         )
                     )
         if failed:
-            return f"the recorder did not answer for {', '.join(sorted(failed))}"
+            # The meters by their settings, since the scheduled run logs this.
+            return (
+                f"the recorder did not answer for {meter_settings(self.hass, failed)}"
+            )
         # The year-to-date column, which used to be reachable only by clicking
         # through the options page and was stored nowhere afterwards. A
         # scheduled run is the right place for it: the pass replays a year per
@@ -495,7 +498,7 @@ class _SweepEngine(_HouseholdMixin):
             _LOGGER.debug(
                 "%s: year-to-date column left out, the recorder did not answer for %s",
                 self.config_entry.entry_id,
-                ", ".join(sorted(failed)),
+                meter_settings(self.hass, failed),
             )
         else:
             rows = ytd

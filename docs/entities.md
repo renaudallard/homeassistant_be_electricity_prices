@@ -852,13 +852,19 @@ the user is looking at.
 ### Redaction
 
 `TO_REDACT` (`diagnostics.py`) holds `CONF_API_KEY`, the six kWh sensor
-settings (`METER_SENSOR_KEYS`) and `CONF_CAPACITY_PEAK_SENSOR`: the entity ids
+settings (`METER_SENSOR_KEYS`) and `CONF_CAPACITY_PEAK_SENSOR` (together
+`METER_SETTINGS`): the entity ids
 the household reads are not needed to debug a price and should not travel with
 an issue report. `async_redact_data` recurses, so a recorded switch's earlier
 contract under `previous_contracts` is masked too. Where the dump names the
 sensors a bill read (`billed_from`, `silent_meter`) it gives the setting that
 holds each sensor instead of its entity id (`**REDACTED**` for one no setting
-holds). `async_redact_data` masks only known config keys, so free-text error fields (`last_error`,
+holds). The keys are `METER_SETTINGS` (`energy_meters.py`), and the log names a
+meter the same way: every log line about one, warning or debug, goes through
+`meter_setting` (`energy_meters.py`), which finds the setting holding the
+entity id in an entry's settings or an earlier contract's copy of them, or
+`meter_settings` for the list of meters a busy recorder did not answer for, so
+a log pasted into an issue does not carry the ids the dump redacts. `async_redact_data` masks only known config keys, so free-text error fields (`last_error`,
 `shared_failure.error`) get a second scrub via `_scrub_secret`
 (`diagnostics.py`), which replaces the API key literal anywhere it appears
 with `**REDACTED**`. This is defence-in-depth: an ENTSO-E transport error string

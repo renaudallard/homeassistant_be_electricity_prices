@@ -36,7 +36,7 @@ bill off the same meter, is ``meter_faults``'s."""
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, date, datetime, timedelta
@@ -61,13 +61,16 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import EnergyConverter
 
 from .const import (
+    CONF_CAPACITY_PEAK_SENSOR,
     CONF_CONSUMPTION_KWH,
     CONF_DAY_CONSUMPTION_KWH,
     CONF_DAY_INJECTION_KWH,
     CONF_INJECTION_KWH,
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_NIGHT_INJECTION_KWH,
+    CONF_PREVIOUS_CONTRACTS,
     CONF_SOLAR_REGIME,
+    DOMAIN,
     METER_SENSOR_KEYS,
     SOLAR_REGIME_NONE,
 )
@@ -83,6 +86,40 @@ _P = TypeVar("_P", date, datetime)
 # anything above it a dip: the line Home Assistant's own statistics draw
 # (sensor/recorder.py, reset_detected).
 _RESET_BELOW = 0.9
+
+
+# The settings that hold one of the household's own sensors: the entity ids
+# diagnostics redact (diagnostics.py), and what a log line names a meter by.
+METER_SETTINGS: tuple[str, ...] = (*METER_SENSOR_KEYS, CONF_CAPACITY_PEAK_SENSOR)
+
+
+def meter_setting(hass: HomeAssistant, entity_id: str) -> str:
+    """The setting that holds ``entity_id``, which a log line names the meter
+    by.
+
+    The meters are the household's own entity ids. Diagnostics redact them
+    (``diagnostics.py``) so they do not travel with an issue report, and a log
+    is what gets pasted into one; the setting says which meter it is just as
+    well. An earlier contract's copy of the settings is searched too, since
+    its days are read off the meters kept with it. "unnamed" for an id no
+    setting holds, which is never the id itself.
+    """
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        settings: list[Mapping[str, Any]] = [entry.data]
+        for record in entry.data.get(CONF_PREVIOUS_CONTRACTS) or ():
+            if isinstance(record, Mapping) and isinstance(record.get("data"), Mapping):
+                settings.append(record["data"])
+        for data in settings:
+            for key in METER_SETTINGS:
+                if data.get(key) == entity_id:
+                    return key
+    return "unnamed"
+
+
+def meter_settings(hass: HomeAssistant, entity_ids: Iterable[str]) -> str:
+    """The settings holding ``entity_ids`` (``meter_setting``), sorted and
+    comma-separated, for a log line listing the meters a read failed for."""
+    return ", ".join(sorted(meter_setting(hass, entity_id) for entity_id in entity_ids))
 
 
 def _read_ahead(day: date) -> bool:
@@ -180,10 +217,11 @@ async def _read_deltas(
                 and float(change) < float(total)
             ):
                 _LOGGER.warning(
-                    "%s has no statistics immediately before %s, so its first "
-                    "bucket carries %.1f kWh accumulated before the window; "
-                    "that bucket is ignored rather than billed to this period",
-                    entity_id,
+                    "the %s meter has no statistics immediately before %s, so "
+                    "its first bucket carries %.1f kWh accumulated before the "
+                    "window; that bucket is ignored rather than billed to this "
+                    "period",
+                    meter_setting(hass, entity_id),
                     start,
                     float(change),
                 )
@@ -209,11 +247,12 @@ async def _read_deltas(
         # render this as an ordinary small bill with nothing to distinguish it
         # from genuinely low consumption.
         _LOGGER.warning(
-            "%s reported %.1f kWh of negative change between %s and %s, which a "
-            "meter cannot do; those buckets are ignored. This usually means the "
-            "recorder restarted its running total after an outage, and the "
-            "affected period will read low until the statistics are rebuilt",
-            entity_id,
+            "the %s meter reported %.1f kWh of negative change between %s and "
+            "%s, which a meter cannot do; those buckets are ignored. This "
+            "usually means the recorder restarted its running total after an "
+            "outage, and the affected period will read low until the "
+            "statistics are rebuilt",
+            meter_setting(hass, entity_id),
             negative,
             start,
             end,

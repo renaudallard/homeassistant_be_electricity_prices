@@ -902,7 +902,7 @@ class _CostsMixin:
             _LOGGER.debug(
                 "%s: earlier contracts not priced, the recorder did not answer for %s",
                 self.entry.entry_id,
-                ", ".join(sorted(failed)),
+                energy_meters.meter_settings(self.hass, failed),
             )
             return
         if self._unloaded:

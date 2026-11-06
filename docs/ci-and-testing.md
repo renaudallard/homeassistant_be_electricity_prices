@@ -127,6 +127,7 @@ machinery.
 | `tests/test_keyless_spots.py` | The keyless setting: no-key fetches, the backfill, and every branch that asks `spots_available` |
 | `tests/test_backfill.py` | Recorder cost-statistics backfill |
 | `tests/test_diagnostics.py` | Diagnostics dump |
+| `tests/test_meter_log_names.py` | Every log line about a meter, warning or debug, names the setting holding it (`meter_setting`, `meter_settings`, `energy_meters.py`), never the household's own entity id, which diagnostics redact |
 | `tests/test_icons.py` | `icons.json` names only real entities and services, and gives every entity without a device class an icon |
 | `tests/test_repairs.py` | The stale-card Repairs fix flow (`repairs.py`) |
 | `tests/test_discover.py` | Every supplier's `discover()` against a frozen listing snippet |

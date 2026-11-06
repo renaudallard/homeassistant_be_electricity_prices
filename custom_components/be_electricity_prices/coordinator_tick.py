@@ -428,7 +428,7 @@ class _TickMixin:
                 # and the next tick reads again.
                 _LOGGER.debug(
                     "Recorder did not answer for %s; keeping the last costs",
-                    ", ".join(sorted(failed)),
+                    energy_meters.meter_settings(self.hass, failed),
                 )
                 costs = await self._held_tick_costs()
             else:

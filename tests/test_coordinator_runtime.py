@@ -4559,10 +4559,12 @@ async def test_a_diverged_pair_is_logged_as_the_bill_reads_it(
     ):
         await coord._ensure_annual_volume()
     logged = [r.getMessage() for r in caplog.records if "diverged" in r.getMessage()]
+    # The meters by their settings: the entity ids are the household's own.
     assert logged == [
-        "sensor.day covers 268 days between 2026-01-01 and 2026-09-26 while "
-        "sensor.night covers 181, so the consumption pair has diverged; its "
-        "totals sensor sensor.total is billed instead"
+        "the day_consumption_kwh meter covers 268 days between 2026-01-01 and "
+        "2026-09-26 while the night_consumption_kwh meter covers 181, so the "
+        "consumption pair has diverged; its totals sensor, the consumption_kwh "
+        "meter, is billed instead"
     ]
 
 

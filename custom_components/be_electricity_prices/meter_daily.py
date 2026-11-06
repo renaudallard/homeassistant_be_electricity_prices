@@ -521,16 +521,19 @@ async def _measured_kwh(
             # one, so refuse it the way a half-wired pair is already refused.
             dead, alive = (night_id, day_id) if d else (day_id, night_id)
             _LOGGER.warning(
-                "%s returned no statistics between %s and %s while %s did, so "
-                "the %s pair cannot be billed%s. Check that sensor has a "
-                "state_class of total_increasing and still exists",
-                dead,
+                "the %s meter returned no statistics between %s and %s while "
+                "the %s meter did, so the %s pair cannot be billed%s. Check "
+                "that sensor has a state_class of total_increasing and still "
+                "exists",
+                energy_meters.meter_setting(hass, dead),
                 start,
                 end,
-                alive,
+                energy_meters.meter_setting(hass, alive),
                 side,
-                f"; its totals sensor {total_id} is billed instead"
-                if use_total
+                "; its totals sensor, the "
+                f"{energy_meters.meter_setting(hass, total_id)} meter, is billed "
+                "instead"
+                if use_total and total_id
                 else "",
             )
         elif warn and days is not None and set(d) != set(n):
@@ -539,17 +542,19 @@ async def _measured_kwh(
             # enough to be labelled scaled rather than measured, which is
             # disclosed to the user instead of silent.
             _LOGGER.warning(
-                "%s covers %d days between %s and %s while %s covers %d, so "
-                "the %s pair has diverged; %s",
-                day_id,
+                "the %s meter covers %d days between %s and %s while the %s "
+                "meter covers %d, so the %s pair has diverged; %s",
+                energy_meters.meter_setting(hass, day_id),
                 len(d),
                 start,
                 end,
-                night_id,
+                energy_meters.meter_setting(hass, night_id),
                 len(n),
                 side,
-                f"its totals sensor {total_id} is billed instead"
-                if use_total
+                "its totals sensor, the "
+                f"{energy_meters.meter_setting(hass, total_id)} meter, is billed "
+                "instead"
+                if use_total and total_id
                 else f"only the {len(days)} days both report are billed",
             )
         if use_total:
