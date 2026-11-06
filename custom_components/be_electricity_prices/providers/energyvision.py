@@ -99,6 +99,7 @@ from zoneinfo import ZoneInfo
 
 import aiohttp
 from homeassistant.util import dt as dt_util
+from yarl import URL
 
 from ..const import (
     DSO_SIBELGA,
@@ -464,13 +465,31 @@ def _card_href_re(code: str, token: str) -> re.Pattern[str]:
     The href is absolute on the Brusol pages and the site prefix optional, so
     a site-relative one reads too, and Brusol has ended one in a space
     ("EV-1026-GSG-BXL-nl.pdf "). The directory is not anchored: Brusol files
-    each card under the month it uploaded it.
+    each card under the month it uploaded it. Nor is the host, which
+    :func:`_on_page_site` holds to the page's.
     """
     return re.compile(
         rf'href="((?:https?://[^"/]+)?/sites/default/files/[^"]*?'
         rf'EV-\d{{4}}-{re.escape(code)}-{re.escape(token)}[^"]*\.pdf)\s*"',
         re.IGNORECASE,
     )
+
+
+def _on_page_site(page: str, href: str) -> str | None:
+    """``href`` read as a link on ``page``, or None where it leaves the
+    page's own site.
+
+    Every card and script the pages have linked sits on the page's own
+    site, Brusol's cards on www.brusol.be and the listing's script on
+    www.energyvision.be, so a link anywhere else is one the page was changed
+    to carry, and following it would fetch whatever that page points at.
+    """
+    url = urljoin(page, href)
+    try:
+        same = URL(url).origin() == URL(page).origin()
+    except ValueError:
+        return None
+    return url if same else None
 
 
 # The script the listing draws its cards with, as the listing names it, and
@@ -492,9 +511,10 @@ async def _listed_codes(session: aiohttp.ClientSession) -> set[str]:
     try:
         listing = await fetch_text(session, _LISTING_URL)
         src = _SCRIPT_SRC_RE.search(listing)
-        if src is None:
+        url = None if src is None else _on_page_site(_LISTING_URL, src.group(1))
+        if url is None:
             return set()
-        script = await fetch_text(session, urljoin(_LISTING_URL, src.group(1)))
+        script = await fetch_text(session, url)
     except ExtractorError:
         return set()
     return {
@@ -643,14 +663,17 @@ async def _resolve_card_url(
     form's consent checkbox, which comes first in the HTML.
     """
     html = await fetch_text(session, page)
-    hrefs: list[str] = _card_href_re(contract.code, card.token).findall(html)
-    if not hrefs:
+    urls = [
+        url
+        for href in _card_href_re(contract.code, card.token).findall(html)
+        if (url := _on_page_site(page, href)) is not None
+    ]
+    if not urls:
         raise ExtractorError(
             f"EnergyVision: no listing entry for card {contract.code} "
             f"({card.token}) on {page}"
         )
-    href = max(hrefs, key=lambda h: _card_month(h) or date.min)
-    return href if href.startswith("http") else card.site + href
+    return max(urls, key=lambda url: _card_month(url) or date.min)
 
 
 # ---- snapshot parser ---------------------------------------------------------

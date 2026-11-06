@@ -1551,6 +1551,66 @@ async def test_a_card_href_ending_in_a_space_is_resolved(
     assert url == f"{base}/2026-09/EV-1026-GRS-BXL-nl.pdf"
 
 
+@pytest.mark.parametrize(
+    "host",
+    [
+        "https://cards.example",
+        "https://www.brusol.be.cards.example",
+        "https://www.brusol.be@cards.example",
+        "http://www.brusol.be",
+    ],
+)
+async def test_a_card_link_off_the_page_s_site_is_not_followed(
+    monkeypatch: pytest.MonkeyPatch, host: str
+) -> None:
+    """Brusol's pages link their cards on www.brusol.be, absolute or from
+    the site's root. A link to any other host, here for a newer month than
+    the page's own card, is one a changed page carries, and was fetched."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    files = "/sites/default/files"
+    crafted = f'<a href="{host}{files}/2026-10/EV-1126-GRS-BXL-nl.pdf">x</a>'
+    html = f'{crafted}<a class="btn" href="{files}/2026-09/EV-1026-GRS-BXL-nl.pdf">'
+
+    async def page(_session: Any, _url: str) -> str:
+        return html
+
+    monkeypatch.setattr(ev, "fetch_text", page)
+    contract = ev._CONTRACTS_BY_ID[_GRS]
+    card = contract.card("brussels")
+    assert card is not None and card.index_url is not None
+    url = await ev._resolve_card_url(None, contract, card, card.index_url)  # type: ignore[arg-type]
+    assert url == f"https://www.brusol.be{files}/2026-09/EV-1026-GRS-BXL-nl.pdf"
+
+    html = crafted
+    with pytest.raises(ExtractorError, match="no listing entry"):
+        await ev._resolve_card_url(None, contract, card, card.index_url)  # type: ignore[arg-type]
+
+
+async def test_the_listing_script_is_read_off_the_listing_s_site_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The listing names the script its cards are drawn with; one named on
+    another host is not fetched, and the catalogue reads as unknown."""
+    from custom_components.be_electricity_prices.providers import energyvision as ev
+
+    script = 'products:[{code:"GS3JV",region:"vlaanderen"}]'
+    asked: list[str] = []
+    src = "https://scripts.example/sites/default/files/ftp/tariefkaarten.min.js"
+
+    async def text(_session: Any, url: str) -> str:
+        asked.append(url)
+        return f'<script src="{src}"></script>' if url == ev._LISTING_URL else script
+
+    monkeypatch.setattr(ev, "fetch_text", text)
+    assert await ev._listed_codes(None) == set()  # type: ignore[arg-type]
+    assert asked == [ev._LISTING_URL]
+
+    src = "/sites/default/files/ftp/tariefkaarten.min.js?v=2.23"
+    assert await ev._listed_codes(None) == {"GS3JV"}  # type: ignore[arg-type]
+    assert asked[-1] == f"https://www.energyvision.be{src}"
+
+
 _EV_FILES = "https://www.energyvision.be/sites/default/files/inline-files/"
 
 

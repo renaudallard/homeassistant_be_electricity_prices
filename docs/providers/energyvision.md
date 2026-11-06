@@ -169,7 +169,11 @@ the current card on the button, and the first match was September's. The `[^"]*`
 `.pdf` tolerates the Drupal `_0` dedup suffix; the site prefix is optional, so a
 site-relative href reads too; whitespace is allowed before the closing quote because
 Brusol's October 2026 page ended the gas card's href in a space; and the directory is not
-anchored because Brusol files each card under the month it uploaded it. Either way the card
+anchored because Brusol files each card under the month it uploaded it. The host is held to
+the page's own (`_on_page_site`): every card Brusol's pages have linked sits on
+`www.brusol.be`, so a link to any other host, even over https and for a newer month, is one
+a changed page carries and is not followed. A page whose only links leave its site reads as
+"no listing entry". Either way the card
 is layout-extracted with `fetch_pdf_text_layout` (the layout extractor keeps column
 alignment, important for the DSO table), then parsed.
 
@@ -202,8 +206,10 @@ own come from `_listed_codes`: the listing names the script it draws its cards w
 product (`_PRODUCT_RE`). A product of Flanders or Wallonia with no `end` month is sold, and a
 Walloon code drops its `-WAL` (`GS1JV-WAL` is the `EV-<MMYY>-GS1JV-WAL-fr.pdf` card); the
 business products (`zakelijk`) and the group buys are left out. The script is the one the
-listing names, so a renamed one is followed rather than an old copy read, and a listing or
-script that does not read gives no code, which the live check reports as every product gone.
+listing names, so a renamed one is followed rather than an old copy read, as long as it
+stays on the listing's site (`_on_page_site`, as for Brusol's cards); a listing or script
+that does not read, or a script named on another host, gives no code, which the live check
+reports as every product gone.
 Brusol's codes come off every page a registered card is advertised on; the token
 alternation is built from the registered cards rather than written out, so a card added
 with a new token extends the check with it. Only pages advertising CURRENT cards are read:
