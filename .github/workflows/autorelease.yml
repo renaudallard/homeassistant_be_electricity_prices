@@ -102,6 +102,18 @@ jobs:
       - name: Build release zip
         if: steps.check.outputs.exists == 'false'
         run: |
+          # zip stores what a symbolic link points at, a folder's files
+          # included, so a link in the component, to the runner's temp folder
+          # where the checkout keeps this job's token or to anything else on
+          # the runner, would ship it to every installation. The repository
+          # holds none, so one is refused rather than zipped; find also names
+          # custom_components or the component itself when either is a link.
+          links=$(find custom_components -type l)
+          if [ -n "$links" ]; then
+            echo "symbolic links under custom_components, not released:" >&2
+            printf '%s\n' "$links" >&2
+            exit 1
+          fi
           mkdir -p dist
           cd custom_components/be_electricity_prices
           zip -qr ../../dist/be_electricity_prices.zip . \

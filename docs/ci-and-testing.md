@@ -1945,7 +1945,11 @@ release's own gate. The `release` job needs all three
 3. Builds `dist/be_electricity_prices.zip` from the component directory, excluding `*.pyc` and
    `__pycache__` (`.github/workflows/autorelease.yml`). `hacs.json` names it with `zip_release`,
    so HACS and the Marketplace install this zip rather than the archive of the tag, which the test
-   fixtures put over the 100 MiB the Marketplace accepts (#163).
+   fixtures put over the 100 MiB the Marketplace accepts (#163). A symbolic link anywhere from
+   `custom_components` down fails the step first: zip stores what a link points at, a folder's
+   files included, so a link to the runner's temp folder, where the checkout keeps the job's
+   write token, would ship the token to every installation, and the repository holds no link
+   there (`test_the_release_zip_refuses_a_symbolic_link`).
 4. Tags, pushes the tag, and runs `gh release create --generate-notes` with the zip attached,
    retrying up to five times with exponential backoff (a past release, v0.5.28, was lost to a 504
    from GitHub's REST API), treating a release an attempt published before it died as success and
