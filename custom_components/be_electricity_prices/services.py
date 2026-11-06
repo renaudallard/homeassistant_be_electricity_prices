@@ -283,10 +283,27 @@ def _to_utc(value: datetime) -> datetime:
     first occurrence. Document the choice rather than try to detect
     invalid wall-clock times - the affected window is one weekend per
     year and the price table is hourly anyway.
+
+    A date at the edge of what Python holds, 1 January of year 1 in a zone
+    east of UTC (Brussels included) or 31 December 9999 west of it, has no
+    UTC time, and the conversion raised OverflowError: Home Assistant logged
+    it as an unexpected error, with a traceback, for any user who called the
+    action. It is refused as the bad input it is.
     """
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
-    return value.astimezone(dt_util.UTC)
+    aware = (
+        value
+        if value.tzinfo is not None
+        else value.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    )
+    try:
+        return aware.astimezone(dt_util.UTC)
+    except OverflowError as err:
+        raise ServiceValidationError(
+            f"{value.isoformat()} is too far in the past or the future to be used",
+            translation_domain=DOMAIN,
+            translation_key="datetime_out_of_range",
+            translation_placeholders={"value": value.isoformat()},
+        ) from err
 
 
 async def _async_cheapest_window_service(call: ServiceCall) -> ServiceResponse:

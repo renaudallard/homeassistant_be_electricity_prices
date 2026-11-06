@@ -27,14 +27,22 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.util import dt as dt_util
 
-from custom_components.be_electricity_prices.const import RESOLUTION_QUARTER
+from custom_components.be_electricity_prices import async_setup
+from custom_components.be_electricity_prices.const import DOMAIN, RESOLUTION_QUARTER
+from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
-from custom_components.be_electricity_prices.services import _find_window
+from custom_components.be_electricity_prices.services import _find_window, _to_utc
+from tests import make_entry, make_snapshot
 
 
 def _hourly(
@@ -195,3 +203,73 @@ def test_find_window_quarter_hour_starts_on_quarter_boundary() -> None:
     )
     win_start = datetime.fromisoformat(result["start"]).astimezone(UTC)
     assert win_start == start + timedelta(minutes=45)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        datetime(1, 1, 1),
+        datetime(1, 1, 1, tzinfo=timezone(timedelta(hours=1))),
+        datetime(9999, 12, 31, 23, 59, tzinfo=timezone(timedelta(hours=-12))),
+    ],
+)
+def test_a_date_with_no_utc_time_is_refused(value: datetime) -> None:
+    """1 January of year 1 in Brussels, or east of UTC, and 31 December 9999
+    west of it have no UTC time. The conversion raised OverflowError, which
+    Home Assistant logs with a traceback for any user calling the action."""
+    with pytest.raises(ServiceValidationError) as raised:
+        _to_utc(value)
+    assert raised.value.translation_key == "datetime_out_of_range"
+    assert raised.value.translation_placeholders == {"value": value.isoformat()}
+
+
+def test_dates_within_range_convert_as_before() -> None:
+    naive = datetime(2026, 4, 30, 20, 0)
+    assert _to_utc(naive) == datetime(2026, 4, 30, 18, 0, tzinfo=UTC)
+    edge = datetime(1, 1, 1, 12, 0, tzinfo=UTC)
+    assert _to_utc(edge) == edge
+
+
+@pytest.mark.parametrize("expected_lingering_timers", [True])
+async def test_the_window_actions_refuse_a_year_1_bound(
+    hass: HomeAssistant, hass_read_only_user: Any
+) -> None:
+    """Called by a read-only user, as the dashboards do: the bound that has no
+    UTC time is a validation error, not an unexpected one."""
+    assert await async_setup(hass, {})
+    entry = make_entry(contract="power_fix_one")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._set_snapshot(make_snapshot())
+    start = dt_util.start_of_local_day().astimezone(UTC)
+    coord.data = SimpleNamespace(  # type: ignore[assignment]
+        hourly=_hourly([0.1 + i / 1000 for i in range(48)], start),
+        resolution="hourly",
+    )
+    entry.mock_state(hass, ConfigEntryState.LOADED)
+    entry.runtime_data = coord
+    context = Context(user_id=hass_read_only_user.id)
+    for service, field, value in (
+        ("cheapest_window", "earliest_start", "0001-01-01T00:00:00"),
+        ("most_expensive_window", "latest_end", "9999-12-31T23:59:00-12:00"),
+    ):
+        with pytest.raises(ServiceValidationError) as raised:
+            await hass.services.async_call(
+                DOMAIN,
+                service,
+                {"duration_hours": 2, field: value},
+                blocking=True,
+                context=context,
+                return_response=True,
+            )
+        assert raised.value.translation_key == "datetime_out_of_range"
+    answer = await hass.services.async_call(
+        DOMAIN,
+        "cheapest_window",
+        {"duration_hours": 2, "earliest_start": start.isoformat()},
+        blocking=True,
+        context=context,
+        return_response=True,
+    )
+    assert answer is not None
+    assert answer["duration_hours"] == 2

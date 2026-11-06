@@ -692,6 +692,11 @@ Both call `_resolve_window_inputs` (`services.py`) then `_find_window`
   (14:30 on a 15-minute contract). A naive datetime from YAML is interpreted in
   the HA time zone (typically Europe/Brussels), not the host's tz
   (`_to_utc`, `services.py`).
+- A bound with no UTC time, 1 January of year 1 in Brussels or any zone east
+  of UTC, or 31 December 9999 west of it, is refused with the translated
+  `datetime_out_of_range` error (`_to_utc`). The conversion used to raise
+  `OverflowError`, which Home Assistant logged with a traceback as an
+  unexpected error, and any user, read-only included, can call these two.
 - `latest_end` filters out any slot whose end (`slot + width`) falls after it.
 - Only strictly time-contiguous runs are considered: a run must span exactly
   `delta * (duration_slots - 1)` so a gap ENTSO-E omitted cannot let the window

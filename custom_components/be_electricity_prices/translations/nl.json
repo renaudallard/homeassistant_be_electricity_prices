@@ -810,6 +810,9 @@
     "duration_too_small": {
       "message": "duration_hours moet minstens 1 zijn."
     },
+    "datetime_out_of_range": {
+      "message": "{value} ligt te ver in het verleden of de toekomst om te gebruiken."
+    },
     "no_loaded_entry": {
       "message": "Geen geladen Belgian Electricity Prices-invoer."
     },

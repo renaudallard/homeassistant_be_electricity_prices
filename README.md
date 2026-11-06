@@ -1542,6 +1542,9 @@ upcoming price table. Both services share the same fields:
 | `earliest_start` | now | Don't consider windows starting before this time. The time is truncated down to its price slot (the hour, or the quarter on a 15-minute contract), so 14:30 still considers the 14:00 slot on an hourly contract. |
 | `latest_end` | end of the cached table | Don't consider windows ending after this time. |
 
+A time so far out that it has no UTC time, such as 1 January of year 1, is
+refused with an error.
+
 Response shape:
 
 ```yaml
