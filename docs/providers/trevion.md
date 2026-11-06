@@ -94,8 +94,11 @@ formula needs.
 
 ## Catalog matching
 
-`_archive_re` matches a product fragment before the common `Particulier`
-suffix. The base Dynamic expression has a `(?!-Plus)` guard; without it the
+`_archive_links` matches a product fragment before the common `Particulier`
+suffix and the stamp the link ends on, reading each link once: as one pattern of
+three open runs, a long link was read again for every place each could end
+(`test_a_crafted_listing_or_card_is_read_in_time_linear_in_its_length`). The
+base Dynamic expression has a `(?!-Plus)` guard; without it the
 base product can bind the Dynamic Plus PDF when both have the same month.
 Tests construct a listing containing all seven real filename shapes and assert
 that every contract resolves its own card.
@@ -159,7 +162,8 @@ another rate is priced at it instead of refused). The title line's
 `Incl. 6% BTW` is recorded as `TaxOverlay.card_vat_rate`. The feed-in formula is VAT-exempt and
 is converted from the card's EUR/MWh notation without the multiplier. Until the
 delivery month's SPP-weighted mean is available, `current` is derived from the
-latest known SPP index printed beside the formula.
+latest known SPP index printed beside the formula: the first value after the
+first "laatst gekende waarde" past the first "Belpex_SPP_BE parameter" (`_after`).
 
 ### Dynamic
 
@@ -167,7 +171,13 @@ latest known SPP index printed beside the formula.
 October 2026 cards rename `EPEX Spot` with the same formulas and coefficients
 (`_QUARTER_HOUR_INDEX` accepts both), and marks the energy rate quarter-hourly.
 Trevion PDFs use an en dash or Unicode minus in feed-in formulas, so every sign
-regex uses `_parse.SIGN_CHARS` rather than a literal ASCII hyphen.
+regex uses `_parse.SIGN_CHARS` rather than a literal ASCII hyphen. On both kinds of
+card the feed-in formula is the first after the first "formule" past the first
+"teruglevering" (`_injection_formula`), read from where its number starts, and the
+gap before a word stops at the next one that starts it, so a card of those words
+with no formula or index after them costs its length
+(`test_a_crafted_card_is_read_in_time_linear_in_its_length`,
+`test_a_crafted_monthly_card_is_read_in_time_linear_in_its_length`).
 
 ### Shared meter columns
 
@@ -216,7 +226,8 @@ where no row reads at all raises
   (`excise_tier_bands`, `_parse.py`);
 - green certificate and WKK costs from `_meter_shared_values`;
 - the domiciled Energiefonds row in EUR/month, 0 when the row is gone, for the
-  same reason.
+  same reason; the gap to its figure stops at the next such heading, so a card of
+  headings with no figure costs its length.
 
 Residential card values are already VAT-inclusive, so `vat_rate=0.0`, as on
 every other residential card; `published_vat_rate` is left at its default for

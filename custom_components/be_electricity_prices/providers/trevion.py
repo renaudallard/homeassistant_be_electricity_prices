@@ -163,11 +163,38 @@ def _number(value: str) -> float:
     return to_float(value.replace(".", "") if "," in value and "." in value else value)
 
 
-def _archive_re(contract: _ContractDef) -> re.Pattern[str]:
-    return re.compile(
-        rf'href="([^" ]*{contract.card_re}[^" ]*particulier[^" ]*-(\d{{6}})(?:-\d+)?\.pdf)"',
-        re.IGNORECASE,
-    )
+# A link on the listing, its "particulier" and the stamp it ends on.
+_HREF_RE = re.compile(r'href="([^" ]*)"', re.IGNORECASE)
+_PARTICULIER_RE = re.compile("particulier", re.IGNORECASE)
+_STAMP_TAIL_RE = re.compile(r"-(\d{6})(?:-\d+)?\.pdf", re.IGNORECASE)
+
+
+def _archive_links(html: str, contract: _ContractDef) -> list[tuple[str, str]]:
+    """``(path, YYYYMM)`` for every link on the listing to one of
+    ``contract``'s cards: the product's name, then "particulier", then the
+    stamp the path ends on, "-202610.pdf" or "-202610-1.pdf".
+
+    Each link is read once. As one pattern of three open runs, a long link
+    was read again for every place each of them could end. Where the first
+    name and the first "particulier" after it leave room for the stamp, any
+    others do too, and the stamp is the last one the path ends on, which
+    only its last two dashes can start.
+    """
+    card = re.compile(contract.card_re, re.IGNORECASE)
+    out: list[tuple[str, str]] = []
+    for href in _HREF_RE.finditer(html):
+        path = href.group(1)
+        name = card.search(path)
+        mark = None if name is None else _PARTICULIER_RE.search(path, name.end())
+        if mark is None:
+            continue
+        last = path.rfind("-", mark.end())
+        for dash in (last, path.rfind("-", mark.end(), last) if last >= 0 else -1):
+            stamp = _STAMP_TAIL_RE.fullmatch(path, dash) if dash >= 0 else None
+            if stamp is not None:
+                out.append((path, stamp.group(1)))
+                break
+    return out
 
 
 def _card_url(path: str) -> str:
@@ -189,7 +216,7 @@ def _resolve_card(
     costs one PDF and not a second round trip for the page both months are
     listed on, which is the discipline ``ebem._archived_card`` keeps.
     """
-    matches = _archive_re(contract).findall(html)
+    matches = _archive_links(html, contract)
     if not matches:
         raise ExtractorError(f"Trevion: no card found for {contract.id}")
     # The listing's six digits are read as YYYYMM. Nothing guarantees they are
@@ -539,22 +566,49 @@ def _extract_formula(text: str, marker: str) -> tuple[float, float]:
     return factor, base
 
 
+def _after(text: str, first: str, then: str) -> str | None:
+    """The text past the first ``then`` after the first ``first``, both read
+    regardless of case, or ``None`` where either is missing.
+
+    The gap between the two stops at the next ``first``, which finds the
+    same ``then``. Left open, a card with nothing after them was read to its
+    end again from every later ``first`` and every later ``then``.
+    """
+    head = re.search(
+        rf"{first}(?:(?!{first}).)*?{then}", text, re.IGNORECASE | re.DOTALL
+    )
+    return None if head is None else text[head.end() :]
+
+
+def _injection_formula(text: str, index: str) -> re.Match[str] | None:
+    """The feed-in formula over ``index``: the first after the first
+    "formule" past the first "teruglevering".
+
+    Read from where its number starts, since from each digit of a long one
+    the number was read again. The multiplication sign moved from "x" to
+    "*" between the May and the June 2026 monthly cards; both are read.
+    """
+    tail = _after(text, "teruglevering", "formule")
+    if tail is None:
+        return None
+    return re.search(
+        rf"(?<![\d.,])({_NUM})\s*[*x×]\s*{index}\s*([{SIGN_CHARS}])\s*({_NUM})",
+        tail,
+        re.IGNORECASE,
+    )
+
+
 def _extract_monthly(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
     marker = "Belpex_RLP_VL"
     factor, base = _extract_formula(text, marker)
-    # The multiplication sign moved from "x" to "*" between the May and the
-    # June 2026 cards; both are read.
-    injection = re.search(
-        rf"teruglevering.*?formule.*?({_NUM})\s*[*x×]\s*Belpex_SPP_BE\s*([{SIGN_CHARS}])\s*({_NUM})",
-        text,
-        re.IGNORECASE | re.DOTALL,
-    )
+    injection = _injection_formula(text, "Belpex_SPP_BE")
     if not injection:
         raise ExtractorError("Trevion: monthly injection formula not found")
-    known_index = re.search(
-        rf"Belpex_SPP_BE parameter.*?laatst gekende waarde.*?\(({_NUM})\s*€/MWh\)",
-        text,
-        re.IGNORECASE | re.DOTALL,
+    tail = _after(text, "Belpex_SPP_BE parameter", "laatst gekende waarde")
+    known_index = (
+        None
+        if tail is None
+        else re.search(rf"\(({_NUM})\s*€/MWh\)", tail, re.IGNORECASE)
     )
     if not known_index:
         raise ExtractorError("Trevion: latest SPP index not found")
@@ -585,11 +639,7 @@ _QUARTER_HOUR_INDEX = r"(?:Belpex 15 MTU|EPEX Spot)"
 
 def _extract_dynamic(text: str) -> tuple[DynamicRates, InjectionRates]:
     factor, base = _extract_formula(text, _QUARTER_HOUR_INDEX)
-    injection = re.search(
-        rf"teruglevering.*?formule.*?({_NUM})\s*[*x×]\s*{_QUARTER_HOUR_INDEX}\s*([{SIGN_CHARS}])\s*({_NUM})",
-        text,
-        re.IGNORECASE | re.DOTALL,
-    )
+    injection = _injection_formula(text, _QUARTER_HOUR_INDEX)
     if not injection:
         raise ExtractorError("Trevion: dynamic injection formula not found")
     inj_factor = _number(injection.group(1)) * 10.0
@@ -665,8 +715,12 @@ def _extract_taxes(text: str) -> TaxOverlay:
     )
     excise = next((m for p in _EXCISE_ROWS if (m := p.search(text))), None)
     excise_value = excise.group(1) if excise else None
+    # The gap to the figure stops at the next heading: a card of headings
+    # with no figure after them was read to its end from each.
     fund = re.search(
-        rf"Bijdrage energiefonds met domicilie.*?\(\d+\)\s+({_NUM})",
+        r"Bijdrage energiefonds met domicilie"
+        r"(?:(?!Bijdrage energiefonds met domicilie).)*?"
+        rf"\(\d+\)\s+({_NUM})",
         text,
         re.IGNORECASE | re.DOTALL,
     )

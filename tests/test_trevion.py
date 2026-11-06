@@ -28,6 +28,8 @@
 from __future__ import annotations
 
 import re
+import time
+from collections.abc import Callable
 from datetime import date
 from typing import Any
 from unittest.mock import AsyncMock
@@ -36,6 +38,7 @@ import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS, REGION_FLANDERS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import trevion as trevion_mod
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
@@ -259,6 +262,56 @@ def test_the_october_2026_name_of_the_quarter_hour_index_is_read() -> None:
     after = parse_snapshot("groene_energie_dynamisch", october)
     assert after.energy == before.energy
     assert after.injection == before.injection
+
+
+# A dynamic card a host could serve instead, about 100,000 characters after
+# its energy formula: the feed-in's heading with no "formule" after it, and a
+# number with no formula around it, each read to the end of the card again
+# from every place it could start.
+@pytest.mark.parametrize(
+    "tail",
+    [
+        pytest.param("teruglevering " * 7_150, id="headings"),
+        pytest.param("teruglevering formule " + "1" * 100_000, id="digits"),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(tail: str) -> None:
+    from custom_components.be_electricity_prices.providers import trevion
+
+    crafted = f"(0,107* Belpex 15 MTU+1,3) *1,06 {tail}"
+    started = time.perf_counter()
+    with pytest.raises(ExtractorError, match="dynamic injection formula"):
+        trevion._extract_dynamic(crafted)
+    assert time.perf_counter() - started < 2.0
+
+
+# A monthly card the same way, and its SPP index's heading with no value after
+# it (200,000 characters, since each heading costs less).
+@pytest.mark.parametrize(
+    ("tail", "error"),
+    [
+        pytest.param("teruglevering " * 7_150, "injection formula", id="headings"),
+        pytest.param(
+            "teruglevering formule " + "1" * 100_000, "injection formula", id="digits"
+        ),
+        pytest.param(
+            "teruglevering formule 0,60 x Belpex_SPP_BE - 0,80 "
+            + "Belpex_SPP_BE parameter " * 8_350,
+            "latest SPP index",
+            id="index headings",
+        ),
+    ],
+)
+def test_a_crafted_monthly_card_is_read_in_time_linear_in_its_length(
+    tail: str, error: str
+) -> None:
+    from custom_components.be_electricity_prices.providers import trevion
+
+    crafted = f"(0,107* Belpex_RLP_VL+1,3) *1,06 {tail}"
+    started = time.perf_counter()
+    with pytest.raises(ExtractorError, match=error):
+        trevion._extract_monthly(crafted)
+    assert time.perf_counter() - started < 2.0
 
 
 @pytest.mark.parametrize(
@@ -903,3 +956,35 @@ async def test_a_card_indexed_on_neither_asks_for_no_second_card(
     assert snap is not None
     assert snap.provisional is False
     assert render.await_count == 1
+
+
+# A listing a host could serve instead, one link of about 100,000 characters
+# naming the product and "particulier" over and over with no stamp, which was
+# read again for every place each of three open runs could end; and a card of
+# energy fund headings with no figure after them, each read to its end.
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    "read",
+    [
+        pytest.param(
+            lambda: trevion_mod._resolve_card(
+                'href="/' + "VAST-particulier-" * 6_000 + '"',
+                trevion_mod._BY_ID["groene_energie_vast"],
+            ),
+            id="listing",
+        ),
+        pytest.param(
+            lambda: trevion_mod._extract_taxes(
+                "Bijdrage energiefonds met domicilie " * 2_800
+            ),
+            id="fund headings",
+        ),
+    ],
+)
+def test_a_crafted_listing_or_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[], object],
+) -> None:
+    started = time.perf_counter()
+    with pytest.raises(ExtractorError):
+        read()
+    assert time.perf_counter() - started < 2.0
