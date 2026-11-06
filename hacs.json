@@ -2,5 +2,7 @@
   "name": "Belgian Electricity Prices",
   "render_readme": true,
   "homeassistant": "2026.2.3",
-  "country": ["BE"]
+  "country": ["BE"],
+  "zip_release": true,
+  "filename": "be_electricity_prices.zip"
 }

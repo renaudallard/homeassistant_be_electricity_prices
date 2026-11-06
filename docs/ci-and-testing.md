@@ -1894,7 +1894,9 @@ release's own gate. The `release` job needs all three
    and release steps out of the workflow against a scratch origin and a fake `gh` that answers
    through the real `jq`).
 3. Builds `dist/be_electricity_prices.zip` from the component directory, excluding `*.pyc` and
-   `__pycache__` (`.github/workflows/autorelease.yml`).
+   `__pycache__` (`.github/workflows/autorelease.yml`). `hacs.json` names it with `zip_release`,
+   so HACS and the Marketplace install this zip rather than the archive of the tag, which the test
+   fixtures put over the 100 MiB the Marketplace accepts (#163).
 4. Tags, pushes the tag, and runs `gh release create --generate-notes` with the zip attached,
    retrying up to five times with exponential backoff (a past release, v0.5.28, was lost to a 504
    from GitHub's REST API), treating a release an attempt published before it died as success and
