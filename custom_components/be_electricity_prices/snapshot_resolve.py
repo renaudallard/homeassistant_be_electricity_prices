@@ -94,6 +94,7 @@ from .fluvius import (
     ensure_area_terms,
     tariff_sheet_held,
 )
+from .network_archive import fields_for as archived_network
 from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
 from .providers._resolve import (
     apply_vat,
@@ -308,24 +309,22 @@ def _resolve_fluvius_network(
     """A custom entry's network overlay as Fluvius's sheet of the delivery
     year gives it for the entry's area, where the entry asks for it.
 
-    The figures typed into the entry stand while no sheet of that year or an
-    earlier one is held, and for a key that is not a Fluvius area. The sheet
-    is excluding VAT and put on the basis the entry typed on, as the ceiling
-    is: a household typing VAT-inclusive figures at a 0 rate was billed it
-    6% short. Transmission is included in its rates, and a peak-metered
-    connection pays one rate day and night, so a typed transport and
-    day/night split go with the typed figures. The ceiling and an analog
+    While no sheet of that year or an earlier one is held, the month the card
+    archive kept stands in (network_archive.py), and without it the figures
+    typed into the entry, as they do for a key that is not a Fluvius area.
+    The sheet is excluding VAT and put on the basis the entry typed on, as
+    the ceiling is: a household typing VAT-inclusive figures at a 0 rate was
+    billed it 6% short. Transmission is included in its rates, and a
+    peak-metered connection pays one rate day and night, so a typed transport
+    and day/night split go with the typed figures. The ceiling and an analog
     meter's surcharge are laid on after it, as on every card.
     """
     if not takes_fluvius_network(entry.data):
         return snap
     dso = str(entry.data.get(CONF_DSO, ""))
     terms = cached_area_terms(month.year, dso)
-    overlay = snap.dsos.get(dso)
-    if terms is None or overlay is None:
-        return snap
-    sheet = _on_sheet(snap, month, overlay, terms.overlay_fields())
-    return replace(snap, dsos={**snap.dsos, dso: sheet})
+    read = {} if terms is None else terms.overlay_fields()
+    return _with_sheet(snap, month, dso, read)
 
 
 def takes_brugel_network(data: Mapping[str, Any]) -> bool:
@@ -344,23 +343,20 @@ def _resolve_brugel_network(
     """A custom Brussels entry's network overlay as Brugel's sheet of the
     delivery year gives it, where the entry asks for it.
 
-    The figures typed stand while no sheet of that year or an earlier one is
-    held. The sheet is excluding VAT and put on the basis the entry typed on,
-    as Brugel's power term is. A single meter pays the day rate and an
-    exclusive-night circuit the night one. The yearly charge carries the power
-    term, with the band above 13 kVA beside it, so
-    :func:`resolve_brussels_power_term` leaves it alone; the OSP fee typed
-    stays, since the sheet does not print it.
+    While no sheet of that year or an earlier one is held, the month the card
+    archive kept stands in, and without it the figures typed. The sheet is
+    excluding VAT and put on the basis the entry typed on, as Brugel's power
+    term is. A single meter pays the day rate and an exclusive-night circuit
+    the night one. The yearly charge carries the power term, with the band
+    above 13 kVA beside it, so :func:`resolve_brussels_power_term` leaves it
+    alone; the OSP fee typed stays, since the sheet does not print it.
     """
     if not takes_brugel_network(entry.data):
         return snap
     dso = str(entry.data.get(CONF_DSO, ""))
     terms = cached_network_terms(month.year)
-    overlay = snap.dsos.get(dso)
-    if terms is None or overlay is None:
-        return snap
-    sheet = _on_sheet(snap, month, overlay, terms.overlay_fields())
-    return replace(snap, dsos={**snap.dsos, dso: sheet})
+    read = {} if terms is None else terms.overlay_fields()
+    return _with_sheet(snap, month, dso, read)
 
 
 def takes_cwape_network(data: Mapping[str, Any]) -> bool:
@@ -381,23 +377,46 @@ def _resolve_cwape_network(
     on the delivery month gives it, and the transport grid, where the entry
     asks for it.
 
-    Each stands on its own: the figures typed stand for one not read yet, so
-    a transport grid published after the operator's leaves the transport
-    typed until it is. Excluding VAT, put on the basis the entry typed on.
-    Every register and Impact band is set, and the entry's meter and tariff
-    mode decide which it bills.
+    Each stands on its own: for one not read yet, what the card archive kept
+    of the month stands in, and without it the figures typed, so a transport
+    grid published after the operator's leaves the transport typed until it
+    is. Excluding VAT, put on the basis the entry typed on. Every register
+    and Impact band is set, and the entry's meter and tariff mode decide
+    which it bills.
     """
     if not takes_cwape_network(entry.data):
         return snap
     dso = str(entry.data.get(CONF_DSO, ""))
-    grid, transport = cached_cwape_network(month, dso)
-    overlay = snap.dsos.get(dso)
-    if overlay is None or (grid is None and transport is None):
-        return snap
-    sheet = overlay
-    for terms in (grid, transport):
+    read: dict[str, float | None] = {}
+    for terms in cached_cwape_network(month, dso):
         if terms is not None:
-            sheet = _on_sheet(snap, month, sheet, terms.overlay_fields())
+            read.update(terms.overlay_fields())
+    return _with_sheet(snap, month, dso, read)
+
+
+def takes_sheet_network(data: Mapping[str, Any]) -> bool:
+    """Whether this entry takes its network off its region's sheet."""
+    return (
+        takes_fluvius_network(data)
+        or takes_brugel_network(data)
+        or takes_cwape_network(data)
+    )
+
+
+def _with_sheet(
+    snap: SupplierSnapshot,
+    month: date,
+    dso: str,
+    read: Mapping[str, float | None],
+) -> SupplierSnapshot:
+    """``snap`` with ``dso``'s overlay set from what its sheet gives for
+    ``month``: what the entry read, and for each field it did not, what the
+    card archive kept of the month (network_archive.py)."""
+    overlay = snap.dsos.get(dso)
+    fields = {**archived_network(month, dso), **read}
+    if overlay is None or not fields:
+        return snap
+    sheet = _on_sheet(snap, month, overlay, fields)
     return replace(snap, dsos={**snap.dsos, dso: sheet})
 
 

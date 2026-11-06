@@ -119,6 +119,8 @@ _update_body (coordinator_tick.py)
  │                                       region's sheet (snapshot_resolve.py)
  ├─ ensure_vat_rates()                   card archive on (vat_rates.py)
  ├─ ensure_law_archive()                 card archive on (law_archive.py)
+ ├─ ensure_network_archive()             card archive on, an entry taking its network
+ │                                       off a sheet (network_archive.py)
  ├─ ensure_excise_law()                  every entry (excise_law.py)
  ├─ _refresh_custom_snapshot() | _maybe_refresh_snapshot()
  │                                       custom formula | probe / TTL / fetch, may adopt sibling cache

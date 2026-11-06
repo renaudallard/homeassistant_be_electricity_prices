@@ -1386,7 +1386,10 @@ rate, for every year a window spans, with the same year-before stand-in,
 backoff and store (`cached_area_terms`, the `area` part of `held_table`).
 The live check reads every area's through `read_area_terms`, which raises on
 a network error where the integration logs, and holds it to the cards (see
-"Network figures" in [ci-and-testing.md](ci-and-testing.md)).
+"Network figures" in [ci-and-testing.md](ci-and-testing.md)). The card
+archive reads them the same way every day and keeps each month's in
+`network.json`, which stands in for a month no sheet held covers
+(`network_archive.py`), ahead of the figures typed.
 
 ### Caching and failure
 
@@ -1499,7 +1502,8 @@ the figures on the basis the entry typed on (`on_card_basis`), before
 `resolve_brussels_power_term`, which then leaves the yearly charge alone since
 the band above 13 kVA is set. The live check reads the sheet through
 `read_network_terms`, which raises where the download or the reader fails,
-and holds it to the cards.
+and holds it to the cards, and the card archive keeps each month's in
+`network.json`, which stands in for a month no sheet held covers.
 
 The parser is tested on the 2026 sheet as Brugel served it on 2026-11-05
 (`tests/fixtures/brugel_elec_2026.pdf`).
@@ -1584,7 +1588,9 @@ entry typed on (`on_card_basis`); the entry's meter and tariff mode decide
 which it bills, and `fees.py` bills no fixed term on Impact. The live check
 reads every operator's grid and the transport grid through `read_listing` and
 `read_network`, which raise where the integration logs, and holds them to the
-cards.
+cards. The card archive reads them through `read_grids` and `read_transports`
+and keeps each month's in `network.json`, from which a field neither grid held
+gives for a month stands in.
 
 The parser is tested on the five operators' 2026 grids, ORES's and RESA's for
 2027 and the 2026 transport grid as the CWaPE served them on 2026-11-05

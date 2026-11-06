@@ -99,7 +99,7 @@ import json
 import re
 import sys
 import tempfile
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -132,8 +132,14 @@ from live_check import (  # type: ignore[import-not-found]  # noqa: E402
     label_month,
 )
 
-from custom_components.be_electricity_prices import excise_law  # noqa: E402
+from custom_components.be_electricity_prices import (  # noqa: E402
+    brugel,
+    cwape,
+    excise_law,
+    fluvius,
+)
 from custom_components.be_electricity_prices.const import (  # noqa: E402
+    BRUSSELS_DSO_KEYS,
     SUPPLIER_CUSTOM,
 )
 from custom_components.be_electricity_prices.providers import (  # noqa: E402
@@ -202,6 +208,7 @@ _RELEASE_PREFIX = "electricity"
 _COVERAGE = "coverage.md"
 _VAT = "vat.json"
 _LAW = "law.json"
+_NETWORK = "network.json"
 _COVERAGE_DIR = "coverage"
 # Which cards were downloaded and could not be read, by the row they would
 # have become. Ecofix publishes page images some months and no reader can
@@ -1463,6 +1470,115 @@ def _write_law(out: Path, today: date) -> int:
     return len(months)
 
 
+async def _network_months(
+    session: Any, today: date, sleep: Callable[[float], Any] = asyncio.sleep
+) -> dict[str, dict[str, dict[str, float | None]]]:
+    """What each regulator's sheet gives a custom entry for every month of
+    last year and of this one up to this month, by month and DSO key: the
+    overlay fields the integration bills, excluding VAT, off the sheet of the
+    month's own year (``overlay_fields``), read with the integration's
+    readers and fetched the way a card is. A sheet that cannot be read gives
+    none of its months, and a CWaPE grid is read from 2026 only, the first
+    year of the structure the reader knows."""
+    out: dict[str, dict[str, dict[str, float | None]]] = {}
+
+    async def read(what: str, fetch: Callable[[], Awaitable[Any]]) -> Any:
+        try:
+            return await _fetch_card(fetch, sleep)
+        except Exception as err:  # one sheet must not stop the others
+            print(f"{what} could not be read: {type(err).__name__}: {err}")
+            return None
+
+    def put(day: date, dso: str, fields: dict[str, float | None]) -> None:
+        # To the seventh decimal the regulators publish at, so a sum the
+        # reader made reads as the tariff rather than 108.38000000000001.
+        if fields:
+            out.setdefault(_month_id(day.year, day.month), {})[dso] = {
+                field: None if value is None else round(value, 7)
+                for field, value in fields.items()
+            }
+
+    documents = await read(
+        "the CWaPE's listing", functools.partial(cwape.read_listing, session)
+    )
+    for year in (today.year - 1, today.year):
+        last = today.month if year == today.year else 12
+        days = [date(year, month, 1) for month in range(1, last + 1)]
+        for dso, area in sorted(fluvius._AREA_SLUGS.items()):
+            terms = await read(
+                f"Fluvius's {year} sheet for {area}",
+                functools.partial(fluvius.read_area_terms, session, year, area),
+            )
+            for day in days if terms is not None else ():
+                put(day, dso, terms.overlay_fields())
+        network = await read(
+            f"Brugel's {year} sheet",
+            functools.partial(brugel.read_network_terms, session, year),
+        )
+        for dso in sorted(BRUSSELS_DSO_KEYS) if network is not None else ():
+            for day in days:
+                put(day, dso, network.overlay_fields())
+        if documents is None or year < cwape.FIRST_YEAR:
+            continue
+        transports = await read(
+            f"the CWaPE's {year} transport grid",
+            functools.partial(cwape.read_transports, session, documents, year),
+        )
+        for dso in sorted(cwape._OPERATORS):
+            grids = await read(
+                f"the CWaPE's {year} grid for {dso}",
+                functools.partial(cwape.read_grids, session, documents, year, dso),
+            )
+            for day in days:
+                fields: dict[str, float | None] = {}
+                for terms in (
+                    cwape.valid_on(grids or (), day),
+                    cwape.valid_on(transports or (), day),
+                ):
+                    if terms is not None:
+                        fields.update(terms.overlay_fields())
+                put(day, dso, fields)
+    return out
+
+
+def _write_network(
+    out: Path,
+    read: Mapping[str, Mapping[str, Mapping[str, float | None]]],
+    today: date,
+    keep_months: int = _KEEP_MONTHS,
+) -> int:
+    """``network.json``: what each regulator's sheet gives a custom entry,
+    by month and DSO key (:func:`_network_months`). Returns the months held.
+
+    A DSO's month read today is written again, one not read keeps what was
+    written, which is what an installation reads for a month its own
+    reading does not cover (network_archive.py), and a month more than
+    ``keep_months`` before this one goes, as the rows do. Deterministic, so a
+    day that changed nothing rewrites the same bytes.
+    """
+    path = out / _NETWORK
+    try:
+        held = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        held = None
+    section = held.get("months") if isinstance(held, dict) else None
+    months: dict[str, dict[str, Any]] = {
+        str(label): dict(dsos)
+        for label, dsos in (section.items() if isinstance(section, dict) else ())
+        if isinstance(dsos, dict)
+    }
+    for label, dsos in read.items():
+        months[label] = {**months.get(label, {}), **dsos}
+    cutoff = _months_before(today, keep_months)
+    table = {
+        "months": {label: months[label] for label in sorted(months) if label >= cutoff}
+    }
+    path.write_text(
+        json.dumps(table, indent=1, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return len(table["months"])
+
+
 def _write_listings(
     out: Path, pdf_base_url: str | None = None, archive_base_url: str | None = None
 ) -> None:
@@ -2317,6 +2433,10 @@ async def archive(
             excise_law.hold_read(excise_law.parse(page))
         except Exception as err:
             print(f"the excise law could not be read: {type(err).__name__}: {err}")
+        # The sheets a custom entry takes its network from, for network.json,
+        # read the same way: a sheet that failed costs the cards nothing, and
+        # network.json keeps what it held of its months.
+        network = await _network_months(session, today, sleep)
     cards.file_the_rest()
     _write_unparsed(out, unreadable, keep_months, today)
     summary.rendered = cards.rendered
@@ -2325,11 +2445,12 @@ async def archive(
     removed = _prune(out, keep_months, today) + _drop_unnamed_texts(out)
     _write_listings(out, pdf_base_url, archive_base_url)
     law = _write_law(out, today)
+    sheets = _write_network(out, network, today, keep_months)
     print(
         f"{summary.stored} stored, {summary.unchanged} unchanged, "
         f"{summary.backfilled} backfilled, {summary.settled} settled, "
         f"{summary.absent} absent, {summary.reoffered} offered again, "
-        f"{law} months of the law, "
+        f"{law} months of the law, {sheets} of the network sheets, "
         f"{len(summary.failed)} failed, {removed} pruned, "
         f"{len(targets)} cards asked; {summary.rendered} rendered, "
         f"{summary.unrendered} served from stored text, "

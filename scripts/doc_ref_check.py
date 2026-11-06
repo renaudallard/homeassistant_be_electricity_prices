@@ -87,6 +87,7 @@ NOT_OURS = frozenset(
         "edition_report.md",
         "extractor_failures.txt",
         "law.json",
+        "network.json",
         "network_failures.txt",
         "network_report.md",
         "parser.txt",

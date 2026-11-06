@@ -525,6 +525,9 @@ jobs:
             "- \`law.json\`: per month, the household and the protected customer's excise" \
             "  the integration bills from the law, read from Justel; a month it no longer" \
             "  gives keeps what was written." \
+            "- \`network.json\`: per month and DSO, what each regulator's sheet gives a" \
+            "  custom entry taking its network from it (Fluvius, Brugel, the CWaPE)," \
+            "  excluding VAT; a month no longer read keeps what was written." \
             "" \
             "The PDFs themselves are the assets of the \`electricity-<YYYY-MM>\` releases of" \
             "this repository, one release per month of cards, each file named by its SHA-256." \

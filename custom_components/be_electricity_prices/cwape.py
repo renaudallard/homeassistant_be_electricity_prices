@@ -223,12 +223,14 @@ def cached_network(
     """``dso``'s grid and the transport grid valid on ``day``, else the latest
     of each that began before it, never one that begins after, or ``None``
     for one not read yet. Synchronous: the snapshot resolver cannot await."""
-    return _valid_on(_grids.get(dso, {}).values(), day), _valid_on(
+    return valid_on(_grids.get(dso, {}).values(), day), valid_on(
         _transport.values(), day
     )
 
 
-def _valid_on[T: (GridTerms, TransportTerms)](held: Iterable[T], day: date) -> T | None:
+def valid_on[T: (GridTerms, TransportTerms)](held: Iterable[T], day: date) -> T | None:
+    """The grid of ``held`` valid on ``day``, else the latest that began
+    before it, never one that begins after, or ``None``."""
     started = [terms for terms in held if terms.valid_from <= day]
     valid = [terms for terms in started if day <= terms.valid_to]
     if not (valid or started):
@@ -293,33 +295,38 @@ def _wanted(
     grid_held: bool,
     transport_held: bool,
 ) -> list[_Document]:
-    """The documents to read for ``year``: the operator's grid off its
-    workbook, else off its PDF, and the transport grid off its workbook, each
-    unless what is held already covers the year asked."""
+    """The documents to read for ``year``: the operator's grid and the
+    transport grid, each unless what is held already covers the year asked."""
+    grids = [] if grid_held else _grid_documents(documents, year, operator)
+    return grids + ([] if transport_held else _transport_documents(documents, year))
+
+
+def _grid_documents(
+    documents: Sequence[_Document], year: int, operator: tuple[str, str]
+) -> list[_Document]:
+    """The operator's grid for ``year``, off its workbook, else off its PDF."""
     grd, name = operator
-    wanted: list[_Document] = []
-    if not grid_held:
-        grids = [
-            doc
-            for doc in documents
-            if doc.kind == _GRID_TYPE
-            and doc.operator == grd
-            and doc.year == year
-            and _names(doc.url, name)
-        ]
-        workbooks = [doc for doc in grids if doc.url.lower().endswith(".xlsx")]
-        wanted += workbooks or [
-            doc for doc in grids if doc.url.lower().endswith(".pdf")
-        ]
-    if not transport_held:
-        wanted += [
-            doc
-            for doc in documents
-            if doc.kind == _TRANSPORT_TYPE
-            and doc.year == year
-            and doc.url.lower().endswith(".xlsx")
-        ]
-    return wanted
+    grids = [
+        doc
+        for doc in documents
+        if doc.kind == _GRID_TYPE
+        and doc.operator == grd
+        and doc.year == year
+        and _names(doc.url, name)
+    ]
+    workbooks = [doc for doc in grids if doc.url.lower().endswith(".xlsx")]
+    return workbooks or [doc for doc in grids if doc.url.lower().endswith(".pdf")]
+
+
+def _transport_documents(documents: Sequence[_Document], year: int) -> list[_Document]:
+    """The transport grid for ``year``, off its workbook."""
+    return [
+        doc
+        for doc in documents
+        if doc.kind == _TRANSPORT_TYPE
+        and doc.year == year
+        and doc.url.lower().endswith(".xlsx")
+    ]
 
 
 def _names(url: str, name: str) -> bool:
@@ -418,17 +425,41 @@ async def read_network(
 ) -> tuple[GridTerms | None, TransportTerms | None]:
     """``dso``'s grid and the transport grid valid on ``day``, read now off
     the listed documents of its year, as :func:`cached_network` picks them.
-    Raises on a network error, for the live check; ``KeyError`` for a key
-    that is not a Walloon operator."""
+    Raises as :func:`read_grids` does."""
+    grids = await read_grids(session, documents, day.year, dso)
+    transports = await read_transports(session, documents, day.year)
+    return valid_on(grids, day), valid_on(transports, day)
+
+
+async def read_grids(
+    session: aiohttp.ClientSession,
+    documents: Sequence[_Document],
+    year: int,
+    dso: str,
+) -> list[GridTerms]:
+    """``dso``'s grids listed for ``year`` that read, read now. Raises on a
+    network error, for the live check and the card archive to tell it from a
+    grid that does not read; ``KeyError`` for a key that is not a Walloon
+    operator."""
     grids: list[GridTerms] = []
-    transports: list[TransportTerms] = []
-    for doc in _wanted(documents, day.year, _OPERATORS[dso], False, False):
+    for doc in _grid_documents(documents, year, _OPERATORS[dso]):
         terms = await read_document(session, doc)
         if isinstance(terms, GridTerms):
             grids.append(terms)
-        elif isinstance(terms, TransportTerms):
+    return grids
+
+
+async def read_transports(
+    session: aiohttp.ClientSession, documents: Sequence[_Document], year: int
+) -> list[TransportTerms]:
+    """The transport grids listed for ``year`` that read, read now; raises
+    as :func:`read_grids` does."""
+    transports: list[TransportTerms] = []
+    for doc in _transport_documents(documents, year):
+        terms = await read_document(session, doc)
+        if isinstance(terms, TransportTerms):
             transports.append(terms)
-    return _valid_on(grids, day), _valid_on(transports, day)
+    return transports
 
 
 async def _download(session: aiohttp.ClientSession, url: str) -> bytes:

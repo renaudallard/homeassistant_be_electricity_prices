@@ -1891,6 +1891,54 @@ def test_the_typed_walloon_network_stands_where_no_grid_is_held(
     assert network == pytest.approx(typed)
 
 
+def test_the_card_archive_s_month_stands_in_for_a_sheet_not_held(
+    ores_2026: Any,
+) -> None:
+    """A month no sheet held covers takes what the card archive kept of it,
+    on the basis the entry typed on, field by field: ORES's grid held and its
+    transport grid not, the archive's transport stands beside the grid's
+    rates; with nothing held, the archive's month whole, on Fluvius's network
+    as on the CWaPE's. A field the entry read is never the archive's."""
+    from custom_components.be_electricity_prices import cwape, network_archive
+
+    grid, _transport = ores_2026
+    cwape._transport.clear()
+    network_archive.hold(
+        {
+            "months": {
+                "2026-11": {
+                    "ores": {"distribution_single": 0.2, "transport": 0.03},
+                    "fluvius_zenne_dijle": {
+                        "distribution_single": 0.0553921,
+                        "distribution_peak": None,
+                        "distribution_offpeak": None,
+                        "distribution_exclusive_night": 0.0501456,
+                        "transport": 0.0,
+                        "capacity_eur_per_kw_year": 56.1228635,
+                        "data_management_per_year": 17.85,
+                    },
+                }
+            }
+        }
+    )
+    ticked = _walloon_network(**{const.CONF_CUSTOM_DSO_FROM_CWAPE: True})
+    network, overlay = _resolved_network(ticked, const.REGION_WALLONIA, "ores")
+    assert network == pytest.approx((grid.single + 0.03) * 1.06)
+    cwape._grids.clear()
+    network, _overlay = _resolved_network(ticked, const.REGION_WALLONIA, "ores")
+    assert network == pytest.approx((0.2 + 0.03) * 1.06)
+    network, overlay = _resolved_network(
+        _flemish_network(**{const.CONF_CUSTOM_DSO_FROM_FLUVIUS: True})
+    )
+    assert round(network * 100, 2) == 5.87
+    assert overlay.distribution_peak is None
+    # Unticked, neither the sheets nor the archive touch what was typed.
+    network, _overlay = _resolved_network(
+        _walloon_network(), const.REGION_WALLONIA, "ores"
+    )
+    assert network == pytest.approx((0.04 + 0.01) * 1.06)
+
+
 @pytest.mark.parametrize(("professional", "factor"), [(False, 1.06), (True, 1.0)])
 def test_the_cwape_s_grid_is_billed_on_the_basis_the_entry_typed_on(
     ores_2026: Any, professional: bool, factor: float

@@ -84,6 +84,7 @@ machinery.
 | `tests/test_vat_rates.py` | The VAT rate of the month billed (`vat_rates.py`) and where it reaches a card |
 | `tests/test_vat_table.py` | The archive's VAT table: the consensus `scripts/archive_cards.py` writes from the cards and `vat_rates.py` reading it |
 | `tests/test_law_archive.py` | The archive's law table: what `scripts/archive_cards.py` writes from the law, `law_archive.py` reading it, and the months `excise_law.py` bills on it |
+| `tests/test_network_archive.py` | The archive's network table (`network_archive.py`): each DSO's month read whole or not at all, kept until a table replaces it, read by a custom entry taking its network from a sheet and kept in its store |
 | `tests/test_card_vat.py` | The VAT basis each card records: the rate it states, or the one its parser grossed a formula by |
 | `tests/test_frank.py` | Frank Energie extractor |
 | `tests/test_frank_variable.py` | Frank Energie's variable tiers, on their real cards |
@@ -1342,6 +1343,16 @@ card is, `_fetch_card`, so a network failure is tried again after a pause, then 
 2022, up to the current one, the `standard` and `protected` excise `excise_law.py` bills. A month
 it still gives is written again, rate by rate, and one it no longer gives keeps what was written,
 which `law_archive.py` reads for a month the law an installation holds does not give.
+`_write_network` writes `network.json` after the walk has read the regulators' sheets
+(`_network_months`): every Fluvius area's sheet, Brugel's, and each Walloon operator's CWaPE grid
+with the transport grid, for last year and this one, read with the integration's readers
+(`read_area_terms`, `read_network_terms`, `read_listing`, `read_grids`, `read_transports`) and
+fetched the way a card is (`_fetch_card`). Per month up to the current one and per DSO key, it
+holds the overlay fields the integration bills (`overlay_fields`), excluding VAT, off the sheet
+of the month's own year, a CWaPE grid from 2026 only. A DSO's month read again is written again,
+one no longer read keeps what was written, and a month past the rows' retention goes with them;
+a sheet that failed costs the run nothing. `network_archive.py` reads it for the fields an
+installation's own reading leaves unset for a month.
 `_write_listings` writes the sheets and the VAT table and removes the `pdfs.md` index earlier versions wrote, since the sheets link every file now.
 The workflow rewrites them once more after the uploads (`--index-only`, no fetch) so the
 day's new files are linked the day they are uploaded, writes the two READMEs itself (`Write the

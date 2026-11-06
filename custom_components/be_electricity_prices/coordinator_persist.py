@@ -61,10 +61,13 @@ from .fluvius import held_table as held_fluvius_table
 from .fluvius import restore as restore_fluvius_table
 from .law_archive import held_table as held_law_table
 from .law_archive import restore as restore_law_table
+from .network_archive import held_table as held_network_table
+from .network_archive import restore as restore_network_table
 from .providers.base import SupplierSnapshot
 from .snapshot_codec import _MigratingStore, _snapshot_from_dict, _snapshot_to_dict
 from .snapshot_feed_in import reference_rows_to_store, restore_reference_rows
 from .snapshot_months import monthly_rows_to_store, restore_monthly_rows
+from .snapshot_resolve import takes_sheet_network
 from .spot_stats import spots_available
 from .vat_rates import held_table as held_vat_table
 from .vat_rates import restore as restore_vat_rates
@@ -183,6 +186,7 @@ class _PersistMixin:
         if isinstance(excise_table, dict):
             restore_excise_law(excise_table)
         restore_law_table(stored.get("law_archive"))
+        restore_network_table(stored.get("network_archive"))
         fluvius_table = stored.get("fluvius_sheets")
         if isinstance(fluvius_table, dict):
             restore_fluvius_table(fluvius_table)
@@ -661,6 +665,10 @@ class _PersistMixin:
         # archive kept of it.
         payload["excise_law"] = held_excise_table()
         payload["law_archive"] = held_law_table()
+        # What the card archive kept of the network sheets, where the entry
+        # takes its network from one.
+        if takes_sheet_network(self.entry.data):
+            payload["network_archive"] = held_network_table()
         # And the figures read off Fluvius's tariff sheets: the VREG ceiling,
         # the minimum peak and an analog meter's kWh rate.
         payload["fluvius_sheets"] = held_fluvius_table()

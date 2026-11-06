@@ -142,6 +142,19 @@ def law_read() -> Iterator[AsyncMock]:
         yield read
 
 
+# The run's own reader, which the fixture below stands in for in every
+# other test.
+_NETWORK_MONTHS = ac._network_months
+
+
+@pytest.fixture(autouse=True)
+def network_read() -> Iterator[AsyncMock]:
+    """The run reads the regulators' network sheets; tests read none unless
+    they say what the sheets give."""
+    with patch.object(ac, "_network_months", AsyncMock(return_value={})) as read:
+        yield read
+
+
 async def _no_sleep(_seconds: float) -> None:
     return None
 
@@ -279,6 +292,120 @@ async def test_the_run_reads_the_law_and_writes_its_table(
     )
     assert summary.failed == []
     assert json.loads((tmp_path / "law.json").read_text())["residential"] == table
+
+
+_ANTWERPEN = {
+    "capacity_eur_per_kw_year": 49.046938,
+    "data_management_per_year": 17.85,
+    "distribution_exclusive_night": 0.048935,
+    "distribution_offpeak": None,
+    "distribution_peak": None,
+    "distribution_single": 0.054269,
+    "transport": 0.0,
+}
+
+
+async def test_the_run_writes_the_network_sheets_table(
+    tmp_path: Path, network_read: AsyncMock
+) -> None:
+    """What each regulator's sheet gives a custom entry, by month and DSO: a
+    month read again is written again, one no longer read keeps what was
+    written, and a month past the rows' retention goes with them."""
+    network_read.return_value = {
+        "2023-08": {"fluvius_antwerpen": _ANTWERPEN},
+        "2026-09": {"fluvius_antwerpen": _ANTWERPEN},
+    }
+    extractors = [_extractor(_card_fetch("september 2026"))]
+    await ac.archive(tmp_path, extractors=extractors, now=NOW, sleep=_no_sleep)
+    assert network_read.await_args is not None
+    assert network_read.await_args.args[1] == date(2026, 9, 11)
+    table = json.loads((tmp_path / "network.json").read_text())["months"]
+    assert table == {"2026-09": {"fluvius_antwerpen": _ANTWERPEN}}
+    moved = {**_ANTWERPEN, "distribution_single": 0.055}
+    network_read.return_value = {"2026-09": {"sibelga": {"transport": 0.0214403}}}
+    await ac.archive(tmp_path, extractors=extractors, now=NOW, sleep=_no_sleep)
+    table = json.loads((tmp_path / "network.json").read_text())["months"]
+    assert table == {
+        "2026-09": {
+            "fluvius_antwerpen": _ANTWERPEN,
+            "sibelga": {"transport": 0.0214403},
+        }
+    }
+    network_read.return_value = {"2026-09": {"fluvius_antwerpen": moved}}
+    await ac.archive(tmp_path, extractors=extractors, now=NOW, sleep=_no_sleep)
+    table = json.loads((tmp_path / "network.json").read_text())["months"]
+    assert table["2026-09"]["fluvius_antwerpen"] == moved
+
+
+async def test_each_sheet_gives_the_months_of_its_own_year() -> None:
+    """Last year's months and this year's up to this one, each off the sheet
+    of its own year, through the integration's readers. A sheet that does not
+    read gives none of its months, a dropped connection is tried again, and a
+    CWaPE grid before 2026 is not asked for."""
+
+    def _terms(**fields: float | None) -> SimpleNamespace:
+        return SimpleNamespace(overlay_fields=lambda: dict(fields))
+
+    tries: dict[str, int] = {}
+
+    async def _area(_session: Any, year: int, area: str) -> Any:
+        if area == "west":
+            raise ValueError("no row")
+        if area == "kempen" and year == 2026 and not tries.get(area):
+            tries[area] = 1
+            raise ExtractorError("network error fetching the listing: reset")
+        return _terms(distribution_single=year / 1e5)
+
+    async def _brugel(_session: Any, year: int) -> Any:
+        return None if year == 2025 else _terms(transport=0.0214403)
+
+    async def _listing(_session: Any) -> list[str]:
+        return ["listed"]
+
+    grid = SimpleNamespace(
+        valid_from=date(2026, 1, 1),
+        valid_to=date(2026, 12, 31),
+        overlay_fields=lambda: {"distribution_medium": 0.102191},
+    )
+    transport = SimpleNamespace(
+        valid_from=date(2026, 1, 1),
+        valid_to=date(2026, 12, 31),
+        overlay_fields=lambda: {"transport": 0.0258728},
+    )
+    asked: list[tuple[str, int]] = []
+
+    async def _grids(_session: Any, _docs: Any, year: int, dso: str) -> list[Any]:
+        asked.append((dso, year))
+        return [grid] if dso == "ores" else []
+
+    async def _transports(_session: Any, _docs: Any, year: int) -> list[Any]:
+        asked.append(("transport", year))
+        return [transport]
+
+    with (
+        patch.object(ac.fluvius, "read_area_terms", _area),
+        patch.object(ac.brugel, "read_network_terms", _brugel),
+        patch.object(ac.cwape, "read_listing", _listing),
+        patch.object(ac.cwape, "read_grids", _grids),
+        patch.object(ac.cwape, "read_transports", _transports),
+    ):
+        months = await _NETWORK_MONTHS(None, date(2026, 3, 9), _no_sleep)
+    assert sorted(months) == [f"2025-{m:02d}" for m in range(1, 13)] + [
+        "2026-01",
+        "2026-02",
+        "2026-03",
+    ]
+    assert months["2025-06"]["fluvius_antwerpen"] == {"distribution_single": 0.02025}
+    assert months["2026-03"]["fluvius_iveka"] == {"distribution_single": 0.02026}
+    assert "fluvius_west" not in months["2026-03"]
+    assert "sibelga" not in months["2025-12"]
+    assert months["2026-01"]["sibelga"] == {"transport": 0.0214403}
+    assert months["2026-02"]["ores"] == {
+        "distribution_medium": 0.102191,
+        "transport": 0.0258728,
+    }
+    assert months["2026-02"]["resa"] == {"transport": 0.0258728}
+    assert all(year == 2026 for _dso, year in asked)
 
 
 async def test_a_dropped_connection_to_justel_is_tried_again(

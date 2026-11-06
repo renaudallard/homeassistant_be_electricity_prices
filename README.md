@@ -264,8 +264,10 @@ tick **Take them from Fluvius's tariff sheet for my area** in Flanders,
 **Take them from Brugel's tariff sheet** in Brussels or **Take them from the
 CWaPE's tariff grid for my operator** in Wallonia, and they follow each
 1 January change by themselves, read off the sheet of each delivery year,
-the latest one held standing in until the next is published and the figures
-typed only until a sheet is read. Brugel's sheet does not print the Brugel
+the latest one held standing in until the next is published. For a month no
+sheet held covers, what the card archive kept of that month's sheet stands in
+(see [The card archive](#the-card-archive)), and the figures typed only until
+either is read. Brugel's sheet does not print the Brugel
 OSP fee, which stays as typed. In Wallonia the operator's approved grid
 gives the rates, Impact bands, fixed term and prosumer rate, and the CWaPE's
 transport grid the transport, each standing on its own, from 2026, the first
@@ -2224,8 +2226,14 @@ again. Justel prints only the
 wording in force, so a month it no longer gives keeps what was written,
 and the integration bills it only for a month the law it read does not
 give.
+And it writes `network.json`: for each month of last year and this one, what
+each regulator's sheet gives a custom entry taking its network from it,
+every Fluvius area, Brugel's sheet and each Walloon operator's CWaPE grid,
+read as an installation reads them. A month no longer read keeps what was
+written, and such an entry takes from it only what its own reading of the
+sheets leaves unset for a month, ahead of the figures typed.
 The *Read past cards from the project's archive* box on the meters step,
-on by default, switches all three off per entry: the integration then never
+on by default, switches all four off per entry: the integration then never
 contacts GitHub, those months are priced on the current card, a rate a
 card does not state is the last one read while the box was on, or else 6%
 for a household and 21% on a professional contract, and a card published as

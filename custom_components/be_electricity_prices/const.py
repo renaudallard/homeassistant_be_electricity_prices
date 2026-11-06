@@ -419,10 +419,10 @@ CONF_DAILY_COMPARE: Final = "daily_compare"
 DEFAULT_DAILY_COMPARE: Final = False
 
 # Whether this entry may read the repository's card archive (CARD_ARCHIVE_URL)
-# for a past month its supplier no longer serves, and its VAT and law tables
-# (VAT_TABLE_URL, LAW_TABLE_URL). On by default; off keeps the integration
-# from contacting GitHub at all, at the price of pricing those months on the
-# current card.
+# for a past month its supplier no longer serves, and its VAT, law and network
+# tables (VAT_TABLE_URL, LAW_TABLE_URL, NETWORK_TABLE_URL). On by default; off
+# keeps the integration from contacting GitHub at all, at the price of pricing
+# those months on the current card.
 CONF_CARD_ARCHIVE: Final = "card_archive"
 DEFAULT_CARD_ARCHIVE: Final = True
 
@@ -629,6 +629,13 @@ VAT_TABLE_URL: Final = (
 LAW_TABLE_URL: Final = (
     "https://raw.githubusercontent.com/renaudallard/be_price_cards/main/"
     "electricity/law.json"
+)
+# The network each regulator's sheet gave a custom entry each month, as the
+# card archive read it (network_archive.py), read under the same option by an
+# entry that takes its network from a sheet.
+NETWORK_TABLE_URL: Final = (
+    "https://raw.githubusercontent.com/renaudallard/be_price_cards/main/"
+    "electricity/network.json"
 )
 # The earliest month the archive can hold for a supplier with no archive of
 # its own. A backfill only mirrors a supplier's own archive, so for those
