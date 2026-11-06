@@ -31,23 +31,27 @@ jobs:
 
   hacs:
     runs-on: ubuntu-latest
-    # Floating-ref actions get no write token from the workflow-level grant.
+    # Pinned, but the action runs the ghcr.io/hacs/action:main image, which
+    # its repository moves, so it gets no write token from the
+    # workflow-level grant.
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: hacs/action@main
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main
         with:
           category: integration
 
   hassfest:
     runs-on: ubuntu-latest
-    # Floating-ref actions get no write token from the workflow-level grant.
+    # Pinned, but the action runs the untagged ghcr.io/home-assistant/hassfest
+    # image, which Home Assistant moves, so it gets no write token from the
+    # workflow-level grant.
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: home-assistant/actions/hassfest@master
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361 # master
 
   release:
     runs-on: ubuntu-latest
@@ -60,7 +64,7 @@ jobs:
       PUBLISHED: '(.isDraft | not) and any(.assets[]; .name == "be_electricity_prices.zip")'
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 

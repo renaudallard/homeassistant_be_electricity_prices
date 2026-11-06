@@ -48,8 +48,9 @@ _RENDER_CODE = (
 )
 # The engine that reads a card published as page images, and what it reads
 # with: pypdfium2 renders the pages, numpy matches the glyphs and pdfplumber
-# lays out the words, all installed beside it unpinned, so one of them moving
-# is the engine moving. A source it read names them in place of the readers.
+# lays out the words, all pinned beside it in the walk, so moving one of the
+# pins is the engine moving. A source it read names them in place of the
+# readers.
 OCR_ENGINE = "ocr-price-cards"
 _ENGINE_LIBRARIES = ("pypdfium2", "numpy", "pdfplumber")
 
@@ -107,8 +108,8 @@ def digest_of(pdf: str) -> str:
 
 def _version(name: str) -> str:
     """One package's version, with the commit when it was installed from
-    git: the OCR engine is installed from its main branch, where a fix does
-    not have to move the version number. ``absent`` when it is not
+    git: the OCR engine is installed from a pinned commit, and a fix there
+    does not have to move the version number. ``absent`` when it is not
     installed."""
     try:
         version = importlib.metadata.version(name)

@@ -748,7 +748,7 @@ def rerender_due(out: Path) -> bool:
     replay keeps its old texts, and must not hold every later run on the
     long budget. A card read off its pixels does not count: a new OCR engine
     reads only those again, a dozen, which the ordinary budget covers, and it
-    is installed from its main branch, so any commit there moves it.
+    is installed from a pinned commit, so moving the pin moves it.
     """
     parser = _parser_digest()
     if _read_stamp(out / _PARSER_STAMP, parser) == parser:

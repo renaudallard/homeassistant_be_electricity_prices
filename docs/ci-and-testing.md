@@ -1309,8 +1309,9 @@ the upgrade, the six-hour budget a dispatched re-render gets (`rerender_due`, `S
 budget`); a row that replay could not replay keeps its old texts without holding later runs on it. A source the OCR engine
 read names the engine instead (`"ocr"`), and an engine move alone reads again only those cards,
 serving every other card its stored text within the usual budget: the engine is installed from
-its main branch, so any commit there moves its version, and only a page-image card can come out
-differently. A `pypdfium2`, `numpy` or `pdfplumber` release counts as the engine moving. The live
+a pinned commit of its main branch, its version stamped with that commit, so moving the pin moves
+its version, and only a page-image card can come out differently. Moving the `pypdfium2` or
+`numpy` pin beside it, or the `pdfplumber` one, counts as the engine moving. The live
 check installs no engine and serves the archive's readings as they are. A row is rewritten only
 when what a source was or what it parsed to changed: the path of the text it was read from is
 not compared, because a listing page with a nonce or a render that is not byte-stable would
@@ -1485,6 +1486,16 @@ the exit code.
 
 Six workflows live under `.github/workflows/`.
 
+Every action they use is pinned to a commit, with the release or the branch it was taken from in
+a comment beside it, and so is the OCR engine the card archive installs from git, with the
+`numpy` and `pypdfium2` it reads with: a tag or a branch is whatever its repository makes it
+next, and these run beside the cards token and on the cards installations bill on
+(`test_every_action_and_git_install_names_a_commit`, `tests/test_autorelease.py`). To move one,
+look up the commit the new tag names (`gh api repos/OWNER/REPO/commits/TAG --jq .sha`) and
+change the hash and its comment together. The pins stop at the action: `hacs/action` runs the
+`ghcr.io/hacs/action:main` image and hassfest the untagged `ghcr.io/home-assistant/hassfest`,
+which their repositories move, so both jobs keep a read-only token.
+
 ### test.yml - Tests
 
 Runs on push to `main`, on every pull request, and on manual dispatch (`.github/workflows/test.yml`).
@@ -1523,9 +1534,10 @@ described above exists.
 Runs on push to `main`, on pull requests, on a daily `cron: "17 6 * * *"`, and on manual dispatch
 (`.github/workflows/validate.yml`). Two independent jobs:
 
-- `hacs` runs `hacs/action@main` with `category: integration` (HACS repository requirements).
-- `hassfest` runs `home-assistant/actions/hassfest@master` (Home Assistant's manifest/brands/services
-  validation).
+- `hacs` runs `hacs/action`, pinned to a commit of its `main` branch, with
+  `category: integration` (HACS repository requirements).
+- `hassfest` runs `home-assistant/actions/hassfest`, pinned to a commit of its `master` branch
+  (Home Assistant's manifest/brands/services validation).
 
 These validate packaging and manifest conformance, not runtime behaviour.
 

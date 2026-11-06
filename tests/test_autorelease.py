@@ -214,6 +214,38 @@ def test_a_rerun_publishes_over_a_draft_an_earlier_run_left(tmp_path: Path) -> N
     assert json.loads((tmp_path / "releases" / TAG).read_text())["isDraft"] is False
 
 
+def test_every_action_and_git_install_names_a_commit() -> None:
+    """A tag or a branch is whatever its repository makes it next. The jobs
+    that hold the cards token ran the artifact actions from a tag, and the
+    walk installed the OCR engine from its main branch, unbounded numpy and
+    pypdfium2 beside it, and read with them the cards installations bill
+    on. Every action and every package installed from git names a commit,
+    and the engine's libraries are pinned with it."""
+    import re
+
+    import yaml  # type: ignore[import-untyped]
+
+    for path in sorted(WORKFLOW.parent.glob("*.yml")):
+        text = path.read_text()
+        for job in yaml.safe_load(text)["jobs"].values():
+            steps = job.get("steps", [])
+            refs = [job["uses"]] if "uses" in job else []
+            refs += [s["uses"] for s in steps if "uses" in s]
+            for ref in refs:
+                if not ref.startswith("./"):
+                    assert re.fullmatch(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}", ref), (
+                        path.name,
+                        ref,
+                    )
+            for step in steps:
+                run = step.get("run", "")
+                if "ocr-price-cards @" in run:
+                    for library in ("numpy", "pypdfium2"):
+                        assert re.search(rf"\b{library}==\d", run), (path.name, library)
+        for url in re.findall(r"git\+https://[^\s\"']+", text):
+            assert re.search(r"@[0-9a-f]{40}$", url), (path.name, url)
+
+
 def test_every_workflow_declares_its_token_permissions() -> None:
     """A workflow without a permissions block runs with the repository's
     default token, which may be read-write. The Tests workflow also runs

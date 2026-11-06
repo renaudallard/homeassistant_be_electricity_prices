@@ -10,7 +10,8 @@ on:
     - cron: "17 6 * * *"
   workflow_dispatch:
 
-# Both actions run from floating refs; neither needs to write anything.
+# Both actions are pinned to a commit, but each runs a Docker image its
+# repository moves; neither needs to write anything.
 permissions:
   contents: read
 
@@ -23,8 +24,8 @@ jobs:
     name: HACS
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: hacs/action@main
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main
         with:
           category: integration
 
@@ -32,5 +33,5 @@ jobs:
     name: Hassfest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: home-assistant/actions/hassfest@master
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361 # master

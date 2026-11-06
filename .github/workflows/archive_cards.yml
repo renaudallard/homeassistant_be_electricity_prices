@@ -58,10 +58,10 @@ jobs:
     # install and the hand-over around it.
     timeout-minutes: 420
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           # 3.14 for ocr_price_cards, which needs it; the rest of the stack
           # runs on both and the test suite gates on 3.13, which is what an
@@ -83,11 +83,15 @@ jobs:
             pypdf pdfplumber aiohttp defusedxml homeassistant freezegun
           # The reader for cards published as page images. Installed here and
           # nowhere else: an installation never runs OCR, it reads the rows
-          # this walk writes. Unconstrained because its numpy and pypdfium2
-          # are its own business and the test suite pins neither; the parser
-          # stamp records both, so a release of either reads those cards again.
+          # this walk writes. The walk runs it on what every supplier serves,
+          # and installations bill on the rows it reads, so it is pinned to a
+          # commit, the head of its main branch on 6 November 2026 (release
+          # 0.4.2), and so are the numpy and pypdfium2 it reads with, at the
+          # versions that day's walk installed. The parser stamp records all
+          # three, so moving a pin reads those cards again.
           pip install \
-            "ocr-price-cards @ git+https://github.com/renaudallard/ocr_price_cards@main"
+            "ocr-price-cards @ git+https://github.com/renaudallard/ocr_price_cards@a5c8a17ccad7768d3bee97c19ed17c8daffbd2ac" \
+            numpy==2.5.4 pypdfium2==5.14.0
 
       - name: Check out the cards repository
         # Everything a card leaves behind lives in be_price_cards, beside
@@ -153,7 +157,7 @@ jobs:
         # learn it from. The ocr job files what this finds; a check that fails
         # says so in the log and the run goes on, since a gap is a reason to
         # retrain, not a broken archive. No token here: the engine is
-        # installed from its main branch.
+        # third-party code, run on what the suppliers serve.
         if: steps.store.outcome == 'success'
         continue-on-error: true
         run: |
@@ -175,21 +179,21 @@ jobs:
           mkdir -p tmp/pdfs
           echo "PDFs fetched by this run, by month" > tmp/pdfs/README
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: walk-cards
           path: tmp/cards/electricity
           if-no-files-found: error
           retention-days: 3
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: walk-pdfs
           path: tmp/pdfs
           if-no-files-found: error
           retention-days: 3
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: walk-ocr
           path: |
@@ -213,11 +217,11 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: walk-ocr
           path: tmp/ocr
@@ -300,12 +304,12 @@ jobs:
           CARDS_TOKEN: ${{ secrets.BE_ELECTRICITY_CARDS }}
         run: '[ -n "$CARDS_TOKEN" ] || { echo "no cards token"; exit 1; }'
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: walk-cards
           path: tmp/cards/electricity
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: walk-pdfs
           path: tmp/pdfs
@@ -448,7 +452,7 @@ jobs:
         # Whatever the uploads did, so the files that landed before one
         # failed still reach the index and the push.
         if: ${{ !cancelled() && steps.keep.outcome != 'skipped' }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kept-manifest
           path: tmp/cards/electricity/pdfs.json
@@ -465,10 +469,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.14"
       - name: Install dependencies
@@ -477,7 +481,7 @@ jobs:
           pip install -c requirements-dev.txt \
             pypdf pdfplumber aiohttp defusedxml homeassistant freezegun
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: walk-cards
           path: tmp/cards/electricity
@@ -487,7 +491,7 @@ jobs:
         # manifest stands then, and the next run offers the PDFs again.
         id: manifest
         continue-on-error: true
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kept-manifest
           path: tmp/cards/electricity
@@ -554,7 +558,7 @@ jobs:
             "this repository, one release per month of cards, each file named by its SHA-256." \
             > tmp/cards/electricity/README.md
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: indexed-cards
           path: |
@@ -578,7 +582,7 @@ jobs:
           CARDS_REPO: renaudallard/be_price_cards
         run: git clone -q --depth=1 "https://github.com/${CARDS_REPO}.git" tmp/cards
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: indexed-cards
           path: tmp/indexed
@@ -638,7 +642,7 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -692,7 +696,7 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 

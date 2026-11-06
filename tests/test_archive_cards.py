@@ -2707,7 +2707,7 @@ async def test_a_row_read_from_the_card_itself_carries_no_ocr_mark(
 async def test_an_ocr_engine_move_reads_only_the_page_image_cards_again(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The engine is installed from its main branch, so any commit there moves
+    """The engine is installed from a pinned commit, so moving the pin moves
     its version, and a moved reader rendered every kept card afresh: about
     1500 downloads and half an hour, where only the cards read off their
     pixels can come out differently. Those are read again; a card with a text
@@ -4541,7 +4541,7 @@ def test_a_token_never_shares_a_job_with_third_party_code(token: str) -> None:
     only: later steps on the same runner held it, where a git hook, a git
     config entry or a GITHUB_ENV line the walk left would have run with it.
     The issue token had the same exposure in the walk's own glyph step,
-    beside the OCR engine installed from its main branch. A job that
+    beside the OCR engine. A job that
     installs or runs Python must not see either token, in its env or in a
     checkout credential; a job that sees one runs only gh, git and jq on
     files handed over as artifacts."""
