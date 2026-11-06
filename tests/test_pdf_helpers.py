@@ -3454,3 +3454,33 @@ def test_a_render_of_ours_logs_what_pypdf_skips_at_debug(
     assert any(
         r.name == "pypdf._cmap" and r.levelno == logging.WARNING for r in caplog.records
     )
+
+
+def test_the_unit_a_card_states_is_the_nearest_statement_of_it() -> None:
+    """The last statement before the figure wins, else the first after it,
+    each within its own reach; a card stating none there answers None."""
+    import re
+
+    from custom_components.be_electricity_prices.providers._parse import (
+        stated_unit,
+    )
+
+    unit = re.compile(r"\((c€/kWh|€/MWh)\)")
+    text = "Index (€/MWh) 174,19 Formule (c€/kWh) 0,116 * Belpex + 2 (€/MWh)"
+    figure = text.index("0,116"), text.index("0,116") + 5
+    assert stated_unit(text, unit, figure, before=30) == "c€/kWh"
+    assert stated_unit(text, unit, figure, before=5, after=30) == "€/MWh"
+    assert stated_unit(text, unit, figure, before=5, after=5) is None
+    assert stated_unit(text, unit, figure) is None
+
+
+def test_a_formula_gives_back_the_price_its_card_prints() -> None:
+    from custom_components.be_electricity_prices.providers._parse import (
+        formula_gives,
+    )
+
+    # Cociter's November 2026 card: (0,075 x BELIX + 5) c€/kWh before VAT at
+    # BELIX 174,19 EUR/MWh, printed 19,1481 c€/kWh with 6% VAT.
+    assert formula_gives(19.1481 / 1.06, 0.075, 174.19, 5.0, tolerance=0.001)
+    assert not formula_gives(19.1481 / 1.06, 0.75, 174.19, 5.0, tolerance=0.001)
+    assert not formula_gives(19.1481 / 1.06, 0.075, 174.19, 0.5, tolerance=0.001)
