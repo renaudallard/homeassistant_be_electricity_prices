@@ -388,3 +388,12 @@ def test_a_sheet_listed_many_times_is_read_once() -> None:
     with patch.object(cwape, "sheet_rows", _rows):
         assert cwape.parse_grid(buf.getvalue()) == expected
     assert len(reads) == len(set(reads)) == 2, reads[:4]
+
+
+def test_a_listing_past_its_cap_is_refused_before_it_is_parsed() -> None:
+    """The listing is 1,9 MB of JSON, which json.loads builds at some twenty
+    times its size: a body of 63 MiB took 14,7 s and 1,7 GB. One past its own
+    cap is refused unparsed, the listing as served parses as it did."""
+    assert len(cwape.parse_listing(_LISTING)) == 36
+    with pytest.raises(ValueError, match="CWaPE listing runs"):
+        cwape.parse_listing(_LISTING + " " * (9 * 1024 * 1024))

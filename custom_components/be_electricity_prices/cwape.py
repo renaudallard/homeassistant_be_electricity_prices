@@ -104,6 +104,10 @@ _FAILURE_RETRY_S: Final = 6 * 3600
 # 2026 over the 2026 and 2027 grids: RESA's workbook unpacks to 1,8 MB, of
 # which the read inflates 175 KB, the most of any.
 _MAX_UNPACKED_BYTES: Final = 2 * 1024 * 1024
+# The listing, measured on 6 November 2026: 1,9 MB of JSON for 496
+# documents, growing by 50 to 110 KB a year. json.loads builds some twenty
+# times what it reads, so a listing past four times that is not parsed.
+_MAX_LISTING_CHARS: Final = 8 * 1024 * 1024
 # A rate per kWh is cents and a yearly term tens of euro: bounds sized on a
 # column read as another, not on what the network ought to cost.
 _MAX_KWH: Final = 0.5
@@ -362,7 +366,10 @@ async def read_listing(session: aiohttp.ClientSession) -> list[_Document]:
 
 def parse_listing(text: str) -> list[_Document]:
     """The listing's documents that apply to one year, each with its type,
-    operator, year and address."""
+    operator, year and address. Raises ValueError for a listing past
+    ``_MAX_LISTING_CHARS``, before it is parsed."""
+    if len(text) > _MAX_LISTING_CHARS:
+        raise ValueError(f"CWaPE listing runs {len(text)} characters")
     payload: Any = json.loads(text)
     documents: list[_Document] = []
     for item in payload if isinstance(payload, list) else ():

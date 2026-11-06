@@ -1613,7 +1613,11 @@ takes its network from them instead of typing it.
 Both are found through the documents service the CWaPE's tariff page is built
 from: `https://www.cwape.be/rest/documents?_format=json` with
 `documents_types[]=202` (an operator's tariffs for consumption) and `210`
-(transport), close to 2 MB of JSON parsed off the event loop (`parse_listing`).
+(transport), close to 2 MB of JSON parsed off the event loop (`parse_listing`):
+1,9 MB for 496 documents on 6 November 2026, growing by 50 to 110 KB a year.
+`json.loads` builds some twenty times what it reads, and a 63 MiB body took
+14,7 s and 1,7 GB, so a listing past 8 MiB (`_MAX_LISTING_CHARS`) is refused
+before it is parsed.
 Each record carries its type, its operator (`field_grd`: 213 AIEG, 214 AIESH,
 453 ORES, 225 RESA, 224 REW, 452 all of them), the years it applies to
 (`field_date_application`, `2026 - 2026`) and its file. The operator's file
