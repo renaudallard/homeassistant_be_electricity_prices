@@ -27,9 +27,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import zipfile
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -790,3 +793,52 @@ def test_the_floor_is_the_years_or_the_last_sheet_before_it() -> None:
     # A sheet whose minimum could not be read does not hide the one before.
     fluvius._cache[2027] = fluvius.SheetTerms(0.3276168, None)
     assert fluvius.capacity_floor_kw(2027) == 3.0
+
+
+@pytest.mark.parametrize(
+    ("parse", "read"),
+    [
+        ("parse_sheet", lambda session: fluvius._fetch_sheet(session, 2026)),
+        (
+            "parse_analog_surcharge",
+            lambda session: fluvius.read_analog_surcharge(session, 2026, "zenne-dijle"),
+        ),
+        (
+            "parse_area_terms",
+            lambda session: fluvius.read_area_terms(session, 2026, "zenne-dijle"),
+        ),
+    ],
+)
+async def test_a_sheet_is_parsed_off_the_event_loop(
+    parse: str, read: Callable[[Any], Awaitable[object]]
+) -> None:
+    """A sheet is XML read whole and walked in Python, and one crafted inside
+    the old cap held the loop for 6,8 s: every read parses in a worker thread,
+    and parses as it did."""
+    real = getattr(fluvius, parse)
+    on_loop: list[bool] = []
+
+    def _parse(payload: bytes, year: int) -> object:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            on_loop.append(False)
+        else:
+            on_loop.append(True)
+        return real(payload, year)
+
+    async def _listing(_session: object) -> str:
+        return ""
+
+    async def _workbook(*_args: object) -> bytes:
+        return _SHEET_2026
+
+    with (
+        patch.object(fluvius, parse, _parse),
+        patch.object(fluvius, "_fetch_listing", _listing),
+        patch.object(fluvius, "_fetch_workbook", _workbook),
+    ):
+        result = await read(MagicMock())
+    assert on_loop == [False]
+    assert result is not None
+    assert result == real(_SHEET_2026, 2026)

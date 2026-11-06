@@ -527,7 +527,9 @@ async def _fetch_sheet(session: aiohttp.ClientSession, year: int) -> SheetTerms 
     if payload is None:
         _LOGGER.debug("Fluvius gives no %d tariff sheet yet", year)
         return None
-    terms = parse_sheet(payload, year)
+    # Off the event loop, as every sheet is: a sheet is XML read whole and
+    # walked in Python, and one crafted inside the budget took seconds.
+    terms = await asyncio.to_thread(parse_sheet, payload, year)
     if terms is not None:
         _LOGGER.debug(
             "Fluvius %d maximumtarief %.7f EUR/kWh excl. VAT, minimum peak %s kW",
@@ -626,7 +628,9 @@ async def read_analog_surcharge(
     ``None`` where the listing has no such sheet or it does not read. Raises on
     a network error, for the live check to tell the two apart."""
     payload = await _area_workbook(session, year, area)
-    return None if payload is None else parse_analog_surcharge(payload, year)
+    if payload is None:
+        return None
+    return await asyncio.to_thread(parse_analog_surcharge, payload, year)
 
 
 async def read_area_terms(
@@ -636,7 +640,9 @@ async def read_area_terms(
     ``None`` where the listing has no such sheet or it does not read. Raises on
     a network error, as :func:`read_analog_surcharge` does."""
     payload = await _area_workbook(session, year, area)
-    return None if payload is None else parse_area_terms(payload, year)
+    if payload is None:
+        return None
+    return await asyncio.to_thread(parse_area_terms, payload, year)
 
 
 async def _area_workbook(

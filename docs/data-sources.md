@@ -1427,7 +1427,9 @@ year it covers (`...-afname-elektriciteit-01012026-31122026`). `fluvius.py`
 takes the first such page for the year, follows its link to the `.xlsx`, and
 reads the first worksheet with `defusedxml`, through the helpers `synergrid.py`
 already uses and its bounded zip reader, on a budget of 1 MiB inflated (see
-[what a workbook may unpack to](#what-a-workbook-may-unpack-to)). The sheet must title itself the
+[what a workbook may unpack to](#what-a-workbook-may-unpack-to)), in a worker
+thread: a sheet is XML read whole and walked in Python, and one crafted inside
+the old cap held the event loop for 6,8 s. The sheet must title itself the
 year's "Tarieflijst periodieke distributienettarieven". Two rows are read: the
 capacity rate's ("Gemiddelde maandpiek"), whose only figure sits in the
 column a peak-metered low-voltage connection is billed on, and the
