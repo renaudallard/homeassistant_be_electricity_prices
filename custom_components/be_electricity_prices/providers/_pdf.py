@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+import codecs
 import ipaddress
 import json
 import logging
@@ -172,6 +173,26 @@ async def read_capped(resp: aiohttp.ClientResponse, url: str) -> bytes:
     return bytes(payload)
 
 
+# The charsets a body is read in when it declares one; any other, or none,
+# reads as UTF-8. Python decodes in every codec it ships, some slowly enough
+# to stall the event loop on a page a server labels with them: punycode is
+# quadratic, 100 kB of it took 1,8 s on a Raspberry Pi and 200 kB 4,4 s. On
+# 2026-11-06 every source declared utf-8, Justel iso-8859-1, or nothing.
+_CHARSETS = frozenset(
+    codecs.lookup(name).name for name in ("utf-8", "latin-1", "cp1252", "ascii")
+)
+
+
+def _charset(declared: str | None) -> str:
+    """The codec a body declaring ``declared`` is read in."""
+    try:
+        name = codecs.lookup(declared or "utf-8").name
+    except LookupError:
+        # A charset Python does not know, "utf8mb4" for one.
+        return "utf-8"
+    return name if name in _CHARSETS else "utf-8"
+
+
 async def read_text_capped(resp: aiohttp.ClientResponse, url: str) -> str:
     """Read a text body under the cap, in the charset it declares or UTF-8.
 
@@ -180,12 +201,7 @@ async def read_text_capped(resp: aiohttp.ClientResponse, url: str) -> str:
     UnicodeDecodeError.
     """
     payload = await read_capped(resp, url)
-    try:
-        return payload.decode(resp.charset or "utf-8", errors="replace")
-    except (LookupError, UnicodeError):
-        # A charset Python does not know ("utf8mb4"), or a codec with no
-        # replace handler (idna).
-        return payload.decode("utf-8", errors="replace")
+    return payload.decode(_charset(resp.charset), errors="replace")
 
 
 def _internal_address(host: str) -> bool:

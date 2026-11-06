@@ -697,10 +697,15 @@ Internals worth knowing:
   what a broken or hostile server can pull into coordinator memory. The cap
   holds on the bytes as they stream, not only on a declared Content-Length,
   which a chunked answer leaves out and a server can lie about.
-  `read_text_capped` decodes a page under the same cap, in the charset it
-  declares or UTF-8, replacing what does not decode so a mislabelled page is
-  refused by its parser as an `ExtractorError` rather than raised as a
-  `UnicodeDecodeError`. The ENTSO-E and energy-charts answers, the Brugel
+  `read_text_capped` decodes a page under the same cap, replacing what does
+  not decode so a mislabelled page is refused by its parser as an
+  `ExtractorError` rather than raised as a `UnicodeDecodeError`. It reads a
+  page in the charset it declares only when that is UTF-8, Latin-1, cp1252 or
+  ASCII (`_charset`, each name normalised through `codecs.lookup`), and in
+  UTF-8 otherwise: Python decodes in any codec it ships, on the event loop
+  here, and punycode is quadratic (200 kB took 4,4 s on a Raspberry Pi). On
+  2026-11-06 every source declared UTF-8, Justel ISO-8859-1, or nothing. The
+  ENTSO-E and energy-charts answers, the Brugel
   sheets, the CREG rate file and Synergrid's download page are read through
   them too.
 - The decode bound (`_pdf_bound.py`, pdfminer's wrappers in

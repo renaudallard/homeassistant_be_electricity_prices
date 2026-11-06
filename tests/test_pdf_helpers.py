@@ -31,6 +31,7 @@ import asyncio
 import inspect
 import logging
 import re
+import time
 from collections.abc import Callable, Iterator, Sequence
 from datetime import date
 from pathlib import Path
@@ -2951,6 +2952,50 @@ async def test_a_page_that_is_not_utf8_is_read_not_raised(
     async with TestServer(app) as server, aiohttp.ClientSession() as session:
         text = await fetch_text(session, str(server.make_url("/")))
     assert text == "Tarif �lectricit�"
+
+
+class _Declaring:
+    """An answer whose Content-Type declares ``charset``."""
+
+    content_length = None
+
+    def __init__(self, body: bytes, charset: str | None) -> None:
+        self.charset = charset
+        self.content = FakeBody(body)
+
+
+async def test_a_body_declaring_a_slow_codec_is_read_as_utf8() -> None:
+    """The charset a page declared was decoded in on the event loop, whatever
+    it named, and punycode is quadratic: 200 kB of it held the loop for
+    seconds on a Raspberry Pi."""
+    body = b"-" + b"a" * 200_000
+    started = time.perf_counter()
+    text = await _pdf.read_text_capped(_Declaring(body, "punycode"), "u")  # type: ignore[arg-type]
+    assert time.perf_counter() - started < 0.5
+    assert text == body.decode("ascii")
+
+
+@pytest.mark.parametrize(
+    ("declared", "body", "text"),
+    [
+        ("iso-8859-1", b"Tarif \xe9lectricit\xe9", "Tarif électricité"),
+        ("latin-1", b"\xe9", "é"),
+        ("windows-1252", b"\x80 par kWh", "€ par kWh"),
+        ("CP1252", b"\x80", "€"),
+        ("us-ascii", b"Tarif", "Tarif"),
+        ("UTF-8", "électricité".encode(), "électricité"),
+        (None, "électricité".encode(), "électricité"),
+        # Unknown to Python, without a replace handler, or another codec:
+        # each reads as UTF-8, what does not decode replaced.
+        ("utf8mb4", b"\xe9t\xc3\xa9", "\ufffdt\xe9"),
+        ("idna", "électricité".encode(), "électricité"),
+        ("utf-16", "électricité".encode(), "électricité"),
+    ],
+)
+async def test_a_body_is_read_in_a_common_charset_it_declares(
+    declared: str | None, body: bytes, text: str
+) -> None:
+    assert await _pdf.read_text_capped(_Declaring(body, declared), "u") == text  # type: ignore[arg-type]
 
 
 class _NoRequestSession:
