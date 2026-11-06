@@ -60,3 +60,29 @@ def test_the_docs_quote_the_same_floor() -> None:
     assert f"Home%20Assistant-{declared}%2B" in readme
     architecture = (_ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
     assert f"Home Assistant {declared} or newer" in architecture
+
+
+def test_the_pdfplumber_floor_leaves_out_the_cmaps_it_unpickled() -> None:
+    """pdfplumber 0.11.0 to 0.11.7 pin a pdfminer.six that unpickles the
+    CMap file a card's font names, from any folder the name reaches, and
+    0.11.8 one that still unpickles it from its own: Home Assistant keeps
+    whichever installed release the manifest allows. 0.11.9 pins one that
+    reads them as JSON, and CI runs it."""
+    from packaging.requirements import Requirement
+    from packaging.version import Version
+
+    manifest = json.loads(
+        (
+            _ROOT / "custom_components" / "be_electricity_prices" / "manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    (floor,) = (
+        Requirement(line).specifier
+        for line in manifest["requirements"]
+        if Requirement(line).name == "pdfplumber"
+    )
+    assert not floor.contains(Version("0.11.8"))
+    requirements = (_ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
+    pinned = re.search(r"^pdfplumber==([0-9.]+)$", requirements, re.MULTILINE)
+    assert pinned is not None, "requirements-dev.txt no longer pins pdfplumber"
+    assert floor.contains(Version(pinned.group(1)))
