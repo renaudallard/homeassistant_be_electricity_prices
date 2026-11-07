@@ -66,7 +66,6 @@ from html import unescape
 from pathlib import Path
 from types import ModuleType
 from typing import Any
-from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -122,9 +121,13 @@ async def _energyvision(
         page = unescape(await _pdf().fetch_text(session, page_url))
     except _pdf().ExtractorError:
         page = ""
+    # Held to the page's own site, as the integration holds Brusol's links
+    # (``on_page_site``): every card either site has linked sits on it, so a
+    # link elsewhere is not one to send the triager to.
+    on_site = importlib.import_module("be_pkg.providers._links").on_page_site
     for link in _HREF_RE.findall(page):
-        url = urljoin(page_url, link)
-        if named.search(url):
+        url = on_site(page_url, link)
+        if url is not None and named.search(url):
             found.setdefault(url, "its card page")
     # Where its listing's script looks for the month's name.
     for url in ev._archive_card_urls(contract, card, month):

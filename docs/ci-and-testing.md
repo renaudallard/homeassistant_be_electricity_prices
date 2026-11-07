@@ -1144,7 +1144,7 @@ candidate, marked ones included:
 | --- | --- | --- |
 | Elegant | the listing's `/Current/<product>_Residential.pdf` links, matched on the product's key with spaces and `&` taken out | the renamed `Flex Electricity` files |
 | Engie | the residential prices pages, French and Dutch, which name every document code; the same product under any term, else a sibling of its family | Empty House's `_36_` code for `_00_` |
-| EnergyVision | the files its `tariefkaart-2` page links, then where its listing's script looks (`_archive_card_urls`) | the month's upload folder, the page's link being dead |
+| EnergyVision | the files its `tariefkaart-2` page (or Brusol's signup page) links on that page's own site (`on_page_site`, `providers/_links.py`), then where its listing's script looks (`_archive_card_urls`) | the month's upload folder, the page's link being dead |
 | Luminus | the price-list archive's product id for the month and for the month before, each asked for the month's card | the old id's early copy, titled November and carrying October's prices (#147), reported as coming from October's id |
 
 That last case is why it only reports: a card naming the month is not

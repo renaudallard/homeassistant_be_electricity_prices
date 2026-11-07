@@ -226,6 +226,32 @@ async def test_energyvision_looks_for_a_card_by_its_own_file_name(
     assert by_url[f"{files}/inline-files/{name}.pdf"] == ("its upload folders", None)
 
 
+async def test_energyvision_follows_no_link_off_its_page_s_site(
+    monkeypatch: pytest.MonkeyPatch, modules: dict[str, ModuleType]
+) -> None:
+    """A page link naming the card on another host, or over plain http, is
+    not reported: EnergyVision's cards sit on www.energyvision.be, where its
+    page is, as Brusol's sit on www.brusol.be."""
+    name = "EV-1126-GS1800V-nl.pdf"
+    _serve(
+        monkeypatch,
+        modules,
+        {
+            "/nl-be/tariefkaart-2": (
+                f'<a href="https://cards.example/sites/default/files/2026-11/{name}">'
+                f'a</a><a href="http://www.energyvision.be/sites/default/files/{name}">'
+                "b</a>"
+            )
+        },
+        {},
+    )
+    found = await cf.find(
+        None, modules, "energyvision", "energyvision_tiered_1800", "flanders", NOVEMBER
+    )
+    assert [url for url, where, _ in found if where == "its card page"] == []
+    assert all(url.startswith("https://www.energyvision.be/") for url, _, _ in found)
+
+
 async def test_luminus_names_the_product_id_each_card_came_from(
     monkeypatch: pytest.MonkeyPatch, modules: dict[str, ModuleType]
 ) -> None:
