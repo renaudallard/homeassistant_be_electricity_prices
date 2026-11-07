@@ -63,6 +63,7 @@ machinery.
 | `tests/test_cociter.py` | Cociter extractor |
 | `tests/test_custom.py` | Expert custom-formula supplier: its config flow, snapshot build and pricing |
 | `tests/test_dats24.py` | DATS 24 extractor |
+| `tests/test_dats24_transferred.py` | DATS 24's withdrawn product for the households EnergyVision took over: setup, a kept entry, the signing card, the network after the last card |
 | `tests/test_dots.py` | Dots Energy extractor |
 | `tests/test_ebem.py` | EBEM extractor |
 | `tests/test_ecofix.py` | Ecofix extractor |
@@ -640,6 +641,9 @@ A product its supplier stopped selling is marked the same way, keyed on the cont
 label against `_WITHDRAWN_CONTRACTS`, bound from each `Contract.withdrawn`. Its date is the first
 day the product was no longer sold, so the allowance starts on it rather than the day after: OCTA+
 went on serving the August cards of Fixed, Flux, Eco Fixed and Eco Flux after replacing them.
+DATS 24 is marked this way since issue #169: its one product is withdrawn from 2026-08-01, the
+month after its last card, and no supplier carries `deprecated_until` any more. It has no listing
+left either, so it has no `discover()` and no `_CATALOG_BASELINES` entry.
 
 The report separates the two kinds of expected failure, because they need different explanations: a
 page-image card can come back, a supplier that has left cannot. Folding a withdrawal under
@@ -1468,8 +1472,8 @@ back as it was (Luminus on a next card naming another month) is left alone and c
 September 2026 was the first month the archive held live
 for every supplier, and Eneco, EBEM, Mega and Trevion were billed on those rows until this. The branch thus mirrors the supplier
 archives: insurance against a supplier dropping its own, and a cheap read for
-any month a supplier's own path cannot serve. Only for suppliers walked while they were still
-publishing, though: DATS 24 left before the archive existed and holds no rows here at all. The daily schedule runs with `--backfill 12`,
+any month a supplier's own path cannot serve. DATS 24 was not walked past its supplier withdrawal
+date, and is again since its product carries the withdrawal instead (issue #169). The daily schedule runs with `--backfill 12`,
 so a newly added supplier gets its last year mirrored on the first run after it lands, a year
 being as far back as a promotion's signing month matters; the workflow's manual dispatch takes the
 number as an input, 12 by default. A month on disk is never asked again, so once the year is

@@ -43,7 +43,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 import aiohttp
@@ -102,6 +102,7 @@ from .providers import (
     offers_quarter_hourly,
     withdrawn_on,
 )
+from .providers._rates import last_card_month
 from .providers._resolve import (
     apply_vat,
     on_card_basis,
@@ -307,12 +308,13 @@ def last_card_year(supplier: str | None, contract: str | None) -> int | None:
     a product still sold: that of the last day it was sold, the day before
     ``Contract.withdrawn``, whose month's card is the last one published.
     Every product registered agrees: GS's last card is of September 2025 and
-    it was withdrawn on 1 October, and the others were withdrawn on 1 or 30
-    October or 1 November 2026, after a card of that year. One answer for the
+    it was withdrawn on 1 October, DATS 24's is of July 2026 and it was
+    withdrawn on 1 August, and the others were withdrawn on 1 or 30 October
+    or 1 November 2026, after a card of that year. One answer for the
     resolver (:func:`past_last_card`) and the backfill's hold
     (:func:`network_sheet_unread`), which has no card to read a date off."""
     withdrawn = withdrawn_on(supplier, contract)
-    return None if withdrawn is None else (withdrawn - timedelta(days=1)).year
+    return None if withdrawn is None else last_card_month(withdrawn).year
 
 
 def past_last_card(

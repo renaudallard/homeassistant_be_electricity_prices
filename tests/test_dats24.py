@@ -46,11 +46,10 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.providers.dats24 import (
     _card_url,
-    discover,
     fetch,
     parse_snapshot,
 )
-from tests import FIXTURES, FakeBody, fixture_text
+from tests import fixture_text
 
 
 def _text() -> str:
@@ -327,59 +326,30 @@ def test_may_card_uses_dot_decimal_separator() -> None:
     assert len(snap.dsos) == 8
 
 
-# ---- monthly card resolution -------------------------------------------------
+# ---- card resolution ---------------------------------------------------------
 #
 # The old ``profile.dats24.be/api/v1/ratecard`` endpoint served one stable
-# URL; the CDN that replaced it carries the month in the filename, so the
-# extractor now picks a month and falls back one month when the new card
-# has not been published yet.
+# URL; the CDN that replaced it carries the month in the filename. DATS 24
+# published its last card for July 2026, so that is the one card ``fetch``
+# reads, and a past month is read by ``fetch_for_month``.
+
+# A Brussels-local instant in November 2026, months after the last card.
+_IN_NOVEMBER = datetime(
+    2026, 11, 7, 9, 0, tzinfo=dt_util.get_time_zone("Europe/Brussels")
+)
 
 
-class _CardResponse:
-    """Minimal aiohttp.ClientResponse stand-in serving PDF bytes."""
+def _served(texts: dict[str, str], seen: list[str]) -> Any:
+    """A ``fetch_pdf_text_layout`` serving ``texts`` by URL, recording each
+    URL asked, and answering 404 for any other."""
 
-    def __init__(self, payload: bytes, status: int) -> None:
-        self.status = status
-        self.content_length = len(payload)
-        self.history = ()
-        self.headers: dict[str, str] = {}
-        self.content = FakeBody(payload)
+    async def _fetch(_session: object, url: str) -> str:
+        seen.append(url)
+        if url not in texts:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+        return texts[url]
 
-    async def __aenter__(self) -> _CardResponse:
-        return self
-
-    async def __aexit__(self, *_args: Any) -> None:
-        return None
-
-
-class _CardSessionImpl:
-    """Serves a (payload, status) pair per URL substring, and records the
-    URLs it was asked for so a test can assert the resolution order."""
-
-    def __init__(self, by_fragment: dict[str, tuple[bytes, int]]) -> None:
-        self._by_fragment = by_fragment
-        self.requested: list[str] = []
-
-    def get(self, url: str, *_args: Any, **_kwargs: Any) -> _CardResponse:
-        self.requested.append(url)
-        for fragment, (payload, status) in self._by_fragment.items():
-            if fragment in url:
-                return _CardResponse(payload, status)
-        return _CardResponse(b"", 404)
-
-    def head(self, url: str, *_args: Any, **_kwargs: Any) -> _CardResponse:
-        return self.get(url)
-
-
-def _card_session(by_fragment: dict[str, tuple[bytes, int]]) -> _CardSessionImpl:
-    return _CardSessionImpl(by_fragment)
-
-
-_APRIL_PDF = (FIXTURES / "dats24_groen_variabel_apr.pdf").read_bytes()
-
-# A Brussels-local instant inside May 2026, so "this month" is 05/2026 and
-# the fallback month is 04/2026, the month the April fixture covers.
-_IN_MAY = datetime(2026, 5, 12, 9, 0, tzinfo=dt_util.get_time_zone("Europe/Brussels"))
+    return _fetch
 
 
 def test_card_url_spells_the_month_in_the_filename() -> None:
@@ -393,101 +363,92 @@ def test_card_url_spells_the_month_in_the_filename() -> None:
     assert "/2025/ELEK/NL/" in _card_url(2025, 1)
 
 
-def test_fetch_prefers_the_current_month() -> None:
-    session = _card_session({"Versie%2005%202026": (_APRIL_PDF, 200)})
-    with patch.object(dt_util, "now", return_value=_IN_MAY):
-        snap = asyncio.run(
-            fetch(
-                cast(aiohttp.ClientSession, session),
-                "dats24_groen_variabel",
-                "flanders",
-            )
-        )
-    # One round-trip: the current month answered, so no fallback was tried.
-    assert len(session.requested) == 1
-    assert "Versie%2005%202026" in snap.source_url
-    assert isinstance(snap.energy, VariableRates)
+def test_fetch_reads_the_last_card_and_never_the_running_month() -> None:
+    """DATS 24 publishes no card after July 2026, so asking for the running
+    month and the one before it, as ``fetch`` did, raised on both 404s."""
+    import custom_components.be_electricity_prices.providers.dats24 as mod
 
-
-def test_fetch_falls_back_one_month_when_the_new_card_is_absent() -> None:
-    """The new card lands during the first days of the month it covers;
-    until then the previous month's card is the one being billed."""
-    session = _card_session(
-        {
-            "Versie%2005%202026": (b"", 404),
-            "Versie%2004%202026": (_APRIL_PDF, 200),
-        }
-    )
-    with patch.object(dt_util, "now", return_value=_IN_MAY):
-        snap = asyncio.run(
-            fetch(
-                cast(aiohttp.ClientSession, session),
-                "dats24_groen_variabel",
-                "flanders",
-            )
-        )
-    assert [
-        ("Versie%2005%202026" in u, "Versie%2004%202026" in u)
-        for u in session.requested
-    ] == [(True, False), (False, True)]
-    # source_url names the month actually served, so the snapshot is
-    # traceable to the card the user is being billed on.
-    assert "Versie%2004%202026" in snap.source_url
-    assert snap.publication_label == "april 2026"
-    assert snap.valid_until == date(2026, 4, 30)
-
-
-def test_fetch_does_not_fall_back_on_a_transient_failure() -> None:
-    """A 5xx / timeout must propagate, not silently re-price everyone at
-    last month's rates: the coordinator classifies it transient and keeps
-    serving its cached current-month snapshot instead."""
-    session = _card_session(
-        {
-            "Versie%2005%202026": (b"", 503),
-            "Versie%2004%202026": (_APRIL_PDF, 200),
-        }
-    )
+    july = fixture_text("dats24_groen_variabel_2026-07.pdf", layout=True)
+    seen: list[str] = []
     with (
-        patch.object(dt_util, "now", return_value=_IN_MAY),
-        pytest.raises(ExtractorError, match="HTTP 503"),
+        patch.object(dt_util, "now", return_value=_IN_NOVEMBER),
+        patch.object(
+            mod, "fetch_pdf_text_layout", _served({_card_url(2026, 7): july}, seen)
+        ),
+    ):
+        snap = asyncio.run(
+            fetch(
+                cast(aiohttp.ClientSession, None),
+                "dats24_groen_variabel",
+                "flanders",
+            )
+        )
+    assert seen == [_card_url(2026, 7)]
+    assert snap.publication_label == "juli 2026"
+    assert snap.source_url == _card_url(2026, 7)
+    assert isinstance(snap.energy, VariableRates)
+    # The July 2026 formula, (BE_spotRLP x 0,1115 + 0,511) + 6% btw.
+    assert snap.energy.formula_factor == pytest.approx(0.1115 * 10 * 1.06)
+    assert snap.energy.formula_base == pytest.approx(0.511 / 100 * 1.06)
+
+
+def test_fetch_reports_the_last_card_gone_as_a_missing_card() -> None:
+    """Once the CDN drops the last card the 404 propagates as it reads, so
+    the coordinator keeps the card it holds or reads the archive's copy
+    rather than reporting a broken card."""
+    import custom_components.be_electricity_prices.providers.dats24 as mod
+    from custom_components.be_electricity_prices.providers._pdf import (
+        is_missing_card_error,
+    )
+
+    seen: list[str] = []
+    with (
+        patch.object(mod, "fetch_pdf_text_layout", _served({}, seen)),
+        pytest.raises(ExtractorError) as err,
     ):
         asyncio.run(
             fetch(
-                cast(aiohttp.ClientSession, session),
+                cast(aiohttp.ClientSession, None),
                 "dats24_groen_variabel",
-                "flanders",
+                "wallonia",
             )
         )
-    # The previous month was never requested.
-    assert len(session.requested) == 1
+    assert seen == [_card_url(2026, 7)]
+    assert is_missing_card_error(str(err.value))
 
 
-def test_discover_accepts_either_candidate_month() -> None:
-    # Only last month's card exists (the new one is not up yet): the
-    # product is still published, so discover() must not report it gone.
-    session = _card_session({"Versie%2004%202026": (_APRIL_PDF, 200)})
-    with patch.object(dt_util, "now", return_value=_IN_MAY):
-        assert asyncio.run(discover(cast(aiohttp.ClientSession, session))) == {
-            "dats24_groen_variabel"
-        }
+def test_the_last_card_is_never_asked_for_again() -> None:
+    """Without a probe a card past its validity is fetched again every hour.
+    The key never changes, so the last card is fetched once and held."""
+    from custom_components.be_electricity_prices.providers.dats24 import (
+        EXTRACTOR,
+        probe,
+    )
+
+    assert EXTRACTOR.probe is probe
+    keys = {
+        asyncio.run(
+            probe(cast(aiohttp.ClientSession, None), "dats24_groen_variabel", r)
+        )
+        for r in ("flanders", "wallonia")
+    }
+    assert keys == {"withdrawn 2026-08-01"}
 
 
-def test_withdrawal_metadata_points_at_a_real_successor() -> None:
-    """``deprecated_successor`` is a free-form registry id; a typo would
-    render as a raw id in the Repairs card instead of a supplier name."""
-    from custom_components.be_electricity_prices.providers import EXTRACTORS
-    from custom_components.be_electricity_prices.providers.dats24 import EXTRACTOR
+def test_the_product_is_withdrawn_rather_than_the_supplier() -> None:
+    """Hiding the supplier hid the product from the households EnergyVision
+    took over on its terms (issue #169), and stopped every fetch. The product
+    is withdrawn from the month after its last card instead."""
+    import custom_components.be_electricity_prices.providers.dats24 as mod
 
-    assert EXTRACTOR.deprecated_until == date(2026, 8, 31)
-    assert EXTRACTOR.deprecated_successor in EXTRACTORS
-
-
-def test_discover_reports_nothing_once_publication_stops() -> None:
-    # After the 2026-08-31 transfer to EnergyVision no further card is
-    # published; discover() must go empty rather than raise.
-    session = _card_session({})
-    with patch.object(dt_util, "now", return_value=_IN_MAY):
-        assert asyncio.run(discover(cast(aiohttp.ClientSession, session))) == set()
+    assert mod.EXTRACTOR.deprecated_until is None
+    assert mod.EXTRACTOR.deprecated_successor is None
+    (contract,) = mod.EXTRACTOR.contracts
+    assert contract.withdrawn == date(2026, 8, 1)
+    assert "EnergyVision" in contract.label
+    # Nothing is sold any more, so there is no listing for the live check to
+    # hold the registry against.
+    assert not hasattr(mod, "discover")
 
 
 def test_injection_resolves_the_delivery_month_not_the_most_recent_value() -> None:
@@ -576,9 +537,7 @@ async def test_fetch_for_month_uses_the_month_keyed_cdn_url() -> None:
 
 
 async def test_fetch_for_month_returns_none_for_an_unpublished_month() -> None:
-    """A month the CDN does not hold is the pre-publication state for the
-    running month and the permanent state after the EnergyVision transfer;
-    neither is an error."""
+    """A month the CDN does not hold is no card, not an error."""
     from datetime import date
 
     import custom_components.be_electricity_prices.providers.dats24 as mod
@@ -593,10 +552,30 @@ async def test_fetch_for_month_returns_none_for_an_unpublished_month() -> None:
                 None,  # type: ignore[arg-type]
                 "dats24_groen_variabel",
                 "flanders",
-                date(2026, 12, 1),
+                date(2026, 6, 1),
             )
             is None
         )
+
+
+async def test_fetch_for_month_asks_nothing_after_the_last_card() -> None:
+    """No card was published after July 2026, so a later month is no card
+    without a request: the running month's address answers 404 for good."""
+    import custom_components.be_electricity_prices.providers.dats24 as mod
+
+    seen: list[str] = []
+    with patch.object(mod, "fetch_pdf_text_layout", _served({}, seen)):
+        for month in (date(2026, 8, 1), date(2026, 11, 1)):
+            assert (
+                await mod.fetch_for_month(
+                    None,  # type: ignore[arg-type]
+                    "dats24_groen_variabel",
+                    "flanders",
+                    month,
+                )
+                is None
+            )
+    assert seen == []
 
 
 def test_a_crafted_indicative_is_read_in_time_linear_in_its_length() -> None:

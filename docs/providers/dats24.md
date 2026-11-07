@@ -2,11 +2,15 @@
 
 This document is the maintainer reference for the DATS 24 supplier extractor
 (`providers/dats24.py`). DATS 24 is the fuel-and-energy retail brand of Colruyt
-Group; it sells one residential electricity product across Flanders and Wallonia
-and publishes its rates as one PDF per month on the Colruyt Group static CDN. The
-notes below are grounded in the module and its fixture-driven test
-(`tests/test_dats24.py`), which encodes the exact parse output against two real
-cards and is treated here as ground truth for what the extractor must produce.
+Group; it sold one residential electricity product across Flanders and Wallonia
+until July 2026 and published its rates as one PDF per month on the Colruyt Group
+static CDN. Its households moved to EnergyVision on 1 September 2026 on the same
+contract and tariff, so the product is modelled as withdrawn and set up from the
+card the household signed (issue #169). The notes below are grounded in the
+module and its fixture-driven tests (`tests/test_dats24.py`,
+`tests/test_dats24_transferred.py`), which encode the exact parse output against
+real cards and are treated here as ground truth for what the extractor must
+produce.
 
 Related reading:
 
@@ -25,11 +29,11 @@ Related reading:
 | Regions served | Flanders, Wallonia (`dats24.py`, `_DATS24_REGIONS`) |
 | Products | one: `dats24_groen_variabel` (`dats24.py`) |
 | Card format | one PDF per month on a CDN, month spelled in the filename |
-| Probe | none (`EXTRACTOR` sets no `probe`, `dats24.py`) |
-| Archive | `fetch_for_month` over the month-keyed CDN URL; cards back to 2023 |
-| Lifecycle | withdrawn: contracts transfer to EnergyVision on 2026-08-31 |
+| Probe | a constant key, `withdrawn 2026-08-01` (`probe`, `dats24.py`) |
+| Archive | `fetch_for_month` over the month-keyed CDN URL; cards from 2023 to July 2026 |
+| Lifecycle | product withdrawn from 2026-08-01; households moved to EnergyVision on 2026-09-01 |
 
-DATS 24 sells one residential electricity product, "Elektriciteit Groen
+DATS 24 sold one residential electricity product, "Elektriciteit Groen
 Variabel" (`dats24.py`). It is a variable (monthly-indexed) contract whose
 formula shape is (the per-meter-type coefficients are re-published with every
 card, so they are deliberately not pinned here or in the module docstring):
@@ -46,20 +50,51 @@ delivery month's weighted mean (`month_indexed` on the energy, `spp_indexed` on
 the feed-in), with the card's printed figures, which use the previous month's
 index, as the fallback without a key.
 
-> **Withdrawal.** DATS 24 is leaving residential energy supply: its own site
-> states contracts transfer automatically to EnergyVision on 31 August 2026, so
-> the August 2026 card is expected to be the last one published
-> (`dats24.py`). The successor products live in
-> [energyvision.md](./energyvision.md). After the transfer the CDN stops
-> publishing and `discover` goes empty rather than raising.
+> **Withdrawal and transfer.** DATS 24 left residential energy supply. Its
+> last card is of July 2026: the CDN holds none for August or later, and the
+> live check found the August address answering 404 on 1 September (issue #78).
+> Its contracts moved automatically to EnergyVision on 1 September 2026, whose
+> welcome mail says contract, tariff and term stay the same and whose invoices
+> name the product "Elektriciteit Groen Variabel vanaf 01/09/2026". EnergyVision
+> publishes no card for these households (issue #100), so the integration prices
+> them on DATS 24's own cards.
 >
-> This is declared on the registry entry as `deprecated_until=date(2026, 8, 31)`
-> and `deprecated_successor="energyvision"` (`dats24.py`), which drops
-> DATS 24 from the config flow's new-setup and compare pickers and raises the
-> `supplier_deprecated` Repairs card on every entry still using it. Existing
-> entries keep pricing normally -- see
-> [../provider-framework.md](../provider-framework.md) for what the two fields
-> do and do not affect.
+> Until issue #169 the supplier carried `deprecated_until=date(2026, 8, 31)` and
+> `deprecated_successor="energyvision"`, which hid DATS 24 from new setups,
+> stopped every fetch past the date and kept the `supplier_deprecated_ended`
+> Repairs card on every entry, telling households whose contract carried on
+> unchanged that their prices were no longer what they were billed. Now the
+> supplier carries neither and its one product is withdrawn instead
+> (`Contract.withdrawn=date(2026, 8, 1)`, the month after its last card): the
+> contract picker lists it marked †, labelled "(transferred to EnergyVision)",
+> the compare pages leave it out, and an entry on it raises `contract_withdrawn`.
+> The successor products EnergyVision sells to new customers live in
+> [energyvision.md](./energyvision.md).
+>
+> **Which card prices it.** The card of the month the household signed, the
+> tariff card month or else the contract start date's ("Versie MM/YYYY" on the
+> DATS 24 order confirmation), through the signing cohort: its energy and feed-in
+> formulas, re-indexed on each delivery month's BE_spotRLP and BE_spotSPP. With
+> no signing month, the last card's, July 2026's. The network and the levies are
+> the delivery month's card's, July 2026's for every month after it, and from
+> 2027 on the regulator's sheet of the year (`past_last_card`,
+> `snapshot_resolve.py`).
+>
+> **The start date is DATS 24's.** A contract start date is the day DATS 24
+> began supplying, not 1 September 2026, the day EnergyVision took over and the
+> date its invoices print. The cohort starts at the later of the card month and
+> the start date (`_cohort_first_month`, `cohort.py`), so a September start
+> bills every month before September 2026 on its own card: in 2026 their feed-in
+> factors run from 0,0665 to 0,0766 c€/kWh per EUR/MWh against the 0,068 of a
+> December 2025 card.
+>
+> **The risk.** It is a variable contract and nobody publishes its card any
+> more. If EnergyVision changed its formulas, nothing here would see it: the
+> entry would go on pricing on the card the household signed. The transfer mail
+> says the tariff stays the same, which is what this rests on. The cards were
+> estimates in their own right (EnergyVision's answer on issue #100): each
+> prints the formula at the previous month's index, which the integration
+> replaces by the delivery month's own when it has a day-ahead source.
 
 ### Source URL
 
@@ -80,39 +115,23 @@ document the API served: the CDN's April 2026 PDF is byte-identical to
 Nothing in the URL varies by region or meter type: one document per month carries
 every region's DSO tables, tax block, and that month's indicative rates, and
 `parse_snapshot` slices out the requested region's overlays. Only the month
-varies, which is what the resolver below handles.
+varies.
 
-### Month resolution
+### The last card
 
-`_fetch_card` (`dats24.py`) asks for the month being billed and falls
-back exactly one month:
-
-```
-_card_months()                dats24.py   (this month, previous month) in Brussels local time
-  ├─ GET _card_url(this month)
-  │    └─ 200 -> (url, text)
-  └─ HTTP 404 / 410 -> GET _card_url(previous month)
-```
-
-Two deliberate choices:
-
-- **Brussels local anchor** (`dats24.py`), matching `bolt.py`: a
-  UTC anchor still names last month during the first two hours of every Belgian
-  month and would fetch a card that has just been superseded.
-- **Only an absent card triggers the fallback** (`is_missing_card_error`,
-  `_pdf.py`). A timeout, a 5xx or an unreadable payload propagates, so
-  the coordinator classifies it transient and keeps serving its cached
-  current-month snapshot. Falling back on any error would silently re-price
-  every user at last month's rates, which is worse than a deferred refresh. `bolt.py`
-  is close: only a fix-folder card whose fetch failed for good (a 404 for an
-  unpublished month) takes the previous-month path, and a transient error fails
-  the tick, because Bolt's cards expose no parseable `valid_until` to signal the swap.
+`fetch` (`dats24.py`) reads `_card_url(2026, 7)`, the last card published,
+whatever the month: no current card exists to ask for. Once the CDN drops it the
+404 propagates as a missing card, and the coordinator keeps the card it holds or
+reads the card archive's copy of the month before `withdrawn`
+(`_keep_withdrawn_card`, `coordinator_snapshot.py`). Until issue #169 it asked
+for the running month and fell back one month, which raised on both 404s once
+publication stopped.
 
 ## Contracts
 
-| id | label | kind | regions | spot_indexed_injection |
-|---|---|---|---|---|
-| `dats24_groen_variabel` | `DATS 24 Elektriciteit Groen Variabel` | `variable` | Flanders, Wallonia | True |
+| id | label | kind | regions | spot_indexed_injection | withdrawn |
+|---|---|---|---|---|---|
+| `dats24_groen_variabel` | `DATS 24 Elektriciteit Groen Variabel (transferred to EnergyVision)` | `variable` | Flanders, Wallonia | True | 2026-08-01 |
 
 Only one `Contract` is declared (`dats24.py`). There is no fixed, TOU, or
 dynamic product, so `quarter_hourly` does not apply (that flag lives on
@@ -133,8 +152,7 @@ not sell residential electricity outside Flanders and Wallonia.
 fetch(session, contract_id, region)          dats24.py
   ├─ reject unknown contract id                dats24.py
   ├─ reject region not in {flanders, wallonia} dats24.py
-  ├─ _fetch_card(session)                      dats24.py   (month resolution -> (url, text))
-  │    └─ fetch_pdf_text_layout(session, url)  dats24.py   (PDF -> pdfplumber layout text)
+  ├─ fetch_pdf_text_layout(session, _card_url(2026, 7))  dats24.py   (PDF -> pdfplumber layout text)
   └─ parse_snapshot(text, url, region)         dats24.py
 ```
 
@@ -148,23 +166,15 @@ pages-present-but-no-text document as a hard error (`_pdf.py`,
 
 ### Probe
 
-There is no `probe`. `EXTRACTOR` (`dats24.py`) sets `id`, `label`,
-`contracts`, `fetch` and `fetch_for_month`, plus the two lifecycle fields;
-`probe` is the one left to default to `None`. The
-month-keyed URL is not a freshness signal either: within a month the file is
-replaced in place, so a HEAD tells us nothing a cheap diff could use, and the
-coordinator's time-based TTL governs refresh. This is the "DATS 24 single-PDF"
-case called out in the `SnapshotProbe` contract comment in `base.py`.
+`probe` (`dats24.py`) returns `withdrawn 2026-08-01` and asks nothing, as
+Energy Knights' does for its withdrawn products: the card read never changes, so
+it is fetched once and held. Without a probe a card past its validity is asked
+for again every hour (`_row_is_fresh`, `snapshot_store.py`), which for July's
+card would be every hour for good.
 
-Note the module does define a `discover` coroutine (`dats24.py`), but it
-is a catalog-drift check for the live-check harness, not a coordinator probe. It
-HEADs both candidate months and returns `{_CONTRACT_ID}` on the first status
-below 400, `set()` otherwise. Accepting either month matters on the 1st of a
-month, before the new card is up. The drift it is meant to catch is publication
-stopping altogether, which is now the expected end state after the 2026-08-31
-transfer; if DATS 24 ever split the product into `vast` / `tou` variants the
-check would stay green so we notice via a real extractor failure rather than a
-false-positive new-product alert (`dats24.py`).
+There is no `discover` any more: nothing is sold, so there is no listing for the
+live check's catalog diff, and `_CATALOG_BASELINES` (`scripts/live_check.py`)
+has no entry for DATS 24.
 
 ### Archive / historical months
 
@@ -182,8 +192,9 @@ at 18,0%, with January's ORES distribution under-billed by 2,459 c€/kWh. The
 backfill shares the same cache, so those prices were written into the recorder
 too, where they do not self-heal.
 
-Returns `None` for a month the CDN does not hold — the pre-publication state for
-the running month, and the permanent state after the transfer to EnergyVision.
+Returns `None` for a month the CDN does not hold, and without a request for any
+month after the last card. The card archive walks DATS 24 again, so its last
+twelve months are mirrored like any supplier's.
 
 ## Parsing
 
@@ -491,8 +502,8 @@ comment or test:
     raise on miss. The Flemish Energiefonds `Hoofdverblijf (domicilie)` row and the
     publication label are nullable (default 0 / empty). This split is deliberate:
     mandatory charges must fail loud rather than silently under-bill.
-11. **`discover` is a catalog check, not a probe.** It stays green if DATS 24 adds a
-    second contract type; that is by design (`dats24.py`).
+11. **No current card.** Never ask for the running month: `fetch` reads the July
+    2026 card and `fetch_for_month` answers `None` after it without a request.
 12. **May fixture excise artifact.** The hand-built dot-decimal May fixture left the
     excise row as a stray `000,005 c€/kWh` that cannot be patched (non-contiguous in
     the compressed stream, the real May card is gone). The May test intentionally
@@ -508,6 +519,8 @@ Under `tests/fixtures/`, exercised by `tests/test_dats24.py`:
 |---|---|---|
 | `dats24_groen_variabel_apr.pdf` | April 2026 card, comma decimals | the default fixture (`test_dats24.py`); all value asserts (energy, taxes, both region DSO blocks, injection, publication metadata) and every fatal-miss test |
 | `dats24_groen_variabel_may.pdf` | May 2026 card, dot decimals | dot-decimal tolerance across energy + DSO parsing (`test_dats24.py`); taxes deliberately not asserted (fixture artifact) |
+| `dats24_groen_variabel_2025-12.pdf` | December 2025 card | the issue #169 example, signed on (BE_spotRLP x 0,1141 + 0,511) + 6% and BE_spotSPP x 0,068 - 1,11 (`test_dats24_transferred.py`) |
+| `dats24_groen_variabel_2026-07.pdf` | July 2026 card, the last | what `fetch` reads and an entry with no signing month is priced on (`test_dats24.py`, `test_dats24_transferred.py`) |
 
 The tests read fixtures via `fixture_text(name, layout=True)`, matching the
 production `fetch_pdf_text_layout` path, and call `parse_snapshot` directly (no

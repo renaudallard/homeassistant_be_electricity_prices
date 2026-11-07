@@ -84,7 +84,7 @@ from .snapshot_resolve import (
 )
 from .snapshot_stand_ins import (
     card_for_unreadable_month,
-    card_of_month_before,
+    card_of_last_month_sold,
     newest_archived_card,
 )
 from .snapshot_store import (
@@ -626,7 +626,7 @@ class _SnapshotMixin:
             passed. energie.be, Engie and Luminus take this path, and so
             do Mega's professional cards and EnergyVision's Brussels cards,
             whose probe has no key to give. DATS 24 never gets here: its
-            supply ended and ``_supply_ended`` returns first.
+            withdrawn product's probe gives a key that never changes.
 
         The shared (supplier, contract, region) cache short-circuits the
         same way: a probe-key match against a sibling coordinator's
@@ -862,7 +862,7 @@ class _SnapshotMixin:
         """
         if self._snapshot is None:
             try:
-                archived = await card_of_month_before(
+                archived = await card_of_last_month_sold(
                     self._session,
                     self.entry.data[CONF_SUPPLIER],
                     self.entry.data[CONF_CONTRACT],

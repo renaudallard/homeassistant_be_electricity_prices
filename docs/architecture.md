@@ -87,7 +87,7 @@ relative to that package directory.
 | `snapshot_resolve.py` | `_resolve_snapshot`: the per-entry VAT, excise-band, settlement-grid and direct-debit resolution applied to a parsed card on load, the network off the regulator's sheet for a custom entry asking for it and for a withdrawn product past its last card's year (`past_last_card`), and `_proxy_for_month`, the current card standing in for another month. |
 | `snapshot_months.py` | One month's card: the archive reader, the per-month cache it fills and the blob those rows persist to. |
 | `snapshot_areas.py` | `_with_nearest_area`: a month's card short of the entry's network area, completed from the nearest card of the same calendar year that prints it, for the callers billing that month (`nearest_area`, `month_card`). |
-| `snapshot_stand_ins.py` | The archive's row standing in for a card an entry cannot have: the running month's for a card published as page images (`card_for_unreadable_month`), a withdrawn product's last month (`card_of_month_before`) and the newest row held (`newest_archived_card`). What settled the row's own month, its realised index and the mark that its figures are the settled ones, is taken off a row of an earlier month than the running one (`_unsettled`): it stands in for every month after its own, and each of those settles on its own index. The running month's row keeps them, that month being its own. |
+| `snapshot_stand_ins.py` | The archive's row standing in for a card an entry cannot have: the running month's for a card published as page images (`card_for_unreadable_month`), a withdrawn product's last card (`card_of_last_month_sold`) and the newest row held (`newest_archived_card`). What settled the row's own month, its realised index and the mark that its figures are the settled ones, is taken off a row of an earlier month than the running one (`_unsettled`): it stands in for every month after its own, and each of those settles on its own index. The running month's row keeps them, that month being its own. |
 | `snapshot_feed_in.py` | The current card standing in for a closed month no archive holds (`stand_in_for_month`), credited the feed-in figures per register of the month's own quarter off the card the supplier names (`SupplierExtractor.stand_in_reference`, Bolt's fixed card of the quarter after), whose rows the entry's blob keeps (`reference_rows_to_store`). |
 | `cohort.py` | Signing-cohort pricing: retrieves the archived signing-month card and splices its energy leg onto the delivery month's overlays. |
 | `signing_month.py` | The month the household signed (`_tariff_card_month`: the tariff card month, else the contract start date) and what a card read for a later month owes it from the one signed: no feed-in floor where that card granted none (`resolve_signed_feed_in_floor`, wired into `_resolve_snapshot`; `Contract.feed_in_floor_from`). |
@@ -374,8 +374,8 @@ three layers; the deep detail is in [coordinator.md](coordinator.md).
   professional cards, EnergyVision's Brussels cards), fall back to a 24-hour TTL (`SNAPSHOT_REFRESH_HOURS`,
   `snapshot_store.py`), cut short once the card's `valid_until` has passed, or for a card that
   states none the month its title names (`card_valid_until`, `providers/_validity.py`), so the
-  new month's card is fetched on the 1st rather than up to a day later. DATS 24 has no probe either, but left the market on 2026-08-31 and is
-  no longer fetched at all.
+  new month's card is fetched on the 1st rather than up to a day later. DATS 24's withdrawn product
+  has a probe whose key never changes, so its last card, July 2026's, is fetched once.
 - On-disk cache: the latest snapshot is persisted to `.storage` (`STORAGE_VERSION`, `const.py`)
   so an offline boot serves last-known prices. A `STORAGE_VERSION` mismatch drops the blob rather
   than migrating it, since every field is re-derivable from a fresh fetch (`_MigratingStore`,

@@ -101,7 +101,7 @@ Each of these has a section of its own further down; this is the scan.
 | **Aspiravi Energy** | Eco Plus Flex *(monthly Belpex mean, mono / bi / excl. night, for members of its partner cooperatives)* · a closed month settles on the mean the next card prints for it, energy and feed-in | Flanders only · [`aspiravi.py`](./custom_components/be_electricity_prices/providers/aspiravi.py) · [notes](./docs/providers/aspiravi.md)
 | **Bolt** | Bolt Fixe · Bolt Plenty Fixe · Bolt Variable · Bolt Plenty Variable · Bolt Online · Bolt Plenty Online · all six as **pro** contracts · the variable cards index quarterly on the RLP-weighted Belpex, re-priced on the delivery quarter with an ENTSO-E key, or settled per quarter-hour on request, and a closed quarter's months, key or not, settle on the indices the next quarter's card prints, and a card whose quarterly index table does not give back its own monthly price is refused, so the card held before keeps billing · the fixed cards credit the feed-in per quarter-hour, and so does a variable card on its quarter-hourly settlement; on its variable one it is credited at the SPP-weighted figures the card prints per meter register (the single one on a Walloon day/night meter, whose night register runs 11:00-17:00 as well, and the one per CWaPE band on the Walloon Impact tariff), settled like the consumption on the next quarter's card, and a month before the card archive holds the variable cards (September 2026) is credited its own quarter's, read off the fixed card of the quarter after · the Plenty cards run an offer for contracts signed in their month, a lump with a feed-in bonus until September 2026 and a cut per kWh with one since October (9 c€/kWh on the residential cards and 10 c€/kWh before VAT on the professional Plenty Fixe card, whose VAT basis is read off its Dutch edition, Plenty Fixe in Flanders only), credited at the first year's settlement off the card of the month you signed and to no contract signed in another | [`bolt.py`](./custom_components/be_electricity_prices/providers/bolt.py) · [notes](./docs/providers/bolt.md)
 | **Cociter** | Tarif Variable (BELIX) · Tarif Variable Trihoraire *(BELIX on the CWaPE 3-band schedule)* · Tarif Dynamique (quarter-hourly BELPEX) | Wallonia only · [`cociter.py`](./custom_components/be_electricity_prices/providers/cociter.py) · [notes](./docs/providers/cociter.md)
-| **DATS 24** *(withdrawn 2026-08-31)* | Elektriciteit Groen Variabel (BE_spotRLP-indexed monthly) | Flanders + Wallonia · [`dats24.py`](./custom_components/be_electricity_prices/providers/dats24.py) · [notes](./docs/providers/dats24.md)
+| **DATS 24** | *withdrawn on 2026-08-01, marked † in the picker for the households EnergyVision took over on 2026-09-01 on the same contract and tariff:* Elektriciteit Groen Variabel *(BE_spotRLP-indexed monthly, the feed-in on BE_spotSPP in Flanders; priced on the formulas of the card the household signed, set as the tariff card month (DATS 24's order confirmation names it as Versie MM/YYYY), or with no signing month on the last card, July 2026's, each re-indexed on the month billed; a contract start date is the day DATS 24 began supplying, not 2026-09-01, the day EnergyVision took over, which would bill every month before September 2026 on its own card instead (in 2026 their feed-in factors run from 0,0665 to 0,0766 against the 0,068 of a December 2025 card); EnergyVision publishes no card for these contracts, so a change it made to the formula would not be seen)* | Flanders + Wallonia · [`dats24.py`](./custom_components/be_electricity_prices/providers/dats24.py) · [notes](./docs/providers/dats24.md)
 | **Dots Energy** | Dots Dynamic *(quarter-hourly EPEX SPOT BE)* · Dots Dynamic Insights *(the same index, with a P1 dongle and an app; its balancing contribution is billed at the bound the card prints, folded into both the energy and the feed-in formula)* · both for a digital meter read per quarter hour; the Dynamic Green option, the dongle and the Energiedelen fee are not modelled | Flanders only · [`dots.py`](./custom_components/be_electricity_prices/providers/dots.py) · [notes](./docs/providers/dots.md)
 | **EBEM** | Groen Variabel (BelpexRLP0 monthly, mono / bi / excl. night) · Groen B@sic+ (BelpexRLP0 monthly, single rate, online-only) · Groen Dyn@mic (Belpex 15-min, SMR3) | Flanders only · [`ebem.py`](./custom_components/be_electricity_prices/providers/ebem.py) · [notes](./docs/providers/ebem.md)
 | **Ecofix** ⚠️ *(cards are page images since August 2026, read in CI)* | Motion (quarter-hourly Belpex 15M) · Motion Online (same index, own coefficients and a 10 €/yr standing charge, online-only) · Flexy (BELPEX-RLP-M monthly variable) · Flexy Online (same index, own coefficients and the same 10 €/yr charge, online-only) | Flanders + Wallonia · [`ecofix.py`](./custom_components/be_electricity_prices/providers/ecofix.py) · [notes](./docs/providers/ecofix.md) · **see the note below the table**
@@ -331,9 +331,9 @@ Luminus and the social tariff, where no cheap freshness key is exposed) keep the
 month its title names when it states no day, is asked for again at the next
 hourly tick, so the new month's card is picked up on the 1st rather than up
 to a day later. Mega's professional cards and EnergyVision's Brussels cards
-take the same TTL, since their probe has no key to give. DATS 24, which left
-the market on 31 August 2026, is no longer polled; its past months still come
-from its archive.
+take the same TTL, since their probe has no key to give. DATS 24, whose one
+product is withdrawn, reads its last card once and holds it; its past months
+still come from its archive.
 
 ## What the integration computes
 
@@ -1368,7 +1368,10 @@ successful refresh:
   transparency.entsoe.eu.
 - **`supplier_deprecated_<entry>`** — the supplier is leaving, or has
   left, the residential market, and the card names the successor and the
-  transfer date (DATS 24 → EnergyVision on 2026-08-31). Before that date
+  transfer date. No supplier carries it today: DATS 24 did until its one
+  product was offered again as a withdrawn one (see `contract_withdrawn`
+  below), since EnergyVision took its households over on the same contract
+  and tariff. Before that date
   prices stay correct until the supplier stops publishing its card. After
   it the card says the transfer has happened and that the entry keeps
   showing the last prices it read, which are no longer what you are
@@ -1383,15 +1386,36 @@ successful refresh:
   your region; otherwise the card says the entry will stop updating and
   asks you to check the letter your supplier sends. Naming the successor is
   not a promise that your product is in its list: a withdrawal announces a
-  supplier, not the product each customer is moved to, and DATS 24's Flemish
+  supplier, not the product each customer is moved to, and DATS 24's
   customers were moved to one EnergyVision publishes no card for. So the card
   tells you to pick the product named on your letter, and what to do when it
   is not there: the **Expert: custom formula** supplier prices it from your
   own card in the meantime.
 - **`contract_withdrawn_<entry>`** — the supplier has stopped selling the
-  product the entry is on (OCTA+ Fixed, Fixed Impact, Eco Fixed, Flux and
-  Eco Flux, and Trevion LifePowr, since 2026-10-01). The entry keeps pricing on the last card the
-  supplier published for it, which is right for as long as your contract
+  product the entry is on. These are, by supplier:
+
+  - DATS 24 Elektriciteit Groen Variabel (transferred to EnergyVision), since 2026-08-01
+  - Eneco Zon & Wind Vast, since 2026-10-30
+  - Energy Knights Optima Online, since 2026-10-01
+  - Energy Knights Optima Online Green, since 2026-10-01
+  - EnergyVision 1 an fixe, since 2026-11-01
+  - EnergyVision Goedkope stroom, since 2025-10-01
+  - Frank Energie Dynamisch VT (Korting), since 2026-11-01
+  - Frank Energie Variabel VT, since 2026-11-01
+  - Mega Off-peak Fixed, since 2026-10-30
+  - Mega Off-peak Fixed (pro), since 2026-11-01
+  - Mega Off-peak Flex, since 2026-10-30
+  - OCTA+ Eco Fixed, since 2026-10-01
+  - OCTA+ Eco Flux, since 2026-10-01
+  - OCTA+ Fixed, since 2026-10-01
+  - OCTA+ Fixed Impact, since 2026-10-01
+  - OCTA+ Flux, since 2026-10-01
+  - LifePowr by Trevion, since 2026-10-01
+
+  DATS 24's households are supplied by EnergyVision on the same terms.
+  The entry keeps pricing on the last card the supplier published for it,
+  or with a contract start date or tariff card month on the card of the
+  month signed, where that card can be read, which is right for as long as your contract
   runs on those terms, but that card never changes again, so nothing else
   would tell it apart from prices that simply did not move. Once the
   supplier takes that card down, the entry keeps the copy it holds, or
@@ -1407,7 +1431,8 @@ successful refresh:
   until the next is published; the energy price stays the card's. If your
   supplier moves you to another product, record it with **Record a
   supplier switch**, dated the first day of the new product. The product
-  is no longer offered when setting up an entry or as a comparison target.
+  is offered marked † when setting up an entry, and never as a comparison
+  target.
   Not a failure: it clears when the entry points at a product still on sale.
 - **`extractor_unreadable_<entry>`** — the card downloaded fine but its
   pages carry no text layer, so no parser change here can read it (Ecofix
@@ -2131,10 +2156,8 @@ supplier's year with no one asking and keeps those months readable should a
 supplier drop its own archive. The archive keeps 36 months, as long as a
 fixed contract runs on its signing card, and a manual run can mirror up to
 that many.
-That only covers suppliers walked while they were still
-publishing: DATS 24 left the market before this archive existed, so none of
-its months are in here and they are read from its own server for as long as
-that lasts.
+That covers DATS 24 again since its one product is withdrawn rather than the
+supplier: past the supplier's withdrawal date it was not walked at all.
 
 **Finding a stored card by hand.** Everything is addressed by the same
 three ids the integration uses, which are the directory names under

@@ -894,7 +894,7 @@
     },
     "contract_withdrawn": {
       "title": "{supplier} verkoopt {contract} niet meer",
-      "description": "{supplier} biedt {contract} sinds {since} niet meer aan. Deze invoer blijft rekenen met de laatste tariefkaart die {supplier} voor dit product publiceerde. Die blijft juist zolang je contract tegen die voorwaarden loopt, maar de kaart verandert niet meer. Zet {supplier} je over naar een ander product, kies dan in de opties van deze invoer 'Leverancierswissel registreren', vul de eerste dag van het nieuwe product in en kies het daarna. 'Instellingen wijzigen' zou het hele jaar op de kaarten van het nieuwe product berekenen, tenzij die dag op 1 januari van dit jaar of vroeger viel."
+      "description": "{supplier} biedt {contract} sinds {since} niet meer aan. Deze invoer blijft het berekenen op de laatste tariefkaart die ervoor verscheen, of, met een startdatum van het contract of een maand van de tariefkaart, op de kaart van de maand waarin je tekende, als die kaart gelezen kan worden. Dat blijft juist zolang je contract tegen die voorwaarden loopt, maar er komt geen nieuwe kaart meer voor. Word je overgezet naar een ander product, kies dan in de opties van deze invoer 'Leverancierswissel registreren', vul de eerste dag van het nieuwe product in en kies het daarna. 'Instellingen wijzigen' zou het hele jaar op de kaarten van het nieuwe product berekenen, tenzij die dag op 1 januari van dit jaar of vroeger viel."
     },
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) publiceert geen distributietarief voor exclusief nacht",

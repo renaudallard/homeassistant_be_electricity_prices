@@ -25,7 +25,7 @@
 
 """DATS 24 (Colruyt subsidiary) tariff extractor.
 
-DATS 24 sells one residential electricity product, "Elektriciteit Groen
+DATS 24 sold one residential electricity product, "Elektriciteit Groen
 Variabel", in Flanders and Wallonia. It's a variable contract indexed
 monthly against the BE_spotRLP (Belgian quarter-hourly spot prices,
 RLP-weighted) parameter, with injection settled on the SPP-weighted
@@ -38,12 +38,16 @@ The per-meter-type coefficients are re-published with every card, so the
 parser reads the printed monthly indicative rather than re-solving the
 formula (see :func:`_extract_energy`).
 
-WITHDRAWAL: DATS 24 is leaving residential energy supply. Its own site
-states the contracts transfer automatically to EnergyVision on 31 August
-2026, so the August 2026 card is expected to be the last one published.
-The ``energyvision`` provider covers the successor products.
+WITHDRAWAL: DATS 24 left residential energy supply. Its last card is of July
+2026, none was published for August, and its contracts moved automatically
+to EnergyVision on 1 September 2026, which keeps their contract and tariff
+and publishes no card for them (issues #100 and #169). So the product is
+withdrawn from 1 August 2026 (``Contract.withdrawn``): a household signed on
+one of its cards prices on that card's formulas, and with no signing month
+on the July 2026 card, each re-indexed on the delivery month's BE_spotRLP and
+BE_spotSPP. No current card is ever asked for.
 
-The card is published monthly on the Colruyt Group static CDN, one PDF per
+The cards are published monthly on the Colruyt Group static CDN, one PDF per
 month at a URL that carries the month in its filename (see
 :func:`_card_url`). It replaces ``profile.dats24.be/api/v1/ratecard``,
 which answered every request with HTTP 500 from 2026-07-29 on; the CDN file
@@ -59,13 +63,11 @@ so ``vat_rate=0.0`` matches the project's standard convention.
 
 from __future__ import annotations
 
-import logging
 import re
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date
 
 import aiohttp
-from homeassistant.util import dt as dt_util
 
 from ..const import (
     DSO_AIEG,
@@ -80,7 +82,6 @@ from ..const import (
 from ._parse import SIGN_CHARS, excise_tier_bands, numeric_row, parse_sign, to_float
 from ._pdf import (
     fetch_pdf_text_layout,
-    head_ok,
     is_missing_card_error,
 )
 from ._pdf_render import (
@@ -92,6 +93,7 @@ from ._rates import (
     InjectionRates,
     RlpBlend,
     VariableRates,
+    last_card_month,
 )
 from ._validity import parse_valid_until
 from .base import (
@@ -103,12 +105,15 @@ from .base import (
     walloon_dso_overlay,
 )
 
-_LOGGER = logging.getLogger(__name__)
-
 _CDN_BASE = "https://api.colruytgroup.com/api/static/dats24/parameters/site"
 
 _CONTRACT_ID = "dats24_groen_variabel"
-_CONTRACT_LABEL = "DATS 24 Elektriciteit Groen Variabel"
+_CONTRACT_LABEL = "DATS 24 Elektriciteit Groen Variabel (transferred to EnergyVision)"
+
+# The first day the product was no longer sold, the month after its last
+# card: the CDN has none for August 2026 or later.
+_WITHDRAWN = date(2026, 8, 1)
+_LAST_CARD = last_card_month(_WITHDRAWN)
 
 
 _FLANDERS_DSOS = FLUVIUS_AREA_LABELS_UPPER
@@ -134,8 +139,7 @@ def _card_url(year: int, month: int) -> str:
 
     The filename spells the month out as "Versie MM YYYY"; the spaces are
     written pre-encoded so the string can be pasted into curl as-is. Cards
-    are retained back to 2023, which is what makes the previous-month
-    fallback cheap.
+    are retained back to 2023, until July 2026.
     """
     return (
         f"{_CDN_BASE}/{year}/ELEK/NL/"
@@ -143,59 +147,37 @@ def _card_url(year: int, month: int) -> str:
     )
 
 
-def _card_months() -> tuple[tuple[int, int], tuple[int, int]]:
-    """The month being billed, then the one before it.
-
-    Anchored on Brussels local time like the sibling Bolt resolver: a UTC
-    anchor would still name last month during the first two hours of every
-    Belgian month and fetch a card that has just been superseded.
-    """
-    today: date = dt_util.now().date()
-    previous = today.replace(day=1) - timedelta(days=1)
-    return (today.year, today.month), (previous.year, previous.month)
-
-
-async def _fetch_card(session: aiohttp.ClientSession) -> tuple[str, str]:
-    """Fetch the newest published card. Returns ``(url, text)``.
-
-    DATS 24 publishes the new card during the first days of the month it
-    covers, so a 404 on the current month is the expected pre-publication
-    state rather than a breakage.
-    """
-    current, previous = _card_months()
-    url = _card_url(*current)
-    try:
-        return url, await fetch_pdf_text_layout(session, url)
-    except ExtractorError as err:
-        # Only an absent file justifies reaching back a month. A timeout, a
-        # 5xx or an unreadable payload must propagate instead: the
-        # coordinator then keeps serving its cached snapshot for the current
-        # month, which beats silently re-pricing every user at last month's
-        # rates.
-        if not is_missing_card_error(str(err)):
-            raise
-        fallback = _card_url(*previous)
-        _LOGGER.warning(
-            "DATS 24: this month's card is not published yet (%s); falling back to %s",
-            err,
-            fallback,
-        )
-        return fallback, await fetch_pdf_text_layout(session, fallback)
-
-
 async def fetch(
     session: aiohttp.ClientSession,
     contract_id: str,
     region: str,
 ) -> SupplierSnapshot:
+    """The last card published, July 2026's, whatever the month.
+
+    DATS 24 publishes no card after it, so the running month's address is
+    never asked for. Once the CDN drops this one the 404 propagates, and the
+    coordinator keeps the card it holds or reads the card archive's copy of
+    the month before ``Contract.withdrawn``.
+    """
     if contract_id != _CONTRACT_ID:
         raise ExtractorError(f"unknown DATS 24 contract {contract_id!r}")
     if region not in (REGION_FLANDERS, REGION_WALLONIA):
         raise ExtractorError(
-            "DATS 24 only sells residential electricity in Flanders / Wallonia"
+            "DATS 24 only sold residential electricity in Flanders / Wallonia"
         )
-    url, text = await _fetch_card(session)
-    return parse_snapshot(text, url, region)
+    url = _card_url(_LAST_CARD.year, _LAST_CARD.month)
+    return parse_snapshot(await fetch_pdf_text_layout(session, url), url, region)
+
+
+async def probe(
+    session: aiohttp.ClientSession,
+    contract_id: str,
+    region: str,
+) -> str | None:
+    """A key that never changes, as the card read never does: the last card
+    is fetched once and held, rather than asked for every hour as a card
+    past its validity would be."""
+    return f"withdrawn {_WITHDRAWN.isoformat()}"
 
 
 async def fetch_for_month(
@@ -217,13 +199,14 @@ async def fetch_for_month(
     and Wallonia 5,7%, worst in May at 18,0%. The backfill shares the same
     cache, so those prices were being written into the recorder as well.
 
-    ``None`` for a month the CDN does not hold, which is the pre-publication
-    state for the running month and the permanent state after the 2026-08-31
-    transfer to EnergyVision.
+    ``None`` for a month the CDN does not hold, and without asking for one
+    after the last card, which has none.
     """
     if contract_id != _CONTRACT_ID:
         return None
     if region not in (REGION_FLANDERS, REGION_WALLONIA):
+        return None
+    if year_month.replace(day=1) > _LAST_CARD:
         return None
     url = _card_url(year_month.year, year_month.month)
     try:
@@ -233,22 +216,6 @@ async def fetch_for_month(
             return None
         raise
     return parse_snapshot(text, url, region)
-
-
-async def discover(session: aiohttp.ClientSession) -> set[str]:
-    """Confirm DATS 24 still publishes a card.
-
-    The catalog "drift" we want to detect is publication stopping
-    altogether, which is now expected once the 2026-08-31 transfer to
-    EnergyVision completes. A 200 from a HEAD probe on either candidate
-    month is enough; if they ever add a second contract type ("vast",
-    "tou", etc.) this check stays green and we'd notice via a separate
-    extractor failure rather than a false-positive new-product alert.
-    """
-    for year, month in _card_months():
-        if await head_ok(session, _card_url(year, month), timeout=20):
-            return {_CONTRACT_ID}
-    return set()
 
 
 def parse_snapshot(text: str, source_url: str, region: str) -> SupplierSnapshot:
@@ -634,7 +601,7 @@ def _extract_publication(text: str) -> str:
     return match.group(1).strip().lower() if match else ""
 
 
-__all__ = ["EXTRACTOR", "extract_pdf_text_layout", "fetch", "parse_snapshot"]
+__all__ = ["EXTRACTOR", "extract_pdf_text_layout", "fetch", "parse_snapshot", "probe"]
 
 
 _DATS24_REGIONS = frozenset({REGION_FLANDERS, REGION_WALLONIA})
@@ -658,13 +625,12 @@ EXTRACTOR = SupplierExtractor(
             # Energy is indexed on the delivery month's BE_spotRLP and the
             # card prints last month's, so the same key re-prices it.
             month_indexed_energy=True,
+            # Offered marked as withdrawn to the households EnergyVision took
+            # over on 1 September 2026 on the same contract and tariff.
+            withdrawn=_WITHDRAWN,
         ),
     ),
     fetch=fetch,
     fetch_for_month=fetch_for_month,
-    # DATS 24's own site: contracts transfer automatically to EnergyVision on
-    # 31 August 2026. Existing entries keep pricing off the monthly card until
-    # it stops publishing; new setups are steered to the successor instead.
-    deprecated_until=date(2026, 8, 31),
-    deprecated_successor="energyvision",
+    probe=probe,
 )

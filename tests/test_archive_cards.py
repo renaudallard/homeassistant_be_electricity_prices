@@ -3454,6 +3454,22 @@ def test_targets_skip_the_custom_and_withdrawn_suppliers() -> None:
     assert len(ac._targets([live], {"acme"}, today)) == 1
 
 
+def test_dats24_is_walked_again_once_its_product_is_withdrawn() -> None:
+    """DATS 24 was dropped from the walk past its supplier withdrawal date,
+    so the archive held none of the cards its households are billed on.
+    Withdrawn at product level since issue #169, it is walked in both
+    regions."""
+    from custom_components.be_electricity_prices.providers import all_extractors
+
+    assert [
+        (e.id, c, r)
+        for e, c, r in ac._targets(all_extractors(), {"dats24"}, date(2026, 11, 7))
+    ] == [
+        ("dats24", "dats24_groen_variabel", "flanders"),
+        ("dats24", "dats24_groen_variabel", "wallonia"),
+    ]
+
+
 def test_prune_removes_months_older_than_the_retention(tmp_path: Path) -> None:
     for month in ("2023-08", "2023-09", "2026-09"):
         card = tmp_path / "cards/acme/acme_fix/wallonia" / f"{month}.json"

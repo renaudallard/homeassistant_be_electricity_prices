@@ -70,7 +70,7 @@ from custom_components.be_electricity_prices.snapshot_codec import (
 from custom_components.be_electricity_prices.spot_stats import (
     _mean_of_month,
 )
-from tests import make_entry
+from tests import dats24_leaving, make_entry
 
 WHEN = datetime(2026, 7, 15, 12, 0, tzinfo=UTC)
 
@@ -549,10 +549,11 @@ def test_compare_targets_are_listed_alphabetically() -> None:
 def test_withdrawn_supplier_not_offered_to_new_setups() -> None:
     from custom_components.be_electricity_prices.flow_contracts import _supplier_options
 
-    assert "dats24" not in {o["value"] for o in _supplier_options()}
-    assert "dats24" not in {
-        o["value"] for o in _supplier_options(const.REGION_FLANDERS)
-    }
+    with dats24_leaving():
+        assert "dats24" not in {o["value"] for o in _supplier_options()}
+        assert "dats24" not in {
+            o["value"] for o in _supplier_options(const.REGION_FLANDERS)
+        }
 
 
 def test_withdrawn_supplier_still_editable_on_an_existing_entry() -> None:
@@ -561,13 +562,40 @@ def test_withdrawn_supplier_still_editable_on_an_existing_entry() -> None:
     become impossible to edit if the filter had no ``keep`` escape hatch."""
     from custom_components.be_electricity_prices.flow_contracts import _supplier_options
 
-    assert "dats24" in {o["value"] for o in _supplier_options(keep="dats24")}
-    # keep= is an exception for one entry, not a global switch-off.
-    assert "dats24" not in {o["value"] for o in _supplier_options(keep="eneco")}
+    with dats24_leaving():
+        assert "dats24" in {o["value"] for o in _supplier_options(keep="dats24")}
+        # keep= is an exception for one entry, not a global switch-off.
+        assert "dats24" not in {o["value"] for o in _supplier_options(keep="eneco")}
 
 
 def test_withdrawn_supplier_not_a_comparison_target() -> None:
+    with dats24_leaving():
+        for region in (const.REGION_FLANDERS, const.REGION_WALLONIA):
+            for kind in ("variable", "dynamic"):
+                assert "dats24" not in {
+                    o["value"] for o in _compare_supplier_options(region, kind, False)
+                }
+
+
+def test_a_supplier_whose_products_are_all_withdrawn_is_offered() -> None:
+    """DATS 24's one product is withdrawn rather than its supplier, so a
+    household EnergyVision took over on its terms finds it again (issue
+    #169), marked as the other withdrawn products are; nobody can be quoted
+    into it."""
+    from custom_components.be_electricity_prices.flow_contracts import _supplier_options
+    from custom_components.be_electricity_prices.flow_schemas import _contract_schema
+
     for region in (const.REGION_FLANDERS, const.REGION_WALLONIA):
+        assert "dats24" in {o["value"] for o in _supplier_options(region)}
+        schema = _contract_schema("dats24", region, {})
+        marker = next(k for k in schema.schema if str(k) == const.CONF_CONTRACT)
+        assert schema.schema[marker].config["options"] == [
+            {
+                "value": "dats24_groen_variabel",
+                "label": "DATS 24 Elektriciteit Groen Variabel "
+                "(transferred to EnergyVision) †",
+            }
+        ]
         for kind in ("variable", "dynamic"):
             assert "dats24" not in {
                 o["value"] for o in _compare_supplier_options(region, kind, False)

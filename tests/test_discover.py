@@ -886,3 +886,25 @@ def test_readme_archive_lists_name_every_supplier_that_keeps_one() -> None:
     assert len(found) == 1, f"expected one archive list, found {len(found)}"
     for listed in found:
         assert sorted(x.strip() for x in listed.split("/")) == archived, listed
+
+
+def test_the_readme_lists_every_withdrawn_product() -> None:
+    """The withdrawn-product Repairs card's README entry named OCTA+ and
+    Trevion's products while the registry held eleven more. The list is the
+    registry's, by supplier and then product, each with its date."""
+    from pathlib import Path
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    rows = sorted(
+        (ex.label.casefold(), c.label.casefold(), c.label, c.withdrawn)
+        for ex in EXTRACTORS.values()
+        for c in ex.contracts
+        if c.withdrawn is not None
+    )
+    block = "\n".join(
+        f"  - {label}, since {withdrawn.isoformat()}" for *_, label, withdrawn in rows
+    )
+    readme = (Path(__file__).parent.parent / "README.md").read_text(encoding="utf-8")
+    entry = readme.split("- **`contract_withdrawn_<entry>`**", 1)[1]
+    assert f"\n\n{block}\n\n" in entry.split("\n- **", 1)[0]

@@ -86,6 +86,7 @@ from custom_components.be_electricity_prices.snapshot_store import (
     evict_shared_caches,
 )
 from tests import (
+    dats24_leaving,
     let_the_fetch_interval_pass,
     make_entry,
     make_snapshot,
@@ -2673,6 +2674,15 @@ async def test_sync_withdrawn_contract_issue_creates_and_clears(
     assert not coord._card_is_final()
 
 
+@pytest.fixture
+def _dats24_leaving() -> Iterator[None]:
+    """DATS 24 as it was declared until issue #169, the supplier these tests
+    of the supplier-level withdrawal are about (``tests.dats24_leaving``)."""
+    with dats24_leaving():
+        yield
+
+
+@pytest.mark.usefixtures("_dats24_leaving")
 async def test_sync_deprecated_supplier_issue_creates_and_clears(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -2711,6 +2721,7 @@ async def test_sync_deprecated_supplier_issue_creates_and_clears(
     assert registry.async_get_issue(DOMAIN, issue_id) is None
 
 
+@pytest.mark.usefixtures("_dats24_leaving")
 async def test_extractor_cards_are_suppressed_once_supply_ended(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -2752,6 +2763,7 @@ async def test_extractor_cards_are_suppressed_once_supply_ended(
     assert registry.async_get_issue(DOMAIN, unreachable_id) is None
 
 
+@pytest.mark.usefixtures("_dats24_leaving")
 async def test_deprecation_card_switches_tense_after_the_end_date(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -2787,6 +2799,7 @@ async def test_deprecation_card_switches_tense_after_the_end_date(
     }
 
 
+@pytest.mark.usefixtures("_dats24_leaving")
 async def test_supply_ended_uses_the_local_date_not_utc(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -2803,6 +2816,7 @@ async def test_supply_ended_uses_the_local_date_not_utc(
     assert coord._supply_ended() is True
 
 
+@pytest.mark.usefixtures("_dats24_leaving")
 async def test_deprecated_supplier_issue_names_the_successor_in_both_regions(
     hass: HomeAssistant, freezer: Any
 ) -> None:

@@ -99,7 +99,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 
 import aiohttp
 
@@ -130,6 +130,7 @@ from ._rates import (
     InjectionRates,
     SpotMonthlyRates,
     TariffKind,
+    last_card_month,
 )
 from ._validity import (
     archive_validity_check,
@@ -515,7 +516,7 @@ async def _last_card(
     serves it there, and Home Assistant's shared session keeps cookies, so a
     year-to-date walk would leave that month's card to be read as current.
     """
-    last = (withdrawn - timedelta(days=1)).replace(day=1)
+    last = last_card_month(withdrawn)
     snap = await fetch_for_month(session, contract.contract_id, region, last)
     if snap is None:
         raise ExtractorError(

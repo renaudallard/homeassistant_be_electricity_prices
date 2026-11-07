@@ -47,6 +47,7 @@ from homeassistant.util import dt as dt_util
 
 from . import snapshot_months
 from .const import CONF_DSO
+from .providers._rates import last_card_month
 from .providers.base import SupplierSnapshot
 from .snapshot_months import ArchivedCard, _archive_allowed
 
@@ -154,25 +155,26 @@ async def card_for_unreadable_month(
     )
 
 
-async def card_of_month_before(
+async def card_of_last_month_sold(
     session: aiohttp.ClientSession,
     supplier: str,
     contract: str,
     region: str,
-    day: date,
+    withdrawn: date,
     entry: ConfigEntry | None,
 ) -> ArchivedCard | None:
-    """The archive's row for the month before ``day``'s, for an entry left
-    with no card. Honours the card-archive box like
-    ``card_for_unreadable_month``.
+    """The archive's row for the last card of a product withdrawn on
+    ``withdrawn``, for an entry left with no card once the supplier took it
+    down. Honours the card-archive box like ``card_for_unreadable_month``.
 
-    A withdrawn product whose card the supplier took down is priced off the
-    last month it was sold, the month before ``withdrawn``.
+    The month of the last day it was sold (``last_card_month``): asking for
+    the month before ``withdrawn``'s read September's row for the products
+    withdrawn on 30 October 2026, whose October card was their last.
     """
     if not _archive_allowed(entry):
         return None
     return await _stand_in(
-        session, supplier, contract, region, month_before(day), entry
+        session, supplier, contract, region, last_card_month(withdrawn), entry
     )
 
 

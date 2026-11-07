@@ -483,7 +483,7 @@ SnapshotFetcher = Callable[
 # Cheap-probe contract: same return value across calls means the snapshot
 # is still valid; a different value means refetch. ``None`` signals the
 # supplier has no probe path the coordinator can rely on (Engie/Luminus
-# API endpoints, DATS 24 single-PDF) and the time-based TTL takes over.
+# API endpoints) and the time-based TTL takes over.
 SnapshotProbe = Callable[[aiohttp.ClientSession, str, str], Awaitable[str | None]]
 
 # Historical-fetch contract: fetch the published card for a specific

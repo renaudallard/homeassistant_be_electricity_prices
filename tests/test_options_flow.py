@@ -56,7 +56,7 @@ from custom_components.be_electricity_prices.const import (
 )
 from custom_components.be_electricity_prices.flow_switch import _validate_contract_dates
 from custom_components.be_electricity_prices.signing_month import _parse_iso_date
-from tests import FakeBody, make_entry
+from tests import FakeBody, dats24_leaving, make_entry
 
 
 @pytest.fixture(autouse=True)
@@ -127,7 +127,8 @@ async def test_edit_branch_offers_a_withdrawn_supplier_it_already_has(
     )
     entry.add_to_hass(hass)
 
-    result = await _enter_edit_branch(hass, entry)
+    with dats24_leaving():
+        result = await _enter_edit_branch(hass, entry)
     data_schema = result["data_schema"]
     assert data_schema is not None
     schema = data_schema.schema
@@ -7824,7 +7825,7 @@ def test_sweep_candidates_apply_every_condition() -> None:
 
     assert "power_fix" not in ids, "own contract must not be a candidate"
     assert all(sup != SUPPLIER_CUSTOM for sup, _c, _q in rows)
-    # dats24 is deprecated_until 2026-08-31 and must not be offered.
+    # DATS 24's one product is withdrawn, so nobody can be quoted into it.
     assert all(sup != "dats24" for sup, _c, _q in rows)
     for sup, contract, quarter_hourly in rows:
         assert "flanders" in contract.regions

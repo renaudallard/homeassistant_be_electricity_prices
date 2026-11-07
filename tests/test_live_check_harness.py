@@ -1285,12 +1285,27 @@ def test_withdrawn_products_are_read_from_the_registry() -> None:
     assert gone <= set(lc._WITHDRAWN_CONTRACTS)
 
 
-def test_the_withdrawal_date_is_read_from_the_registry() -> None:
-    """Declared on the supplier's own EXTRACTOR, so it lives in one place."""
-    from custom_components.be_electricity_prices.providers import dats24
-
-    assert dats24.EXTRACTOR.deprecated_until == date(2026, 8, 31)
+def test_the_withdrawal_date_is_read_from_the_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Declared on the registry, so it lives in one place. DATS 24's is its
+    product's since issue #169: its rows are expected from 1 August 2026, the
+    month after its last card, and it has no listing left to diff."""
+    lc._load_providers()
+    assert "dats24" not in lc._DEPRECATED_UNTIL
+    assert lc._WITHDRAWN_CONTRACTS["dats24_groen_variabel"] == date(2026, 8, 1)
+    assert "dats24" not in lc._CATALOG_BASELINES
     assert "dats24" not in lc._PERIOD_MAX_LAG_MONTHS
+    monkeypatch.setattr(lc, "datetime", _FrozenDatetime(date(2026, 11, 7)))
+    lc._expect_card_period(
+        "dats24/dats24_groen_variabel/flanders",
+        "dats24_groen_variabel",
+        _snap("juli 2026", date(2026, 7, 31)),
+    )
+    failures = [c for c in lc.CHECKS if not c.ok]
+    assert failures
+    assert all(c.expected for c in failures)
+    assert lc._extractor_regressions(lc.CHECKS) == []
 
 
 def test_every_allowance_is_a_ceiling_not_a_skip() -> None:

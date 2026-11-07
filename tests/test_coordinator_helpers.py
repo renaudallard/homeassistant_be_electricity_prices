@@ -6418,7 +6418,7 @@ async def test_a_stand_in_row_must_print_the_entrys_area() -> None:
     with patch.object(snapshot_months, "_archived_card_from_github", read):
         for stand_in in (
             snapshot_stand_ins.card_for_unreadable_month,
-            snapshot_stand_ins.card_of_month_before,
+            snapshot_stand_ins.card_of_last_month_sold,
         ):
             args = (MagicMock(), "acme", "acme_fix", "wallonia", day)
             assert await stand_in(*args, make_entry(dso="ores")) is None
@@ -6426,6 +6426,33 @@ async def test_a_stand_in_row_must_print_the_entrys_area() -> None:
             assert found is not None and found.snapshot is card
             assert await stand_in(*args, None) is not None
             assert await stand_in(*args, make_entry(dso="")) is not None
+
+
+async def test_the_stand_in_reads_the_last_card_sold_not_the_month_before() -> None:
+    """Eneco withdrew Zon & Wind Vast on 30 October 2026, after its October
+    card, as Mega did its two Off-peak products. The archive's stand-in for
+    a card taken down read the month before the withdrawal day's, September,
+    while the product's last card is October's (``last_card_month``)."""
+    from custom_components.be_electricity_prices import snapshot_stand_ins
+    from custom_components.be_electricity_prices.providers import withdrawn_on
+
+    read = AsyncMock(return_value=None)
+    with patch.object(snapshot_months, "_archived_card_from_github", read):
+        for supplier, contract in (
+            ("eneco", "power_fix"),
+            ("mega", "mega_offpeak_fixed"),
+            ("dats24", "dats24_groen_variabel"),
+        ):
+            withdrawn = withdrawn_on(supplier, contract)
+            assert withdrawn is not None
+            await snapshot_stand_ins.card_of_last_month_sold(
+                MagicMock(), supplier, contract, "flanders", withdrawn, None
+            )
+    assert [call.args[4] for call in read.await_args_list] == [
+        date(2026, 10, 1),
+        date(2026, 10, 1),
+        date(2026, 7, 1),
+    ]
 
 
 async def test_a_stand_in_row_carries_no_settlement_of_its_month(
@@ -6475,7 +6502,11 @@ async def test_a_stand_in_row_carries_no_settlement_of_its_month(
     with patch.object(snapshot_months, "_archived_card_from_github", _september_only):
         newest = await snapshot_stand_ins.newest_archived_card(*args)
         assert newest is not None and newest[0] == date(2026, 9, 1)
-        rows = [newest[1], await snapshot_stand_ins.card_of_month_before(*args)]
+        # LifePowr was withdrawn on 1 October, after its September card.
+        last = await snapshot_stand_ins.card_of_last_month_sold(
+            *args[:4], date(2026, 10, 1), args[5]
+        )
+        rows = [newest[1], last]
     for row in rows:
         assert row is not None and row.read_by_ocr
         snap = row.snapshot

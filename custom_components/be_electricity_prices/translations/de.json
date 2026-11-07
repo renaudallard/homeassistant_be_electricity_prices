@@ -894,7 +894,7 @@
     },
     "contract_withdrawn": {
       "title": "{supplier} verkauft {contract} nicht mehr",
-      "description": "{supplier} bietet {contract} seit dem {since} nicht mehr an. Dieser Eintrag rechnet weiter mit der letzten Tarifkarte, die {supplier} für dieses Produkt veröffentlicht hat. Sie bleibt richtig, solange Ihr Vertrag zu diesen Bedingungen läuft, ändert sich aber nicht mehr. Stellt {supplier} Sie auf ein anderes Produkt um, wählen Sie in den Optionen dieses Eintrags „Lieferantenwechsel erfassen“, geben den ersten Tag des neuen Produkts ein und wählen es dann aus. „Einstellungen bearbeiten“ würde das ganze Jahr auf den Karten des neuen Produkts berechnen, außer dieser Tag lag am 1. Januar dieses Jahres oder früher."
+      "description": "{supplier} bietet {contract} seit dem {since} nicht mehr an. Dieser Eintrag berechnet ihn weiter nach der letzten dafür veröffentlichten Tarifkarte oder, mit einem Vertragsbeginn oder einem Monat der Tarifkarte, nach der Karte des Monats, in dem Sie unterschrieben haben, sofern diese Karte gelesen werden kann. Das bleibt richtig, solange Ihr Vertrag zu diesen Bedingungen läuft, aber es erscheint keine neue Karte mehr dafür. Werden Sie auf ein anderes Produkt umgestellt, wählen Sie in den Optionen dieses Eintrags „Lieferantenwechsel erfassen“, geben den ersten Tag des neuen Produkts ein und wählen es dann aus. „Einstellungen bearbeiten“ würde das ganze Jahr auf den Karten des neuen Produkts berechnen, außer dieser Tag lag am 1. Januar dieses Jahres oder früher."
     },
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) veröffentlicht keinen Verteilungstarif für Exklusiv-Nacht",

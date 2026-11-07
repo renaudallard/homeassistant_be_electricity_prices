@@ -35,7 +35,7 @@ without pulling in the pricing engine.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields, replace
-from datetime import date
+from datetime import date, timedelta
 from typing import Literal
 
 from ..const import REGIONS, VAT_RATE_REDUCED
@@ -62,6 +62,12 @@ RlpBlend = Literal["distinct", "columns", "flanders", "wallonia"]
 # extractors whose every product serves all of them. Public: mega and
 # totalenergies each restated it from the REGION_* constants.
 ALL_REGIONS: frozenset[str] = frozenset(REGIONS)
+
+
+def last_card_month(withdrawn: date) -> date:
+    """The month of the last card of a product withdrawn on ``withdrawn``:
+    that of the last day it was sold, the day before."""
+    return (withdrawn - timedelta(days=1)).replace(day=1)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -149,12 +155,13 @@ class Contract:
     direct_debit_discount: bool = False
     # Set when the supplier has stopped selling this product: the first day
     # it was no longer offered. The contract-level twin of a supplier's
-    # ``deprecated_until``, with the same two effects and no others: the
-    # config flow and the compare pages stop offering it, and an entry still
-    # on it raises a Repairs card. Fetching is untouched, so the entry keeps
-    # pricing on the last card the supplier published for it, which is what
-    # a customer kept on the product's terms is still billed. Purely
-    # declarative: nothing compares it to the clock.
+    # ``deprecated_until``, though not with its effects: the setup and edit
+    # picker marks it with a dagger, the compare pages stop offering it, and
+    # an entry still on it raises a Repairs card. Fetching is untouched, so
+    # the entry keeps pricing on the last card the supplier published for it,
+    # or on the card of its signing month, which is what a customer kept on
+    # the product's terms is still billed. Purely declarative: nothing
+    # compares it to the clock.
     withdrawn: date | None = None
     # The first signing month whose card guarantees the feed-in minimum the
     # card read for every month prints, for a product read off a later card

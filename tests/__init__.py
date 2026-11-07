@@ -30,12 +30,14 @@ from __future__ import annotations
 import ast
 import hashlib
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
+from dataclasses import replace
 from datetime import date
 from functools import cache
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -319,6 +321,23 @@ def make_stub_extractor(
     )
 
 
+@contextmanager
+def dats24_leaving() -> Iterator[None]:
+    """The registry with DATS 24 declared as a supplier leaving the market,
+    as it was until issue #169: ``deprecated_until`` 2026-08-31, EnergyVision
+    its successor. No supplier carries the flag now, and the tests of what
+    it does need one."""
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    leaving = replace(
+        EXTRACTORS["dats24"],
+        deprecated_until=date(2026, 8, 31),
+        deprecated_successor="energyvision",
+    )
+    with patch.dict(EXTRACTORS, {"dats24": leaving}):
+        yield
+
+
 def let_the_fetch_interval_pass(coordinator: Any) -> None:
     """Have the coordinator's next refresh run a full tick, as it does once
     ``MIN_FETCH_INTERVAL``, a quarter of an hour, has passed since the last."""
@@ -328,6 +347,7 @@ def let_the_fetch_interval_pass(coordinator: Any) -> None:
 __all__ = [
     "FIXTURES",
     "FakeBody",
+    "dats24_leaving",
     "fixture_text",
     "let_the_fetch_interval_pass",
     "make_entry",

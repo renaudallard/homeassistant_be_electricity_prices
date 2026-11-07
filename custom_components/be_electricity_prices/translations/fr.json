@@ -894,7 +894,7 @@
     },
     "contract_withdrawn": {
       "title": "{supplier} ne vend plus {contract}",
-      "description": "{supplier} a cessé de proposer {contract} le {since}. Cette entrée continue de tarifer sur la dernière carte tarifaire que {supplier} a publiée pour ce produit, qui reste correcte tant que votre contrat court à ces conditions, mais cette carte ne changera plus. Si {supplier} vous fait passer à un autre produit, choisissez « Enregistrer un changement de fournisseur » dans les options de cette entrée, saisissez le premier jour du nouveau produit, puis sélectionnez-le. « Modifier les paramètres » tarifierait toute l'année sur les cartes du nouveau produit, sauf si ce jour tombe le 1er janvier de cette année ou avant."
+      "description": "{supplier} a cessé de proposer {contract} le {since}. Cette entrée continue de le tarifer sur la dernière carte tarifaire publiée pour lui, ou, avec une date de début de contrat ou un mois de carte tarifaire, sur la carte du mois de votre signature, lorsque cette carte peut être lue. Cela reste correct tant que votre contrat court à ces conditions, mais aucune nouvelle carte ne paraîtra pour lui. Si vous passez à un autre produit, choisissez « Enregistrer un changement de fournisseur » dans les options de cette entrée, saisissez le premier jour du nouveau produit, puis sélectionnez-le. « Modifier les paramètres » tarifierait toute l'année sur les cartes du nouveau produit, sauf si ce jour tombe le 1er janvier de cette année ou avant."
     },
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) ne publie pas de tarif de distribution exclusif nuit",

@@ -134,9 +134,10 @@ def _successor_for(supplier_id: str | None, region: str) -> SupplierExtractor | 
     product each customer lands on. EnergyVision has five Flemish products and
     the DATS 24 customers who transferred to it landed on none of them, but on
     the legacy card continued under its name, which is published nowhere this
-    can read (issue #100). So the card names the successor and then says what
-    to do when the product is missing, rather than promising a match it cannot
-    check.
+    can read (issue #100); DATS 24's own product is offered for them since,
+    marked withdrawn (issue #169). So the card names the successor and then
+    says what to do when the product is missing, rather than promising a
+    match it cannot check.
     """
     if not supplier_id:
         return None

@@ -894,7 +894,7 @@
     },
     "contract_withdrawn": {
       "title": "{supplier} no longer sells {contract}",
-      "description": "{supplier} stopped offering {contract} on {since}. This entry keeps pricing on the last tariff card {supplier} published for it, which stays right for as long as your contract runs on those terms, but that card will not change again. If {supplier} moves you to another product, choose 'Record a supplier switch' in this entry's options, enter the first day of the new product, then select it. 'Edit settings' would price the whole year on the new product's cards, unless that day was 1 January of this year or earlier."
+      "description": "{supplier} stopped offering {contract} on {since}. This entry keeps pricing it on the last tariff card published for it, or, with a contract start date or a tariff card month, on the card of the month you signed, where that card can be read. That stays right for as long as your contract runs on those terms, but no new card will come for it. If you are moved to another product, choose 'Record a supplier switch' in this entry's options, enter the first day of the new product, then select it. 'Edit settings' would price the whole year on the new product's cards, unless that day was 1 January of this year or earlier."
     },
     "exclusive_night_rate_missing": {
       "title": "{supplier} ({contract}) does not publish an exclusive-night distribution rate",
