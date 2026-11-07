@@ -31,6 +31,7 @@ import asyncio
 import base64
 import json
 import re
+import time
 from collections.abc import Callable
 from dataclasses import fields
 from datetime import date
@@ -1673,3 +1674,77 @@ def test_a_card_without_impact_prices_keeps_no_bands(
     assert isinstance(energy, VariableRates)
     assert energy.impact_pic is None
     assert energy.formula_factor_pic is None
+
+
+# Card text a host could serve instead, about 100,000 characters each: runs of
+# digits, of blanks and of labels, on which every place was tried as the start
+# of a figure, a row or a formula and read the rest of the run again.
+@pytest.mark.parametrize(
+    ("reader", "crafted"),
+    [
+        pytest.param("forfait", "0" * 100_000, id="forfait digits"),
+        pytest.param(
+            "fee", "Redevance raccordement Wallonie " * 3_200, id="fee labels"
+        ),
+        pytest.param("above", "0" * 100_000, id="value above digits"),
+        pytest.param("walloon", "Régie de Wavre" + "0" * 100_000, id="walloon digits"),
+        pytest.param("walloon", "AIEG " * 20_000, id="walloon labels"),
+        pytest.param("walloon_2025", "AIESH" + " " * 100_000, id="2025 blanks"),
+        pytest.param("walloon_2025", "AIEG " * 20_000, id="2025 labels"),
+        pytest.param("flanders", "Fluvius " + " " * 100_000, id="flanders blanks"),
+        pytest.param(
+            "meters", "monohoraire : Epex RLP" + "\xa0" * 100_000, id="meter formulas"
+        ),
+        pytest.param(
+            "bands", "Impact Eco : Epex RLP" + "\xa0" * 100_000, id="band formulas"
+        ),
+        pytest.param("feed_in", "Belpex SPP" + "\xa0" * 100_000, id="feed-in formulas"),
+        pytest.param(
+            "dynamic_feed_in",
+            "Le prix de votre injection Belpex 15" + " " * 100_000,
+            id="dynamic feed-in",
+        ),
+        pytest.param(
+            "dynamic_energy",
+            "La formule tarifaire HTVA est la suivante" + "\xa0" * 100_000,
+            id="dynamic lead",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    reader: str, crafted: str
+) -> None:
+    from custom_components.be_electricity_prices.providers import (
+        _octaplus_formulas,
+        _octaplus_overlays,
+        octaplus,
+    )
+
+    readers: dict[str, Callable[[str], object]] = {
+        "forfait": lambda text: _octaplus_overlays._extract_supplier_prosumer(
+            text, "fixed"
+        ),
+        "fee": lambda text: _octaplus_overlays._extract_taxes(
+            "0 & 3.000 kWh 5,0329 0,2042 " + text, "wallonia"
+        ),
+        "above": lambda text: _octaplus_overlays._row_value(text, "Coûts cogénération"),
+        "walloon": _octaplus_overlays._extract_wallonia_dsos,
+        "walloon_2025": _octaplus_overlays._extract_wallonia_2025_dsos,
+        "flanders": _octaplus_overlays._extract_flanders_dsos,
+        "meters": lambda text: octaplus._rlp_coefficients(
+            text, _octaplus_formulas._RLP_METER_RES, 1.0
+        ),
+        "bands": lambda text: octaplus._rlp_coefficients(
+            text, _octaplus_formulas._RLP_IMPACT_RES, 1.0
+        ),
+        "feed_in": lambda text: octaplus._extract_injection(text, "variable"),
+        "dynamic_feed_in": lambda text: octaplus._extract_injection(text, "dynamic"),
+        "dynamic_energy": _octaplus_formulas._dynamic_consumption_formula,
+    }
+    started = time.perf_counter()
+    try:
+        found = readers[reader](crafted)
+    except ExtractorError:
+        found = None
+    assert not found
+    assert time.perf_counter() - started < 2.0

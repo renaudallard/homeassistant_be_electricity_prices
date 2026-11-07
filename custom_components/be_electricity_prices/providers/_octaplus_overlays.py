@@ -44,7 +44,13 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_WALLONIA,
 )
-from ._parse import TIER_BOUND, excise_tier_bands, ores_sub_areas_split, to_float
+from ._parse import (
+    LINE_BREAK,
+    TIER_BOUND,
+    excise_tier_bands,
+    ores_sub_areas_split,
+    to_float,
+)
 from ._rates import TariffKind
 from .base import DsoOverlay, ExtractorError, walloon_dso_overlay
 
@@ -67,8 +73,10 @@ def _extract_supplier_prosumer(text: str, kind: TariffKind) -> float | None:
         return None
     # Anchor on "<value> EUR/kVA par mois" without the "HTVA" the AMR
     # fallback carries, so a single regex picks the 4,77 forfait and never
-    # the 1,50 AMR rate.
-    match = re.search(r"([\d.,]+)\s*€/kVA\s+par\s+mois", text)
+    # the 1,50 AMR rate. The value is read from the start of its digits:
+    # tried from each digit of a long run, the run was read again from every
+    # one.
+    match = re.search(r"(?<![\d.,])([\d.,]+)\s*€/kVA\s+par\s+mois", text)
     if match is None:
         raise ExtractorError("OCTA+: supplier PV compensation forfait not found")
     return to_float(match.group(1)) * 12.0
@@ -107,8 +115,13 @@ def _extract_taxes(
 
     region_connection_fee = 0.0
     if region == REGION_WALLONIA:
+        # The gap to the figure stops at the next label, whose own gap reaches
+        # the same figure, and is not given back: run on to the figure from
+        # each, a run of labels with none after them was read to the end
+        # again from every one.
         fee = re.search(
-            r"Redevance\s+raccordement\s+Wallonie[^0-9]*([\d.,]+)",
+            r"Redevance\s+raccordement\s+Wallonie"
+            r"(?:(?!Redevance\s+raccordement\s+Wallonie)[^0-9])*+([\d.,]+)",
             text,
         )
         if fee is None:
@@ -164,7 +177,11 @@ def _row_value(text: str, label: str) -> re.Match[str] | None:
     after = re.search(rf"{label}\s+(\d+(?:[.,]\d+)?)", text)
     if after is not None:
         return after
-    for match in re.finditer(rf"(\d+(?:[.,]\d+)?)\s*\n\s*{label}", text):
+    # Read from the start of the digits, and the line break between figure
+    # and label one way: tried from each digit of a long run, or with two
+    # runs of blanks free to share the blank lines, each read its run again
+    # from every place in it.
+    for match in re.finditer(rf"(?<!\d)(\d+(?:[.,]\d+)?){LINE_BREAK}{label}", text):
         tail = text[match.end() : match.end() + 12].lstrip()
         if tail.startswith("(") or tail[:3].lower() == "les":
             continue
@@ -202,8 +219,12 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     """
     out: dict[str, DsoOverlay] = {}
     for pattern, key in _WALLONIA_LABELS:
+        # The row is read from the start of its first figure's digits, and the
+        # gap to it stops at the next label on the line, which reaches the
+        # same figures: tried from each digit of a long run, or run on to the
+        # line's end from every label, a long line was read again from each.
         match = re.search(
-            rf"{pattern}[^\n]*?"
+            rf"{pattern}(?:(?!{pattern})[^\n])*?(?<![\d.,])"
             + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
             + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
             + r"([\d.,]+)\s+([\d.,]+)",
@@ -266,11 +287,18 @@ def _extract_wallonia_2025_dsos(text: str) -> dict[str, DsoOverlay]:
 
     The cards up to January 2024 print each ORES sub-area on a distribution
     tariff of its own, and those leave ORES out (``ores_sub_areas_split``).
+
+    The gap after the label runs to the line's first digit, which a blank
+    must precede, and stops at the next label, which reaches the same
+    figures. Spelt as a gap and then the blanks, a long run of blanks was
+    split between the two in every way, and run on from every label, a line
+    naming the label over and over was read to its first digit from each.
     """
     out: dict[str, DsoOverlay] = {}
     for pattern, key in _WALLONIA_LABELS:
         match = re.search(
-            rf"^[^\d\n]*?(?:{pattern})[^\d\n]*?{_FIGURE * 7}[^\S\n]*$",
+            rf"^[^\d\n]*?(?:{pattern})(?:(?!{pattern})[^\d\n])*(?<=[^\S\n])"
+            rf"(\d{{1,3}},\d{{2}}){_FIGURE * 6}[^\S\n]*$",
             text,
             re.MULTILINE | re.IGNORECASE,
         )
@@ -312,9 +340,12 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     # digits before the comma. The aligned text of some Dynamic cards smears
     # the column's leading digits into the first row ('566665768,43') and
     # drops them from the others ('5,46'): such a row stores nothing. A dash
-    # cell is smeared the same way, so a row may print one dash.
+    # cell is smeared the same way, so a row may print one dash. The label
+    # ends where the blanks before the figures start: ended inside them, a
+    # long run of blanks was walked again from each place in it, and a label
+    # of blanks alone names no area.
     for m in re.finditer(
-        rf"^(Fluvius [^\n]+?){_FIGURE * 3}[^\S\n]+-+(?:[^\S\n]+-+)?{_FIGURE}"
+        rf"^(Fluvius [^\n]+?)(?<![^\S\n]){_FIGURE * 3}[^\S\n]+-+(?:[^\S\n]+-+)?{_FIGURE}"
         + r"[^\S\n]+(?P<prosumer>\d{2,3},\d{2})[^\S\n]*$",
         text,
         re.MULTILINE,

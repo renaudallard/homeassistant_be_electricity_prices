@@ -684,6 +684,17 @@ illustrative for `fluvius_antwerpen`: transport 0.0, single 0.0535, capacity
 - **Fail-loud policy**: yearly fee, federal tier, regional renewables, and the
   bi-hourly rows all raise on a miss instead of defaulting to 0, so a layout
   drift surfaces (the coordinator then serves the cached snapshot).
+- **A card costs its length**: the PV forfait, the Walloon connection fee, a
+  value printed above its label (`_row_value`), the Walloon and Flemish
+  network rows and the formulas (`_octaplus_formulas.py`) are read from where
+  a figure, a row or a label starts. A figure starts at its first digit, a
+  gap stops at the next label of its kind, and an optional mark takes the
+  blanks after it.
+  Tried from every place of a long run of digits, blanks or labels, each read
+  the rest of the run again. A crafted card of 100,000 characters takes
+  milliseconds where it took seconds to minutes
+  (`test_a_crafted_card_is_read_in_time_linear_in_its_length`,
+  `tests/test_octaplus.py`).
 
 ## Test fixtures
 

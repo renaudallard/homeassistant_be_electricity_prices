@@ -37,9 +37,12 @@ from ._parse import SIGN_CHARS, parse_sign, to_float
 # - 13,89" on the dynamic card, "Belpex SPP x 0,852 - 13,39" on the monthly
 # ones. From March every card says Epex. The dynamic cards before 2026 index
 # on the clock hour, "Belpex Hourly * 1,038 + 3,93", and without that spelling
-# a contract signed on one could not read its own card.
+# a contract signed on one could not read its own card. An optional mark and
+# the blanks after it are one optional piece, here and in the formulas below:
+# as runs of blanks either side of an optional mark, a run of blanks was split
+# between the two in every way before the operator failed.
 _EPEX_FORMULA = (
-    rf"(?:Bel|E)pex\s*(?:15\s*'?|Hourly)\s*\*\s*(\d+(?:[.,]\d+)?)\s*"
+    rf"(?:Bel|E)pex\s*(?:15\s*(?:'\s*)?|Hourly\s*)\*\s*(\d+(?:[.,]\d+)?)\s*"
     rf"([{SIGN_CHARS}])\s*(\d+(?:[.,]\d+)?)"
 )
 # The 2026 template reworded the injection lead-in from "Le prix de votre
@@ -58,7 +61,7 @@ _EPEX_FORMULA = (
 # The optional M must be followed by the operator, so the prose mention of the
 # parameter name on its own ("le parametre << Epex SPP M >>") cannot match.
 _SPP_FORMULA_RE = re.compile(
-    rf"(?:Bel|E)pex\s*SPP\s*M?\s*[x*]\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*"
+    rf"(?:Bel|E)pex\s*SPP\s*(?:M\s*)?[x*]\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*"
     rf"(\d+(?:[.,]\d+)?)",
     re.IGNORECASE,
 )
@@ -70,7 +73,7 @@ _SPP_FORMULA_RE = re.compile(
 # sits before the formula and the two generations word it differently, so each
 # meter gets its own lead-in.
 _RLP_FORMULA = (
-    rf"Epex\s*RLP\s*M?\s*[x*]\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}+])\s*"
+    rf"Epex\s*RLP\s*(?:M\s*)?[x*]\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}+])\s*"
     rf"(\d+(?:[.,]\d+)?)"
 )
 _RLP_METER_RES: dict[str, re.Pattern[str]] = {
@@ -115,11 +118,12 @@ def _injection_formula(text: str) -> re.Match[str] | None:
 # The sentence that introduces the consumption formula, once on every dynamic
 # card: "La formule tarifaire HTVA (en €/MWh) est la suivante:" until the
 # August 2026 redesign, "La formule de prix est la suivante, en EUR/MWh HTVA :"
-# after it, with "en cEUR/kWh HTVA" since November 2026.
+# after it, with "en cEUR/kWh HTVA" since November 2026. The unit clause
+# takes the blanks after it, like the marks in the formulas above.
 _CONSUMPTION_LEAD = (
     r"La\s+formule\s+(?:tarifaire\s+HTVA(?:\s*\(en\s*€\s*/\s*MWh\))?|de\s+prix)"
     r"\s+est\s+la\s+suivante\s*"
-    r"(?:,\s*en\s+c?(?:EUR|€)\s*/\s*(?:MWh|kWh)\s+HTVA)?\s*:"
+    r"(?:,\s*en\s+c?(?:EUR|€)\s*/\s*(?:MWh|kWh)\s+HTVA\s*)?:"
 )
 
 
