@@ -101,6 +101,20 @@ class _ContractDef:
     # The first day the product is no longer sold, as the listing's script
     # says by an end month; None while it is.
     withdrawn: date | None = None
+    # How the card's file is named, from the product code, the card's region
+    # token and its month as MMYY. The products of 2026 put the month first;
+    # the original Goedkope stroom put its code first and a version after,
+    # and no region.
+    file_name: str = "EV-{month}-{code}-{token}.pdf"
+    # The month of the only card read, for a product withdrawn before the
+    # cards it was sold on could all be read: every month is billed on it,
+    # with its own month's network and levies, and no other issue is asked
+    # for. None reads the month's own card.
+    last_card: date | None = None
+    # The first signing month whose card guarantees the feed-in minimum
+    # ``last_card`` prints (``Contract.feed_in_floor_from``); None where
+    # every issue read states its own.
+    feed_in_floor_from: date | None = None
 
     @property
     def regions(self) -> frozenset[str]:
@@ -204,6 +218,35 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "spot_monthly",
         "GSLP",
         {REGION_FLANDERS: _FLANDERS_CARD},
+    ),
+    # The original Goedkope stroom, sold in Flanders until September 2025 on a
+    # card that also prices gas, of which only the electricity is read. Its
+    # issues are EV-GS-<MMYY>-01: November and December 2024, January, March,
+    # June and September 2025, none from October 2025. Only the last is
+    # read: the 2024 ones print the ten Fluvius areas before the merger, the
+    # January and March 2025 ones print their network as a picture, December
+    # 2024 and March 2025 leave page 1's prices blank, and June 2025's
+    # network, levies and terms are September's figure for figure. The price
+    # is the same on every issue, the first 1.000 kWh of the year at 9,54
+    # c/kWh for 10 years, the rest on 1,05 x Belpex-RLP-M + 15 EUR/MWh and the
+    # feed-in on 0,6 x Belpex-SPP-M - 15, so the last card prices every month,
+    # each with its own month's index, network and levies. The 1 c/kWh floor
+    # under the feed-in is not: it came with the June 2025 card, and a
+    # household that signed an earlier one is credited the formula alone.
+    _ContractDef(
+        "energyvision_goedkope_stroom",
+        "EnergyVision Goedkope stroom",
+        "spot_monthly",
+        "GS",
+        {REGION_FLANDERS: _FLANDERS_CARD},
+        withdrawn=date(2025, 10, 1),
+        # The card's version after the month, "Versie EV-GS-1124-01", the
+        # same 01 on every issue; the region is not in the name.
+        file_name="EV-{code}-{month}-01.pdf",
+        last_card=date(2025, 9, 1),
+        # Condition 5, "garanderen wij in elk geval 1 €cent/kWh", came with
+        # the June 2025 card: the four issues before it print no floor.
+        feed_in_floor_from=date(2025, 6, 1),
     ),
     # Brusol's other Brussels product, and the one any household can sign:
     # GS1800V is sold only to roofs carrying EnergyVision/Brusol panels,

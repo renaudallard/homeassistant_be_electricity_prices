@@ -55,7 +55,6 @@ from .backfill_window import (
     _recorder_models,
     _stat_id,
 )
-from .cohort import _parse_iso_date
 from .const import (
     CONF_CONTRACT_START_DATE,
     CONF_SUPPLIER,
@@ -97,6 +96,7 @@ from .pricing import (
 from .providers import get as get_extractor
 from .providers._rates import InjectionRates
 from .providers.base import SupplierSnapshot
+from .signing_month import _parse_iso_date
 from .snapshot_resolve import meter_segment
 from .spot_stats import (
     _bucket_by_local_month,

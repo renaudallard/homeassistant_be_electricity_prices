@@ -719,6 +719,16 @@ bi-hourly split free: the card puts 900 kWh of allowance on each register, and
 since both registers bill the same two rates, splitting per register and
 blending once over the year reach the same annual total.
 
+The withdrawn Goedkope stroom is folded the same way and is not exact on two
+counts its cards state. Its tranche is not every register's: the September 2025
+card read gives it to "verbruik tijdens de zonne-uren", the issues up to March
+2025 to the single or day register. A day/night meter is billed exactly only
+while the kWh it counts reach the 1.000 a year; under that, the fold credits the
+tranche to the other kWh too. And it has no Voordeelzekerheid: the allowance is
+spread over the year, and a month using less than its share loses the rest, where
+the fold assumes the whole tranche used (see
+[the provider notes](providers/energyvision.md#the-withdrawn-goedkope-stroom-gs)).
+
 The volume comes from `entry_annual_kwh`, which is the one answer three legs
 share (this tranche, the degressive excise band and the Flemish network
 ceiling): a full year of the coordinator's daily `_annual_volume` measurement

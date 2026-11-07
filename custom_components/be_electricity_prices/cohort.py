@@ -38,7 +38,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import date
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
@@ -60,7 +60,6 @@ from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
     CONF_SUPPLIER,
-    CONF_TARIFF_CARD_DATE,
     CONF_YTD_FROM_CONTRACT_START,
     SUPPLIER_CUSTOM,
     SUPPLIER_SOCIAL,
@@ -78,6 +77,7 @@ from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
 )
+from .signing_month import _parse_iso_date, _tariff_card_month
 from .snapshot_months import (
     _month_card_retrievable,
     _snapshot_for_month,
@@ -96,45 +96,6 @@ _LOGGER = logging.getLogger(__name__)
 # prices, about forty times a tick on a year to date, and the line is only
 # news when its answer changes.
 _LOGGED_SOURCE: dict[tuple[str, date | None, bool], str] = {}
-
-
-def _parse_iso_date(value: Any) -> date | None:
-    """Parse a stored ISO ``YYYY-MM-DD`` date string, or ``None``.
-
-    Accepts the DateSelector return value used for the contract lifecycle
-    fields; returns ``None`` for a missing / malformed value.
-    """
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _tariff_card_month(entry: ConfigEntry) -> date | None:
-    """First-of-month of the card this contract is billed on, or ``None``.
-
-    A fixed or dynamic contract is locked to the card in force when it was
-    SIGNED, which is not always the month supply began: a supplier switch
-    takes about a month to go through, so a customer who signed in June is
-    supplied from July on June's card, and energie.be goes as far as printing
-    that month in the product name ("... 06/26"). Reading the start date as
-    the card month therefore billed a switcher one card too late, which on
-    Eneco's fixed card between July and August 2026 is 0,1681 against 0,2028
-    EUR/kWh, 121 EUR/yr at 3500 kWh (issue #96).
-
-    So the card month is its own optional field, and the start date is the
-    fallback for every entry that does not set one, which is the behaviour
-    they already had. The day within the month is irrelevant to which monthly
-    card applies, so normalise to the first.
-    """
-    d = _parse_iso_date(entry.data.get(CONF_TARIFF_CARD_DATE)) or _parse_iso_date(
-        entry.data.get(CONF_CONTRACT_START_DATE)
-    )
-    if d is None:
-        return None
-    return date(d.year, d.month, 1)
 
 
 def _cohort_first_month(entry: ConfigEntry, card_month: date) -> date:

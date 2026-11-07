@@ -46,7 +46,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .cohort import _tariff_card_month, ytd_window_start
+from .cohort import ytd_window_start
 from .const import CONF_CAPACITY_FIXED_KW, CONF_CONTRACT, CONF_REGION, CONF_SUPPLIER
 from .contract_periods import PricedPeriods, priced_from_dict, priced_to_dict
 from .coordinator_profiles import (
@@ -64,6 +64,7 @@ from .law_archive import restore as restore_law_table
 from .network_archive import held_table as held_network_table
 from .network_archive import restore as restore_network_table
 from .providers.base import SupplierSnapshot
+from .signing_month import _tariff_card_month
 from .snapshot_codec import _MigratingStore, _snapshot_from_dict, _snapshot_to_dict
 from .snapshot_feed_in import reference_rows_to_store, restore_reference_rows
 from .snapshot_months import monthly_rows_to_store, restore_monthly_rows

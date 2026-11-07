@@ -261,7 +261,7 @@ otherwise hard-fail over a key it never held once its leg re-prices to
 key is configured and the month has not settled (`cohort.py`), keeping the
 current card's printed rate with the signing card's standing charge instead.
 
-**Which month the cohort asks for** (`_tariff_card_month`, `cohort.py`): the
+**Which month the cohort asks for** (`_tariff_card_month`, `signing_month.py`): the
 entry's own tariff card month when it sets one, else its contract start date.
 They differ by about a month for anyone who switched supplier, since a fixed or
 dynamic contract is locked to the card in force at SIGNING and the switch takes

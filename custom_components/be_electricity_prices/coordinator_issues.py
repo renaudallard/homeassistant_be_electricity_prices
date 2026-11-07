@@ -48,7 +48,7 @@ from .brugel import (
     cached_power_term,
     power_term_is_indicative,
 )
-from .cohort import _parse_iso_date, ytd_window_start
+from .cohort import ytd_window_start
 from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
@@ -77,6 +77,7 @@ from .providers._rates import Contract
 from .providers._resolve import omits_brussels_power_term
 from .providers._validity import card_valid_until
 from .providers.base import ExtractorError, SupplierExtractor, SupplierSnapshot
+from .signing_month import _parse_iso_date
 from .snapshot_store import (
     SNAPSHOT_STALE_DAYS,
 )

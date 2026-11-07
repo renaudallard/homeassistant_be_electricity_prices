@@ -73,6 +73,13 @@ The residential electricity products supported:
   helpers of ``_energyvision_wallonia``, which also read the Walloon cards
   of GS3JV and GS5JV.
 
+* ``GS`` (Goedkope stroom, Flanders, withdrawn from October 2025): the
+  original tiered product, the year's first 1.000 kWh at 9,54 c/kWh for 10
+  years and the rest on ``1,05 x Belpex-RLP-M + 15 EUR/MWh``, on a card that
+  also prices gas. Its cards are ``EV-GS-<MMYY>-01.pdf``, code first, and
+  only the last, September 2025's, is read: it prices every month, each
+  with its own index, levies and, from 2026, the network of its year.
+
 * ``GS1800V`` (all three regions) / ``GSVI3`` / ``GSLP`` (Flanders):
   the tiered range, which bills a first tranche of the YEAR at a flat rate
   and the remainder on ``factor x Belpex-RLP-M + 20 EUR/MWh``. Parsed as a
@@ -317,6 +324,10 @@ async def fetch_for_month(
     if card is None:
         return None
     first = date(year_month.year, year_month.month, 1)
+    if contract.last_card is not None and first != contract.last_card:
+        # Its other issues are not read (``_ContractDef.last_card``): the
+        # month is billed on the last card standing in.
+        return None
     return await _archived_card(session, contract_id, card, region, first)
 
 
@@ -565,7 +576,7 @@ def _archive_card_urls(
     ``inline-files`` alone.
     """
     stamp = f"{first.month:02d}{first.year % 100:02d}"
-    name = f"EV-{stamp}-{contract.code}-{card.token}.pdf"
+    name = contract.file_name.format(month=stamp, code=contract.code, token=card.token)
     inline = f"{card.site}/sites/default/files/inline-files/{name}"
     if not card.archive_by_upload_month and first < _UPLOAD_FOLDERS_FROM:
         return (inline,)
@@ -616,7 +627,8 @@ async def _current_upload(
 ) -> tuple[str, str | None]:
     """The card the listing shows today and its Last-Modified: the newest
     upload of this month's card, else of last month's, which the listing
-    goes on showing until this month's is up.
+    goes on showing until this month's is up. A product read off its last
+    card alone (``_ContractDef.last_card``) is that card every month.
 
     The month is Home Assistant's, which the coordinator holds a card's
     validity to; the listing's script takes the one in Brussels.
@@ -627,15 +639,19 @@ async def _current_upload(
     last card it holds.
     """
     first = dt_util.now().date().replace(day=1)
-    for month in (first, (first - timedelta(days=1)).replace(day=1)):
+    months: tuple[date, ...] = (first, (first - timedelta(days=1)).replace(day=1))
+    asked = f"{first:%Y-%m} or the month before"
+    if contract.last_card is not None:
+        months = (contract.last_card,)
+        asked = f"{contract.last_card:%Y-%m}, its last"
+    for month in months:
         for url in _archive_card_urls(contract, card, month):
             found = await _newest_upload(session, url)
             if found is not None:
                 return found
     raise ExtractorError(
-        f"HTTP 404 fetching {_archive_card_urls(contract, card, first)[0]}: "
-        f"EnergyVision has no card {contract.code} ({card.token}) for "
-        f"{first:%Y-%m} or the month before"
+        f"HTTP 404 fetching {_archive_card_urls(contract, card, months[0])[0]}: "
+        f"EnergyVision has no card {contract.code} ({card.token}) for {asked}"
     )
 
 
@@ -710,6 +726,10 @@ def parse_snapshot(
     # branch; the network and tax blocks are each region's own.
     brussels = region == REGION_BRUSSELS
     kind, lump_capped = _welcome_credit_rule(text)
+    # A product read off its last card alone grants no welcome credit: the
+    # credit is the one printed on the issue a household signed, which is not
+    # read, and the last card's 125 EUR is the direct-debit figure besides.
+    welcome = None if contract.last_card is not None else _welcome_credit(text)
     return with_vat_basis(
         SupplierSnapshot(
             supplier="energyvision",
@@ -721,7 +741,7 @@ def parse_snapshot(
             publication_label=publication_label or _publication_label(text),
             valid_until=parse_valid_until(text),
             injection=injection,
-            welcome_credit_eur=_welcome_credit(text),
+            welcome_credit_eur=welcome,
             welcome_credit_kind=kind,
             welcome_credit_lump_capped=lump_capped,
             direct_debit_discount_eur=_direct_debit_discount(
@@ -807,6 +827,7 @@ EXTRACTOR = SupplierExtractor(
             spot_indexed_injection=c.contract_id in _MONTH_INDEXED_INJECTION,
             direct_debit_discount=c.contract_id in _DIRECT_DEBIT,
             withdrawn=c.withdrawn,
+            feed_in_floor_from=c.feed_in_floor_from,
         )
         for c in _CONTRACTS
     ),

@@ -44,7 +44,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .cohort import _parse_iso_date
 from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
@@ -64,6 +63,7 @@ from .fees import (
 )
 from .meter_daily import _measured_kwh
 from .providers.base import SupplierExtractor, SupplierSnapshot
+from .signing_month import _parse_iso_date
 from .snapshot_store import cached_month_card
 
 

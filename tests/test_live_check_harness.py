@@ -1548,6 +1548,34 @@ def test_every_month_indexed_card_can_collect_a_key() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("contract_id", "fixture"),
+    [
+        ("energyvision_tiered_1800", "energyvision_tiered_1800_sep.pdf"),
+        ("energyvision_laadpunt", "energyvision_laadpunt_sep.pdf"),
+        ("energyvision_goedkope_stroom", "energyvision_goedkope_stroom_sep2025.pdf"),
+    ],
+)
+def test_the_energyvision_cards_crediting_the_spp_mean_are_held_to_it(
+    contract_id: str, fixture: str
+) -> None:
+    """A spot_monthly card derives "present", which asserts only that a
+    feed-in leg exists, so each EnergyVision card whose feed-in reads the
+    month's Belpex-SPP-M is pinned "spp": unpinned, a card losing its
+    formula or the flag would pass the live check."""
+    from custom_components.be_electricity_prices.providers import energyvision
+    from tests import fixture_text
+
+    snap = energyvision.parse_snapshot(
+        contract_id,
+        fixture_text(fixture, layout=True),
+        f"test://{contract_id}",
+        region="flanders",
+    )
+    assert snap.injection is not None and snap.injection.spp_indexed
+    assert lc._expected_injection_shape(contract_id) == "spp"
+
+
 def test_a_month_indexed_card_losing_its_flag_fails() -> None:
     """The five cards that credit a monthly index carry coefficients AND the
     flag that names which mean they resolve against. Dropping the flag leaves

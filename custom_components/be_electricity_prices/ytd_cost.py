@@ -50,7 +50,6 @@ from .cohort import (
     _cohort_legs,
     _effective_snapshot_for_month,
     _month_snapshot_cache,
-    _parse_iso_date,
     signing_month_snapshot,
     ytd_window_start,
 )
@@ -95,6 +94,7 @@ from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
 )
+from .signing_month import _parse_iso_date
 from .snapshot_resolve import (
     entry_annual_injection_kwh,
     entry_annual_kwh,

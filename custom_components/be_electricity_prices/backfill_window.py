@@ -52,7 +52,6 @@ from .brugel import ensure_power_term
 from .cohort import (
     _cohort_legs,
     _month_snapshot_cache,
-    _tariff_card_month,
     signing_month_snapshot,
     ytd_window_start,
 )
@@ -89,6 +88,7 @@ from .pricing import DsoTariffMode, MeterType
 from .providers import get as get_extractor
 from .providers._rates import InjectionRates
 from .providers.base import SupplierSnapshot
+from .signing_month import _tariff_card_month
 from .snapshot_months import (
     _snapshot_for_month,
     month_card,

@@ -50,7 +50,6 @@ from . import energy_meters
 from .cohort import (
     _cohort_legs,
     _effective_snapshot_for_month,
-    _parse_iso_date,
     signing_month_snapshot,
     ytd_window_start,
 )
@@ -104,6 +103,7 @@ from .providers import (
 from .providers import (
     get as get_extractor,
 )
+from .signing_month import _parse_iso_date
 from .snapshot_months import archived_months_present
 from .snapshot_store import _monthly_snapshots
 from .spot_stats import index_window_start, own_day_ahead

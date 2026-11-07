@@ -4913,11 +4913,13 @@ _INJECTION_SHAPE: dict[str, str] = {
     "energyvision_fixed_3y": "spp",
     "energyvision_fixed_5y": "spp",
     "energyvision_fixed_1y": "spp",
-    # The two tiered cards that index their credit monthly, same Belpex-SPP-M
+    # The tiered cards that index their credit monthly, same Belpex-SPP-M
     # formula as the fixed pair above. Pinned rather than derived: their kind
     # is spot_monthly, which the default reads as presence-only.
     "energyvision_tiered_1800": "spp",
     "energyvision_laadpunt": "spp",
+    # The withdrawn Goedkope stroom, on its last card, prints the same pair.
+    "energyvision_goedkope_stroom": "spp",
     # GSVI3 fixes its feed-in price for the term instead of indexing it, so
     # its card prints a figure and no formula. "monthly" is the shape that
     # asserts exactly that pair (current set, no factor/base); the label reads

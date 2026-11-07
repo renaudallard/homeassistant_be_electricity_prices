@@ -125,8 +125,8 @@ def _validate_contract_dates(
     started before it: the year would price the contract left only from that
     start, and the cohort would look the signing card up a month too early.
     """
-    from .cohort import _parse_iso_date
     from .contract_periods import recorded_contracts
+    from .signing_month import _parse_iso_date
 
     errors: dict[str, str] = {}
     start = _parse_iso_date(user_input.get(CONF_CONTRACT_START_DATE))
@@ -244,8 +244,8 @@ def _validate_switch_date(
     because each contract ends where the next begins, and after the start date
     of the contract being left, which cannot end before it began.
     """
-    from .cohort import _parse_iso_date
     from .contract_periods import recorded_contracts
+    from .signing_month import _parse_iso_date
 
     until = _parse_iso_date(user_input.get(CONF_SWITCH_DATE))
     today = dt_util.now().date()

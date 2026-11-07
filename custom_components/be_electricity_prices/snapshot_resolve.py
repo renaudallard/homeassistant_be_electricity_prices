@@ -118,6 +118,7 @@ from .providers._resolve import (
 )
 from .providers._settlement_grid import resolve_settlement_grid
 from .providers.base import DsoOverlay, SupplierSnapshot
+from .signing_month import resolve_signed_feed_in_floor
 
 # Where a compare-page proxy (``compare_inputs._quote_entry``) freezes the
 # household's measured yearly export. The proxy carries no coordinator, and no
@@ -878,6 +879,9 @@ def _resolve_snapshot(
     resolved = resolve_welcome_credit_meter(
         resolved, entry.data.get(CONF_METER, METER_MONO)
     )
+    # And the feed-in floor of the card the household signed, where the card
+    # read for every month is a later one (Goedkope stroom's 0925).
+    resolved = resolve_signed_feed_in_floor(entry, resolved)
     resolved = resolve_volume_tier(
         resolve_excise_band(resolved, annual_kwh),
         annual_kwh,

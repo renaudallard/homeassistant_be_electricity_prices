@@ -805,7 +805,7 @@ and `CONF_YTD_FROM_CONTRACT_START` while they still hold the stored values
 them empty, as `_record_switch` does for a switch. Pre-filled, they were
 submitted as the new contract's own, and the card month put it on the card of
 the month the old contract was signed, which a newly typed start date does not
-override (`_tariff_card_month`, `cohort.py`). A supply that starts on 1 January
+override (`_tariff_card_month`, `signing_month.py`). A supply that starts on 1 January
 cannot be recorded as a switch, so this path is how that change is made. Only a
 value still equal to the stored one goes, so the start date a switch has just
 moved to the switch day stays. So does a stored start date on the day of the

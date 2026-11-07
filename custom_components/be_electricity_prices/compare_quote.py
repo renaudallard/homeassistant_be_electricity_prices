@@ -46,7 +46,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .cohort import _parse_iso_date, _signed_in
+from .cohort import _signed_in
 from .compare_weighting import (
     _register_network_rates,
     _register_weights,
@@ -93,6 +93,7 @@ from .meter_daily import (
     _measured_kwh,
 )
 from .pricing import renewables_eur_per_kwh, yearly_fixed_fee_for_meter
+from .signing_month import _parse_iso_date
 
 # Each meter register's own all-in rate, weighted by the consumption shape and
 # by the export shape (compare_weighting._register_rates), in the order of

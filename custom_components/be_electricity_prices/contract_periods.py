@@ -52,7 +52,7 @@ import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .cohort import _tariff_card_month, ytd_window_start
+from .cohort import ytd_window_start
 from .compare_inputs import _coordinator_rlp_index_weights, _QuoteEntry
 from .const import (
     CONF_ANALOG_METER,
@@ -89,6 +89,7 @@ from .providers import effective_kind, settlement_answer
 from .providers.base import (
     ExtractorError,
 )
+from .signing_month import _tariff_card_month
 from .snapshot_resolve import (
     analog_meter,
     ensure_custom_network,

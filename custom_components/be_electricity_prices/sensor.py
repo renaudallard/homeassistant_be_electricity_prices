@@ -45,9 +45,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from . import creg_ev
-from .cohort import (
-    _parse_iso_date,
-)
 from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_END_DATE,
@@ -94,6 +91,7 @@ from .sensor_values import (
     _tomorrow_max,
     _tomorrow_min,
 )
+from .signing_month import _parse_iso_date
 
 
 @dataclass(frozen=True, kw_only=True)

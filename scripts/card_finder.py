@@ -111,9 +111,9 @@ async def _energyvision(
     contract = ev._CONTRACTS_BY_ID[contract_id]
     card = contract.cards[region]
     stamp = f"{month.month:02d}{month.year % 100:02d}"
+    name = contract.file_name.format(month=stamp, code=contract.code, token=card.token)
     named = re.compile(
-        rf"/EV-{stamp}-{re.escape(contract.code)}-{re.escape(card.token)}"
-        r"(?:_\d+)?\.pdf$",
+        rf"/{re.escape(name.removesuffix('.pdf'))}(?:_\d+)?\.pdf$",
         re.IGNORECASE,
     )
     page_url = card.index_url or f"{card.site}{_ENERGYVISION_PAGE}"

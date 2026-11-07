@@ -60,7 +60,6 @@ from custom_components.be_electricity_prices import (
 from custom_components.be_electricity_prices.cohort import (
     _cohort_energy_leg,
     _effective_snapshot_for_month,
-    _tariff_card_month,
 )
 from custom_components.be_electricity_prices.cohort_legs import (
     _cohort_energy_from_archived,
@@ -132,6 +131,7 @@ from custom_components.be_electricity_prices.providers.base import (
     SupplierSnapshot,
     TaxOverlay,
 )
+from custom_components.be_electricity_prices.signing_month import _tariff_card_month
 from custom_components.be_electricity_prices.snapshot_codec import (
     _DEGRADED_MIN_SCHEMA_VERSION,
     _SNAPSHOT_SCHEMA_VERSION,

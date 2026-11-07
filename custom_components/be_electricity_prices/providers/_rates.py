@@ -156,6 +156,11 @@ class Contract:
     # a customer kept on the product's terms is still billed. Purely
     # declarative: nothing compares it to the clock.
     withdrawn: date | None = None
+    # The first signing month whose card guarantees the feed-in minimum the
+    # card read for every month prints, for a product read off a later card
+    # than the one its households signed: one that signed before it is
+    # credited no floor (``signing_month.resolve_signed_feed_in_floor``).
+    feed_in_floor_from: date | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

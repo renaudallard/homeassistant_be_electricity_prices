@@ -530,6 +530,7 @@ def test_energyvision_is_registered() -> None:
         _TIERED_VI3,
         _TIERED_LP,
         "energyvision_groene_stroom",
+        "energyvision_goedkope_stroom",
     }
 
 
@@ -570,10 +571,14 @@ def test_discover_ids_superset_of_supported() -> None:
 def test_the_walloon_1_year_fixed_product_is_withdrawn_in_november_2026() -> None:
     """EnergyVision's listing ends it with October 2026, when the 3-year and
     5-year products came to Wallonia: households on it keep its last card and
-    the setup offers it marked withdrawn."""
+    the setup offers it marked withdrawn. The original Goedkope stroom is the
+    only other one, from October 2025."""
     withdrawn = {c.id: c.withdrawn for c in EXTRACTORS["energyvision"].contracts}
     assert withdrawn[_FIXED_WAL] == date(2026, 11, 1)
-    assert {key for key, day in withdrawn.items() if day is not None} == {_FIXED_WAL}
+    assert {key for key, day in withdrawn.items() if day is not None} == {
+        _FIXED_WAL,
+        "energyvision_goedkope_stroom",
+    }
 
 
 @pytest.mark.parametrize(

@@ -45,7 +45,6 @@ from custom_components.be_electricity_prices import (
     compare_household,
     snapshot_resolve,
 )
-from custom_components.be_electricity_prices.cohort import _parse_iso_date
 from custom_components.be_electricity_prices.compare_table import RankedRow
 from custom_components.be_electricity_prices.const import (
     CONF_ANNUAL_CONSUMPTION_KWH,
@@ -56,6 +55,7 @@ from custom_components.be_electricity_prices.const import (
     DOMAIN,
 )
 from custom_components.be_electricity_prices.flow_switch import _validate_contract_dates
+from custom_components.be_electricity_prices.signing_month import _parse_iso_date
 from tests import FakeBody, make_entry
 
 

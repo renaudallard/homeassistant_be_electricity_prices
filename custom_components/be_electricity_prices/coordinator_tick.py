@@ -46,11 +46,7 @@ from homeassistant.util import dt as dt_util
 
 from . import energy_meters
 from .brugel import ensure_power_term
-from .cohort import (
-    _cohort_legs,
-    _tariff_card_month,
-    ytd_window_start,
-)
+from .cohort import _cohort_legs, ytd_window_start
 from .const import (
     CONF_CARD_ARCHIVE,
     CONF_CONTRACT,
@@ -115,6 +111,7 @@ from .providers import (
     get as get_extractor,
 )
 from .providers._rates import DynamicRates, EnergyRates, SpotMonthlyRates
+from .signing_month import _tariff_card_month
 from .snapshot_resolve import (
     analog_meter,
     ensure_custom_network,

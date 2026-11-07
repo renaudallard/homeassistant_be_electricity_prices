@@ -71,6 +71,7 @@ machinery.
 | `tests/test_energiebe.py` | energie.be extractor |
 | `tests/test_energyknights.py` | Energy Knights extractor |
 | `tests/test_energyvision.py` | EnergyVision extractor |
+| `tests/test_energyvision_goedkope_stroom.py` | The withdrawn Goedkope stroom off its last card: the tranche, formula and feed-in it prints, the units against the published index, the tier fold, every month read off that card and the 2026 network off Fluvius's sheet |
 | `tests/test_engie.py` | Engie extractor |
 | `tests/test_excise_law.py` | The federal excise read from article 419 on Justel (`excise_law.py`), the household schedule read from its archived copy, started after the transition its law fixed and billed on a card standing in for one of its months, their store round trip, `resolve_federal_excise` billing the law, and a crafted page read in time linear in its length |
 | `tests/test_brugel.py` | Brugel's published Sibelga power term (`brugel.py`) and the card it completes, and a custom Brussels entry's network read off the same sheet, on the real 2026 sheet |

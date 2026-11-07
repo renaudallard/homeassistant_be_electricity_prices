@@ -43,7 +43,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .cohort import _month_snapshot_cache, _parse_iso_date
+from .cohort import _month_snapshot_cache
 from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_START_DATE,
@@ -78,6 +78,7 @@ from .pricing import (
 )
 from .providers._rates import InjectionRates
 from .providers.base import SupplierExtractor, SupplierSnapshot
+from .signing_month import _parse_iso_date
 from .snapshot_resolve import meter_segment
 from .spot_stats import (
     _bucket_by_local_month,

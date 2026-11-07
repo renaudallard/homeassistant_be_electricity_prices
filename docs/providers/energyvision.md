@@ -44,6 +44,9 @@ integration tracks these:
   fixed for the term instead of indexed.
 - **GSLP** ("Goedkope stroom + Laadpunt", Flanders) - the 1.000 kWh tranche again, with the
   charging point's much larger 410 €/yr standing charge.
+- **GS** ("Goedkope stroom", Flanders) - the original tiered product, withdrawn from
+  October 2025 and read off its last card alone: see
+  [The withdrawn Goedkope stroom (GS)](#the-withdrawn-goedkope-stroom-gs) below.
 - **GRS** ("Groene stroom", Brussels) - the same monthly index with no tranche in front of
   it, so it bills `1,12 x Belpex-RLP-M + 38 EUR/MWh` from the first kWh. Brusol's own
   product and the one any Brussels household can sign, where GS1800V asks for
@@ -67,7 +70,8 @@ names them apart, by partner rather than by product code (the iChoosr GRSO cards
 July 2026 among them), and `discover()` reads none.
 
 EnergyVision publishes its cards as PDFs named `EV-<MMYY>-<CODE>-<lang>.pdf` under
-`/sites/default/files/inline-files/`. The filename carries the pricing month
+`/sites/default/files/inline-files/` (`_ContractDef.file_name`; the withdrawn Goedkope
+stroom's are `EV-GS-<MMYY>-01.pdf`). The filename carries the pricing month
 (`EV-0726-GSDYN-nl.pdf` = July 2026) and the Drupal CMS adds a dedup suffix to a card
 uploaded again (the fixed card ships as `EV-0726-GS3JV-nl_0.pdf`), so the plain name can
 be a draft. Since 30 October 2026 the tariefkaart listing
@@ -113,6 +117,7 @@ token, which site and which archive layout that region's publication uses:
 | `energyvision_fixed_injection_3y` | EnergyVision vaste injectieprijs 3 jaar | spot_monthly | GSVI3 | flanders → `nl` | n/a |
 | `energyvision_laadpunt` | EnergyVision Laadpunt | spot_monthly | GSLP | flanders → `nl` | n/a |
 | `energyvision_groene_stroom` | EnergyVision Groene stroom | spot_monthly | GRS | brussels → `BXL-nl` | n/a |
+| `energyvision_goedkope_stroom` | EnergyVision Goedkope stroom (withdrawn 2025-10-01) | spot_monthly | GS | flanders, not in the file name | n/a |
 
 Contract ids carry no region token, per the project convention: the region lives only in
 the keys of `cards`, which `regions` is derived from. The Walloon product is a separate
@@ -554,7 +559,95 @@ does not reach the pricing engine, because footnote f's *Voordeelzekerheid* sett
 year so the full tranche lands at the flat rate whenever the volume allowed it; the
 exclusive-night exclusion does, through `resolve_volume_tier`'s meter argument.
 
+## The withdrawn Goedkope stroom (GS)
+
+The original "Goedkope stroom" (issue #168) is a combined electricity and gas card for
+Flanders, of which only the electricity is read. It was sold until September 2025: its
+issues are `EV-GS-<MMYY>-01.pdf` in `inline-files`, the code first and a version after
+("Versie EV-GS-1124-01"), for November and December 2024 and January, March, June and
+September 2025, and October 2025 answers 404. So the contract carries
+`withdrawn=date(2025, 10, 1)`, its own `file_name` and `last_card=date(2025, 9, 1)`.
+
+`last_card` is the one card read. `fetch` and `probe` take the newest upload of it
+(`_current_upload`; the plain name, `_0` and `_1` are byte for byte the same file, all of
+1 September 2025), so an entry is priced from its first tick and needs neither the card
+archive nor a card it held. `fetch_for_month` reads it for September 2025 and answers
+`None` for every other month without asking the site, so each of those is billed on the
+last card standing in, with its own month's index, federal levies and, from 2026, the
+network of its year off Fluvius's sheet (`past_last_card`, `snapshot_resolve.py`). The
+months of 2025 keep the card's own 2025 table.
+
+The earlier issues are not read:
+
+- 1124 and 1224 print the ten Fluvius areas before the merger (Gaselwest, Imewo, Intergem,
+  Iveka, Iverlek, PBE, Sibelgas beside Antwerpen, Limburg and West), which match no
+  network key one to one, in a table whose columns differ from 2025's: two data
+  management columns and no maximumtarief. Read with today's reader, only Antwerpen,
+  Limburg and West come out, each with 13,95 EUR a year read as a ceiling of 0,1395
+  EUR/kWh, and 1124's "Kosten GSC en WKC geldig voor november 2024: 1,582" stops the tax
+  block. Energy Knights refuses its 2024 cards for the same areas (`_ARCHIVE_HORIZON`).
+- 0125 and 0325 print both network tables as pictures, with no text to read them from.
+- 1224 and 0325 leave page 1's indicative prices, the feed-in figure and the welcome
+  credit blank, and print their month nowhere in the text.
+- 0625 reads, but its network table, tax block, tranche, formulas and standing charge are
+  0925's figure for figure (compared on 7 November 2026), so reading it would change
+  nothing June 2025 is billed on but the printed feed-in estimate, which the month's own
+  Belpex-SPP-M replaces.
+
+The price is the same on every issue, which is what makes one card enough: the year's
+first 1.000 kWh at 9,54 c/kWh including VAT, "geldig voor 10 jaar", the rest on
+`1,05 x Belpex-RLP-M + 15 EUR/MWh` excluding VAT, the feed-in on
+`0,6 x Belpex-SPP-M - 15 EUR/MWh`, and 50 EUR a year. The same parser as GS1800V reads
+them (`_extract_tiered`), and `resolve_volume_tier` folds the tranche in.
+
+The terms are not the same on every issue, though. The 1 c/kWh floor under the feed-in,
+condition 5, "Bij ons is zonne-energie nooit waardeloos ... dan garanderen wij in elk
+geval 1 €cent/kWh", came with the June 2025 card: 1124, 1224, 0125 and 0325 list
+conditions 1 to 4 and no floor. So the contract carries `feed_in_floor_from=date(2025, 6,
+1)`, and `resolve_signed_feed_in_floor` (`signing_month.py`, wired into
+`_resolve_snapshot`) drops the floor for a household whose signing month, the tariff card
+month or else the contract start date (`_tariff_card_month`), is before June 2025. One
+that signed from June 2025 on keeps it, and so does one whose signing month is not known,
+since those are the terms of the card read. Every month and every path bills the entry
+through the resolver, so the answer is the same on all of them.
+
+A household supplied from June 2025 or later that signed before June, on an earlier card,
+should set the **tariff card month** to the month it signed: a supplier switch takes about
+a month, and with only the start date set the signing month reads as June or later and the
+floor is credited although the card signed printed none.
+
+The wording of the tranche also moved. 1124, 1224, 0125 and 0325 give it to "je
+enkelvoudig tarief of je dag tarief (niet van toepassing op nacht en exclusief nacht
+tarief)", and 0625 and 0925 to "verbruik tijdens de zonne-uren", the wording of GSVI3 and
+GSLP. Two things in footnote a differ from GS1800V's, and the fold is inexact on both:
+
+- **The tranche is not every register's.** It is the single or day register's on the
+  issues up to March 2025 and the solar hours' from June 2025. The fold measures it
+  against the entry's whole yearly volume and drops it on an exclusive-night entry. Both
+  registers pay the one formula, so a day/night meter is billed exactly while the kWh the
+  tranche counts reach 1.000 a year; under that, the tranche is credited to the other kWh
+  too, (1.000 - those kWh) x (formula - 9,54) a year too little.
+- **There is no Voordeelzekerheid.** GS1800V, GSVI3 and GSLP settle the year so the whole
+  tranche lands at the fixed rate whenever the volume allowed it; this card does not, and
+  spreads the 1.000 kWh pro rata per day (1124, 1224 and 0125) or over the months on the
+  solar profile (0325, 0625 and 0925). A month that uses less than its share loses the rest, which the
+  fold does not see: it assumes the whole tranche used.
+
+Page 1's 11,59 and 1,75 c/kWh are an estimate "volgens methodologie Vlaamse
+Nutsregulator": EnergyVision's Indexatieparameters give that method's August 2025 values
+as 89,891 EUR/MWh for Belpex-RLP-M and 54,235 for Belpex-SPP-M, and the parsed
+coefficients give back 11,5949 and 1,7541 at them
+(`test_the_formula_gives_back_the_printed_indicatives`). November 2024's 11,31 and 2,15
+come back the same way from October 2024's 87,334 and 60,809.
+
+No welcome credit is read off the card (see below).
+
 ## Welcome credit
+
+Goedkope stroom is the exception: its last card prints "Eenmalige welkomstkorting 125 €
+(*)", the figure for a household paying by direct debit, 105 otherwise, and each issue
+printed its own, so with only the last read no credit is granted (`welcome_credit_eur`
+`None`) rather than one off a card the household did not sign.
 
 Four of the six cards print an `Eenmalige welkomstkorting` above the standing charge:
 180 EUR on GSDYN, 240 on GS3JV, 200 on GS1800V, 50 on GSVI3. `_welcome_credit` reads it
@@ -790,6 +883,7 @@ The fixtures live under `tests/fixtures/`:
 | `energyvision_laadpunt_nov.pdf` | the GSLP card for November 2026: the levy row spelled "GSC en WKK" |
 | `energyvision_tiered_1800_wal_nov.pdf` | the Walloon GS1800V card for November 2026: the tranche bound grouped with a space, "<1 800 kWh" |
 | `energyvision_tiered_1800_nov.pdf` | the Flemish GS1800V card for November 2026 as corrected on 2 November, filed in `2026-11` only: 12,72 c EUR/kWh for the first 1.800 kWh, a 35 EUR welcome credit |
+| `energyvision_goedkope_stroom_sep2025.pdf` | the GS "Goedkope stroom" card for September 2025, its last issue, electricity and gas: 9,54 c EUR/kWh for the first 1.000 kWh and the 2025 network table |
 
 Tests load them through `fixture_text("energyvision_<...>.pdf", layout=True)`, matching
 the layout-preserving extraction used in production. Both Walloon fixtures are kept on
@@ -814,4 +908,5 @@ parser, and it will fail the day the two publications diverge.
 | Tax under/over-billing or "could not parse tax block" | `_extract_taxes` regexes (-209) | a levy row label or unit changed; energy fund is the only optional one |
 | A DSO sub-area missing, or all DSOs missing | `_DSO_ROWS` and the row lookup in `_extract_dsos`; the "Digitale Meter" anchor | a label renamed or the section header changed |
 | "HTTP 404 fetching ...: EnergyVision has no card ... for ... or the month before" | `_current_upload` | no card answers for this month or the last: the product was withdrawn, or the listing's script (`/sites/default/files/ftp/tariefkaarten.min.js`) builds its names another way |
+| "HTTP 404 fetching ...: EnergyVision has no card GS (nl) for 2025-09, its last" | `_current_upload` | Goedkope stroom's last card is gone from `inline-files`: an entry keeps the card it holds, else the card archive's row for September 2025 |
 | "EnergyVision: no listing entry for card ..." | `_resolve_card_url` | Brusol's signup page markup or the `EV-<MMYY>-<CODE>-BXL-nl` filename scheme changed |

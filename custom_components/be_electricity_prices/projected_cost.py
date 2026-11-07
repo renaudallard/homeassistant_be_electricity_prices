@@ -158,7 +158,7 @@ def _contract_basis(entry: ConfigEntry, today: date, horizon: date) -> str:
     approximate. Every path here degrades to "no end date set" rather than
     refusing to produce a number.
     """
-    from .cohort import _parse_iso_date
+    from .signing_month import _parse_iso_date
 
     end = _parse_iso_date(entry.data.get(CONF_CONTRACT_END_DATE))
     if end is None:
@@ -273,10 +273,10 @@ async def _compute_projected_year_cost(
         # Two things splice that leg on: the signing month locking a cohort's
         # formula, and on its own an ENTSO-E key on a month-indexed card, which
         # re-prices each month on its index. The signing month is the tariff
-        # card month, else the start date (cohort._tariff_card_month), and the
-        # basis names whichever chose it: naming a start date to an entry that
-        # set none sent the user looking for the wrong box.
-        from .cohort import _parse_iso_date, _tariff_card_month
+        # card month, else the start date (signing_month._tariff_card_month),
+        # and the basis names whichever chose it: naming a start date to an
+        # entry that set none sent the user looking for the wrong box.
+        from .signing_month import _parse_iso_date, _tariff_card_month
 
         if not spliced:
             basis = (

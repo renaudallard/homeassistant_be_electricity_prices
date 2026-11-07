@@ -190,6 +190,42 @@ async def test_energyvision_is_found_in_its_upload_folder_when_the_page_link_is_
     assert by_url[f"{files}/2026-11/{name}"] == ("its upload folders", None)
 
 
+async def test_energyvision_looks_for_a_card_by_its_own_file_name(
+    monkeypatch: pytest.MonkeyPatch, modules: dict[str, ModuleType]
+) -> None:
+    """Goedkope stroom's cards are EV-GS-<MMYY>-01, the code first and a
+    version after, so the search matches a page's link and asks
+    inline-files under that name, not the EV-<MMYY>-<code>-<lang> of the
+    products of 2026."""
+    name = "EV-GS-0925-01"
+    files = "https://www.energyvision.be/sites/default/files"
+    _serve(
+        monkeypatch,
+        modules,
+        {
+            "/nl-be/tariefkaart-2": (
+                f'<a href="/sites/default/files/inline-files/{name}_1.pdf">GS</a>'
+            )
+        },
+        {
+            f"/inline-files/{name}": (
+                FIXTURES / "energyvision_goedkope_stroom_sep2025.pdf"
+            ).read_bytes()
+        },
+    )
+    found = await cf.find(
+        None,
+        modules,
+        "energyvision",
+        "energyvision_goedkope_stroom",
+        "flanders",
+        date(2025, 9, 1),
+    )
+    by_url = {url: (where, reason) for url, where, reason in found}
+    assert by_url[f"{files}/inline-files/{name}_1.pdf"] == ("its card page", None)
+    assert by_url[f"{files}/inline-files/{name}.pdf"] == ("its upload folders", None)
+
+
 async def test_luminus_names_the_product_id_each_card_came_from(
     monkeypatch: pytest.MonkeyPatch, modules: dict[str, ModuleType]
 ) -> None:
