@@ -57,6 +57,14 @@ from ..const import (
     REGION_WALLONIA,
     WALLONIA_DSO_KEYS,
 )
+from ._cociter_rows import (
+    _BELIX_ROW_TAIL,
+    _INDICATIVE_TAIL,
+    _VARIABLE_CEILING_ROWS,
+    _belix_band_coefficients,
+    _price_ceilings,
+    _row,
+)
 from ._cociter_settle import published_belix
 from ._parse import (
     SIGN_CHARS,
@@ -337,7 +345,8 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
         return set()
     out: set[str] = set()
     for family in re.findall(
-        r"(RC[A-Za-z]+_[A-Za-z0-9]+)_Coop-\d+-(?:fr|nl)(?:-\d+)?\.pdf", html
+        r"(?<![A-Za-z])(RC[A-Za-z]+_[A-Za-z0-9]+)_Coop-\d+-(?:fr|nl)(?:-\d+)?\.pdf",
+        html,
     ):
         out.add(_DISCOVER_FAMILIES.get(family, family))
     return out
@@ -397,12 +406,34 @@ def _extract_supplier_prosumer(text: str, contract_id: str) -> float | None:
     """
     if contract_id not in ("cociter_variable", "cociter_variable_impact"):
         return None
-    match = re.search(r"([\d,]+)\s*€/kVA/an\s*TVAC", text)
+    match = re.search(r"(?<![\d,])([\d,]+)\s*€/kVA/an\s*TVAC", text)
     if not match:
         if contract_id == "cociter_variable_impact":
             return None
         raise ExtractorError("could not parse Cociter compensation-regime PV forfait")
     return to_float(match.group(1))
+
+
+# The lead-in of the dynamic card's feed-in block, and the formula after it.
+# The meter-type label in front of the formula is prose Cociter rewords:
+# "Tout compteur", "Compteur SMR3", and from the August 2026 card "Compteur
+# pouvant effectuer des mesures par quart d'heure". Any Compteur label is
+# matched up to the formula's opening bracket rather than enumerating them,
+# so the next rewording doesn't take the injection block offline again. The
+# label stays REQUIRED though: made optional, the pattern matches the
+# CONSUMPTION formula on a card that prints its injection prose after its
+# injection formula, and billed a 1,03 x +3 feed-in.
+#
+# The label's run to the bracket stops at the next "compteur", and the gap
+# after the lead-in at the next lead-in, each of which reaches the same
+# formula: run on past them, a line of labels or a card of lead-ins with no
+# formula after them was read to its end again from each.
+_INJECTION_LEAD = r"Le\s+prix\s+de\s+l['‘’ʼ]\s*injection"
+_INJECTION_FORMULA = (
+    r"(?:Tout\s+)?[Cc]ompteur(?:(?![Cc]ompteur)[^\n(])*"
+    r"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*|15\s*MIN\s*)?BELPEX\s*"
+    rf"([{SIGN_CHARS}])\s*([\d,]+)\)"
+)
 
 
 def _extract_injection(text: str) -> InjectionRates:
@@ -430,31 +461,14 @@ def _extract_injection(text: str) -> InjectionRates:
     hardcoded.
     """
     formula = re.search(
-        rf"Le\s+prix\s+de\s+l['‘’ʼ]\s*injection.*?"
-        # The meter-type label in front of the formula is prose Cociter
-        # rewords: "Tout compteur", "Compteur SMR3", and from the August
-        # 2026 card "Compteur pouvant effectuer des mesures par quart
-        # d'heure". Match any Compteur label up to the formula's opening
-        # bracket rather than enumerating them, so the next rewording
-        # doesn't take the injection block offline again. The label stays
-        # REQUIRED though: made optional, this pattern matches the
-        # CONSUMPTION formula on a card that prints its injection prose after
-        # its injection formula, and billed a 1,03 x +3 feed-in.
-        rf"(?:Tout\s+)?[Cc]ompteur[^\n(]*"
-        rf"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*|15\s*MIN\s*)?BELPEX\s*"
-        rf"([{SIGN_CHARS}])\s*([\d,]+)\)",
+        rf"{_INJECTION_LEAD}(?:(?!{_INJECTION_LEAD}).)*?{_INJECTION_FORMULA}",
         text,
         re.S,
     )
     if formula is None:
         # Variable PDF has no anchor prose around the injection block;
         # fall back to the first formula on any Compteur line.
-        formula = re.search(
-            rf"(?:Tout\s+)?[Cc]ompteur[^\n(]*"
-            rf"\(([\d,]+)\s*x\s*(?:QUARTER\s*HOURL\s*Y\s*|15\s*MIN\s*)?BELPEX\s*"
-            rf"([{SIGN_CHARS}])\s*([\d,]+)\)",
-            text,
-        )
+        formula = re.search(_INJECTION_FORMULA, text)
     if not formula:
         raise ExtractorError("could not parse Cociter injection formula")
     factor_pdf = to_float(formula.group(1))
@@ -465,79 +479,6 @@ def _extract_injection(text: str) -> InjectionRates:
         base=base_pdf_cents / 100.0,
         formula=formula.group(0),
     )
-
-
-# One BELIX row per meter. The label anchors are mandatory: an optional one
-# lets the pattern wander onto the consumption formula of the July 2026
-# dynamic re-upload, which is the trap the injection pattern's own mandatory
-# "Compteur" label already exists for.
-_BELIX_ROW_TAIL = (
-    rf"[^\n]*?\(([\d,]+)\s*x\s*BELIX\s*"
-    rf"([{SIGN_CHARS}])\s*([\d,]+)\)\s*\+\s*(\d+)\s*%\s*TVA"
-)
-_BELIX_BANDS: tuple[tuple[str, str], ...] = (
-    ("peak", r"Heures pleines"),
-    ("offpeak", r"Heures creuses"),
-    ("exclusive_night", r"Compteur exclusif nuit"),
-)
-
-
-def _belix_band_coefficients(text: str) -> dict[str, tuple[float, float]]:
-    """Per-meter BELIX ``(factor, base)`` on a Cociter variable card.
-
-    Same conversion as the mono row: the coefficients print c€/kWh against a
-    BELIX expressed in EUR/MWh, so the factor takes a x10 and the base a /100,
-    and the "+ N% TVA" printed outside the parens lands on both. The VAT is
-    read per row rather than hardcoded.
-    """
-    out: dict[str, tuple[float, float]] = {}
-    for key, label in _BELIX_BANDS:
-        match = re.search(label + _BELIX_ROW_TAIL, text)
-        if match is None:
-            continue
-        vat_mult = 1.0 + to_float(match.group(4)) / 100.0
-        out[key] = (
-            to_float(match.group(1)) * vat_mult * 10.0,
-            parse_sign(match.group(2)) * to_float(match.group(3)) * vat_mult / 100.0,
-        )
-    return out
-
-
-# The "Prix maximum" column, printed on the same row as the indicative and
-# in the same unit. Both figures end in "c€/kWh", so the ceiling is the
-# SECOND one on the row.
-_CEILING_TAIL = r"[^\n]*?\d+,\d+\s*c€/kWh[^\n]*?(\d+,\d+)\s*c€/kWh"
-
-_VARIABLE_CEILING_ROWS: tuple[tuple[str, str], ...] = (
-    ("single", r"Compteur monohoraire"),
-    ("peak", r"Heures pleines"),
-    ("offpeak", r"Heures creuses"),
-    ("exclusive_night", r"Compteur exclusif nuit"),
-)
-
-
-def _price_ceilings(
-    text: str, rows: tuple[tuple[str, str], ...]
-) -> dict[str, float | None]:
-    """The card's "Prix maximum" column, per row, as TVAC EUR/kWh.
-
-    Note (8): "COCITER a decide de plafonner le prix de fourniture de
-    l'energie [...] si le Belix venait a augmenter au point que
-    l'application du prix variable (indexe) donne une valeur superieure au
-    prix maximum, c'est le prix maximum qui s'applique." The cap is on the
-    supply price only; network, taxes and surcharges stay due in full, which
-    is exactly what ``pricing`` already does with a ceiling.
-
-    A row without the column yields None rather than 0.0, so a card that
-    stops publishing the cap goes back to uncapped instead of pricing every
-    kWh at zero. The dynamic card prints no cap at all and reaches this with
-    no matching row.
-    """
-    out: dict[str, float | None] = {}
-    for key, label in rows:
-        match = re.search(label + _CEILING_TAIL, text)
-        out[key] = to_float(match.group(1)) / 100.0 if match else None
-    return out
 
 
 # The trihoraire card announces itself in its own title, "Carte tarifaire (1)
@@ -583,13 +524,13 @@ def _impact_energy(text: str, yearly_fee: float) -> ImpactRates:
     coefficients: dict[str, float | None] = {}
     formulas: list[str] = []
     for band, label in _IMPACT_BANDS:
-        indicative = re.search(label + r"[^\n]*?(\d+,\d+)\s*c€/kWh", text)
+        indicative = re.search(_row(label, _INDICATIVE_TAIL), text)
         if indicative is None:
             raise ExtractorError(
                 f"could not parse Cociter trihoraire {band} indicative rate"
             )
         rates[band] = to_float(indicative.group(1)) / 100.0
-        row = re.search(label + _BELIX_ROW_TAIL, text)
+        row = re.search(_row(label, _BELIX_ROW_TAIL), text)
         if row is None:
             coefficients[f"{band}_factor"] = None
             coefficients[f"{band}_base"] = None
@@ -630,7 +571,7 @@ def _impact_energy(text: str, yearly_fee: float) -> ImpactRates:
 
 
 def _extract_energy(text: str, contract_id: str) -> EnergyRates:
-    yearly_fee_match = re.search(r"(\d+,\d+)\s*€/an\s*\n?\s*TVAC", text)
+    yearly_fee_match = re.search(r"(?<!\d)(\d+,\d+)\s*€/an\s*TVAC", text)
     if yearly_fee_match is None:
         # The abonnement (53,00 EUR/an TVAC) is on every Cociter card; a
         # miss silently drops the standing charge, so fail loud like the
@@ -642,10 +583,10 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
         return _impact_energy(text, yearly_fee)
 
     if contract_id == "cociter_variable":
-        mono = re.search(r"Compteur monohoraire[^\n]*?(\d+,\d+)\s*c€/kWh", text)
-        peak = re.search(r"Heures pleines[^\n]*?(\d+,\d+)\s*c€/kWh", text)
-        offpeak = re.search(r"Heures creuses[^\n]*?(\d+,\d+)\s*c€/kWh", text)
-        excl = re.search(r"Compteur exclusif nuit[^\n]*?(\d+,\d+)\s*c€/kWh", text)
+        mono = re.search(_row("Compteur monohoraire", _INDICATIVE_TAIL), text)
+        peak = re.search(_row("Heures pleines", _INDICATIVE_TAIL), text)
+        offpeak = re.search(_row("Heures creuses", _INDICATIVE_TAIL), text)
+        excl = re.search(_row("Compteur exclusif nuit", _INDICATIVE_TAIL), text)
         if not mono:
             raise ExtractorError(
                 "could not parse Cociter variable monohoraire indicative rate"
@@ -853,7 +794,7 @@ def _extract_transport(text: str) -> float:
     # every Cociter card and feeds straight into network cost; a regex
     # miss silently dropping it would under-bill every kWh. Fail loud,
     # matching the renewables / tax parsers.
-    match = re.search(r"Tarifs de transport TVAC[^\n]*?([\d,]+)", text)
+    match = re.search(_row("Tarifs de transport TVAC", r"([\d,]+)"), text)
     if match is None:
         raise ExtractorError("Cociter: ELIA transport tariff row not found")
     return to_float(match.group(1)) / 100.0
@@ -866,7 +807,7 @@ def _extract_taxes(text: str) -> TaxOverlay:
     # adjacent quote glyph and require the literal heading near the number to
     # avoid silently grabbing some other 'TVAC ... c€/kWh' value.
     renewables = re.search(
-        r"[\"'“”«»]?\s*énergies renouvelables"
+        r"(?:[\"'“”«»]\s*)?énergies renouvelables"
         r"[\"'“”«»]?.{0,200}?TVAC\s*([\d,]+)\s*c€/kWh",
         text,
         re.S,
@@ -877,10 +818,10 @@ def _extract_taxes(text: str) -> TaxOverlay:
     # Anchor on the literal label trio so a future footnote/inserted
     # number above the values can't be mistaken for the row.
     taxes_block = re.search(
-        r"Cotisation énergie.*?"
-        r"Droit d'accises spécial.*?"
-        r"Redevance de raccordement.*?"
-        r"([\d,]+)\s+([\d,]+)\s+([\d,]+)",
+        r"Cotisation énergie(?:(?!Cotisation énergie).)*?"
+        r"Droit d'accises spécial(?:(?!Droit d'accises spécial).)*?"
+        r"Redevance de raccordement(?:(?!Redevance de raccordement).)*?"
+        r"(?<![\d,])([\d,]+)\s+([\d,]+)\s+([\d,]+)",
         text,
         re.S,
     )

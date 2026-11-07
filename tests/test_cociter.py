@@ -28,6 +28,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import time
+from collections.abc import Callable
 from datetime import date, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -41,6 +44,10 @@ from custom_components.be_electricity_prices.pricing import (
     energy_eur_per_kwh,
 )
 from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import cociter as cociter_mod
+from custom_components.be_electricity_prices.providers._cociter_settle import (
+    published_belix,
+)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     ImpactRates,
@@ -1063,3 +1070,115 @@ def test_trihoraire_with_a_band_formula_unreadable_keeps_its_printed_bands() -> 
         data={"contract": "cociter_variable_impact", "api_key": "k"}
     )
     assert _month_indexed_leg(snap, entry) is None  # type: ignore[arg-type]
+
+
+def _quietly(read: Callable[[], object]) -> Callable[[], None]:
+    """``read``, whatever it makes of a card it cannot parse."""
+
+    def call() -> None:
+        with contextlib.suppress(ExtractorError):
+            read()
+
+    return call
+
+
+# Card text a host could serve instead, about 100,000 characters each, on
+# which a pattern was tried again from every place it could start: a line of
+# meter labels with no formula after them, a long number where a row, the
+# standing charge or the forfait expects its figure, blank lines or blanks
+# where a unit or a heading follows, a line of headings without the rows
+# under them, feed-in lead-ins and meter labels with no formula, "x BELIX"
+# with no bracket after it (200,000 for a line of the names, which cost the
+# old pattern under 2 s at 100,000 on a fast machine), and a listing of
+# family prefixes.
+@pytest.mark.parametrize(
+    "read",
+    [
+        pytest.param(
+            lambda: cociter_mod._belix_band_coefficients("Heures creuses " * 7_000),
+            id="belix rows",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: cociter_mod._extract_energy(
+                    "1,00 €/an TVAC\nCompteur monohoraire 0,0 c€/kW" + "0" * 100_000,
+                    "cociter_variable",
+                )
+            ),
+            id="indicative",
+        ),
+        pytest.param(
+            lambda: cociter_mod._price_ceilings(
+                "Heures pleines 0,0 c€/kWh 0,0 c€/kW" + "0" * 100_000,
+                cociter_mod._VARIABLE_CEILING_ROWS,
+            ),
+            id="ceiling",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: cociter_mod._extract_energy(
+                    "0" * 100_000 + " €/an", "cociter_dynamic"
+                )
+            ),
+            id="standing charge",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: cociter_mod._extract_energy(
+                    "1,0 €/an" + "\n" * 100_000, "cociter_dynamic"
+                )
+            ),
+            id="standing charge unit",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: cociter_mod._extract_supplier_prosumer(
+                    "0" * 100_000 + " €/kVA/an", "cociter_variable"
+                )
+            ),
+            id="forfait",
+        ),
+        pytest.param(
+            _quietly(lambda: cociter_mod._extract_taxes(" " * 100_000)),
+            id="renewables",
+        ),
+        pytest.param(
+            _quietly(lambda: cociter_mod._extract_taxes("Cotisation énergie " * 5_300)),
+            id="taxes",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: cociter_mod._extract_transport(
+                    "Tarifs de transport TVAC " * 4_000
+                )
+            ),
+            id="transport",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: cociter_mod._extract_injection(
+                    "Le prix de l'injection Compteur " * 3_000
+                )
+            ),
+            id="injection lead-ins",
+        ),
+        pytest.param(
+            _quietly(lambda: cociter_mod._extract_injection("Compteur " * 11_000)),
+            id="injection labels",
+        ),
+        pytest.param(
+            lambda: published_belix("x BELIX" + " " * 100_000), id="belix blanks"
+        ),
+        pytest.param(lambda: published_belix("x BELIX " * 25_000), id="belix names"),
+        pytest.param(
+            lambda: asyncio.run(cociter_mod.discover(make_text_session("RC" * 50_000))),
+            id="listing",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[], object],
+) -> None:
+    started = time.perf_counter()
+    read()
+    assert time.perf_counter() - started < 2.0

@@ -181,8 +181,10 @@ also has `_energyvision_wallonia.py`, because its Walloon card is a different
 document in a different language rather than a variant of the Dutch one, and
 `_energyvision_contracts.py`, which holds its contract registry, as Mega's
 `_mega_contracts.py` does, and Cociter
-has only `_cociter_settle.py`, which reads the BELIX its next card prints for a
-closed month (`_settle.py` settles the month on it). The
+has `_cociter_settle.py`, which reads the BELIX its next card prints for a
+closed month (`_settle.py` settles the month on it), and `_cociter_rows.py`, the
+per-meter rows its card readers call: the indicative rate, the BELIX formula and
+the price ceiling. The
 supplier module keeps the urls, the archive and `parse_snapshot`, which calls
 into them.
 

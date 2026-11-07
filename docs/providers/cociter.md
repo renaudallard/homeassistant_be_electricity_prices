@@ -132,7 +132,9 @@ A month-indexed card (Variable, Trihoraire) is then settled on the card that
 follows it (`_settle_on_next_card`). Note (7) bills the delivery month on its
 own BELIX while the card prints its rates on the month before's, and the next
 card prints that BELIX and names the month: "156,41 ... dans ce cas-ci
-septembre 2026". `published_belix` (`_cociter_settle.py`) reads both, and when
+septembre 2026". `published_belix` (`_cociter_settle.py`) reads both (the
+value's gap to its bracket is one run that stops at the next `x BELIX`, so a
+row of them costs its length), and when
 the month matches, `settled_energy` (`_settle.py`) rebuilds every printed row through its own
 formula at that value (`index_realised` records it on both cards); the
 card's price ceiling stays with the engine. Over January to
@@ -166,7 +168,9 @@ listing and regexes every `RC<family>_<suffix>_Coop-<digits>-(fr|nl).pdf`
 filename, mapping known families (`RCVar_YMR`, `RCVaI_YMR`, `RCDyn_SM3`) back to contract ids
 via `_DISCOVER_FAMILIES` (`cociter.py`) and surfacing any unknown
 family verbatim. An unrecognised family in the output means Cociter has added a
-product the integration does not yet model.
+product the integration does not yet model. A family is read from where its
+letters start, so a listing costs its length: tried from every `RC` of a long
+run of letters, the run was read again from each.
 
 ## Parsing
 
@@ -193,7 +197,8 @@ text with pypdf off the event loop.
 ### Energy: `_extract_energy`
 
 The yearly abonnement is common to both products, matched by
-`(\d+,\d+) €/an ... TVAC` (`cociter.py`). A miss is fatal
+`(\d+,\d+) €/an ... TVAC` (`cociter.py`), read from the start of its
+digits. A miss is fatal
 (`ExtractorError`, `cociter.py`) rather than a silent zero standing charge.
 The comment notes the abonnement is 53,00 EUR/an TVAC (illustrative), and the
 variable test pins `yearly_fixed_fee == 53.0` (`test_cociter.py`).
@@ -208,6 +213,14 @@ to reach EUR/kWh:
 | bi-hourly peak | `Heures pleines` | `peak` (optional) |
 | bi-hourly off-peak | `Heures creuses` | `offpeak` (optional) |
 | exclusive night | `Compteur exclusif nuit` | `exclusive_night` (optional) |
+
+Each row is read by `_row` (`_cociter_rows.py`): its label, then the first
+figure or formula after it on the same line, the gap between them stopping at
+the next copy of the label, which finds the same figure. A row's figures are
+read from the start of their digits. So a card costs its length: open to the
+end of the line, a line of labels was read to its end again from each, and a
+long number again from every digit. `_cociter_rows.py` holds the per-meter
+readers `cociter.py` calls (`_belix_band_coefficients`, `_price_ceilings`).
 
 Only the mono rate is mandatory (`cociter.py`); the others are `None`
 when absent so pricing falls back to `current`. The BELIX indexation formula is
@@ -235,7 +248,7 @@ one. Adding the field would be unreachable code.
 The `Prix maximum` column IS parsed, on both cards. The card caps supply at
 26,5 c€/kWh TVAC (footnote 8, "si le Belix venait a augmenter au point que
 l'application du prix variable donne une valeur superieure au prix maximum,
-c'est le prix maximum qui s'applique"). `_price_ceilings` reads it for the four
+c'est le prix maximum qui s'applique"). `_price_ceilings` (`_cociter_rows.py`) reads it for the four
 variable meter rows and the three Impact bands, and `ImpactRates` gained
 `ceiling_pic` / `ceiling_medium` / `ceiling_eco` alongside the `ceiling_*`
 columns `VariableRates` already had.
@@ -382,11 +395,16 @@ confirms both this and the abonnement raise.
 1. The Walloon renewables contribution, anchored on the quoted heading
    `"énergies renouvelables"` (accepting straight or curly quote glyphs) with
    the number within ~200 chars (`cociter.py`). A miss is fatal
-   (`cociter.py`); the ~3 c€/kWh contribution is mandatory.
+   (`cociter.py`); the ~3 c€/kWh contribution is mandatory. The opening quote
+   and the blanks after it are one optional piece, so a start inside a run of
+   blanks fails at once: with the quote and the blanks each optional, every
+   place in a long run of blanks read the rest of it again.
 2. The `Taxes et redevances` block, a single line of three values anchored on
    the literal label trio `Cotisation énergie | Droit d'accises spécial |
    Redevance de raccordement` (`cociter.py`). A miss is fatal
-   (`cociter.py`).
+   (`cociter.py`). Each gap stops at the next copy of its own label and the
+   first value is read from the start of its digits, so a card of labels with
+   no values after them costs its length.
 
 Mapping into `TaxOverlay` (`cociter.py`): `energy_contribution`
 (cotisation énergie), `federal_excise` (droit d'accises spécial),
@@ -413,7 +431,7 @@ returned for `cociter_variable` and `cociter_variable_impact`
 regime and returns `None`.
 
 The value comes from footnote (6), matched on the unique wording
-`([\d,]+) €/kVA/an TVAC` (`cociter.py`). The card prints 37,10 EUR/kVA/an
+`([\d,]+) €/kVA/an TVAC` (`cociter.py`), read from the start of its digits. The card prints 37,10 EUR/kVA/an
 TVAC (illustrative, pinned by `test_variable_extracts_supplier_prosumer_forfait`,
 `test_cociter.py`). The anchor is deliberately the "EUR/kVA/an TVAC"
 footnote wording, not the bare "(EUR/kVA/an)" DSO prosumer column header, so the
@@ -500,6 +518,10 @@ Two parsing subtleties:
 - The variable card has no anchor prose around the injection block, so a
   fallback regex matches the first `Tout compteur` formula
   (`cociter.py`).
+- The meter label's run to the formula's bracket stops at the next
+  `compteur`, and the gap after the lead-in at the next lead-in, each of which
+  reaches the same formula. Run on past them, a line of labels or a card of
+  lead-ins with no formula was read to its end again from each.
 
 Both regexes accept any `SIGN_CHARS` sign between the BELPEX factor and base,
 and tolerate the split `QUARTER HOURL Y` spelling. A miss is fatal
@@ -571,6 +593,12 @@ Under `tests/fixtures/`:
 The `_LISTING_HTML` fixture is inline in the test module
 (`test_cociter.py`), not a file, and models the listing page's
 `<a href>` links for the three `fetch_for_month` tests.
+
+`test_a_crafted_card_is_read_in_time_linear_in_its_length` (`test_cociter.py`)
+hands every reader above about 100,000 characters of the text a pattern used
+to read again from each place it could start: lines of labels with no figure,
+long numbers, runs of blanks, lead-ins with no formula, `x BELIX` with no
+bracket and a listing of family prefixes.
 
 ## When the card changes, look here
 

@@ -37,8 +37,12 @@ from ._pdf import FR_MONTHS
 # belongs to: "Compteur monohoraire (0,075 x BELIX + 5) + 6% TVA 156,41
 # 17,7346 c€/kWh", then "* L'indice BELIX indiqué est celui du mois
 # précédent, dans ce cas-ci septembre 2026." Every row prints the same value.
+# The gap to the bracket is one run, which stops at the next "x BELIX". Spelt
+# as blanks and then the rest, a run of blanks was split between the two in
+# every way; run past the next "x BELIX", whose own gap reaches the same
+# bracket, a row of them was read again from each.
 _BELIX_VALUE_RE = re.compile(
-    r"x\s*BELIX\s*[^)]*\)\s*\+\s*\d+\s*%\s*TVA\s+(\d+(?:,\d+)?)\s"
+    r"x\s*BELIX(?:(?!x\s*BELIX)[^)])*\)\s*\+\s*\d+\s*%\s*TVA\s+(\d+(?:,\d+)?)\s"
 )
 _BELIX_MONTH_RE = re.compile(r"dans\s+ce\s+cas-ci\s+(\w+)\s+(\d{4})", re.IGNORECASE)
 
