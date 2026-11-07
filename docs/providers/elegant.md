@@ -52,7 +52,9 @@ checked: its second line names the product ("Flex", "ComfortFlex", "Zeker &
 Vast", followed on the archive's copies by the card's month as "09.26", or on
 the cards of 8 November 2025 by that day as "08/11/2025") and the third the
 segment ("Particulier"). A card for another product or for the
-professional edition is refused.
+professional edition is refused. The product's name is read up to its last
+character that is not blank: let it end inside a run of blanks and every place
+in a long run read the rest of it again (`_HEADING_RE`).
 
 ## The indices
 
@@ -149,7 +151,15 @@ whatever the card prints (`resolve_federal_excise`).
 
 "Forfait zonnepanelen" (4,00 EUR/kVA a month) is owed only on a compensation
 meter and is kept as `supplier_prosumer_eur_per_kva_year`; the integration
-bills the compensation regime in Wallonia alone. The card prints no VREG
+bills the compensation regime in Wallonia alone.
+
+The fixed fee, the forfait and the two levies are each read past a unit in
+brackets, and that bracket is read up to the next label with its bracket at
+most, which reads the same unit and figure; the fee's and the forfait's
+footnote with the blanks after it is one optional piece. A run of labels with
+no closing bracket, or a long run of blanks after the unit, costs the card its
+length: before, the first was read to its end again from each label and the
+second split between two runs of blanks in every way. The card prints no VREG
 maximum tariff, which `resolve_vreg_network_ceiling` supplies.
 
 ## Archive
@@ -214,3 +224,7 @@ prints.
   September 2026 cards as the archive serves them, settled on the indices the
   October cards name, and a next card naming another month, or no index,
   settling nothing.
+
+`test_a_crafted_card_is_read_in_time_linear_in_its_length` hands the heading,
+the fee, the forfait and the two levy readers runs of blanks or labels with no
+closing bracket, about 100,000 characters each and a million for the levies.

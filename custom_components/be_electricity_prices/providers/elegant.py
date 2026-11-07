@@ -173,21 +173,32 @@ _H = r"[^\S\n]"
 #   Variabel Onbepaalde duur Versie oktober 2026 Particulier Prijzen ...
 # The archive's copy follows the product with its month, "Flex 09.26", or on
 # the cards of 8 November 2025 with the day the offer started, "Flex
-# 08/11/2025".
+# 08/11/2025". The name ends on a character that is not blank: where it could
+# end inside a run of blanks, the run's start reads the same, and from every
+# place in a long run the rest of it was read again.
 _HEADING_RE = re.compile(
-    r"Tariefkaart\s+Elektriciteit\s*\n(?P<name>[^\n]+?)"
+    r"Tariefkaart\s+Elektriciteit\s*\n(?P<name>[^\n]+?)(?<!\s)"
     r"(?:\s+(?:\d{2}\.\d{2}|\d{2}/\d{2}/\d{4}))?\s*\n"
     r"[^\n]*?\bVersie\s+(?P<month>[A-Za-z]+)\s+(?P<year>\d{4})\s+(?P<segment>\w+)",
     re.IGNORECASE,
 )
 _VAT_RE = re.compile(r"Prijzen\s+inclusief\s+(\d+)\s*%\s*btw", re.IGNORECASE)
+# A row's unit bracket runs to the next label with its bracket at most, which
+# reads the same unit and figure, and the footnote with the blanks after it is
+# one optional piece. Open to the next closing bracket, a run of labels
+# without one was read to its end again from each; spelt as two runs of
+# blanks either side of an optional footnote, a run of blanks was split
+# between the two in every way.
 _FEE_RE = re.compile(
-    rf"Vaste\s+vergoeding\s*\([^)]*jaar\)\s*(?:\(\d\))?{_H}*{_NUM}", re.IGNORECASE
+    r"Vaste\s+vergoeding\s*\((?:(?!Vaste\s+vergoeding\s*\()[^)])*jaar\)"
+    rf"\s*(?:\(\d\){_H}*)?{_NUM}",
+    re.IGNORECASE,
 )
 # "Forfait zonnepanelen (€/kVA/maand)(4) 4,00": owed only on a compensation
 # meter, which the integration bills in Wallonia alone.
 _PV_FORFAIT_RE = re.compile(
-    rf"Forfait\s+zonnepanelen\s*\([^)]*maand\)\s*(?:\(\d\))?{_H}*{_NUM}",
+    r"Forfait\s+zonnepanelen\s*\((?:(?!Forfait\s+zonnepanelen\s*\()[^)])*maand\)"
+    rf"\s*(?:\(\d\){_H}*)?{_NUM}",
     re.IGNORECASE,
 )
 # The monthly prices, which the card prints above the yearly estimate it
@@ -249,11 +260,16 @@ _EXCISE_RE = re.compile(
     rf"Federale\s+Accijns\s+Verbruik\s+0\s*[{SIGN_CHARS}]\s*[\d.]+\s*kWh\s+{_NUM}",
     re.IGNORECASE,
 )
+# Their unit brackets are read like the fee's.
 _GSC_RE = re.compile(
-    rf"Bijdrage\s+groene\s+stroom\s*\(c[^)]*\)\s*{_NUM}", re.IGNORECASE
+    r"Bijdrage\s+groene\s+stroom\s*\(c"
+    rf"(?:(?!Bijdrage\s+groene\s+stroom\s*\(c)[^)])*\)\s*{_NUM}",
+    re.IGNORECASE,
 )
 _WKK_RE = re.compile(
-    rf"Bijdrage\s+warmtekrachtkoppeling\s*\(c[^)]*\)\s*{_NUM}", re.IGNORECASE
+    r"Bijdrage\s+warmtekrachtkoppeling\s*\(c"
+    rf"(?:(?!Bijdrage\s+warmtekrachtkoppeling\s*\(c)[^)])*\)\s*{_NUM}",
+    re.IGNORECASE,
 )
 _CONTRIBUTION_RE = re.compile(rf"Energiebijdrage\s+{_NUM}\s*c€", re.IGNORECASE)
 # The residential row, not the 10,07 "Niet-residentiëel" one under it.

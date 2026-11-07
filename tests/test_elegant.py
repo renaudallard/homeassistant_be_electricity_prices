@@ -28,8 +28,10 @@ and November 2025."""
 
 from __future__ import annotations
 
+import contextlib
 import json
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from datetime import date
 from typing import Any
 from unittest.mock import AsyncMock
@@ -821,3 +823,62 @@ async def test_the_launch_month_reads_the_first_day_with_the_product(
     assert injection is not None
     assert injection.index_realised == pytest.approx(0.07889)
     assert injection.current == pytest.approx(0.85 * 0.07889 - 0.02)
+
+
+def _heading_of(text: str) -> None:
+    """The heading reader on ``text``, whatever it makes of it."""
+    with contextlib.suppress(ExtractorError):
+        elegant._card_month(text, elegant._contract(_FLEX, REGION_FLANDERS))
+
+
+# Card text a host could serve instead, on which a pattern was tried again
+# from every place it could start: a run of blanks after the product name or
+# after a row's unit, and labels of a row with no closing bracket. The levy
+# rows' labels are a million characters, each of them costing less.
+@pytest.mark.parametrize(
+    "read",
+    [
+        pytest.param(
+            lambda: _heading_of(
+                "Tariefkaart Elektriciteit\nFlex 00." + "\xa0" * 100_000
+            ),
+            id="heading",
+        ),
+        pytest.param(
+            lambda: elegant._FEE_RE.search(
+                "Vaste vergoeding (€/jaar) " + "\xa0" * 100_000
+            ),
+            id="fee blanks",
+        ),
+        pytest.param(
+            lambda: elegant._FEE_RE.search("Vaste vergoeding (" * 11_000),
+            id="fee labels",
+        ),
+        pytest.param(
+            lambda: elegant._PV_FORFAIT_RE.search(
+                "Forfait zonnepanelen (€/kVA/maand) " + "\xa0" * 100_000
+            ),
+            id="forfait blanks",
+        ),
+        pytest.param(
+            lambda: elegant._PV_FORFAIT_RE.search("Forfait zonnepanelen (m" * 9_000),
+            id="forfait labels",
+        ),
+        pytest.param(
+            lambda: elegant._GSC_RE.search("Bijdrage groene stroom (c" * 40_000),
+            id="green levy labels",
+        ),
+        pytest.param(
+            lambda: elegant._WKK_RE.search(
+                "Bijdrage warmtekrachtkoppeling (c" * 30_000
+            ),
+            id="cogeneration levy labels",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[], object],
+) -> None:
+    started = time.perf_counter()
+    read()
+    assert time.perf_counter() - started < 2.0
