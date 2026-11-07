@@ -194,7 +194,11 @@ on the wrong one. The live fetch takes the newest card as it is.
 `parse_luminus` reads the feed-in row, "Tarif de l'énergie injectée" since
 2026 and "Compensation pour l'énergie injectée" before; the card a change of
 rate falls in (June 2025) prints two dated rows, and the first, "jusqu'au" the
-end of its own month, is the month's. The card indexes
+end of its own month, is the month's. The footnote and the date each take the
+blanks before them: spelt as runs of blanks of their own between optional
+pieces, a long run of blanks was split between them in every way before the
+figures failed
+(`test_a_crafted_luminus_feed_in_row_is_read_in_time_linear_in_its_length`). The card indexes
 it on the delivery quarter's Belpex and prints it on the previous quarter's,
 the one figure known while the quarter runs, which is what is credited.
 

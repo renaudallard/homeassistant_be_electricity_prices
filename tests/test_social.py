@@ -3,6 +3,7 @@ protected customer's excise and the feed-in two suppliers publish."""
 
 from __future__ import annotations
 
+import time
 from datetime import date, datetime
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
@@ -753,3 +754,12 @@ def test_luminus_s_card_of_a_change_of_rate_bills_its_own_month() -> None:
     assert (injection.current, injection.peak, injection.offpeak) == pytest.approx(
         (0.0621, 0.0786, 0.0368)
     )
+
+
+def test_a_crafted_luminus_feed_in_row_is_read_in_time_linear_in_its_length() -> None:
+    """100,000 blanks after the feed-in unit, where the footnote and the date
+    each stood between runs of blanks of their own: the run was split between
+    them in every way before the figures failed."""
+    started = time.perf_counter()
+    social._LUMINUS_INJECTION_RE.search("injectée (c€/kWh) " + "\xa0" * 100_000)
+    assert time.perf_counter() - started < 2.0

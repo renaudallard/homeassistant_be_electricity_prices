@@ -253,8 +253,11 @@ _LUMINUS_CONSUMPTION_RE = re.compile(
 # "Tarif de l'énergie injectée" since 2026, "Compensation pour l'énergie
 # injectée" before. The card a change of rate falls in prints two rows, the
 # first "jusqu'au" the end of its own month (June 2025), which is the one.
+# The footnote and the date each take the blanks before them: spelt as runs
+# of blanks of their own between optional pieces, a run of blanks was split
+# between them in every way before the figures failed.
 _LUMINUS_INJECTION_RE = re.compile(
-    r"injectée \(c€/\s*kWh\)\s*1?(?:\s*-\s*jusqu'au [\d/]+)?"
+    r"injectée \(c€/\s*kWh\)(?:\s*1)?(?:\s*-\s*jusqu'au [\d/]+)?"
     rf"\s+{_NUM}\s+{_NUM}\s+{_NUM}"
 )
 # Any Walloon operator's row: connection fee, energy fund (none), excise
