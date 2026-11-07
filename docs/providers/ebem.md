@@ -222,7 +222,10 @@ alle uren 0,108 Belpex15' + 1,625
 `alle uren` that is NOT preceded by `injectie` (`(?<!injectie\s)`) so it does
 not pick the injection row, and accepts any `SIGN_CHARS` between factor and base
 so a re-render to a Unicode minus or a negative offset does not dead-end the
-parser. Factor / base go through `_formula_to_dynamic` with the card VAT.
+parser. The quote after `Belpex15` and the blanks after it are one optional
+piece, here and on the injection row: as runs of blanks either side of an
+optional quote, a long run of blanks was split between the two in every way.
+Factor / base go through `_formula_to_dynamic` with the card VAT.
 `quarter_hourly=True`. Illustrative from the test: `0.108 * 1.06 * 10 = 1.1448`
 and `1.625 * 1.06 / 100 = 0.017225` (`tests/test_ebem.py`).
 
@@ -336,7 +339,10 @@ mapped to `capacity_eur_per_kw_year`, `distribution_single`,
 
 The variable (`elek`) card additionally carries an `ANALOGE METER` table; when
 present, the parser walks it to attach the fifth column as
-`prosumer_eur_per_kva_year` (`ebem.py`). The dynamic card is SMR3-only, so
+`prosumer_eur_per_kva_year` (`ebem.py`). The table runs from the first
+`ANALOGE METER` to the first `DIGITALE METER` past it, found in two passes: as
+one pattern, a card without the second heading was read to its end again from
+every first one. The dynamic card is SMR3-only, so
 it has no analog table and the prosumer column stays `None`
 (`tests/test_ebem.py`). `fetch` refuses a live card whose table misses any of
 the eight Fluvius areas rather than adopt it with a hole in it, since an entry
@@ -370,7 +376,9 @@ reports it, allowed on the exact figure in `_KNOWN_NETWORK_FIGURES` until
   `_parse.py`), 5,0329 / 5,0329 / 4,8188 / 4,7569 on the May 2026 variable card,
   whose last row differs from the 4,7467 the other cards print.
 - Energy contribution: the value next to the `Beschermende klanten ... €0`
-  residential energy-fund row. Illustrative `0.0020417`.
+  residential energy-fund row, the first `€0` figure past the label, found in
+  a pass of its own (as one pattern, a card without it was read to its end
+  again from every label). Illustrative `0.0020417`.
 
 Both raise `ExtractorError` when the anchor row is missing.
 
@@ -479,6 +487,10 @@ Test constants `_VARIABLE` / `_DYNAMIC` (`tests/test_ebem.py`); the listing
 HTML is read at `tests/test_ebem.py`. Fixture text is loaded with
 `layout=True` (`tests/test_ebem.py`) so it matches the production
 `fetch_pdf_text_layout` extraction.
+`test_a_crafted_card_is_read_in_time_linear_in_its_length` hands the dynamic
+formulas, the contribution and the analog table about 100,000 characters each
+of blanks, labels or headings a pattern used to read again from each place it
+could start.
 
 ## When the card changes, look here
 

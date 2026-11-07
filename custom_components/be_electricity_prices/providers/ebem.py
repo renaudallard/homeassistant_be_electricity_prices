@@ -556,8 +556,11 @@ def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
         # injection row by accident. Accept any sign char between the
         # factor and the base so a future re-render that flips to a
         # Unicode minus or a negative offset doesn't dead-end the parser.
+        # The quote after "15" and the blanks after it are one optional
+        # piece: as runs of blanks either side of an optional quote, a run of
+        # blanks was split between the two in every way.
         match = re.search(
-            rf"(?<!injectie\s)\balle uren\s+([\d,.]+)\s+Belpex\s*15\s*[’']?\s*"
+            rf"(?<!injectie\s)\balle uren\s+([\d,.]+)\s+Belpex\s*15\s*(?:[’']\s*)?"
             rf"([{SIGN_CHARS}])\s*([\d,.]+)",
             text,
             re.IGNORECASE,
@@ -745,7 +748,7 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | No
         # Belpex 15' is a true hourly-spot formula priced from the
         # live/historical spot via the energy path; surface factor/base.
         match = re.search(
-            rf"injectie alle uren\s+([\d,.]+)\s+Belpex\s*15\s*[’']?\s*"
+            rf"injectie alle uren\s+([\d,.]+)\s+Belpex\s*15\s*(?:[’']\s*)?"
             rf"([{SIGN_CHARS}])\s*([\d,.]+)",
             text,
             re.IGNORECASE,
@@ -829,13 +832,15 @@ def _extract_federal_taxes(
     the others use lowercase "MWh"), and the table from it is read into
     bands while it falls by volume (until July 2026).
     Energy contribution sits next to the residential energy-fund row
-    on a single visual line (``Beschermende ... €0 0,20417``).
+    on a single visual line (``Beschermende ... €0 0,20417``): the first
+    "€0" figure past the label, found in a pass of its own. As one pattern,
+    a card without it was read to its end again from every label.
     """
     excise = re.search(r"0-3\s+MWH\s+([\d,.]+)", text)
-    contribution = re.search(
-        r"Beschermende klanten[\s\S]+?€0\s+([\d,.]+)",
-        text,
-    )
+    head = "Beschermende klanten"
+    at = text.find(head)
+    zero = re.compile(r"€0\s+([\d,.]+)")
+    contribution = None if at < 0 else zero.search(text, at + len(head) + 1)
     if excise is None:
         raise ExtractorError("EBEM: federal excise (0-3 MWH) row not found")
     if contribution is None:
@@ -909,10 +914,15 @@ def _extract_dsos(text: str, contract: _ContractDef) -> dict[str, DsoOverlay]:
 
     prosumer_by_key: dict[str, float] = {}
     if contract.pdf_kind == "elek":
-        analog_section = re.search(r"ANALOGE METER([\s\S]+?)DIGITALE METER", text)
-        if analog_section:
+        # From the analog heading to the first digital one past it, found in
+        # two passes: as one pattern, a card without the second heading was
+        # read to its end again from every first one.
+        head = "ANALOGE METER"
+        at = text.find(head)
+        end = -1 if at < 0 else text.find("DIGITALE METER", at + len(head) + 1)
+        if end >= 0:
             prosumer_by_key = parse_prosumer_column(
-                analog_section.group(1), _FLANDERS_LABELS
+                text[at + len(head) : end], _FLANDERS_LABELS
             )
 
     out: dict[str, DsoOverlay] = {}

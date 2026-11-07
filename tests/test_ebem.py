@@ -28,6 +28,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import time
+from collections.abc import Callable
 from datetime import date
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -36,6 +39,7 @@ import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import ebem as ebem_mod
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     VariableRates,
@@ -777,3 +781,68 @@ async def test_probe_keys_on_the_card_the_fetcher_resolves() -> None:
     assert dynamic is not None and "dynamic" in dynamic
     assert await probe(make_text_session(""), "ebem_variable", "flanders") is None
     assert await probe(session, "unknown", "flanders") is None
+
+
+_DYNAMIC_CONTRACT = ebem_mod._CONTRACTS_BY_ID["ebem_dynamic"]
+_VARIABLE_CONTRACT = ebem_mod._CONTRACTS_BY_ID["ebem_variable"]
+
+
+def _quietly(read: Callable[[], object]) -> Callable[[], None]:
+    """``read``, whatever it makes of a card it cannot parse."""
+
+    def call() -> None:
+        with contextlib.suppress(ExtractorError):
+            read()
+
+    return call
+
+
+# Card text a host could serve instead, about 100,000 characters each, on
+# which a pattern was tried again from every place it could start: a run of
+# blanks after the dynamic formula's index, labels of the protected-customer
+# row with no figure after them, and analog-meter headings with no digital
+# one after them.
+@pytest.mark.parametrize(
+    "read",
+    [
+        pytest.param(
+            _quietly(
+                lambda: ebem_mod._extract_energy(
+                    "alle uren 1,0 Belpex15 " + "\xa0" * 100_000, _DYNAMIC_CONTRACT
+                )
+            ),
+            id="energy formula",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: ebem_mod._extract_injection(
+                    "injectie alle uren 1,0 Belpex15" + "\n" * 100_000,
+                    _DYNAMIC_CONTRACT,
+                )
+            ),
+            id="injection formula",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: ebem_mod._extract_federal_taxes(
+                    "Beschermende klanten €0 \n" * 4_000
+                )
+            ),
+            id="contribution",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: ebem_mod._extract_dsos(
+                    "DIGITALE METER\n" + "ANALOGE METER " * 7_000, _VARIABLE_CONTRACT
+                )
+            ),
+            id="analog table",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[], object],
+) -> None:
+    started = time.perf_counter()
+    read()
+    assert time.perf_counter() - started < 2.0
