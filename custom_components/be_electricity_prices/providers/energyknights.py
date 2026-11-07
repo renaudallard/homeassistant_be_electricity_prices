@@ -401,12 +401,25 @@ _VAT_RE = re.compile(r"inclusief\s+(\d+)\s*%\s*btw", re.IGNORECASE)
 
 # "Groene stroom (c€/kWh) 0,32", present only on a green card and applying to
 # every kWh whatever the register. No formula and no footnote, so it is on the
-# same VAT-inclusive basis as the printed rate columns.
-_GREEN_RE = re.compile(rf"Groene\s+stroom\s*\(c[^)]*\)\s*{_NUM}", re.IGNORECASE)
+# same VAT-inclusive basis as the printed rate columns. Every unit bracket on
+# this card is read up to the next label with its bracket at most, which reads
+# the same unit and figure: open to the next closing bracket, a run of labels
+# without one was read to its end again from each.
+_GREEN_RE = re.compile(
+    r"Groene\s+stroom\s*\(c"
+    rf"(?:(?!Groene\s+stroom\s*\(c)[^)])*\)\s*{_NUM}",
+    re.IGNORECASE,
+)
 
-# "Met Agilior Online van Energy Knights kies je voor:"
+# "Met Agilior Online van Energy Knights kies je voor:". The name starts past
+# every blank after "Met", ends on a character that is not blank, and is at
+# most 120 characters long: the 168 Energy Knights card texts on file in
+# November 2026 print names of 13 to 32. Sharing the blanks around it, the
+# name split a run of blanks in every way, and from each "met" of a long line
+# the rest of the line was read again.
 _PRODUCT_RE = re.compile(
-    r"Met\s+(.+?)\s+van\s+Energy\s+Knights\s+kies\s+je\s+voor", re.IGNORECASE
+    r"Met\s++(.{1,120}?)(?<!\s)\s+van\s+Energy\s+Knights\s+kies\s+je\s+voor",
+    re.IGNORECASE,
 )
 
 # "Tariefkaart 2026-08", the first line of every card.
@@ -416,7 +429,9 @@ _LABEL_RE = re.compile(r"Tariefkaart\s+(\d{4}-\d{2})")
 # the same reason the sibling extractors do it: a renderer that drops or
 # doubles the euro glyph must not take the contract offline over a mandatory
 # row that is otherwise perfectly readable.
-_FEE_RE = re.compile(rf"Abonnement\s*\([^)]*jaar\)\s+{_NUM}", re.IGNORECASE)
+_FEE_RE = re.compile(
+    rf"Abonnement\s*\((?:(?!Abonnement\s*\()[^)])*jaar\)\s+{_NUM}", re.IGNORECASE
+)
 
 # The four consumption rows and the injection row all print as
 #   <label> (c€/kWh) <indicative> <index> * <coefficient> <sign> <offset>
@@ -437,23 +452,30 @@ _ROW_LABELS: tuple[tuple[str, str, str], ...] = (
     ("exclusive_night", "exclusief nacht", r"Verbruik\s+exclusief\s+nacht"),
 )
 _FORMULA_TAIL = (
-    rf"{_H}*\(c[^)]*\){_H}*(?:\(\d\){_H}*)?{_NUM}{_H}+"
+    rf"\){_H}*(?:\(\d\){_H}*)?{_NUM}{_H}+"
     rf"(Belpex[A-Za-z_0-9]*){_H}*\*{_H}*{_NUM}{_H}*([{SIGN_CHARS}]){_H}*{_NUM}"
 )
+
+
+def _formula_row(head: str) -> re.Pattern[str]:
+    """The row ``head`` opens, ``head`` running up to the opening bracket of
+    the row's unit, which is read as the green row's: up to the next ``head``
+    at most."""
+    return re.compile(rf"{head}(?:(?!{head})[^)])*{_FORMULA_TAIL}", re.IGNORECASE)
+
+
 _ROW_RES: dict[str, re.Pattern[str]] = {
-    slot: re.compile(anchor + _FORMULA_TAIL, re.IGNORECASE)
-    for slot, _wording, anchor in _ROW_LABELS
+    slot: _formula_row(rf"{anchor}{_H}*\(c") for slot, _wording, anchor in _ROW_LABELS
 }
 _ROW_CARD_LABELS: dict[str, str] = {
     slot: wording for slot, wording, _anchor in _ROW_LABELS
 }
 # 'optie "solar" (c€/kWh) (1) 5,85 Belpex_15 * 1 - 12'. The quotes are
 # straight on every card seen, but a renderer that curls them would otherwise
-# take the whole injection leg offline.
-_INJECTION_RE = re.compile(
-    r"optie\s*[\"“”]?\s*solar\s*[\"“”]?" + _FORMULA_TAIL,
-    re.IGNORECASE,
-)
+# take the whole injection leg offline. Each quote and the blanks beside it
+# are one optional piece: spelt as runs of blanks either side of an optional
+# quote, a run of blanks was split between the two in every way.
+_INJECTION_RE = _formula_row(rf"optie\s*(?:[\"“”]\s*)?solar\s*(?:[\"“”]{_H}*)?\(c")
 
 
 # ---- public entry points -----------------------------------------------------

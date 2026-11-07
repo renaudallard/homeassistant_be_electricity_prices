@@ -27,6 +27,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import time
+from collections.abc import Callable
 from datetime import date
 from typing import Any
 from unittest.mock import AsyncMock
@@ -1156,3 +1159,95 @@ async def test_a_withdrawn_product_reads_its_last_card_from_the_archive(
     ]
     key = await energyknights.probe(None, _OPTIMA_GREEN, "flanders")  # type: ignore[arg-type]
     assert key == "withdrawn 2026-10-01"
+
+
+def _quietly(read: Callable[[], object]) -> Callable[[], None]:
+    """``read``, whatever it makes of a card it cannot parse."""
+
+    def call() -> None:
+        with contextlib.suppress(ExtractorError):
+            read()
+
+    return call
+
+
+def _ek() -> Any:
+    from custom_components.be_electricity_prices.providers import energyknights
+
+    return energyknights
+
+
+def _overlays() -> Any:
+    from custom_components.be_electricity_prices.providers import (
+        _energyknights_overlays,
+    )
+
+    return _energyknights_overlays
+
+
+# Card text a host could serve instead, on which a pattern was tried again
+# from every place it could start: labels of a row with no closing bracket
+# after them, a run of blanks after "Met" or "optie", a line of "Met" with no
+# product after it, tax headers with no row under them, and network labels
+# with no figures. About 100,000 characters each, a million for the labels
+# that each cost less, and 50,000 for the line of "Met", where each still
+# reads up to the longest name the pattern allows.
+@pytest.mark.parametrize(
+    "read",
+    [
+        pytest.param(
+            lambda: _ek()._GREEN_RE.search("Groene stroom (c" * 60_000), id="green"
+        ),
+        pytest.param(
+            lambda: _ek()._PRODUCT_RE.search("Met" + " " * 100_000), id="product blanks"
+        ),
+        pytest.param(
+            lambda: _ek()._PRODUCT_RE.search("Met  " * 10_000), id="product line"
+        ),
+        pytest.param(
+            _quietly(lambda: _ek()._yearly_fee("Abonnement (ja" * 14_000)), id="fee"
+        ),
+        pytest.param(
+            lambda: _ek()._ROW_RES["peak"].search("Verbruik dag (c" * 60_000),
+            id="consumption row",
+        ),
+        pytest.param(
+            lambda: _ek()._INJECTION_RE.search("optie " + "\xa0" * 100_000),
+            id="injection blanks",
+        ),
+        pytest.param(
+            lambda: _ek()._INJECTION_RE.search("optie" + "\n" * 100_000),
+            id="injection lines",
+        ),
+        pytest.param(
+            lambda: _ek()._INJECTION_RE.search("optie solar (c" * 70_000),
+            id="injection labels",
+        ),
+        pytest.param(
+            lambda: _overlays()._CONTRIB_RE.search("Energiebijdrage (c)" * 50_000),
+            id="contribution header",
+        ),
+        pytest.param(
+            lambda: _overlays()._CONTRIB_RE.search("Energiebijdrage (c" * 55_000),
+            id="contribution bracket",
+        ),
+        pytest.param(
+            lambda: _overlays()._FUND_RE.search("Bijdrage energiefonds ()" * 40_000),
+            id="fund header",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: _overlays()._extract_dsos(
+                    "digitale meter\n" + "Fluvius (Halle" * 7_000
+                )
+            ),
+            id="network row",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[], object],
+) -> None:
+    started = time.perf_counter()
+    read()
+    assert time.perf_counter() - started < 2.0

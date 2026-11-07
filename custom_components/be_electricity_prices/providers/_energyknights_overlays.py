@@ -91,16 +91,21 @@ _WKK_RE = re.compile(rf"Bijdrage\s+WKK\s+{_NUM}", re.IGNORECASE)
 # in both columns, once under the energy fund in EUR/month and once under the
 # energiebijdrage in c€/kWh. Reading either without its header attached is a
 # hundredfold unit error in whichever direction the match lands, so both
-# anchor on the header line above them.
+# anchor on the header line above them. The header's bracket and the rest of
+# its line each run to the next header at most, which reads the line under
+# the same one: open to the next closing bracket and to the end of the line,
+# a line of headers was read to its end again from each.
 _CONTRIB_RE = re.compile(
-    rf"Energiebijdrage\s*\(c[^)]*\)[^\n]*\n\s*Standaard\s+tarief\s+{_NUM}",
+    r"Energiebijdrage\s*\(c(?:(?!Energiebijdrage\s*\(c)[^)])*\)"
+    rf"(?:(?!Energiebijdrage\s*\(c)[^\n])*\n\s*Standaard\s+tarief\s+{_NUM}",
     re.IGNORECASE,
 )
 # The "Standaard tarief" row, not the 10,07 "Niet-gedomicilieerd" one: this
 # integration prices a domiciled residential entry, the same choice every
 # sibling makes. The card spells it "Niet-gedomiciliëerd" with two e's.
 _FUND_RE = re.compile(
-    rf"Bijdrage\s+energiefonds\s*\([^)]*\)[^\n]*\n\s*Standaard\s+tarief\s+{_NUM}",
+    r"Bijdrage\s+energiefonds\s*\((?:(?!Bijdrage\s+energiefonds\s*\()[^)])*\)"
+    rf"(?:(?!Bijdrage\s+energiefonds\s*\()[^\n])*\n\s*Standaard\s+tarief\s+{_NUM}",
     re.IGNORECASE,
 )
 
@@ -127,8 +132,12 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
     section = text[head.end() :] if tail is None else text[head.end() : tail.start()]
     out: dict[str, DsoOverlay] = {}
     for prefix, key in _DSO_ROWS:
+        # The label's run to its figures stops at the next copy of the label,
+        # which reads the same figures: run on to the first digit, a line of
+        # labels without one was read to its end again from each.
+        label = rf"Fluvius{_H}*\({_H}*{re.escape(prefix)}"
         row = re.search(
-            rf"Fluvius{_H}*\({_H}*{re.escape(prefix)}[^\d\n]*"
+            rf"{label}(?:(?!{label})[^\d\n])*"
             rf"{_NUM}{_H}+{_NUM}{_H}+{_NUM}{_H}+{_NUM}{_H}+{_NUM}",
             section,
             re.IGNORECASE,

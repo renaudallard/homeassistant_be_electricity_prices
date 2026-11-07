@@ -183,6 +183,14 @@ So the conversions are:
 already include VAT" rather than "no VAT applies". Same as every other residential
 Flemish card here.
 
+Every row read past a unit in brackets, the consumption and feed-in rows (`_formula_row`),
+the abonnement and the green row, reads that bracket up to the next copy of its own label
+with its bracket at most, which reads the same unit and row. The feed-in label's quotes
+are each one optional piece with the blanks beside them. A card of labels with no closing
+bracket, or a run of blanks around `solar`, costs its length: before, the first was read
+to its end again from each label and the second split between runs of blanks in every
+way (`test_a_crafted_card_is_read_in_time_linear_in_its_length`).
+
 ### The double rounding
 
 Energy Knights rounds the ex-VAT cents to two decimals **before** applying the 6%. On
@@ -315,7 +323,9 @@ zonnepanelen en een digitale meter?"*, which sits 921 characters above the table
 card where that sentence is not wrapped (the January 2026 card is one). Each DSO row is
 also confined to a single line, so a row that loses its figures raises instead of
 inheriting its neighbour's: dropping Midden-Vlaanderen used to hand it Fluvius West's
-numbers, 27% more distribution, reported silently.
+numbers, 27% more distribution, reported silently. A row's label runs to its figures up
+to the next copy of the label at most, which reads the same figures: run on to the first
+digit, a line of labels without one was read to its end again from each.
 Every Energy Knights product is sold as "100% digitaal" and the dynamic ones bill on
 meetregime 3 quarter values, which only a digital meter produces. A parser that read the
 classic block would over-bill a typical Flemish entry by a few hundred euro a year.
@@ -366,7 +376,10 @@ Beschermd tarief 0,0000               Bijdrage WKK 0,36
 
 A bare `Standaard tarief\s+(NUM)` matches the energy fund (EUR/month) and the
 energiebijdrage (c€/kWh) interchangeably, which is a hundredfold unit error in whichever
-direction it lands. Both patterns therefore anchor on the header line above them.
+direction it lands. Both patterns therefore anchor on the header line above them. The
+header's bracket and the rest of its line each run to the next header at most, which reads
+the same row under it: open to the closing bracket and to the end of the line, a line of
+headers was read to its end again from each.
 
 Both values happen to be zero on the August 2026 card, so a silent miss would look
 identical to a correct parse. `test_tax_block_reads_each_column_of_the_interleave` uses
@@ -404,7 +417,11 @@ read `Belpex_15 * 1 + 12`, the same `- 12` injection and the same 25,00 abonneme
 check on the formula or the figures can tell them apart, so `_require_product` reads the
 card's own intro line, `Met <product> van Energy Knights kies je voor:`, and raises when
 it names anything else. That also keeps the "Green" twin, which prints
-`Agilior Online Green`, from parsing as the plain product.
+`Agilior Online Green`, from parsing as the plain product. The name starts past the blanks
+after `Met`, ends on a character that is not blank and is at most 120 characters long
+(`_PRODUCT_RE`): the 168 Energy Knights card texts on file in November 2026 name products
+of 13 to 32 characters. Unbounded, every "met" of a long line read the rest of it again,
+and blanks around the name were split between it and its neighbours in every way.
 
 **Energy Knights renames its products.** `Elektriciteit Dynamisch15` became
 `Agilior Online` at the turn of 2026, `Elektriciteit Dynamisch` became `Agilis Online`
