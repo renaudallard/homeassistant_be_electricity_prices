@@ -257,7 +257,9 @@ did before.
    to `data-product-element="<Product Name>"` followed by an `href` matching
    `Mega-FR-EL-B2C-<REGION>-\d{6}-...\.pdf`. Pinning to `Mega-FR-EL-B2C-<REGION>-` is
    what stops the gas links (`Mega-FR-NG-...`) and the other-region links from
-   matching (`mega.py`). When that regional block is missing but the card is
+   matching (`mega.py`). The gap from the product's mention to its link stops at
+   the next mention of the same product, so a page of mentions with no link after
+   them is read once. When that regional block is missing but the card is
    still published (Dynamic Wallonia, July 2026, #42), the resolver rewrites a
    surviving sibling region's URL by swapping the `-B2C-<REGION>-` code
    (`_REGION_SEGMENT_RE`, `mega.py`). The test
@@ -298,8 +300,11 @@ while the effective day `<DD>` is preserved (most products publish on the 1st; C
 for example, uses another day). The rewrite:
 
 1. Resolve the current URL from the listing (never guess a suffix).
-2. Match the `-MMYYYY-` segment (`mmyyyy_re`, `mega.py`) and capture the current
-   month, then substitute the requested `MMYYYY` (year untouched).
+2. Match the first `-MMYYYY-` segment of the file name, after its last slash and
+   before the `.pdf` it ends in (`_month_segment`, `mega.py`), and capture the current
+   month, then substitute the requested `MMYYYY` (year untouched). The segment is
+   searched for inside those bounds rather than checked ahead from each candidate,
+   which read the rest of a name made of such segments again from every one.
 3. In the filename tail after the `-MMYYYY-` segment, rewrite the two-digit
    effective-date month while preserving the day (`Online0106-Fixed ->
    Online0105-Fixed`, `Cosy1306 -> Cosy1305`) (`mega.py`).
@@ -537,7 +542,9 @@ signed base-cents to EUR via `to_float` and `parse_sign`. The sign parser accept
 Unicode dash, which matters because the injection base uses an en-dash, not an ASCII
 hyphen (`test_dynamic_injection_uses_separate_htva_formula_with_endash`,
 `test_mega.py`). The tail regex accepts dot or comma decimals so a re-render of
-`* 1,05 + 1,35` as `* 1.05 + 1.35` does not dead-end the snapshot.
+`* 1,05 + 1,35` as `* 1.05 + 1.35` does not dead-end the snapshot. The gap from each
+label to its formula stops at the next sentence opening one, so a card of those
+sentences with no formula after them is read once.
 
 With the spot in c€/kWh, the parsed `factor` maps EUR/kWh-spot to EUR/kWh-energy
 directly and the base cents are converted to EUR (`_mega_cards.py`); a residential card
@@ -556,7 +563,9 @@ maps the eight Fluvius sub-areas. Note the label-to-key gotchas: `Fluvius Kempen
 maps to `DSO_FLUVIUS_IVEKA` and `Fluvius Midden-Vlaanderen` to
 `DSO_FLUVIUS_INTERGEM`. Static cards print 6 numbers per row (digital + classic
 bundles); dynamic cards print only the 2 digital-meter numbers and surface the
-`Tarif de gestion des données` fee in a separate `18.92 €/an` line outside the table.
+`Tarif de gestion des données` fee in a separate `18.92 €/an` line outside the table,
+read from the first figure after the label, from the start of its digits, before the
+next such label.
 The third digital column (exclusive-night distribution, lower than normal) is
 captured optionally and only set when present, so dynamic cards leave
 `distribution_exclusive_night` as `None`. Distribution rates already include
@@ -634,7 +643,8 @@ month (Mega cards are valid for the printed month).
   cogénération row appears, `_mega_overlays.py`), `wallonia_renewables`, or
   `brussels_renewables`, per region. Each raises on a miss in its own region.
   The value is read as the region's name and a number on two lines of their own
-  anywhere after the heading (`_green_levy_value`), not within a character budget:
+  anywhere after the heading and before the next one (`_green_levy_value`), not
+  within a character budget:
   a page break under the heading puts the page footer in between, 407 characters
   on the October 2026 Cosy Flex Flanders card, which failed it under the old
   400-character window.
@@ -816,6 +826,22 @@ The land mines a future maintainer must know, drawn from the module comments:
   `probe` and `fetch_for_month` all have to know that the B2B cards live off the
   listing; `fetch_for_month` lacked it and served the residential card, because the
   B2C and B2B definitions of a product share `product_name`.
+- **A card costs its length.** Mega prints a label and its figures on lines of their
+  own, and every such row was spelt `\s*\n\s*` (or `\s*\n?\s*`): a run of blank
+  lines was split between the two blank runs in every way before the row failed.
+  They read through `LINE_BREAK` (`_parse.py`), which takes the same blanks one way.
+  A pattern tried from every place it could start read the rest of a long run again
+  from each: the cap's sentence over and over with no closing bracket, the blanks
+  around its colon, formula sentences with no formula after them, blanks in the
+  Impact formula, levy and data-fee headings over and over, digits after the data
+  fee, a listing of one product's mentions with no link, and a card name of month
+  segments that is not a `.pdf`. Each is now read once, so a crafted card of 100,000
+  characters takes milliseconds where it took seconds to hours
+  (`test_a_crafted_card_is_read_in_time_linear_in_its_length`, `test_mega.py`). The
+  ristourne and feed-in bonus sentences are read on the card with its blanks
+  collapsed, where no run of blanks is longer than one, and the PV forfait and the
+  energy fund in windows of 200 and 160 characters, so those patterns cost no more
+  than they did.
 
 ## Test fixtures
 

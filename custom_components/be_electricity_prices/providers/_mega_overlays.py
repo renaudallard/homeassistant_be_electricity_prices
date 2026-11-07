@@ -58,6 +58,7 @@ from ..const import (
     WELCOME_CREDIT_PRO_RATA,
 )
 from ._parse import (
+    LINE_BREAK,
     parse_brussels_osp,
     tier_bound_kwh,
     to_float,
@@ -181,7 +182,7 @@ def _extract_pro_excise_tiers(text: str) -> list[tuple[str, str, str, str]]:
 # Four rows on every Mega residential card from January to July 2026, the
 # same schedule and the same rates Engie's cards print.
 _RESIDENTIAL_TIER_RE = re.compile(
-    r"Consommation\s+entre\s+([\d.]+)\s+et\s*\n?\s*([\d.]+)\s*kWh\s*\n\s*([\d.,]+)",
+    rf"Consommation\s+entre\s+([\d.]+)\s+et\s*([\d.]+)\s*kWh{LINE_BREAK}([\d.,]+)",
     re.IGNORECASE,
 )
 
@@ -220,7 +221,7 @@ def _extract_federal_excise(
     default to 0.
     """
     flat = re.search(
-        r"Accise\s+sp[ée]ciale\s*\n?\s*\(c€/kWh\)\s*\n?\s*([\d.,]+)",
+        r"Accise\s+sp[ée]ciale\s*\(c€/kWh\)\s*([\d.,]+)",
         text,
     )
     if flat is not None:
@@ -233,7 +234,7 @@ def _extract_federal_excise(
         )
         return bands[0][1], bands
     match = re.search(
-        r"Consommation entre\s*\n?\s*0\s*et\s*3000\s*kWh\s*\n\s*([\d.,]+)",
+        rf"Consommation entre\s*0\s*et\s*3000\s*kWh{LINE_BREAK}([\d.,]+)",
         text,
     )
     if match is None:
@@ -538,7 +539,7 @@ def _extract_energy_contribution(text: str) -> float:
     offline.
     """
     match = re.search(
-        r"Consommation entre\s*\n?\s*0\s*et\s*3000\s*kWh\s*\n\s*[\d.,]+\s*\n\s*([\d.,]+)",
+        rf"Consommation entre\s*0\s*et\s*3000\s*kWh{LINE_BREAK}[\d.,]+{LINE_BREAK}([\d.,]+)",
         text,
     )
     if match is None:
@@ -552,7 +553,7 @@ def _extract_connection_fee(text: str) -> float:
     Called only for Wallonia, where it is a mandatory charge; raise on a
     miss rather than silently zero it (matching the federal block).
     """
-    match = re.search(r"Redevance de raccordement\s*\n\s*([\d.,]+)", text)
+    match = re.search(rf"Redevance de raccordement{LINE_BREAK}([\d.,]+)", text)
     if match is None:
         raise ExtractorError("Mega: Wallonia connection fee (raccordement) not found")
     return to_float(match.group(1)) / 100.0
@@ -569,9 +570,14 @@ def _green_levy_value(text: str, region_label: str) -> float | None:
     against 33 on its siblings, past the 400 that had been allowed, and the
     whole card failed. So the region and the number are matched as whole
     lines, which nothing else after the heading prints.
+
+    The gap stops at the next heading, which reads the same lines: run on
+    past it, a card of headings with no region after them was read to its
+    end again from each.
     """
+    head = r"Cotisation Verte\s*\(c€/kWh\)"
     match = re.search(
-        rf"Cotisation Verte\s*\(c€/kWh\).*?^[ \t]*{region_label}[ \t]*\n"
+        rf"{head}(?:(?!{head}).)*?^[ \t]*{region_label}[ \t]*\n"
         r"[ \t]*([\d.,]+)[ \t]*$",
         text,
         re.S | re.M,
@@ -628,8 +634,13 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     coûts de transport'), same convention as Engie/Luminus Flanders.
     """
     data_mgmt = 0.0
+    # Both gaps stop at the next label and the fee is read from the start of
+    # its digits: run on past the next label, a card of labels was read to
+    # its end again from each, and tried from each digit of a long run, the
+    # run was read again from every one.
+    head = r"Tarif de gestion des données\s*\(€/an"
     data_match = re.search(
-        r"Tarif de gestion des données\s*\(€/an[^)]*\).*?(\d+(?:[.,]\d+)?)\s*€",
+        rf"{head}(?:(?!{head})[^)])*\)(?:(?!{head}).)*?(?<!\d)(\d+(?:[.,]\d+)?)\s*€",
         text,
         re.S,
     )
@@ -647,14 +658,14 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     if prosumer_block:
         block = prosumer_block.group(0)
         for label, key in _FLANDERS_LABELS.items():
-            pmatch = re.search(rf"{re.escape(label)}\s*\n\s*(\d+[.,]\d+)", block)
+            pmatch = re.search(rf"{re.escape(label)}{LINE_BREAK}(\d+[.,]\d+)", block)
             if pmatch:
                 prosumer_by_key[key] = to_float(pmatch.group(1))
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():
         match = re.search(
-            rf"{re.escape(label)}\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)"
-            rf"(?:\s*\n\s*([\d.,]+))?",
+            rf"{re.escape(label)}{LINE_BREAK}([\d.,]+){LINE_BREAK}([\d.,]+)"
+            rf"(?:{LINE_BREAK}([\d.,]+))?",
             text,
             re.IGNORECASE,
         )
@@ -699,13 +710,13 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     # Mega lists prosumer rates in a separate small table further down.
     prosumer_by_key: dict[str, float] = {}
     prosumer_block = re.search(
-        r"Tarif Prosumer\s*\n\s*\(€/kW/an\).+?(?=\(3\)|$)", text, re.S
+        rf"Tarif Prosumer{LINE_BREAK}\(€/kW/an\).+?(?=\(3\)|$)", text, re.S
     )
     if prosumer_block:
         prosumer_text = prosumer_block.group(0)
         for label, key in _WALLONIA_LABELS.items():
             match = re.search(
-                rf"{re.escape(label)}\s*\n\s*([\d.,]+)",
+                rf"{re.escape(label)}{LINE_BREAK}([\d.,]+)",
                 prosumer_text,
                 re.IGNORECASE,
             )
@@ -714,10 +725,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
         match = re.search(
-            rf"{re.escape(label)}\s*\n\s*"
-            rf"([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*"
-            rf"([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*"
-            rf"([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)",
+            rf"{re.escape(label)}" + rf"{LINE_BREAK}([\d.,]+)" * 9,
             text,
             re.IGNORECASE,
         )
@@ -763,9 +771,9 @@ def _wallonia_2025_rows(
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
         match = re.search(
-            rf"{re.escape(label)}\s*\n"
-            + r"\s*([\d.,]+)\s*\n" * 5
-            + r"\s*([\d.,]+)(?![\d.,])(?!\s*\d)",
+            rf"{re.escape(label)}"
+            + rf"{LINE_BREAK}([\d.,]+)" * 6
+            + r"(?![\d.,])(?!\s*\d)",
             text,
             re.IGNORECASE,
         )
@@ -794,9 +802,7 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
             terme_fixe_>13kVA (€/an)
     """
     match = re.search(
-        r"Sibelga\s*\n\s*"
-        r"([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*"
-        r"([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)\s*\n\s*([\d.,]+)",
+        "Sibelga" + rf"{LINE_BREAK}([\d.,]+)" * 8,
         text,
     )
     if not match:

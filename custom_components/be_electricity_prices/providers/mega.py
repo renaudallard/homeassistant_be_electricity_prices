@@ -183,8 +183,11 @@ def _find_pdf_url(listing_html: str, product_name: str, region_code: str) -> str
     or gas link. We pin the regex to ``Mega-FR-EL-B2C-<REGION>-`` so the
     gas links (``Mega-FR-NG-...``) and other-region links don't match.
     """
+    # The gap to the link stops at the next mention of the same product: a
+    # page of those with no link after them was read to its end from each.
+    head = 'data-product-element="' + re.escape(product_name) + '"'
     pattern = re.compile(
-        r'data-product-element="' + re.escape(product_name) + r'"[^>]*?'
+        head + f"(?:(?!{head})[^>])*?"
         r'href="(https://my\.mega\.be/resources/tarif/'
         r"Mega-FR-EL-B2C-" + region_code + r"-\d{6}-[^\"]+\.pdf)\"",
         re.S,
@@ -505,19 +508,41 @@ def _current_url(
     return url
 
 
+# The -MMYYYY- segment of a card's file name.
+_MMYYYY_RE = re.compile(r"-(\d{2})\d{4}-")
+
+
+def _month_segment(url: str) -> re.Match[str] | None:
+    """The first -MMYYYY- segment of ``url``'s file name, the part after its
+    last slash and before the ".pdf" it ends in, or ``None``.
+
+    Searched for inside those bounds rather than checked ahead from each
+    candidate: that check read the rest of the name again from every one, so
+    a name made of such segments cost the square of its length. A line break
+    ending ``url`` is passed over, as ``$`` passes over it.
+    """
+    end = len(url) - 1 if url.endswith("\n") else len(url)
+    if not url.endswith(".pdf", 0, end):
+        return None
+    return _MMYYYY_RE.search(url, url.rfind("/", 0, end) + 1, end - len(".pdf"))
+
+
 def _moved_urls(
     current_url: str, year_month: date, *, allow_current: bool, first_day_first: bool
 ) -> list[str]:
     """The URLs ``current_url``'s card for ``year_month`` may sit under, the
     month moved in both places ``_archive_pdf_urls`` describes."""
-    mmyyyy_re = re.compile(r"-(\d{2})\d{4}-(?=[^/]*\.pdf$)")
-    mmyyyy_match = mmyyyy_re.search(current_url)
+    mmyyyy_match = _month_segment(current_url)
     if mmyyyy_match is None:
         return []
     current_mm = mmyyyy_match.group(1)
     target_mm = f"{year_month.month:02d}"
     historical_mmyyyy = f"{target_mm}{year_month.year}"
-    new_url = mmyyyy_re.sub(f"-{historical_mmyyyy}-", current_url, count=1)
+    new_url = (
+        current_url[: mmyyyy_match.start()]
+        + f"-{historical_mmyyyy}-"
+        + current_url[mmyyyy_match.end() :]
+    )
     # Online0106-Fixed -> Online0105-Fixed, Cosy1306 -> Cosy1305. A product
     # whose publication day varies month to month resolves to the CDN's HTML
     # stub, which the PDF magic-byte check rejects, so the card of the 1st is

@@ -28,7 +28,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
+import time
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, date, datetime
@@ -40,6 +42,9 @@ import pytest
 
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import _mega_cards as cards_mod
+from custom_components.be_electricity_prices.providers import (
+    _mega_overlays as overlays_mod,
+)
 from custom_components.be_electricity_prices.providers import mega as mega_mod
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
@@ -2976,3 +2981,146 @@ async def test_a_product_still_sold_off_the_listing_is_asked_for_by_name(
         await mega_fetch(None, contract_id, "flanders")  # type: ignore[arg-type]
     assert fetched.call_args.args[1] == _B2C_BASE + asked
     assert parsed.call_args.args[3] == _B2C_BASE + asked
+
+
+def _quietly(read: Callable[[str], object]) -> Callable[[str], None]:
+    """``read``, whatever it makes of the text: these cards print nothing."""
+
+    def call(text: str) -> None:
+        with contextlib.suppress(ExtractorError):
+            read(text)
+
+    return call
+
+
+_FEE_ROW = "Redevance fixe (€/an)\n42.4\n"
+_TIERS = "PIC\n1\nMEDIUM\n1\nECO\n1\n"
+
+
+# Card text and listings a host could serve instead, about 100,000 characters
+# each or more where one piece costs little, on which a pattern was tried
+# again from every place it could start or split: the cap's sentence over and
+# over with no closing bracket, one long word of "limit", formula sentences with no
+# formula after them, blanks in the Impact formula, blank lines under every
+# label the rows sit beneath, levy and fee headings over and over, digits
+# after the data fee, a listing of one product's mentions with no link and a
+# card name of month segments that is not a ".pdf".
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    ("read", "crafted"),
+    [
+        pytest.param(
+            cards_mod._energy_price_ceiling,
+            "limitée à un plafond de (" * 20_000,
+            id="cap brackets",
+        ),
+        pytest.param(cards_mod._energy_price_ceiling, "limit" * 20_000, id="cap word"),
+        pytest.param(
+            _quietly(
+                lambda text: cards_mod._extract_energy(_FEE_ROW + text, "dynamic")
+            ),
+            "formule tarifaire suivante " * 20_000,
+            id="formula sentences",
+        ),
+        pytest.param(
+            lambda text: cards_mod._extract_injection(text, "dynamic"),
+            "formule suivante (HTVA) " * 20_000,
+            id="feed-in sentences",
+        ),
+        pytest.param(
+            _quietly(
+                lambda text: cards_mod._extract_energy(
+                    _FEE_ROW + _TIERS + text, "tou_impact"
+                )
+            ),
+            "La formule tarifaire est la suivante" + "\xa0" * 100_000,
+            id="impact formula",
+        ),
+        pytest.param(
+            lambda text: cards_mod._extract_meter_value(text, "Compteur mono-horaire"),
+            "Compteur mono-horaire" + "\n" * 100_000,
+            id="meter",
+        ),
+        pytest.param(
+            lambda text: cards_mod._extract_impact_tier(text, "PIC"),
+            "PIC" + "\n" * 100_000,
+            id="impact tier",
+        ),
+        pytest.param(
+            _quietly(cards_mod._extract_yearly_fee),
+            "Redevance fixe (€/an) " + "\n" * 100_000,
+            id="yearly fee",
+        ),
+        pytest.param(
+            lambda text: cards_mod._extract_injection(text, "fixed"),
+            "Compteur mono-horaire\n1" + "\n" * 100_000,
+            id="feed-in row",
+        ),
+        pytest.param(
+            lambda text: overlays_mod._green_levy_value(text, "Flandre"),
+            "Cotisation Verte(c€/kWh)\n" * 10_000,
+            id="levy headings",
+        ),
+        pytest.param(
+            overlays_mod._extract_flanders_dsos,
+            "Tarif de gestion des données(€/an)" * 4_000,
+            id="data fee headings",
+        ),
+        pytest.param(
+            overlays_mod._extract_flanders_dsos,
+            "Tarif de gestion des données(€/an)" + "0" * 100_000,
+            id="data fee digits",
+        ),
+        pytest.param(
+            overlays_mod._extract_flanders_dsos,
+            "Fluvius Kempen" + "\n" * 100_000,
+            id="flemish row",
+        ),
+        pytest.param(
+            overlays_mod._extract_wallonia_dsos,
+            "AIEG" + "\n" * 100_000,
+            id="walloon row",
+        ),
+        pytest.param(
+            _quietly(overlays_mod._extract_brussels_dsos),
+            "Sibelga" + "\n" * 100_000,
+            id="brussels row",
+        ),
+        pytest.param(
+            _quietly(overlays_mod._extract_federal_excise),
+            "Accise spéciale(c€/kWh)" + "\n" * 100_000,
+            id="excise",
+        ),
+        pytest.param(
+            _quietly(overlays_mod._extract_federal_excise),
+            "Consommation entre 1 et " + "\n" * 100_000,
+            id="excise tiers",
+        ),
+        pytest.param(
+            _quietly(overlays_mod._extract_connection_fee),
+            "Redevance de raccordement" + "\n" * 100_000,
+            id="connection fee",
+        ),
+        pytest.param(
+            lambda html: _find_pdf_url(html, "Dynamic", "WL"),
+            'data-product-element="Dynamic" ' * 8_000,
+            id="listing",
+        ),
+        pytest.param(
+            lambda name: mega_mod._moved_urls(
+                "https://my.mega.be/a" + name,
+                date(2026, 5, 1),
+                allow_current=True,
+                first_day_first=False,
+            ),
+            "-000000" * 40_000,
+            id="month segments",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[str], object], crafted: str
+) -> None:
+    started = time.perf_counter()
+    read(crafted)
+    assert time.perf_counter() - started < 2.0

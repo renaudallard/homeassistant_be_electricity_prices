@@ -44,7 +44,7 @@ from dataclasses import replace
 from datetime import date
 from typing import Any
 
-from ._parse import SIGN_CHARS, parse_sign, to_float
+from ._parse import LINE_BREAK, SIGN_CHARS, parse_sign, to_float
 from ._pdf import (
     FR_MONTHS,
     vat_multiplier,
@@ -76,11 +76,16 @@ _FORMULA_TAIL = (
     # Dynamic snapshot. to_float normalises either separator.
     rf"([\d.,]+)\s*([{SIGN_CHARS}])\s*([\d.,]+)\s*c€/kWh"
 )
+# The gap to the formula stops at the next sentence that opens one: a card of
+# those sentences with no formula after them was read to its end from each.
 _CONSUMPTION_FORMULA_RE = re.compile(
-    r"formule tarifaire suivante[^*]+?" + _FORMULA_TAIL, re.S
+    r"formule tarifaire suivante(?:(?!formule tarifaire suivante)[^*])+?"
+    + _FORMULA_TAIL,
+    re.S,
 )
 _INJECTION_FORMULA_RE = re.compile(
-    r"formule suivante\s*\(HTVA\)[^*]+?" + _FORMULA_TAIL, re.S
+    r"formule suivante\s*\(HTVA\)(?:(?!formule suivante)[^*])+?" + _FORMULA_TAIL,
+    re.S,
 )
 
 
@@ -342,7 +347,8 @@ def _extract_energy(
         if pic is None or medium is None or eco is None:
             raise ExtractorError("could not parse Mega Off-peak Impact energy block")
         formula_match = re.search(
-            r"La formule tarifaire est la suivante[^.]+?(?=\s*Cette formule)",
+            r"La formule tarifaire est la suivante"
+            r"(?:(?!La formule tarifaire)(?:[^\s.]|\s++))+?(?=\s*Cette formule)",
             text,
             re.S | re.I,
         )
@@ -423,8 +429,14 @@ def _extract_energy(
     )
 
 
+# The word holding "limit" is read from its own start and taken whole, and
+# the bracket stops at the next "limit": tried from each "limit" of a long
+# word, or run on to the bracket a later sentence closes, each read its run
+# again from every place in it. The sentence is read with its blanks
+# collapsed, so no run of them is longer than one.
 _CEILING_RE = re.compile(
-    r"limit\w+\s+[\u00e0a]\s+un plafond de\s*:?\s*\([^)]*\)\s*"
+    r"\b(?>\w*?limit)\w++\s+[\u00e0a]\s+un plafond de\s*:?\s*"
+    r"\((?:(?!limit)[^)])*\)\s*"
     r"Compteur\s+mono-horaire\s*:\s*(?P<mono>\d+[.,]\d+)\s*;\s*"
     r"Jour\s*:\s*(?P<peak>\d+[.,]\d+)\s*;\s*"
     r"Nuit\s*:\s*(?P<offpeak>\d+[.,]\d+)\s*;\s*"
@@ -693,7 +705,7 @@ def _extract_impact_tier(text: str, tier: str) -> float | None:
     ``tarif`` in the footnote formula, so the regex is intentionally
     permissive on the ``Tarif`` prefix.
     """
-    match = re.search(rf"(?:Tarif\s+)?{tier}\s*\n\s*([\d.,]+)", text)
+    match = re.search(rf"(?:Tarif\s+)?{tier}{LINE_BREAK}([\d.,]+)", text)
     return to_float(match.group(1)) / 100.0 if match else None
 
 
@@ -716,7 +728,7 @@ def _extract_meter_value(text: str, label: str) -> float | None:
         if anchor_match is not None:
             scope = text[anchor_match.start() :]
     match = re.search(
-        rf"{re.escape(label)}\s*\n\s*([\d.,]+)",
+        rf"{re.escape(label)}{LINE_BREAK}([\d.,]+)",
         scope,
     )
     return to_float(match.group(1)) / 100.0 if match else None
@@ -726,7 +738,7 @@ def _extract_yearly_fee(text: str) -> float:
     # Mega's dynamic card splits the heading across two lines
     # ('Redevance fixe\n(€/an)\n42.4'); fixed cards keep them together
     # ('Redevance fixe (€/an)\n111.3'). Accept either layout.
-    match = re.search(r"Redevance fixe\s*\n?\s*\(€/an\)\s*\n?\s*([\d.,]+)", text)
+    match = re.search(r"Redevance fixe\s*\(€/an\)\s*([\d.,]+)", text)
     if match is None:
         # The standing charge (42-111 EUR/yr) is on every card; raise on a
         # miss rather than silently drop it, matching every other Mega line.
@@ -794,12 +806,13 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # labels (all three rows print the same value, so pick the first
         # one we find).
         inj_match = re.search(
-            r"(?:Tarif\s+)?(?:ECO|MEDIUM|PIC)\s*\n\s*[\d.,]+\s*\n\s*([\d.,]+)", text
+            rf"(?:Tarif\s+)?(?:ECO|MEDIUM|PIC){LINE_BREAK}[\d.,]+{LINE_BREAK}([\d.,]+)",
+            text,
         )
         current = to_float(inj_match.group(1)) / 100.0 if inj_match else None
     else:
         pattern = re.compile(
-            r"Compteur mono-horaire\s*\n\s*[\d.,]+\s*\n\s*([\d.,]+)",
+            rf"Compteur mono-horaire{LINE_BREAK}[\d.,]+{LINE_BREAK}([\d.,]+)",
         )
         match = pattern.search(text)
         current = to_float(match.group(1)) / 100.0 if match else None
