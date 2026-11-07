@@ -185,9 +185,24 @@ def _find_fluvius_row(text: str, label: str) -> DsoOverlay | None:
     )
 
 
+def _levy_row(label: str) -> str:
+    """A levy row: ``label``, then its "(€cent/kWh)" unit and the figure.
+
+    The gap to the unit stops at the next of the same label, which reads the
+    same unit, and the blanks after the unit are one run, a line break among
+    them: run on past the next label, a page of labels was read to its end
+    again from each, and spelt as runs either side of an optional line break,
+    a run of blank lines was split between them in every way.
+    """
+    return rf"{label}(?:(?!{label}).)+?\(€cent/kWh\){_WS}*{_NUM}"
+
+
 def _extract_taxes(text: str, region: str) -> TaxOverlay:
+    # Each run of blanks is read as one, line breaks included: spelt as runs
+    # either side of optional line breaks, a run of blank lines was split
+    # between the three in every way.
     tier_match = re.search(
-        rf"(?:Verbruik tussen{_WS}*\n*{_WS}*0{_WS}+en{_WS}+3\.000{_WS}+kWh|Alle verbruik){_WS}*\n*{_WS}*"
+        rf"(?:Verbruik tussen{_WS}*0{_WS}+en{_WS}+3\.000{_WS}+kWh|Alle verbruik){_WS}*"
         + _NUM
         # The optional second figure is the energy contribution printed on
         # the SAME row. Horizontal whitespace only: with a class that matched
@@ -209,21 +224,12 @@ def _extract_taxes(text: str, region: str) -> TaxOverlay:
     # below) rather than the first number after the label: the sibling
     # rows already carry "(2)(4)" footnote markers, so a lazy {_NUM}
     # would capture a footnote digit if these rows ever gain one too.
-    wkk = re.search(
-        rf"Bijdrage groene stroom en WKK.+?\(€cent/kWh\){_WS}*\n?{_WS}*{_NUM}",
-        text,
-        re.S,
-    )
+    wkk = re.search(_levy_row("Bijdrage groene stroom en WKK"), text, re.S)
     wallonia_renewables = re.search(
-        rf"Bijdrage groene stroom Wallonië.+?\(€cent/kWh\){_WS}*\n?{_WS}*{_NUM}",
-        text,
-        re.S,
+        _levy_row("Bijdrage groene stroom Wallonië"), text, re.S
     )
     connection = re.search(
-        rf"Aansluitingsvergoeding elektriciteit.+?"
-        rf"\(€cent/kWh\){_WS}*\n?{_WS}*{_NUM}",
-        text,
-        re.S,
+        _levy_row("Aansluitingsvergoeding elektriciteit"), text, re.S
     )
     if not connection:
         # The Walloon connection fee row is on every Eneco card and is a

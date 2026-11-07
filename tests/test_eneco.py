@@ -28,8 +28,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
-from collections.abc import Coroutine
+import time
+from collections.abc import Callable, Coroutine
 from datetime import date
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -1235,3 +1237,117 @@ def test_a_product_still_sold_off_the_listing_still_fails_loud() -> None:
         pytest.raises(eneco_mod.ExtractorError, match="did not advertise a PDF"),
     ):
         _run(eneco_mod.fetch(None, "power_fix_one", REGION_WALLONIA))  # type: ignore[arg-type]
+
+
+def _quietly(read: Callable[[str], object]) -> Callable[[str], None]:
+    """``read``, whatever it makes of the text: these cards print nothing."""
+
+    def call(text: str) -> None:
+        with contextlib.suppress(eneco_mod.ExtractorError):
+            read(text)
+
+    return call
+
+
+def _discover_on(listing: str) -> None:
+    with patch.object(eneco_mod, "_fetch_listing", new=AsyncMock(return_value=listing)):
+        _run(eneco_mod.discover(None))  # type: ignore[arg-type]
+
+
+# Card text and listings a host could serve instead, about 100,000 characters
+# each or more where one piece costs little, on which a pattern was tried again
+# from every place it could start or split: blank lines after the fixed header,
+# the variable fee's unit and the dynamic fee's label, the variable unit over
+# and over, digits before the variable row, digits, blanks, grouped numbers and
+# blank lines in the injection block, schemes with no card file after them,
+# product names glued together with no ".pdf", and blank lines and repeated
+# labels in the tax block.
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    ("read", "crafted"),
+    [
+        pytest.param(
+            _quietly(eneco_mod._extract_fixed), "DAG NACHT" + "\n" * 100_000, id="fixed"
+        ),
+        pytest.param(
+            _quietly(eneco_mod._extract_variable),
+            "(€/jaar)" + "\n" * 100_000,
+            id="variable fee",
+        ),
+        pytest.param(
+            _quietly(eneco_mod._extract_variable), "(€/jaar)" * 20_000, id="fee units"
+        ),
+        pytest.param(
+            _quietly(eneco_mod._extract_variable),
+            "(€/jaar)\n1\nx Geschatte jaarprijs " + "0" * 100_000,
+            id="variable row",
+        ),
+        pytest.param(
+            _quietly(eneco_mod._extract_dynamic),
+            "Enkelvoudige meter" + "\n" * 100_000,
+            id="dynamic fee",
+        ),
+        pytest.param(
+            _quietly(lambda text: eneco_mod._extract_injection(text, "power_fix")),
+            "AFNAME EN INJECTIE " + "0" * 100_000,
+            id="injection digits",
+        ),
+        pytest.param(
+            _quietly(lambda text: eneco_mod._extract_injection(text, "power_fix")),
+            "AFNAME EN INJECTIE 1 " + " " * 100_000,
+            id="injection blanks",
+        ),
+        pytest.param(
+            _quietly(lambda text: eneco_mod._extract_injection(text, "power_fix")),
+            "AFNAME EN INJECTIE " + "000\xa0" * 25_000,
+            id="injection groups",
+        ),
+        pytest.param(
+            _quietly(lambda text: eneco_mod._extract_injection(text, "power_fix")),
+            "AFNAME EN INJECTIE\n" + "\n" * 100_000,
+            id="injection lines",
+        ),
+        pytest.param(
+            lambda text: eneco_mod._resolve_url(text, "power_fix"),
+            "http://" * 15_000,
+            id="schemes",
+        ),
+        pytest.param(_discover_on, "BC___NL_ENECO_POWER_" * 10_000, id="names"),
+        pytest.param(
+            _quietly(lambda text: eneco_mod._extract_taxes(text, REGION_FLANDERS)),
+            "Verbruik tussen" + "\n" * 100_000,
+            id="excise",
+        ),
+        pytest.param(
+            _quietly(lambda text: eneco_mod._extract_taxes(text, REGION_FLANDERS)),
+            "Alle verbruik 1 Bijdrage groene stroom en WKK x(€cent/kWh)"
+            + "\n" * 100_000,
+            id="levy lines",
+        ),
+        pytest.param(
+            _quietly(lambda text: eneco_mod._extract_taxes(text, REGION_FLANDERS)),
+            "Alle verbruik 1\n" + "Bijdrage groene stroom en WKK x" * 10_000,
+            id="levy labels",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[str], object], crafted: str
+) -> None:
+    started = time.perf_counter()
+    read(crafted)
+    assert time.perf_counter() - started < 2.0
+
+
+# A real card with crafted rows of its energy and excise labels before it,
+# which the old patterns read again from every place: the card's own figures
+# are still the ones read.
+@pytest.mark.timeout(60)
+def test_crafted_rows_before_a_real_card_leave_its_reading_alone() -> None:
+    real = fixture_text("eneco_fix.pdf")
+    crafted = "DAG NACHT" + "\n" * 30_000 + "x\nVerbruik tussen" + "\n" * 30_000 + "x\n"
+    started = time.perf_counter()
+    snap = parse_snapshot(crafted + real, "power_fix", "test://fix", REGION_FLANDERS)
+    assert time.perf_counter() - started < 2.0
+    own = parse_snapshot(real, "power_fix", "test://fix", REGION_FLANDERS)
+    assert (snap.energy, snap.taxes) == (own.energy, own.taxes)

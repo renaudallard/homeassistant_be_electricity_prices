@@ -53,6 +53,7 @@ from ..const import (
 )
 from ._eneco_overlays import _AREAS, _NUM, _WS, _extract_dsos, _extract_taxes
 from ._parse import (
+    LINE_BREAK,
     SIGN_CHARS,
     parse_sign,
     require_every_area,
@@ -130,6 +131,14 @@ _INJECTION_FOOTNOTE_RE = re.compile(
 # injection.current empty on 26 Fix and 23 Dynamic issues the CDN
 # still serves.
 _BULLET = rf"(?:>{_WS}*)?"
+# A figure of a priced row, taken whole with the blanks after it, and where
+# such a row starts: at the start of a number's digits, never inside a run of
+# digits or after the separator of a grouped number. Tried from every digit of
+# a long run or every group of a grouped number, and free to split a grouped
+# number or a run of blanks between two figures, a row was read again from
+# each place in it.
+_ROW_START = r"(?<!\d)(?<!\d[\xa0\u2009\u202f])"
+_FIGURE = rf"(?>{_NUM})\s++"
 
 
 async def fetch(
@@ -371,6 +380,10 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     (``POWER_FLEX_ONE``) stayed invisible here for as long as it was sold
     while every catalog check reported green. Discovery has to be looser
     than the resolver, never narrower.
+
+    The product token stops at the next file name it runs into: run on over
+    a page of names glued together with no ".pdf" after them, it was read to
+    the end again from each.
     """
     try:
         listing = await _fetch_listing(session)
@@ -378,12 +391,24 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
         return set()
     return {
         f"power_{name.lower()}"
-        for name in re.findall(r"BC_[\d_]+_NL_ENECO_POWER_([A-Z_]+)\.pdf", listing)
+        for name in re.findall(
+            r"BC_[\d_]+_NL_ENECO_POWER_"
+            r"((?:(?!BC_[\d_]+_NL_ENECO_POWER_)[A-Z_])+)\.pdf",
+            listing,
+        )
     }
 
 
 async def _fetch_listing(session: aiohttp.ClientSession) -> str:
     return await fetch_text(session, _LISTING_URL)
+
+
+# A full link lies in one run of characters with no blank, quote or angle
+# bracket, and starts at the first scheme in that run: from any later one it
+# reaches no file the first does not. Searched from every scheme instead, a
+# run of them with no file after was read to its end again from each.
+_LINK_TOKEN_RE = re.compile(r"[^\s\"'<>]+")
+_SCHEME_RE = re.compile(r"https?://")
 
 
 def _resolve_url(listing_html: str, contract_id: str) -> str | None:
@@ -399,12 +424,14 @@ def _resolve_url(listing_html: str, contract_id: str) -> str | None:
     slug = _CONTRACT_SLUGS.get(contract_id)
     if slug is None:
         return None
-    full = re.search(
-        rf"https?://[^\s\"'<>]+?/BC_[\d_]+_NL_ENECO_POWER_{slug}\.pdf",
-        listing_html,
-    )
-    if full:
-        return full.group(0)
+    name = re.compile(rf"/BC_[\d_]+_NL_ENECO_POWER_{slug}\.pdf")
+    for token in _LINK_TOKEN_RE.finditer(listing_html):
+        scheme = _SCHEME_RE.search(listing_html, token.start(), token.end())
+        if scheme is None:
+            continue
+        found = name.search(listing_html, scheme.end() + 1, token.end())
+        if found is not None:
+            return listing_html[scheme.start() : found.end()]
     bare = re.search(rf"BC_[\d_]+_NL_ENECO_POWER_{slug}\.pdf", listing_html)
     if bare:
         return f"{_BASE_URL}/{bare.group(0)}"
@@ -478,11 +505,10 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
 
 
 def _extract_fixed(text: str) -> FixedRates:
-    pattern = re.compile(
-        r"DAG\s+NACHT\s*\n*"
-        rf"\s*{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}",
-        re.S,
-    )
+    # The blanks after the header are one run: as two runs with the line
+    # breaks between them, a run of blank lines was split between the three in
+    # every way before the row failed.
+    pattern = re.compile(r"DAG\s+NACHT\s*" + _FIGURE * 4 + _NUM, re.S)
     match = pattern.search(text)
     if not match:
         raise ExtractorError("could not parse Eneco fixed energy block")
@@ -504,9 +530,16 @@ def _extract_variable(text: str) -> VariableRates:
     # that ends in "Geschatte jaarprijs". Anchor on those two stable
     # tokens rather than counting a fixed number of header lines between
     # them: a single extra header line on a future card used to break
-    # the rigid four-newline skip and take Power Flex offline.
+    # the rigid four-newline skip and take Power Flex offline. The gap steps
+    # over a run of blanks whole and the fee's line break is read from where
+    # the run starts: free to end at each line break of a run of blank lines,
+    # the gap read the rest of the run again from every one. It stops at the
+    # next "(€/jaar)", which reads the same fee.
     yearly_fee_match = re.search(
-        r"\(€/jaar\)[\s\S]*?\n\s*" + _NUM + r"\s*\n[^\n]*Geschatte\s+jaarprijs",
+        r"\(€/jaar\)(?:\s++|(?!\(€/jaar\))\S)*?"
+        + LINE_BREAK
+        + _NUM
+        + r"\s*\n[^\n]*Geschatte\s+jaarprijs",
         text,
         re.S,
     )
@@ -524,7 +557,7 @@ def _extract_variable(text: str) -> VariableRates:
     )
     consumption = text[: injection.start()] if injection else text
     monthly_match = re.search(
-        rf"{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_BULLET}Maandprijs", consumption
+        rf"{_ROW_START}{_FIGURE * 4}{_BULLET}Maandprijs", consumption
     )
     # Accept any sign character between the BELPEX factor and the base
     # so a future card flipping to '-' or to a Unicode minus doesn't
@@ -573,7 +606,7 @@ def _extract_variable(text: str) -> VariableRates:
 
 def _extract_dynamic(text: str) -> DynamicRates:
     yearly_fee_match = re.search(
-        r"Enkelvoudige meter\s*\n\s*" + _NUM,
+        r"Enkelvoudige meter" + LINE_BREAK + _NUM,
         text,
     )
     # Capture the VAT multiplier the PDF actually applies (e.g. 1,06 for the
@@ -641,9 +674,11 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
 
     # Numeric prefix only: dodges "Zie afname Geschatte jaarprijs" lines on
     # Power Dynamic (the Zie-afname block is the consumption recap).
-    maand = re.search(rf"((?:{_NUM}\s+){{1,4}}){_WS}*{_BULLET}Maandprijs", section)
+    maand = re.search(
+        rf"({_ROW_START}(?:{_FIGURE}){{1,4}}){_BULLET}Maandprijs", section
+    )
     yearly = re.search(
-        rf"((?:{_NUM}\s+){{1,4}}){_WS}*{_BULLET}Geschatte jaarprijs", section
+        rf"({_ROW_START}(?:{_FIGURE}){{1,4}}){_BULLET}Geschatte jaarprijs", section
     )
     formula = re.search(
         rf"(0,\d+)\s*X\s*BELPEX[\w\-]*\s*([{SIGN_CHARS}])\s*(\d+(?:,\d+)?)",
@@ -670,9 +705,13 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
     # The "Zie afname" recap rows carry the same two labels with no
     # figure, so key the guard on a row that starts with a number, and
     # match whatever glyph sits between it and the label rather than
-    # reusing _BULLET, so the next change of that kind is caught too.
+    # reusing _BULLET, so the next change of that kind is caught too. The
+    # row is read from its own line's start and its number taken whole:
+    # spanning lines, a run of blank lines was walked again from each one,
+    # and each group of a grouped number sent the line's rest to be read
+    # again.
     if current_cents is None and re.search(
-        rf"^{_WS}*{_NUM}[^\n]*(?:Maandprijs|Geschatte jaarprijs)", section, re.M
+        rf"^[^\S\n]*(?>{_NUM})[^\n]*(?:Maandprijs|Geschatte jaarprijs)", section, re.M
     ):
         raise ExtractorError("Eneco injection row is printed but unreadable")
 

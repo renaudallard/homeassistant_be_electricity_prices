@@ -139,7 +139,11 @@ fetch(session, contract_id, region)
 HTML, reconstructing the absolute URL from `_BASE_URL` when only the filename is
 present. It keeps the first match: the listing only advertises one issue at a
 time, but the single-shot search defends against a future duplicate silently
-selecting a stale revision.
+selecting a stale revision. A full href is looked for one run of the page at a
+time, a run being what lies between blanks, quotes and angle brackets, and from
+that run's first scheme only, which reaches every file a later scheme could: a
+page of schemes with no file after them is read once rather than to its end from
+each.
 
 Zon & Wind Vast left the listing on 30 October 2026, Fix One being the fixed
 product sold since, and is withdrawn from that day (`_WITHDRAWN`,
@@ -228,7 +232,9 @@ Walloon caller gets the Flemish energy fund zeroed on the archived card too.
 
 `discover` (`eneco.py`) returns the set of `power_<name>` slugs advertised
 on the listing, extracted from every `BC_..._NL_ENECO_POWER_<NAME>.pdf` link and
-lower-cased to match the registry contract ids.
+lower-cased to match the registry contract ids. The product token stops at the
+next file name it runs into, so names glued together with no `.pdf` after them
+are read once.
 
 ## Parsing
 
@@ -267,7 +273,10 @@ spaces is unambiguous. The comment records a historical bug: the previous
 more (for example a four-digit yearly fee) was truncated to its first `1.xxx` and
 mis-parsed. `test_num_parses_thousands_grouped_and_four_digit_values`
 (`tests/test_eneco.py`) locks both the NBSP-grouped and ungrouped
-four-digit round-trips. `_WS` (`_eneco_overlays.py`) matches ASCII whitespace or NBSP
+four-digit round-trips. In a priced row (`_FIGURE`, `eneco.py`) each figure is
+taken whole with the blanks after it, and the row starts at the start of a
+number's digits, never inside a run of digits or after the separator of a grouped
+number (`_ROW_START`). `_WS` (`_eneco_overlays.py`) matches ASCII whitespace or NBSP
 and is used to span line wraps in the tax block. All numeric values are parsed via
 `to_float` (`_parse.py`), which strips every Unicode space variant before
 swapping comma for dot.
@@ -642,6 +651,16 @@ lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
 - **Power Dynamic was Flanders-only until September 2026**: the October card sells it in
   Wallonia too, and its Walloon rows carry no Tarif Impact columns (`eneco.py`,
   `tests/test_eneco.py`).
+- **A card costs its length**: a pattern tried from every place it could start or
+  split read the rest of a long run again from each: blank lines after `DAG NACHT`,
+  the variable fee's `(€/jaar)` or the dynamic fee's label, `(€/jaar)` over and
+  over, digits, blanks or grouped numbers before a priced row, blank lines in the
+  injection block and in the tax block, levy labels over and over, a listing of
+  schemes with no card file after them and product names with no `.pdf`. Each run is
+  now read once, so a crafted card of 100,000 characters takes milliseconds where it
+  took seconds to hours (`test_a_crafted_card_is_read_in_time_linear_in_its_length`,
+  `tests/test_eneco.py`), and a real card read after such rows still reads its own
+  figures (`test_crafted_rows_before_a_real_card_leave_its_reading_alone`).
 
 ## Test fixtures
 
