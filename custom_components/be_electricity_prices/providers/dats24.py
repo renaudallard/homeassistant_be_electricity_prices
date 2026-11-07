@@ -594,9 +594,11 @@ def _extract_injection(text: str, region: str) -> InjectionRates | None:
         return None
     # The monthly indicative can go negative when BE_spotSPP is low, so
     # capture an optional leading sign - otherwise a negative indicative
-    # fails to match and the credit is silently dropped.
+    # fails to match and the credit is silently dropped. The blanks before
+    # the sign are taken whole: shared with those after it when no sign is
+    # printed, a run of blanks was split between the two in every way.
     indicative = re.search(
-        rf"Teruglevering2?\s*\(c€/kWh\)\s+([{SIGN_CHARS}]?)\s*([\d,.]+)", text
+        rf"Teruglevering2?\s*\(c€/kWh\)\s++([{SIGN_CHARS}]?)\s*([\d,.]+)", text
     )
     if not indicative:
         # The card always prints the monthly indicative; a miss is a layout

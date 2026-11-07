@@ -28,6 +28,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import time
 from datetime import date, datetime
 from typing import Any, cast
 from unittest.mock import patch
@@ -595,3 +597,17 @@ async def test_fetch_for_month_returns_none_for_an_unpublished_month() -> None:
             )
             is None
         )
+
+
+def test_a_crafted_indicative_is_read_in_time_linear_in_its_length() -> None:
+    """100,000 blanks after the feed-in label, where the indicative's optional
+    sign stood between two runs of blanks: the run was split between them in
+    every way before the figure failed."""
+    from custom_components.be_electricity_prices.providers import dats24
+
+    started = time.perf_counter()
+    with contextlib.suppress(ExtractorError):
+        dats24._extract_injection(
+            "Teruglevering (c€/kWh) " + "\xa0" * 100_000, "flanders"
+        )
+    assert time.perf_counter() - started < 2.0

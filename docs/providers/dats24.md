@@ -420,8 +420,11 @@ Two hard invariants encoded in tests:
   not be surfaced for them (`test_injection_is_flanders_only`,
   `test_dats24.py`).
 - **Negative-safe sign parsing.** The indicative regex captures an optional leading
-  sign, `Teruglevering2?\s*\(c€/kWh\)\s+([SIGN_CHARS]?)\s*(...)` (`dats24.py`),
-  and applies `parse_sign` (`_parse.py`). When `BE_spotSPP` is low the monthly
+  sign, `Teruglevering2?\s*\(c€/kWh\)\s++([SIGN_CHARS]?)\s*(...)` (`dats24.py`),
+  and applies `parse_sign` (`_parse.py`). The blanks before the sign are taken whole
+  (`\s++`): shared with the blanks after it when no sign is printed, a long run of
+  blanks was split between the two in every way before the figure failed
+  (`test_a_crafted_indicative_is_read_in_time_linear_in_its_length`). When `BE_spotSPP` is low the monthly
   indicative goes negative (the producer pays to inject); an earlier version without
   the sign group silently dropped the credit (`dats24.py`,
   `test_injection_indicative_handles_negative_value` `test_dats24.py`, which
