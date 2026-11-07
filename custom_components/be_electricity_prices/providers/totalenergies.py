@@ -69,7 +69,7 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
-from ._parse import require_contract
+from ._parse import LINE_BREAK, require_contract
 from ._pdf import (
     fetch_pdf_text_layout,
     fetch_text,
@@ -442,7 +442,7 @@ def parse_injection_card(
         )
         _check_card(text, title, place, region)
     words = r"\s+".join(map(re.escape, title.split()))
-    dated = re.search(rf"Total\s?Energies\s+{words}\s*\n\s*(\w+\s+\d{{4}})", text)
+    dated = re.search(rf"Total\s?Energies\s+{words}{LINE_BREAK}(\w+\s+\d{{4}})", text)
     return _extract_injection(text, contract.kind), dated.group(1) if dated else ""
 
 
@@ -580,7 +580,7 @@ def _check_card(text: str, title: str, place: str, region: str) -> None:
 # prints it. The October 2026 myDynamic cards drop that column and print
 # "19,37 19,37 19,37 Tarif mensuel" with the fee on the next line.
 _EXCL_NIGHT_HEADER_RE = re.compile(
-    r"Heures\s+creuses\s+excl\.\s*nuit\s*\n\s*Consommation"
+    rf"Heures\s+creuses\s+excl\.\s*nuit{LINE_BREAK}Consommation"
 )
 
 

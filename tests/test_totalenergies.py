@@ -28,11 +28,18 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import time
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 
-from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import (
+    EXTRACTORS,
+    _totalenergies_cards,
+    totalenergies,
+)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
@@ -2071,3 +2078,114 @@ def test_the_printed_index_is_the_median_of_the_columns() -> None:
 
 async def _ready(value: Any) -> Any:
     return value
+
+
+def _quietly(read: Callable[[str], object]) -> Callable[[str], None]:
+    """``read``, whatever it makes of the text: these cards print nothing."""
+
+    def call(text: str) -> None:
+        with contextlib.suppress(ExtractorError, ValueError):
+            read(text)
+
+    return call
+
+
+_FLEMISH_FEED_IN = "Injection pour l'électricité en Région flamande\n"
+
+
+# Card text a host could serve instead, about 100,000 characters each or more
+# where one piece costs little, on which a pattern was tried again from every
+# place it could start or split: a long word and a line of titles in the
+# heading, digits before the factor, blank lines after the formula label and
+# after the exclusive-night header, digits on the index line, feed-in
+# headings over and over on one line, digits and blanks in the feed-in
+# formula, and blank lines under a feed-in card's title.
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    ("read", "crafted"),
+    [
+        pytest.param(
+            _totalenergies_cards._extract_publication_month,
+            "TotalEnergies Electricite" + "a" * 100_000,
+            id="title word",
+        ),
+        pytest.param(
+            _totalenergies_cards._extract_publication_month,
+            "TotalEnergies myX " * 30_000,
+            id="titles",
+        ),
+        pytest.param(
+            _totalenergies_cards._resolve_consumption_formula,
+            "," * 100_000,
+            id="factor",
+        ),
+        pytest.param(
+            _totalenergies_cards._resolve_consumption_formula,
+            "1 * BELPEXH + x Formule tarifaire" + "\n" * 100_000,
+            id="split base",
+        ),
+        pytest.param(
+            _totalenergies_cards._consumption_month_formula,
+            "BELPEXM_RLP " + "0" * 100_000,
+            id="index line",
+        ),
+        pytest.param(
+            totalenergies._EXCL_NIGHT_HEADER_RE.search,
+            "Heures creuses excl. nuit" + "\n" * 100_000,
+            id="meter header",
+        ),
+        pytest.param(
+            _quietly(lambda text: _extract_injection(text, "fixed")),
+            "Injection*" * 12_000,
+            id="feed-in headings",
+        ),
+        pytest.param(
+            _quietly(lambda text: _extract_injection(text, "dynamic")),
+            "Injection*" * 12_000,
+            id="dynamic headings",
+        ),
+        pytest.param(
+            _quietly(lambda text: _extract_injection(text, "fixed")),
+            "Injection* (Compensation x " * 20_000,
+            id="formula headings",
+        ),
+        pytest.param(
+            _quietly(lambda text: _extract_injection(text, "fixed")),
+            "Injection* (Compensation)\nx\n" + "," * 100_000,
+            id="formula digits",
+        ),
+        pytest.param(
+            _quietly(lambda text: _extract_injection(text, "fixed")),
+            "Injection* (Compensation)\n1*" + " " * 100_000,
+            id="formula blanks",
+        ),
+        pytest.param(
+            _quietly(
+                lambda text: totalenergies.parse_injection_card(
+                    "totalenergies_electricite_variable", text, "flanders"
+                )
+            ),
+            _FLEMISH_FEED_IN + "TotalEnergies Injection Variable" + "\n" * 100_000,
+            id="feed-in card",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[str], object], crafted: str
+) -> None:
+    started = time.perf_counter()
+    read(crafted)
+    assert time.perf_counter() - started < 2.0
+
+
+# A real fixed card with a crafted consumption row before it, blank lines the
+# old pattern read again from every line break: the card's own rates are still
+# the ones read.
+@pytest.mark.timeout(60)
+def test_a_crafted_row_before_a_real_card_leaves_its_reading_alone() -> None:
+    real = fixture_text("totalenergies_mycomfort_fixed_w.pdf", layout=True)
+    crafted = "Consommation*" + "\n" * 60_000 + "x\n"
+    started = time.perf_counter()
+    read = _totalenergies_cards._extract_energy(crafted + real, "fixed")
+    assert time.perf_counter() - started < 2.0
+    assert read == _totalenergies_cards._extract_energy(real, "fixed")

@@ -256,11 +256,13 @@ Notable parsing hurdles:
 - **Per-contract table drift.** The `Consommation` row has 0 to 5 trailing
   asterisks and may or may not carry an intervening `Tarif annuel` / `Tarif mensuel`
   label; the four meter values (mono / jour / nuit / excl_nuit) are separated by
-  `[ \t]+` and the row must end at the line break (`_totalenergies_cards.py`).
+  `[ \t]+` and the row must end at the line break (`_totalenergies_cards.py`). The
+  blanks before the row are read once, up to their last line break.
 - **Split-line dynamic formula (Brussels).** Wallonia and Flanders print
   `0.1034 * BELPEXH + 1.75` on one line; Brussels splits it, printing the factor
   line then the bases after a `Formule tarifaire` header. `_resolve_consumption_formula`
-  handles both (`_totalenergies_cards.py`).
+  handles both (`_totalenergies_cards.py`). The factor is read from the start of its
+  digits (`_FACTOR_ONLY_RE`).
 - **Sign character variance.** Formula signs are parsed with `parse_sign` over the
   shared `SIGN_CHARS` class, which covers ASCII `+`/`-` plus several Unicode dashes
   that TotalEnergies flips between on re-renders (`_parse.py`).
@@ -698,6 +700,18 @@ The land mines a future maintainer must know, each traceable to a source comment
   a "200 OK" HTML 404, which `fetch_pdf_text_layout` rejects. The per-contract
   `regions` override (e.g. Impact = Wallonia only) keeps the extractor from ever
   requesting a non-existent card (`totalenergies.py`).
+- **A card costs its length.** A pattern tried from every place it could start or
+  split read the rest of a long run again from each: a long word or a line of
+  titles in the heading, digits before a factor or on the index line, blank lines
+  after `Formule tarifaire`, `Consommation`, the exclusive-night header and a feed-in
+  card's title, feed-in headings over and over on one line, and blanks around the
+  slash of the feed-in formula. Each run is now read once: a heading's line stops at
+  the next heading on it, a figure is read from the start of its digits and a slash
+  with its blanks is one optional piece. A crafted card of 100,000 characters takes
+  milliseconds where it took seconds to hours
+  (`test_a_crafted_card_is_read_in_time_linear_in_its_length`,
+  `tests/test_totalenergies.py`), and a real card after a crafted row still reads its
+  own rates (`test_a_crafted_row_before_a_real_card_leaves_its_reading_alone`).
 
 ## Test fixtures
 

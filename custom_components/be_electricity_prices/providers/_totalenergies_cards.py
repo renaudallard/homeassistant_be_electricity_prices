@@ -44,7 +44,7 @@ from __future__ import annotations
 import re
 from dataclasses import fields, replace
 
-from ._parse import SIGN_CHARS, parse_sign, to_float
+from ._parse import LINE_BREAK, SIGN_CHARS, parse_sign, to_float
 from ._pdf import vat_multiplier
 from ._rates import (
     DynamicRates,
@@ -67,9 +67,11 @@ from .base import ExtractorError
 # Brussels Dynamic prints "<factor> * BELPEXH +" on one line and the bases
 # on the next: "0.1034 * BELPEXH + ... + Formule tarifaire\n3.85 3.85 ...".
 # _resolve_consumption_formula handles both the same-line and split-line
-# layouts via these two patterns.
-_FACTOR_ONLY_RE = re.compile(rf"([\d.,]+)\s*\*\s*BELPEXH\s*([{SIGN_CHARS}])")
-_BASE_AFTER_FORMULE_RE = re.compile(r"Formule tarifaire\s*\n\s*([\d.,]+)")
+# layouts via these two patterns. The factor is read from the start of its
+# digits: tried from each digit of a long run, the run was read again from
+# every one.
+_FACTOR_ONLY_RE = re.compile(rf"(?<![\d.,])([\d.,]+)\s*\*\s*BELPEXH\s*([{SIGN_CHARS}])")
+_BASE_AFTER_FORMULE_RE = re.compile(rf"Formule tarifaire{LINE_BREAK}([\d.,]+)")
 
 
 def _resolve_consumption_formula(text: str) -> tuple[float, float, float] | None:
@@ -178,8 +180,12 @@ def _extract_energy(text: str, kind: TariffKind, columns: int = 4) -> EnergyRate
     # The October 2026 fixed cards print the yearly fee as the row's first
     # figure and the header after the four rates, which the second pattern
     # reads; the first cannot match that row, since it ends at the fourth.
+    #
+    # Each run of blanks before the row is read once, up to its last line
+    # break: tried from every line break of a run of blank lines, the rest of
+    # the run was read again from each.
     consumption_match = re.search(
-        r"Consommation\*{0,5}\s*\n(?:\s*Tarif\s+(?:annuel|mensuel)\s*\n)?[ \t]*"
+        r"Consommation\*{0,5}(?>\s*\n)(?:\s*Tarif\s+(?:annuel|mensuel)(?>\s*\n))?[ \t]*"
         r"([\d.,]+)[ \t]+([\d.,]+)[ \t]+([\d.,]+)[ \t]+([\d.,]+)[ \t]*(?:\n|$)",
         text,
     )
@@ -237,7 +243,9 @@ def _extract_energy(text: str, kind: TariffKind, columns: int = 4) -> EnergyRate
 # separates the two runs without depending on where the index token lands.
 # A count the caller does not recognise is a layout it cannot read, and it
 # then keeps the printed row rather than billing a half-read formula.
-_DOT_DECIMAL_RE = re.compile(r"\d+\.\d+")
+# Read from the start of the digits: tried from each digit of a long run, the
+# run was read again from every one.
+_DOT_DECIMAL_RE = re.compile(r"(?<!\d)\d+\.\d+")
 
 
 def _consumption_month_formula(text: str) -> list[tuple[float, float]] | None:
@@ -477,9 +485,12 @@ def _extract_yearly_fee(text: str, columns: int = 4) -> float:
 
 def _extract_publication_month(text: str) -> str:
     # The October 2026 myComfort Fixe card in Flanders spells the brand
-    # "Total Energies" in its title.
+    # "Total Energies" in its title. The rest of the title line is one run:
+    # as a word and then the rest, a long word was split between the two in
+    # every way. It stops at the next title, which reads the same next line.
     match = re.search(
-        r"Total\s?Energies\s+(?:my\w+|Electricit[eé]\w*|Impact)[^\n]*\n"
+        r"Total\s?Energies\s+(?:my\w|Electricit[eé]|Impact)"
+        r"(?:(?!Total\s?Energies\s+(?:my\w|Electricit[eé]|Impact))[^\n])*\n"
         r"([a-zéûÉ]+\s+\d{4})",
         text,
     )
@@ -639,15 +650,29 @@ def _realized_monthly_injection(text: str) -> float | None:
 # page reads "0.1099 * BELPEXM_RLP + 2.03", a DIFFERENT, load-profile-weighted
 # index; without the lookahead the search returns that instead and credits
 # injection at roughly six times the right coefficient.
-_INJECTION_HEADING_RE = re.compile(r"Injection\*{0,5}\s*\(Compensation[^\n]*\n")
+#
+# The heading's line is read up to the next heading on it, which ends at the
+# same line break, the factor from the start of its digits, and each slash
+# with the blanks after it as one optional piece: run on to the line's end
+# from each heading, tried from each digit of a long run, or with runs of
+# blanks either side of an optional slash, each read its run again from every
+# place in it.
+_INJECTION_HEADING_RE = re.compile(
+    r"Injection\*{0,5}\s*\(Compensation"
+    r"(?:(?!Injection\*{0,5}\s*\(Compensation)[^\n])*\n"
+)
 _MONTH_FORMULA_RE = re.compile(
-    rf"([\d.,]+)\s*\*\s*/?\s*BELPEXM(?!_)\s*/?\s*([{SIGN_CHARS}])\s*([\d.,]+)"
+    r"(?<![\d.,])([\d.,]+)\s*\*\s*(?:/\s*)?BELPEXM(?!_)\s*(?:/\s*)?"
+    rf"([{SIGN_CHARS}])\s*([\d.,]+)"
 )
 
 
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
+    # The heading's line is read up to the next "Injection" on it, which
+    # reads the same figures below: run on to the line's end from each, a
+    # line of them was read again from every one.
     indicative = re.search(
-        r"Injection\*{0,5}[^\n]*\n\s*([\d.,]+)",
+        r"Injection\*{0,5}(?:(?!Injection)[^\n])*\n\s*([\d.,]+)",
         text,
     )
     current = to_float(indicative.group(1)) / 100.0 if indicative else None
@@ -664,10 +689,11 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
             return None
         # Injection block always prints the formula cleanly on one line
         # ("0.1 * BELPEXH -1.3 ..."). Anchor the search after "Injection"
-        # so the consumption formula above can never be picked up.
+        # so the consumption formula above can never be picked up. Its
+        # line stops at the next "Injection", as the indicative's does.
         match = re.search(
-            rf"Injection\*{{0,5}}[^\n]*\n[^\n]*\n\s*([\d.,]+)\s*\*\s*BELPEXH\s*"
-            rf"([{SIGN_CHARS}])\s*([\d.,]+)",
+            r"Injection\*{0,5}(?:(?!Injection)[^\n])*\n[^\n]*\n\s*([\d.,]+)\s*\*\s*"
+            rf"BELPEXH\s*([{SIGN_CHARS}])\s*([\d.,]+)",
             text,
         )
         if match is None:
