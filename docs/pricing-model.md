@@ -346,7 +346,8 @@ as rows or as a footnote. `excise_tier_bands` (`providers/_parse.py`) reads it
 from the row the parser bills, each further row starting where the one before
 ended, so another volume table on the card is never taken for it, and a table
 whose tiers all carry one rate leaves `federal_excise_bands` at `None`, where
-the resolver is identity. Cociter prints the first tranche alone, and
+the resolver is identity. A run of thousands groups that starts no row is
+passed over whole (`_tier_row`), since every group in it reads to the same end. Cociter prints the first tranche alone, and
 energie.be and Frank say the excise is degressive without printing the other
 rates, so a household above 20.000 kWh on those cards is billed the first
 tranche on every kWh.

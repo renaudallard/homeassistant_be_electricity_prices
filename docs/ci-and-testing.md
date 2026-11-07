@@ -136,6 +136,7 @@ machinery.
 | `tests/test_window_service.py` | The window search behind the `cheapest_window` and `most_expensive_window` services |
 | `tests/test_pdf_helpers.py` | Shared PDF fetching and text extraction (`providers/_pdf.py`, `providers/_pdf_render.py`) |
 | `tests/test_redirect_hops.py` | Every redirect hop is checked before it is asked (`checked_request`, `providers/_pdf.py`), over a local TLS server and a stand-in LAN device that records every connection |
+| `tests/test_parse.py` | The shared card readers of `providers/_parse.py` on crafted card text: the Brussels OSP table, the ORES sub-area rows and the degressive excise rows cost the length of the text, and `LINE_BREAK` reads what `\s*\n\s*` reads |
 | `tests/test_module_size.py` | Every module of the integration stays under a thousand lines |
 | `tests/test_manifest.py` | The Home Assistant floor `hacs.json` declares, and the README and `docs/architecture.md` repeat, is the release `requirements-dev.txt` pins for the suite |
 | `tests/test_live_check_harness.py` | The live check (`scripts/live_check.py`): its failure containment, the expectations it holds cards to, and the workflow's retry loop |

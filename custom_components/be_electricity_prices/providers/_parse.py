@@ -315,19 +315,12 @@ def parse_brussels_osp(text: str) -> dict[str, float] | None:
     # is bilingual and the Dutch cards head the same table "Taks openbare
     # dienstverplichtingen (ODV)", so both languages anchor here rather than
     # the block going unread on a card that prints it.
-    block = re.search(
-        r"(?:Obligations de Service|Taks openbare dienstverplichtingen)"
-        r".*?(?=\n\s*\(\d\)|\Z)",
-        text,
-        re.S | re.I,
-    )
-    if block is None:
+    head = _OSP_HEAD_RE.search(text)
+    if head is None:
         return None
+    block = text[head.start() : _osp_end(text, head.end())]
     out: dict[str, float] = {}
-    for match in re.finditer(
-        r"(?P<open>>\s*)?(?P<bound>[\d.,]+)\s*kVA[\s\n]+(?P<value>[\d.,]+)",
-        block.group(0),
-    ):
+    for match in _OSP_ROW_RE.finditer(block):
         bound = round(to_float(match.group("bound")), 2)
         if match.group("open"):
             # A ">" immediately before the value-bearing bound is the
@@ -340,6 +333,25 @@ def parse_brussels_osp(text: str) -> dict[str, float] | None:
         if tier is not None:
             out[tier] = to_float(match.group("value"))
     return out or None
+
+
+def _osp_end(text: str, start: int) -> int:
+    """Where the OSP block that starts before ``start`` ends: at the first
+    line break of a blank run that runs into a footnote mark "(1)", or at
+    the end of the text.
+
+    Each mark is looked for once and the blanks before it read once. Read
+    as the lookahead ``\\n\\s*\\(\\d\\)`` tried at every place, a run of blank
+    lines was read to its end again from each of its line breaks.
+    """
+    for mark in _FOOTNOTE_MARK_RE.finditer(text, start):
+        blank = mark.start()
+        while blank > start and text[blank - 1].isspace():
+            blank -= 1
+        brk = text.find("\n", blank, mark.start())
+        if brk >= 0:
+            return brk
+    return len(text)
 
 
 def parse_sibelga_row(text: str) -> DsoOverlay | None:
@@ -509,7 +521,7 @@ def excise_tier_bands(
     rate, as several cards still print it since August 2026, so the law's
     excise keeps replacing that rate.
     """
-    row = _EXCISE_TIER_RE.search(text, start)
+    row = _tier_row(text, start)
     if row is None or (within is not None and row.start() >= within):
         return None
     bands: list[tuple[float, float]] = []
@@ -527,7 +539,7 @@ def excise_tier_bands(
         bands.append(
             (tier_bound_kwh(row.group(2)) * per, to_float(row.group(4)) / per_euro)
         )
-        row = _EXCISE_TIER_RE.search(text, row.end())
+        row = _tier_row(text, row.end())
     if (
         len(bands) < 2
         or (excise is not None and abs(bands[0][1] - excise) > 1e-9)
@@ -535,6 +547,14 @@ def excise_tier_bands(
     ):
         return None
     return tuple(bands)
+
+
+def _tier_row(text: str, pos: int) -> re.Match[str] | None:
+    """The first excise tier row at or after ``pos``, or None: the search
+    goes on past every run of thousands groups that starts no row."""
+    while (row := _EXCISE_TIER_RE.search(text, pos)) is not None and row[1] is None:
+        pos = row.end()
+    return row
 
 
 _T = TypeVar("_T")
@@ -558,9 +578,15 @@ _NEGATIVE_SIGNS = ("-", "‐", "‑", "‒", "–", "—", "−")
 # tier_bound_kwh), so this is not hypothetical.
 _ROW_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 # A row of a Walloon card's ORES sub-area, "ORES (Est) 11,46 12,24 ...", with
-# its figures on the same line.
+# its figures on the same line: from the first character after the label that
+# is not blank to the last one, or the one blank of a row with nothing else.
+# As the shortest run before the line's trailing blanks, each step of that run
+# read those blanks again. The bracket stops where the next row's label opens
+# a bracket of its own, whose row reads the same: run on past it, a column of
+# labels with no closing bracket was read to its end again from each.
 _ORES_SUB_AREA_ROW = re.compile(
-    r"^ORES\s*\([^)]+\)[^\S\n]+(.+?)[^\S\n]*$", re.MULTILINE | re.IGNORECASE
+    r"^ORES\s*\((?:(?!^ORES\s*\([^)])[^)])+\)[^\S\n]+(\S(?:[^\n]*\S)?|[^\S\n])[^\S\n]*$",
+    re.MULTILINE | re.IGNORECASE,
 )
 # Residential connection-power upper bounds (kVA) mapped to the OSP tier keys
 # shared with const.CONNECTION_KVA_TIER_*. Kept as literals so this low-level
@@ -580,6 +606,16 @@ _OSP_BOUND_TO_TIER: dict[float, str] = {
 # the check is "at least", not equality.
 _OSP_OPEN_TIER = "gt56"
 _OSP_OPEN_MIN_BOUND = 56.0
+# The OSP block's heading, a footnote mark that can end it, and one of its
+# rows, read from the start of its bound: tried from each digit of a long
+# number, the number was read again from every one.
+_OSP_HEAD_RE = re.compile(
+    r"Obligations de Service|Taks openbare dienstverplichtingen", re.I
+)
+_FOOTNOTE_MARK_RE = re.compile(r"\(\d\)")
+_OSP_ROW_RE = re.compile(
+    r"(?P<open>>\s*)?(?<![\d.,])(?P<bound>[\d.,]+)\s*kVA[\s\n]+(?P<value>[\d.,]+)"
+)
 # "Un tarif maximal de 0,3472738 €/kWh (hors gestion des données) s'applique
 # aux compteurs digitaux", and in Dutch "Voor digitale meters geldt een
 # maximumtarief van 0,3472738 EUR/kWh (excl. databeheer)". One VREG figure for
@@ -595,6 +631,12 @@ _VREG_CEILING_RE = re.compile(
 SIGN_CHARS = r"+\-‐‑‒–—−"
 """Drop into a regex character class: ``[`` + SIGN_CHARS + ``]``."""
 
+LINE_BREAK = r"[^\S\n]*\n\s*"
+"""Drop into a pattern where blanks holding a line break part two fields:
+what ``\\s*\\n\\s*`` reads, read one way. Spelt with two runs of ``\\s``, a
+run of blank lines was split between them in every way before what follows
+it failed, the square of the run."""
+
 # One row of a degressive excise table, by its volume range rather than its
 # label, which OCTA+'s Flemish cards mangle: "Verbruik tussen 0 en 3.000 kWh
 # 5,0329", "Verbruik tussen 0 – 20.000 kWh", "Consommation entre 0 & 3 000
@@ -607,9 +649,14 @@ SIGN_CHARS = r"+\-‐‑‒–—−"
 # Trevion's plain layout prints its rows and then their rates apart.
 # The unit is read by its first letter and tolerates the two ways OCTA+'s
 # aligned text mangles it on the rows after the first, "kWhW" and "k h".
+# Where no row starts, the run of thousands groups there matches alone, with
+# no groups, and the search goes on past it (``_tier_row``): each group of the
+# run reads to the same end and fails there the same way, and tried from every
+# group, a long run of them was read again from each.
 TIER_BOUND = r"\d+(?:[. ]\d{3})*"
 _EXCISE_TIER_RE = re.compile(
-    rf"(?<![\d.,])({TIER_BOUND})\s*(?:[km]wh\s*)?(?:&|en|et|[{SIGN_CHARS}])\s*"
-    rf"({TIER_BOUND})\s*([km])[^\S\n]?w?h\w?\b(?:[^\S\n]*:\s*|[^\S\n]+)(\d+(?:[.,]\d+)?)",
+    rf"(?<![\d.,])(?:({TIER_BOUND})\s*(?:[km]wh\s*)?(?:&|en|et|[{SIGN_CHARS}])\s*"
+    rf"({TIER_BOUND})\s*([km])[^\S\n]?w?h\w?\b(?:[^\S\n]*:\s*|[^\S\n]+)(\d+(?:[.,]\d+)?)"
+    r"|\d+(?:[. ]\d{3}(?!\d))*)",
     re.IGNORECASE,
 )
