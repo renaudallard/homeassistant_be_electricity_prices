@@ -28,6 +28,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import time
+from collections.abc import Callable
 from datetime import date, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -708,3 +711,76 @@ def test_head_probe_fallback_drops_a_retired_product() -> None:
     )
     discovered = asyncio.run(_head_probe_ids(session))  # type: ignore[arg-type]
     assert discovered == {"ecofix_motion_online", "ecofix_flexy"}
+
+
+def _quietly(read: Callable[[], object]) -> Callable[[], None]:
+    """``read``, whatever it makes of a card it cannot parse."""
+
+    def call() -> None:
+        with contextlib.suppress(ExtractorError):
+            read()
+
+    return call
+
+
+# Card text a host could serve instead, about 100,000 characters each, on
+# which a pattern was tried again from every place it could start: block
+# headings with no closing heading after them, a long number before the
+# Flexy renewables label, WKK headers with no unit after them, Walloon
+# headings with no levy unit, and ORES labels with no closing bracket.
+@pytest.mark.parametrize(
+    "read",
+    [
+        pytest.param(
+            _quietly(lambda: ecofix._flanders_energy_block("Vlaanderen " * 9_000)),
+            id="energy block",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: _extract_fee_and_flanders_renewables(
+                    "Vlaanderen " + "1" * 100_000 + " Wallonië", "variable"
+                )
+            ),
+            id="flexy renewables",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: _extract_fee_and_flanders_renewables(
+                    "Vlaanderen\n" + "& WKK (€ cent\n" * 7_000 + "Wallonië", "dynamic"
+                )
+            ),
+            id="wkk unit",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: _extract_flanders_dsos(
+                    "Vlaams gewest Digitale meter " * 3_400, "dynamic"
+                )
+            ),
+            id="digital table",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: _extract_flanders_dsos(
+                    "Vlaams gewest Analoge meter " * 3_600, "dynamic"
+                )
+            ),
+            id="analog table",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: ecofix._extract_wallonia_renewables(
+                    "Wallonië Bijdrage groene energie (€ " * 2_800
+                )
+            ),
+            id="walloon renewables",
+        ),
+        pytest.param(lambda: ecofix._extract_ores("ORES (\n" * 14_000), id="ores rows"),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[], object],
+) -> None:
+    started = time.perf_counter()
+    read()
+    assert time.perf_counter() - started < 2.0

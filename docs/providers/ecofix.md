@@ -325,7 +325,14 @@ Notable parsing hurdles:
 - **Vlaanderen block slice.** `_flanders_energy_block` (`ecofix.py`) carves the
   text from the `Vlaanderen` heading to `Wallonië`; both the fee and the FL
   renewable live in that slice. Scoping the renewable regex to this block stops the
-  later federal "Verbruik tussen 0 & 3.000 kWh" row from shadowing it.
+  later federal "Verbruik tussen 0 & 3.000 kWh" row from shadowing it. The slice,
+  the dynamic card's `& WKK` / `(€ cent/kWh)` anchor, both Flemish network tables
+  and the Walloon levy's anchor are each found by `_past` (`ecofix.py`), one pass
+  per heading: the first heading, then the first closing one past it. That is
+  what the lazy patterns they replace found, and a card costs its length: as one
+  pattern, a card without the closing heading was read to its end again from
+  every opening one. The renewable above its `Verbruik` label is read from the
+  start of its digits.
 - **Belpex 15M formula anchoring.** `_dynamic_formula_match` (`ecofix.py`)
   anchors each formula on its own label (`Afname` for consumption, `Injectie` for
   injection) instead of indexing into a document-order `findall`. The fill between
@@ -466,7 +473,9 @@ Jaarlijkse meteropname (EUR/jaar), Prosumenten tarief (EUR/kWe/jaar), Transport
 Non-ORES DSOs mapped from `_WALLONIA_LABELS`: `aieg`, `aiesh`, `rew` (label `WAVRE`),
 `resa` (label `TECTEO - RESA`). ORES is handled separately by `_extract_ores`
 (`ecofix.py`): the card lists nine numerically-identical ORES sub-area rows,
-which are collapsed to a single `ores` key. If a future card splits sub-areas
+which are collapsed to a single `ores` key. A sub-area's name in `_ORES_PATTERN`
+stops at the next line opening an ORES row, so lines of `ORES (` with no closing
+bracket cost their length rather than being read to the end from each. If a future card splits sub-areas
 (different numbers per row), `_extract_ores` raises `ExtractorError` rather than
 silently billing at the first sub-area's rate
 (`test_ores_subarea_drift_is_rejected`, `tests/test_ecofix.py`). The five
@@ -632,6 +641,9 @@ All three are the May 2026 edition (`tests/test_ecofix.py`). Several tests
 synthesize edge-case text inline rather than from a fixture (the July 2026 reflow,
 the diverging data-management columns, the ORES drift, the version-token collision),
 so those layouts are exercised without needing a separate fixture file.
+`test_a_crafted_card_is_read_in_time_linear_in_its_length` hands the block, table,
+levy and ORES readers about 100,000 characters each of headings with no closing
+heading, a long number or ORES labels with no closing bracket.
 
 ## When the card changes, look here
 

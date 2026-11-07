@@ -302,6 +302,27 @@ def parse_snapshot(
 # ---- energy + injection -----------------------------------------------------
 
 
+def _past(text: str, *pieces: str) -> tuple[int, re.Match[str]] | None:
+    """Where the first of ``pieces`` ends, and the match of the last, each
+    piece the first to start at least one character past the end of the one
+    before; ``None`` where one is missing.
+
+    This is what ``a[\\s\\S]+?b[\\s\\S]+?c`` finds, read one pass per piece:
+    a later piece missing past the first copy of an earlier one is missing
+    past every copy, so no other is tried. As one pattern, a card without the
+    later piece was read to its end again from every copy of the earlier.
+    """
+    match = re.search(pieces[0], text)
+    if match is None:
+        return None
+    start = match.end()
+    for piece in pieces[1:]:
+        match = re.compile(piece).search(text, match.end() + 1)
+        if match is None:
+            return None
+    return start, match
+
+
 def _flanders_energy_block(text: str) -> str:
     """The Vlaanderen energy block runs from the ``Vlaanderen`` heading
     down to ``Wallonië``; both yearly fee and FL renewables live there.
@@ -310,10 +331,11 @@ def _flanders_energy_block(text: str) -> str:
     Motion Online has ``1,60`` then ``10,00 Type gebruik``), so callers
     extract both numbers from this slice and disambiguate by magnitude.
     """
-    match = re.search(r"Vlaanderen([\s\S]+?)Wallonië", text)
-    if not match:
+    found = _past(text, "Vlaanderen", "Wallonië")
+    if found is None:
         raise ExtractorError("Ecofix: Vlaanderen / Wallonië energy block not found")
-    return match.group(1)
+    start, end = found
+    return text[start : end.start()]
 
 
 def _extract_fee_and_flanders_renewables(
@@ -346,9 +368,11 @@ def _extract_fee_and_flanders_renewables(
         # instead of after it ("Verbruik 1,60"), which stopped the old
         # same-line anchor from matching and took the whole card offline.
         # Accept either order, scoped to the Vlaanderen block so the later
-        # federal "Verbruik tussen 0 & 3.000 kWh" row cannot shadow it.
+        # federal "Verbruik tussen 0 & 3.000 kWh" row cannot shadow it. The
+        # value above the label is read from the start of its digits: tried
+        # from each digit of a long run, the run was read again from every one.
         renew_match = re.search(
-            r"Verbruik\s+(\d+,\d+)|(\d+,\d+)\s+Verbruik",
+            r"Verbruik\s+(\d+,\d+)|(?<!\d)(\d+,\d+)\s+Verbruik",
             _flanders_energy_block(text),
         )
         if not fee_match:
@@ -380,10 +404,10 @@ def _extract_fee_and_flanders_renewables(
     # and the end of the Vlaanderen block: yearly fee + FL renewable.
     # Anchor on the SECOND "(€ cent/kWh)" inside the block to skip the
     # Energieprijs unit row, then collect both numbers.
-    cent_marker = re.search(r"&\s*WKK[\s\S]+?\(€\s*cent/kWh\)([\s\S]+)", block)
-    if not cent_marker:
+    cent_marker = _past(block, r"&\s*WKK", r"\(€\s*cent/kWh\)")
+    if cent_marker is None or cent_marker[1].end() == len(block):
         raise ExtractorError("Ecofix dynamic: '& WKK / (€ cent/kWh)' anchor missing")
-    numbers = re.findall(r"\b\d+,\d+\b", cent_marker.group(1))
+    numbers = re.findall(r"\b\d+,\d+\b", block[cent_marker[1].end() :])
     if len(numbers) < 2:
         raise ExtractorError(
             "Ecofix dynamic: expected fee + FL renewables in the Vlaanderen block"
@@ -714,10 +738,7 @@ def _extract_wallonia_renewables(text: str) -> float:
     consumption / injection / formula rows, and return the first
     remaining numeric token.
     """
-    anchor = re.search(
-        r"Wallonië[\s\S]+?Bijdrage groene energie[\s\S]+?\(€\s*cent/kWh\)",
-        text,
-    )
+    anchor = _past(text, "Wallonië", "Bijdrage groene energie", r"\(€\s*cent/kWh\)")
     if not anchor:
         raise ExtractorError(
             "Ecofix: Wallonia 'Bijdrage groene energie' anchor not found"
@@ -732,7 +753,7 @@ def _extract_wallonia_renewables(text: str) -> float:
         "Uitsluitend",
     )
     stop_markers = ("Distributie", "Ecofix Digi", "Friends with benefits", "Netwerk")
-    for raw_line in text[anchor.end() :].splitlines():
+    for raw_line in text[anchor[1].end() :].splitlines():
         line = raw_line.strip()
         if not line:
             continue
@@ -788,25 +809,24 @@ def _extract_flanders_dsos(text: str, kind: TariffKind) -> dict[str, DsoOverlay]
     ``prosumer_eur_per_kva_year`` (analog-meter holdouts only).
     """
     out: dict[str, DsoOverlay] = {}
-    digital_section = re.search(
-        r"Vlaams gewest\s+Digitale meter([\s\S]+?)Vlaams gewest\s+Analoge meter",
-        text,
+    digital_section = _past(
+        text, r"Vlaams gewest\s+Digitale meter", r"Vlaams gewest\s+Analoge meter"
     )
-    analog_section = re.search(
-        r"Vlaams gewest\s+Analoge meter([\s\S]+?)Ecofix Gas\s*&\s*Power",
-        text,
+    analog_section = _past(
+        text, r"Vlaams gewest\s+Analoge meter", r"Ecofix Gas\s*&\s*Power"
     )
     if not digital_section:
         raise ExtractorError("Ecofix: Flanders 'Digitale meter' table not found")
+    digital = text[digital_section[0] : digital_section[1].start()]
 
     prosumer_by_key: dict[str, float] = {}
     if analog_section:
         prosumer_by_key = parse_prosumer_column(
-            analog_section.group(1), _FLANDERS_LABELS
+            text[analog_section[0] : analog_section[1].start()], _FLANDERS_LABELS
         )
 
     for label, key in _FLANDERS_LABELS.items():
-        row = numeric_row(digital_section.group(1), label, 5)
+        row = numeric_row(digital, label, 5)
         if not row:
             continue
         capacity = to_float(row[0])
@@ -839,9 +859,12 @@ _WALLONIA_LABELS: tuple[tuple[str, str], ...] = (
     ("TECTEO - RESA", DSO_RESA),
 )
 # The ORES rows keep a pattern of their own: every sub-area has to be read
-# and compared, and the sub-area names are not known ahead of the card.
+# and compared, and the sub-area names are not known ahead of the card. The
+# sub-area's name stops at the next line opening an ORES row: run on to the
+# next closing bracket, a run of such lines without one was read to its end
+# again from each.
 _ORES_PATTERN = re.compile(
-    r"^ORES\s*\(([^)]+)\)\s+"
+    r"^ORES\s*\(((?:(?!^ORES\s*\()[^)])+)\)\s+"
     + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
     + r"([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)\s+"
     + r"([\d.,]+)\s+([\d.,]+)\s*$",
