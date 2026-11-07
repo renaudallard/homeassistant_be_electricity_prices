@@ -70,6 +70,7 @@ from ..const import (
     REGION_FLANDERS,
     VAT_RATE_REDUCED,
 )
+from ._links import on_hosts
 from ._parse import (
     SIGN_CHARS,
     numeric_row,
@@ -123,6 +124,9 @@ _CARD_URL = (
 # the address, not a convenience mirror. The JSON names the CURRENT PDF for
 # every product; the blob it points at is replaced in place each month.
 _CONTRACTS_URL = "https://www.energie.be/api/v1/data/contracts"
+# Where the contracts and archive APIs' documents sit: every card they
+# named in the archive and on 2026-11-06 was a blob on this host.
+_CARD_HOSTS = frozenset({"energie.blob.core.windows.net"})
 
 _CONTRACT_ID = "energiebe_dynamic"
 _CONTRACT_LABEL = "energie.be Dynamisch"
@@ -417,9 +421,10 @@ async def _resolve_card_url(session: aiohttp.ClientSession, tariff_type: str) ->
         url = (
             residential.get("tariffDocument") if isinstance(residential, dict) else None
         )
-        # A non-string here would be str()-ed into a nonsense URL and fetched;
-        # treat it as a missing card instead.
-        if isinstance(url, str) and url.startswith("https://"):
+        # A non-string here would be str()-ed into a nonsense URL and fetched,
+        # and a document off _CARD_HOSTS is no card of energie.be's; treat
+        # either as a missing card instead.
+        if isinstance(url, str) and on_hosts(url, _CARD_HOSTS) is not None:
             return url
     raise ExtractorError(
         f"energie.be: no residential {tariff_type} card in contracts API"
@@ -454,7 +459,7 @@ async def _resolve_archive_url(
         if not isinstance(card, dict) or card.get("date") != wanted:
             continue
         url = card.get("electricityDocument")
-        if isinstance(url, str) and url.startswith("https://"):
+        if isinstance(url, str) and on_hosts(url, _CARD_HOSTS) is not None:
             return url
     return None
 

@@ -59,6 +59,10 @@ a `contractTypeElRes.tariffDocument` blob URL that is replaced in place each mon
 `_resolve_card_url` takes the `tariffType` and reads that entry's residential document and
 nothing else - `_TARIFF_TYPE` maps the contract id to it. The host matters: the site's front end calls this API on its own origin, and the
 `energie-production-api.azurewebsites.net` host behind it answers `401` on this path.
+A document this API or the month archive names is followed only on `_CARD_HOSTS`
+(`energiebe.py`, through `on_hosts` in `_links.py`), and one elsewhere reads as no
+card: every card both have named, in the archive and on 2026-11-06, was a blob on
+`energie.blob.core.windows.net`.
 
 ```
 config (contract_id) -> fetch(): dynamic          -> GET _CARD_URL (302 -> blob)

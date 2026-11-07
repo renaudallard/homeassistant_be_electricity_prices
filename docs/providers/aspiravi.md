@@ -35,7 +35,11 @@ with its label up to the first `</a>` and its tags taken out (`strip_tags`,
 `providers/_markup.py`). A tag is known to close before any href in it is
 tried, and the next link is looked for past the last one's `</a>`, so a page
 costs its length. As one pattern, a page of `<a` with no tag end, or of links
-with no `</a>`, was read to its end from each of them.
+with no `</a>`, was read to its end from each of them. Only a link on
+Aspiravi's own site is kept (`on_page_site`, `_links.py`): every card both pages
+have linked, in the card archive and live on 2026-11-06, sits on
+`aspiravi-energy.be`, so a link to another host is not read, and not probed
+either, since the probe asks the card `_current_card_url` names.
 
 ## Contract
 

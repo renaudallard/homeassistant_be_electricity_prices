@@ -57,6 +57,9 @@ from custom_components.be_electricity_prices.providers.energiebe import (
 )
 from tests import fixture_text
 
+# Where every card the APIs name sits.
+_BLOB = "https://energie.blob.core.windows.net/cms/assets/"
+
 
 def _text() -> str:
     return fixture_text("energiebe_dynamic_jul.pdf", layout=True)
@@ -903,15 +906,15 @@ def _resolve(body: str, tariff_type: str = "Variable") -> str:
 
 _GOOD_BODY = (
     '{"contracts": ['
-    '{"tariffType": "Fixed", "contractTypeElRes": {"tariffDocument": "https://x/vast.pdf"}},'
-    '{"tariffType": "Variable", "contractTypeElRes": {"tariffDocument": "https://x/var.pdf"},'
-    ' "contractTypeElPro": {"tariffDocument": "https://x/var-pro.pdf"}}]}'
+    '{"tariffType": "Fixed", "contractTypeElRes": {"tariffDocument": "https://energie.blob.core.windows.net/cms/assets/vast.pdf"}},'
+    '{"tariffType": "Variable", "contractTypeElRes": {"tariffDocument": "https://energie.blob.core.windows.net/cms/assets/var.pdf"},'
+    ' "contractTypeElPro": {"tariffDocument": "https://energie.blob.core.windows.net/cms/assets/var-pro.pdf"}}]}'
 )
 
 
 def test_resolver_picks_the_residential_variable_document() -> None:
     """Not the fixed sibling, and not the professional edition of the same product."""
-    assert _resolve(_GOOD_BODY) == "https://x/var.pdf"
+    assert _resolve(_GOOD_BODY) == _BLOB + "var.pdf"
 
 
 @pytest.mark.parametrize(
@@ -925,10 +928,10 @@ def test_resolver_picks_the_residential_variable_document() -> None:
         "<html>login</html>",
         '{"contracts": []}',
         '{"contracts": ["Variable"]}',
-        '{"contracts": [{"tariffType": "Fixed", "contractTypeElRes": {"tariffDocument": "https://x/a.pdf"}}]}',
+        '{"contracts": [{"tariffType": "Fixed", "contractTypeElRes": {"tariffDocument": "https://energie.blob.core.windows.net/cms/assets/a.pdf"}}]}',
         '{"contracts": [{"tariffType": "Variable", "contractTypeElRes": null}]}',
         '{"contracts": [{"tariffType": "Variable", "contractTypeElRes": {"tariffDocument": {"u": 1}}}]}',
-        '{"contracts": [{"tariffType": "Variable", "contractTypeElRes": {"tariffDocument": "http://x/a.pdf"}}]}',
+        '{"contracts": [{"tariffType": "Variable", "contractTypeElRes": {"tariffDocument": "http://energie.blob.core.windows.net/cms/assets/a.pdf"}}]}',
     ],
 )
 def test_resolver_funnels_every_bad_shape_into_extractor_error(body: str) -> None:
@@ -947,15 +950,15 @@ def test_resolver_funnels_every_bad_shape_into_extractor_error(body: str) -> Non
 def test_resolver_selects_by_tariff_type() -> None:
     """The tariffType is a parameter now, so a fixed contract must not be able
     to pick up the variable document (or vice versa) from the same payload."""
-    assert _resolve(_GOOD_BODY, "Variable") == "https://x/var.pdf"
-    assert _resolve(_GOOD_BODY, "Fixed") == "https://x/vast.pdf"
+    assert _resolve(_GOOD_BODY, "Variable") == _BLOB + "var.pdf"
+    assert _resolve(_GOOD_BODY, "Fixed") == _BLOB + "vast.pdf"
 
 
 @pytest.mark.parametrize(
     ("contract_id", "expected_url"),
     [
-        ("energiebe_variable", "https://x/var.pdf"),
-        ("energiebe_fixed", "https://x/vast.pdf"),
+        ("energiebe_variable", _BLOB + "var.pdf"),
+        ("energiebe_fixed", _BLOB + "vast.pdf"),
     ],
 )
 def test_fetch_asks_the_contracts_api_for_this_contracts_card(
@@ -1030,7 +1033,7 @@ def test_resolver_never_falls_back_to_another_card() -> None:
     """
     body = (
         '{"contracts": [{"tariffType": "Dynamic",'
-        ' "contractTypeElRes": {"tariffDocument": "https://x/dyn.pdf"}}]}'
+        ' "contractTypeElRes": {"tariffDocument": "https://energie.blob.core.windows.net/cms/assets/dyn.pdf"}}]}'
     )
     with pytest.raises(ExtractorError, match="no residential Variable card"):
         _resolve(body)
@@ -1222,9 +1225,9 @@ async def test_archive_resolves_the_months_card_from_the_listing(
         fetched.append(url)
         assert "tariffType=Dynamic" in url and "isProfessional=false" in url
         return _listing(
-            ("2026/08", "https://blob/Augustus_Dynamisch.pdf"),
-            ("2026/07", "https://blob/Juli_Dynamisch.pdf"),
-            ("2026/06", "https://blob/Juni_Dynamisch.pdf"),
+            ("2026/08", _BLOB + "Augustus_Dynamisch.pdf"),
+            ("2026/07", _BLOB + "Juli_Dynamisch.pdf"),
+            ("2026/06", _BLOB + "Juni_Dynamisch.pdf"),
         )
 
     async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
@@ -1240,7 +1243,7 @@ async def test_archive_resolves_the_months_card_from_the_listing(
         date(2026, 7, 15),
     )
     assert snap is not None
-    assert fetched[-1] == "https://blob/Juli_Dynamisch.pdf"
+    assert fetched[-1] == _BLOB + "Juli_Dynamisch.pdf"
     assert snap.publication_label == "juli 2026"
     assert isinstance(snap.energy, DynamicRates)
     # (1,04 x Belpex + 0,50) c€/kWh ex-VAT, stored VAT-inclusive in EUR/kWh.
@@ -1263,7 +1266,7 @@ async def test_a_november_card_is_downloaded_once_for_its_two_readings(
 
     name = "energiebe_variable_nov.pdf"
     payload = (FIXTURES / name).read_bytes()
-    url = "https://blob/November_Variabel.pdf"
+    url = _BLOB + "November_Variabel.pdf"
     downloads: list[str] = []
 
     async def _download(_session: Any, asked: str, **_kw: Any) -> bytes:
@@ -1292,7 +1295,7 @@ async def test_a_past_month_keeps_a_short_network_table(
     refused, as ``fetch`` refuses it."""
     from custom_components.be_electricity_prices.providers import energiebe
 
-    listing = _listing(("2026/07", "https://blob/Juli_Dynamisch.pdf"))
+    listing = _listing(("2026/07", _BLOB + "Juli_Dynamisch.pdf"))
     monkeypatch.setattr(energiebe, "fetch_text", AsyncMock(return_value=listing))
     monkeypatch.setattr(
         energiebe, "fetch_pdf_text_layout", AsyncMock(return_value=_without_limburg())
@@ -1330,7 +1333,7 @@ async def test_archive_answers_none_for_a_month_the_listing_lacks(
     pdf_calls: list[str] = []
 
     async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
-        return _listing(("2026/08", "https://blob/Augustus_Dynamisch.pdf"))
+        return _listing(("2026/08", _BLOB + "Augustus_Dynamisch.pdf"))
 
     async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
         pdf_calls.append(url)
@@ -1359,7 +1362,7 @@ async def test_archive_rejects_a_card_that_names_another_month(
     from custom_components.be_electricity_prices.providers import energiebe
 
     async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
-        return _listing(("2026/03", "https://blob/Maart_Dynamisch.pdf"))
+        return _listing(("2026/03", _BLOB + "Maart_Dynamisch.pdf"))
 
     async def _fake_pdf(session: object, url: str, **kwargs: object) -> str:
         return _text()  # says "juli 2026"
@@ -1389,7 +1392,7 @@ async def test_archive_swallows_an_unreadable_or_unreachable_card(
     )
 
     async def _fake_fetch_text(session: object, url: str, **kwargs: object) -> str:
-        return _listing(("2025/06", "https://blob/Juni_2025.pdf"))
+        return _listing(("2025/06", _BLOB + "Juni_2025.pdf"))
 
     async def _images(session: object, url: str, **kwargs: object) -> str:
         raise CardNotReadableError("card has no text layer")

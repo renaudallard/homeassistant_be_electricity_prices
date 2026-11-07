@@ -574,8 +574,8 @@ def test_ecopower_discover_sees_a_family_named_with_a_full_date() -> None:
     naming either, so the one check meant to notice a new Ecopower product
     would stay silent on it."""
     page = (
-        '<a href="https://cdn.example/20260801_dbs_tariefkaart.pdf">dbs</a>'
-        '<a href="https://cdn.example/20260901_groenestroom_tariefkaart.pdf">new</a>'
+        '<a href="https://cdn.nimbu.io/20260801_dbs_tariefkaart.pdf">dbs</a>'
+        '<a href="https://cdn.nimbu.io/20260901_groenestroom_tariefkaart.pdf">new</a>'
     )
     discovered = _run(ecopower_mod.discover(_FakeSession(page)))
     assert ecopower_mod._DBS_DISCOVER_ID in discovered
@@ -589,7 +589,7 @@ def test_ecopower_discover_finds_dynamic_card() -> None:
     the reason Ecopower's dynamic tariff was never flagged as new."""
     body = (
         _read("ecopower.html")
-        + '\n<a href="https://example/202601_dbs_tariefkaart.pdf">x</a>\n'
+        + '\n<a href="https://cdn.nimbu.io/202601_dbs_tariefkaart.pdf">x</a>\n'
     )
     session = _FakeSession(body)
     discovered = _run(ecopower_mod.discover(session))
@@ -603,12 +603,12 @@ def test_ecopower_discover_surfaces_new_family_on_dbs_page() -> None:
     session = _UrlFakeSession(
         {
             ecopower_mod._PRICE_PAGE: (
-                '<a href="https://example/202601_gbs_tariefkaart.pdf">x</a>',
+                '<a href="https://cdn.nimbu.io/202601_gbs_tariefkaart.pdf">x</a>',
                 200,
             ),
             ecopower_mod._DBS_PAGE: (
-                '<a href="https://example/202601_dbs_tariefkaart.pdf">x</a>'
-                '<a href="https://example/202605_zakelijk_stroom_tariefkaart.pdf">y</a>',
+                '<a href="https://cdn.nimbu.io/202601_dbs_tariefkaart.pdf">x</a>'
+                '<a href="https://cdn.nimbu.io/202605_zakelijk_stroom_tariefkaart.pdf">y</a>',
                 200,
             ),
         }
@@ -631,7 +631,7 @@ def test_ecopower_discover_logs_partial_page_failure(
     session = _UrlFakeSession(
         {
             ecopower_mod._PRICE_PAGE: (
-                '<a href="https://example/202601_gbs_tariefkaart.pdf">x</a>',
+                '<a href="https://cdn.nimbu.io/202601_gbs_tariefkaart.pdf">x</a>',
                 200,
             ),
             ecopower_mod._DBS_PAGE: ("", 503),
@@ -647,7 +647,7 @@ def test_ecopower_discover_logs_partial_page_failure(
 def test_ecopower_discover_surfaces_genuinely_new_family() -> None:
     body = (
         _read("ecopower.html")
-        + '\n<a href="https://example/202605_zakelijk_stroom_tariefkaart.pdf">x</a>\n'
+        + '\n<a href="https://cdn.nimbu.io/202605_zakelijk_stroom_tariefkaart.pdf">x</a>\n'
     )
     session = _FakeSession(body)
     discovered = _run(ecopower_mod.discover(session))

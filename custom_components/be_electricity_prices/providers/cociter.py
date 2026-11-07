@@ -66,6 +66,7 @@ from ._cociter_rows import (
     _row,
 )
 from ._cociter_settle import published_belix
+from ._links import on_page_site
 from ._parse import (
     SIGN_CHARS,
     numeric_row,
@@ -226,7 +227,7 @@ async def _card_for_month(
     # keeps the original and adds "-1" to the newcomer, so the suffixed URL is
     # the NEWER file. Take the highest suffix rather than the first match, or
     # a re-upload correcting the original would be ignored.
-    candidates = [url for url, yymm in pattern.findall(html) if yymm == target_yymm]
+    candidates = [url for url, yymm in _listed(html, pattern) if yymm == target_yymm]
     if not candidates:
         return None
     # Newest first, but fall through to an older edition when it does not
@@ -861,11 +862,21 @@ def _dedup_rank(url: str) -> int:
     return int(m.group(1)) if m else 0
 
 
+def _listed(html: str, pattern: re.Pattern[str]) -> list[tuple[str, str]]:
+    """``(url, YYMM)`` for every card of ``pattern`` the index links on
+    Cociter's own site (:func:`on_page_site`)."""
+    return [
+        (url, yymm)
+        for href, yymm in pattern.findall(html)
+        if (url := on_page_site(_INDEX_URL, href)) is not None
+    ]
+
+
 async def _find_latest(
     session: aiohttp.ClientSession, pattern: re.Pattern[str]
 ) -> tuple[str, str]:
     html = await fetch_text(session, _INDEX_URL)
-    matches = pattern.findall(html)
+    matches = _listed(html, pattern)
     if not matches:
         raise ExtractorError(f"no matching tariff card linked at {_INDEX_URL}")
     # Rank on (month, re-upload counter). Sorting on the month alone left

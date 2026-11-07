@@ -49,6 +49,11 @@ config (contract_id) ->  probe(): GROQ newest _createdAt  -> freshness key
                               parse_snapshot() -> SupplierSnapshot
 ```
 
+The asset's `url` is followed only on `_CARD_HOSTS` (`frank.py`, through `on_hosts` in
+`_links.py`): every card in the archive and every one the API named on 2026-11-06 sat on
+`cdn.sanity.io`. A newest row elsewhere raises an `ExtractorError` rather than fall back
+to an older card.
+
 The `source_url` stored in the snapshot is the resolved Sanity asset URL (whatever
 `_resolve_pdf_url` returned), not a stable human-facing page. The `publication_label` is
 a lowercased "month year" string ("april 2026") reconstructed from the filename by

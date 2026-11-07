@@ -52,6 +52,7 @@ from ..const import (
     REGION_WALLONIA,
 )
 from ._eneco_overlays import _AREAS, _NUM, _WS, _extract_dsos, _extract_taxes
+from ._links import on_hosts
 from ._parse import (
     LINE_BREAK,
     SIGN_CHARS,
@@ -90,6 +91,9 @@ from .base import (
 )
 
 _BASE_URL = "https://cdn.eneco.be/downloads/nl/general/tk"
+# Where Eneco's cards sit: every card in the archive and on the listing on
+# 2026-11-06 came from the host _BASE_URL names.
+_CARD_HOSTS = frozenset({"cdn.eneco.be"})
 _LISTING_URL = "https://eneco.be/nl/elektriciteit-gas/tariefkaarten"
 
 
@@ -419,7 +423,9 @@ def _resolve_url(listing_html: str, contract_id: str) -> str | None:
     only the filename is present. When several issues appear we keep the
     first match: the listing page only ever advertises one issue at a
     time, but a defensive single-shot keeps a future duplicate from
-    silently switching to a stale revision.
+    silently switching to a stale revision. A full href off
+    ``_CARD_HOSTS`` is passed over, so a filename only it carries is read
+    as a bare one, on Eneco's own host.
     """
     slug = _CONTRACT_SLUGS.get(contract_id)
     if slug is None:
@@ -430,8 +436,11 @@ def _resolve_url(listing_html: str, contract_id: str) -> str | None:
         if scheme is None:
             continue
         found = name.search(listing_html, scheme.end() + 1, token.end())
-        if found is not None:
-            return listing_html[scheme.start() : found.end()]
+        if found is None:
+            continue
+        url = on_hosts(listing_html[scheme.start() : found.end()], _CARD_HOSTS)
+        if url is not None:
+            return url
     bare = re.search(rf"BC_[\d_]+_NL_ENECO_POWER_{slug}\.pdf", listing_html)
     if bare:
         return f"{_BASE_URL}/{bare.group(0)}"

@@ -94,12 +94,10 @@ from __future__ import annotations
 import re
 from datetime import UTC, date, datetime, time, timedelta
 from email.utils import parsedate_to_datetime
-from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 import aiohttp
 from homeassistant.util import dt as dt_util
-from yarl import URL
 
 from ..const import (
     DSO_SIBELGA,
@@ -134,6 +132,7 @@ from ._energyvision_wallonia import (
     _DSO_ROWS_FR,
     _parse_wallonia,
 )
+from ._links import on_page_site
 from ._parse import (
     require_every_area,
     running_month_short_of_an_area,
@@ -466,7 +465,7 @@ def _card_href_re(code: str, token: str) -> re.Pattern[str]:
     a site-relative one reads too, and Brusol has ended one in a space
     ("EV-1026-GSG-BXL-nl.pdf "). The directory is not anchored: Brusol files
     each card under the month it uploaded it. Nor is the host, which
-    :func:`_on_page_site` holds to the page's. The card's name is looked for
+    :func:`on_page_site` holds to the page's. The card's name is looked for
     ahead and the value then read to its last ".pdf" once: split around the
     name, a value naming the card over and over with no closing quote was
     read to its end again from each.
@@ -476,23 +475,6 @@ def _card_href_re(code: str, token: str) -> re.Pattern[str]:
         rf'(?=[^"]*?EV-\d{{4}}-{re.escape(code)}-{re.escape(token)})[^"]*\.pdf)\s*"',
         re.IGNORECASE,
     )
-
-
-def _on_page_site(page: str, href: str) -> str | None:
-    """``href`` read as a link on ``page``, or None where it leaves the
-    page's own site.
-
-    Every card and script the pages have linked sits on the page's own
-    site, Brusol's cards on www.brusol.be and the listing's script on
-    www.energyvision.be, so a link anywhere else is one the page was changed
-    to carry, and following it would fetch whatever that page points at.
-    """
-    url = urljoin(page, href)
-    try:
-        same = URL(url).origin() == URL(page).origin()
-    except ValueError:
-        return None
-    return url if same else None
 
 
 # The script the listing draws its cards with, as the listing names it, and
@@ -516,7 +498,7 @@ async def _listed_codes(session: aiohttp.ClientSession) -> set[str]:
     try:
         listing = await fetch_text(session, _LISTING_URL)
         src = _SCRIPT_SRC_RE.search(listing)
-        url = None if src is None else _on_page_site(_LISTING_URL, src.group(1))
+        url = None if src is None else on_page_site(_LISTING_URL, src.group(1))
         if url is None:
             return set()
         script = await fetch_text(session, url)
@@ -671,7 +653,7 @@ async def _resolve_card_url(
     urls = [
         url
         for href in _card_href_re(contract.code, card.token).findall(html)
-        if (url := _on_page_site(page, href)) is not None
+        if (url := on_page_site(page, href)) is not None
     ]
     if not urls:
         raise ExtractorError(

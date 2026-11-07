@@ -995,6 +995,18 @@ Internals worth knowing:
   Aspiravi probes the links its listing prints. `head_freshness_key` answers
   `None` there, no signal, `head_or_raise` raises an `ExtractorError` and
   `head_ok` answers `False`.
+- `_links.py` holds a card link read off a supplier's page or API answer to
+  where that supplier's cards sit. `_refusal` alone would let it through to any
+  public host with a trusted certificate. `on_hosts(url, hosts)` keeps an https
+  address on one of the hosts given, on the default port, and drops any other.
+  `on_page_site(page, href)` reads a link a page lists against that page, and
+  drops it where it leaves the page's own site. EnergyVision's Brusol cards and
+  listing script, Cociter's index, Aspiravi's two pages and Trevion's listing go
+  through `on_page_site`; Ecopower's pages, Eneco's listing, energie.be's two
+  APIs and Frank's Sanity answer go through `on_hosts`, each with a
+  `_CARD_HOSTS` of its own. Every card these sources have named, in the card
+  archive and live on 2026-11-06, sits there, so a link to another host, even
+  over https, is one a changed page or answer carries.
 - `is_transient_fetch_error(message: str) -> bool` (`_pdf.py`) classifies an
   `ExtractorError` message: `network error fetching` and `storage error fetching`
   are always transient; among HTTP statuses, 5xx plus 408/429/403 are transient

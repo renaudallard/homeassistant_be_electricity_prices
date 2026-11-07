@@ -138,6 +138,7 @@ machinery.
 | `tests/test_redirect_hops.py` | Every redirect hop is checked before it is asked (`checked_request`, `providers/_pdf.py`), over a local TLS server and a stand-in LAN device that records every connection |
 | `tests/test_markup.py` | The tags taken out of a fetched page (`providers/_markup.py`): every real page the suite holds reads as through the plain pattern, and a page of stray brackets costs its length |
 | `tests/test_parse.py` | The shared card readers of `providers/_parse.py` on crafted card text: the Brussels OSP table, the ORES sub-area rows and the degressive excise rows cost the length of the text, and `LINE_BREAK` reads what `\s*\n\s*` reads |
+| `tests/test_link_site.py` | A card link read off Cociter's, Aspiravi's or Trevion's page is followed only on that page's own site, and one read off Ecopower's pages, Eneco's listing, energie.be's APIs or Frank's Sanity answer only on that supplier's card host (`on_page_site`, `on_hosts`, `providers/_links.py`) |
 | `tests/test_message_cut.py` | A failure's message is cut where last_error keeps it: the shared fetch's, a failed tick's and ENTSO-E's, the `entsoe_auth_failed` Repairs card included |
 | `tests/test_module_size.py` | Every module of the integration stays under a thousand lines |
 | `tests/test_manifest.py` | The Home Assistant floor `hacs.json` declares, and the README and `docs/architecture.md` repeat, is the release `requirements-dev.txt` pins for the suite |

@@ -46,6 +46,7 @@ from datetime import date
 import aiohttp
 
 from ..const import FLUVIUS_CARD_LABELS, REGION_FLANDERS
+from ._links import on_page_site
 from ._markup import strip_tags
 from ._parse import (
     SIGN_CHARS,
@@ -161,8 +162,9 @@ _GSC_RE = re.compile(rf"Kosten Groene stroom excl\.\s*BTW\s+{_NUM}")
 _WKK_RE = re.compile(rf"Kosten WKK excl\.\s*BTW\s+{_NUM}")
 
 
-def _links(page: str) -> list[tuple[str, str]]:
-    """``(url, label)`` for every PDF the page links, the label as read.
+def _links(page: str, page_url: str) -> list[tuple[str, str]]:
+    """``(url, label)`` for every PDF the page at ``page_url`` links on
+    Aspiravi's own site (:func:`on_page_site`), the label as read.
 
     The next link is looked for past the last one's ``</a>``, and one with
     none after it ends the page, since no later link can have one either.
@@ -177,14 +179,16 @@ def _links(page: str) -> list[tuple[str, str]]:
         if end is None:
             break
         label = strip_tags(page[link.end() : end.start()])
-        out.append((link.group(1), " ".join(label.split())))
+        url = on_page_site(page_url, link.group(1))
+        if url is not None:
+            out.append((url, " ".join(label.split())))
         pos = end.end()
     return out
 
 
 async def _current_card_url(session: aiohttp.ClientSession) -> str:
     page = await fetch_text(session, _DOWNLOADS_URL)
-    for url, label in _links(page):
+    for url, label in _links(page, _DOWNLOADS_URL):
         if label.lower() == "huidige tariefkaart":
             return url
     raise ExtractorError(f"Aspiravi: no current card linked at {_DOWNLOADS_URL}")
@@ -274,7 +278,7 @@ async def _card_for_month(
     second link to a card of another year, and the first that proves to be
     the month's card wins.
     """
-    for url, label in _links(page):
+    for url, label in _links(page, _ARCHIVE_URL):
         if _archive_month(label) != year_month:
             continue
         try:
@@ -337,7 +341,7 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
             page = await fetch_text(session, page_url)
         except ExtractorError:
             continue
-        for url, label in _links(page):
+        for url, label in _links(page, page_url):
             if _CARD_LABEL_RE.match(label) is None:
                 continue
             match = _PRODUCT_CODE_RE.search(url.rsplit("/", 1)[-1])

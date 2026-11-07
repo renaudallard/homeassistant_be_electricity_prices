@@ -101,6 +101,7 @@ from ..const import (
     WELCOME_CREDIT_PRO_RATA,
 )
 from ._frank_variable import variable_energy, variable_injection
+from ._links import on_hosts
 from ._parse import (
     LINE_BREAK,
     SIGN_CHARS,
@@ -143,6 +144,9 @@ from .base import (
 _LOGGER = logging.getLogger(__name__)
 
 _SANITY_API = "https://8navd656.api.sanity.io/v2023-01-01/data/query/production-be"
+# Where the files Sanity names sit: every card in the archive and every one
+# the API named on 2026-11-06 was on Sanity's file host.
+_CARD_HOSTS = frozenset({"cdn.sanity.io"})
 
 
 # The GROQ predicate every lookup of a product's cards filters on. Frank
@@ -345,7 +349,11 @@ async def _resolve_pdf_url(
         )
     matches.sort(key=lambda r: r.get("_createdAt", ""), reverse=True)
     best = matches[0]
-    url = best["url"]
+    url = best.get("url")
+    if not isinstance(url, str) or on_hosts(url, _CARD_HOSTS) is None:
+        raise ExtractorError(
+            f"Frank Energie tariff card for {contract_id} is not on Sanity's file host"
+        )
     fname = best.get("originalFilename", "")
     m = re.search(
         r"(" + "|".join(re.escape(n) for n in _NL_MONTHS_TITLE) + r")\s+(\d{4})",

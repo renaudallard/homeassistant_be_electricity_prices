@@ -4305,7 +4305,7 @@ def test_every_frank_tier_is_checked_and_gets_its_own_freshness_row(
     rows = [
         {
             "originalFilename": f"Frank Energie {product} {s}Oktober 2026.pdf",
-            "url": f"https://cdn/{product}/{i}.pdf",
+            "url": f"https://cdn.sanity.io/{product}/{i}.pdf",
             "_createdAt": "2026-10-01T00:00:00Z",
         }
         for product in ("Dynamisch", "Variabel")
@@ -4366,7 +4366,7 @@ def test_a_frank_tier_on_the_running_month_s_card_is_current(
     rows = [
         {
             "originalFilename": f"Frank Energie {product} {s}{month} 2026.pdf",
-            "url": f"https://cdn/{product}/{month}/{i}.pdf",
+            "url": f"https://cdn.sanity.io/{product}/{month}/{i}.pdf",
             "_createdAt": created,
         }
         for product in ("Dynamisch", "Variabel")

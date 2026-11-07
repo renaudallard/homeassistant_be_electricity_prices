@@ -580,13 +580,13 @@ async def test_the_household_card_wins_over_a_newer_pro_card(
         {
             "originalFilename": "Frank Energie Tariefkaart Elektriciteit Dynamisch JN Pro"
             " November 2026 (2).pdf",
-            "url": "https://cdn.example/pro.pdf",
+            "url": "https://cdn.sanity.io/pro.pdf",
             "_createdAt": "2026-10-30T12:43:12Z",
         },
         {
             "originalFilename": "Frank Energie Tariefkaart Elektriciteit Dynamisch JN"
             " November 2026.pdf",
-            "url": "https://cdn.example/jn.pdf",
+            "url": "https://cdn.sanity.io/jn.pdf",
             "_createdAt": "2026-10-30T12:38:23Z",
         },
     ]
@@ -596,7 +596,7 @@ async def test_the_household_card_wins_over_a_newer_pro_card(
 
     monkeypatch.setattr(frank, "_sanity_query", query)
     url, label = await frank._resolve_pdf_url(None, "frank_dynamic_jn")  # type: ignore[arg-type]
-    assert (url, label) == ("https://cdn.example/jn.pdf", "november 2026")
+    assert (url, label) == ("https://cdn.sanity.io/jn.pdf", "november 2026")
 
 
 # ---- the September 2026 filename rename ------------------------------------------

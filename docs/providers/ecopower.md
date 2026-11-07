@@ -132,7 +132,9 @@ name past that scheme; the dynamic name must be followed by a `.pdf` in the same
 (`_card_links`, `ecopower.py`). Each value is read on its own and once: as one pattern over the
 page, a value without its closing quote, or with schemes or card names and nothing after them,
 was read to its end again from every scheme and every name in it, the square of its length or
-worse.
+worse. A link off `_CARD_HOSTS` (`ecopower.py`) is passed over (`on_hosts`, `_links.py`): every
+card in the archive and on both pages on 2026-11-06 came from `cdn.nimbu.io`, so a link to
+another host, even over https, is one a changed page carries.
 
 Both patterns accept a **six- or eight-digit** stamp. Ecopower named every card `YYYYMM_...` until
 the August 2026 dynamic card arrived as `20260801_dbs_tariefkaart.pdf`; the six-digit pattern could

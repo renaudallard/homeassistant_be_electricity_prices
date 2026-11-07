@@ -92,6 +92,7 @@ from ._ecopower_overlays import (
     _extract_dsos,
     _extract_taxes,
 )
+from ._links import on_hosts
 from ._parse import require_every_area, running_month_short_of_an_area
 from ._pdf import (
     fetch_pdf_text_layout,
@@ -126,6 +127,9 @@ _CARD_RE = re.compile(
     r"/(?P<stamp>20\d{4}(?:\d{2})?)_gbs_tariefkaart\.pdf", re.IGNORECASE
 )
 _SCHEME_RE = re.compile(r"https?://", re.IGNORECASE)
+# Where Ecopower's cards sit: every card in the archive and on the pages
+# on 2026-11-06 came from Nimbu's file host, which serves the site.
+_CARD_HOSTS = frozenset({"cdn.nimbu.io"})
 _PDF_RE = re.compile(r"\.pdf", re.IGNORECASE)
 
 
@@ -148,7 +152,8 @@ def _card_links(
     the first scheme of a value can start one: a later one sees no name the
     first does not. Read as one pattern over the page, a value without its
     closing quote or its card name was read to its end again from every
-    scheme and every name in it, the square of its length or worse.
+    scheme and every name in it, the square of its length or worse. A link
+    off ``_CARD_HOSTS`` is no card of Ecopower's and is passed over.
     """
     links: list[tuple[str, str]] = []
     for value in html.split('"')[:-1]:
@@ -157,8 +162,9 @@ def _card_links(
             continue
         end = _last_pdf(value) if pdf_after else len(value)
         names = list(name.finditer(value, scheme.end() + 1, max(end, 0)))
-        if names:
-            links.append((value[scheme.start() :], names[-1]["stamp"]))
+        url = on_hosts(value[scheme.start() :], _CARD_HOSTS)
+        if names and url is not None:
+            links.append((url, names[-1]["stamp"]))
     return links
 
 

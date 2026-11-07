@@ -150,7 +150,9 @@ async def test_a_past_month_keeps_a_short_network_table(
     refused, as ``fetch`` refuses it."""
     month = date(2026, 7, 1) if block == "digital" else date(2026, 1, 1)
     kind = "gbs" if block == "digital" else "dbs"
-    listing = f'<a href="https://cdn.example/{month:%Y%m}_{kind}_tariefkaart.pdf">x</a>'
+    listing = (
+        f'<a href="https://cdn.nimbu.io/{month:%Y%m}_{kind}_tariefkaart.pdf">x</a>'
+    )
     session = make_text_session(listing)
     with patch.object(
         ecopower,
@@ -630,11 +632,11 @@ def test_dbs_card_supplier_and_contract_metadata() -> None:
 
 
 _LISTING_HTML = """
-<a href="https://cdn.example/202601_gbs_tariefkaart.pdf">January</a>
-<a href="https://cdn.example/202602_gbs_tariefkaart.pdf">February</a>
-<a href="https://cdn.example/202603_gbs_tariefkaart.pdf">March</a>
-<a href="https://cdn.example/202604_gbs_tariefkaart.pdf">April</a>
-<a href="https://cdn.example/202605_gbs_inschatting_tariefkaart_ecopower.pdf">May preview</a>
+<a href="https://cdn.nimbu.io/202601_gbs_tariefkaart.pdf">January</a>
+<a href="https://cdn.nimbu.io/202602_gbs_tariefkaart.pdf">February</a>
+<a href="https://cdn.nimbu.io/202603_gbs_tariefkaart.pdf">March</a>
+<a href="https://cdn.nimbu.io/202604_gbs_tariefkaart.pdf">April</a>
+<a href="https://cdn.nimbu.io/202605_gbs_inschatting_tariefkaart_ecopower.pdf">May preview</a>
 """
 
 
@@ -660,7 +662,7 @@ def test_fetch_for_month_returns_snapshot_when_listing_has_url() -> None:
 
 
 def _july_for_month(text: str) -> SupplierSnapshot | None:
-    listing = '<a href="https://cdn.example/202607_gbs_tariefkaart.pdf">July</a>'
+    listing = '<a href="https://cdn.nimbu.io/202607_gbs_tariefkaart.pdf">July</a>'
     with patch(
         "custom_components.be_electricity_prices.providers.ecopower.fetch_pdf_text_layout",
         new=AsyncMock(return_value=text),
@@ -808,10 +810,10 @@ def test_fetch_for_month_unknown_contract_returns_none() -> None:
 
 
 _DBS_LISTING_HTML = """
-<a href="https://cdn.example/202406_dbs_tariefkaart_ecopower.pdf">2024-06</a>
-<a href="https://cdn.example/202501b_dbs_tariefkaart.pdf">2025-01</a>
-<a href="https://cdn.example/202510_dbs_tariefkaart.pdf">2025-10</a>
-<a href="https://cdn.example/202601_dbs_tariefkaart.pdf">2026-01</a>
+<a href="https://cdn.nimbu.io/202406_dbs_tariefkaart_ecopower.pdf">2024-06</a>
+<a href="https://cdn.nimbu.io/202501b_dbs_tariefkaart.pdf">2025-01</a>
+<a href="https://cdn.nimbu.io/202510_dbs_tariefkaart.pdf">2025-10</a>
+<a href="https://cdn.nimbu.io/202601_dbs_tariefkaart.pdf">2026-01</a>
 """
 
 
@@ -872,16 +874,16 @@ def test_dbs_fetch_for_month_returns_none_on_an_unreadable_card() -> None:
 
 
 _DBS_LISTING_HTML_DATED = """
-<a href="https://cdn.example/202510_dbs_tariefkaart.pdf">2025-10</a>
-<a href="https://cdn.example/202601_dbs_tariefkaart.pdf">2026-01</a>
-<a href="https://cdn.example/20260801_dbs_tariefkaart.pdf">2026-08</a>
+<a href="https://cdn.nimbu.io/202510_dbs_tariefkaart.pdf">2025-10</a>
+<a href="https://cdn.nimbu.io/202601_dbs_tariefkaart.pdf">2026-01</a>
+<a href="https://cdn.nimbu.io/20260801_dbs_tariefkaart.pdf">2026-08</a>
 """
 
 
 _GBS_LISTING_DATED = """
-<a href="https://cdn.example/202607_gbs_tariefkaart.pdf">July</a>
-<a href="https://cdn.example/20260715_gbs_tariefkaart.pdf">July reissue</a>
-<a href="https://cdn.example/202608_gbs_inschatting_tariefkaart_ecopower.pdf">Aug preview</a>
+<a href="https://cdn.nimbu.io/202607_gbs_tariefkaart.pdf">July</a>
+<a href="https://cdn.nimbu.io/20260715_gbs_tariefkaart.pdf">July reissue</a>
+<a href="https://cdn.nimbu.io/202608_gbs_inschatting_tariefkaart_ecopower.pdf">Aug preview</a>
 """
 
 
@@ -1009,11 +1011,11 @@ async def test_probe_keys_on_the_card_the_fetcher_resolves() -> None:
 
     gbs = make_text_session(_GBS_LISTING_DATED)
     first = await probe(gbs, "ecopower_burgerstroom", "flanders")
-    assert first == "https://cdn.example/20260715_gbs_tariefkaart.pdf"
+    assert first == "https://cdn.nimbu.io/20260715_gbs_tariefkaart.pdf"
     assert await probe(gbs, "ecopower_burgerstroom", "flanders") == first
     dbs = make_text_session(_DBS_LISTING_HTML_DATED)
     assert await probe(dbs, "ecopower_dynamische_burgerstroom", "flanders") == (
-        "https://cdn.example/20260801_dbs_tariefkaart.pdf"
+        "https://cdn.nimbu.io/20260801_dbs_tariefkaart.pdf"
     )
     assert await probe(make_text_session(""), "ecopower_burgerstroom", "x") is None
     assert await probe(gbs, "unknown", "flanders") is None

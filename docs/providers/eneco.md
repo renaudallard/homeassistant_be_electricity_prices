@@ -143,7 +143,10 @@ selecting a stale revision. A full href is looked for one run of the page at a
 time, a run being what lies between blanks, quotes and angle brackets, and from
 that run's first scheme only, which reaches every file a later scheme could: a
 page of schemes with no file after them is read once rather than to its end from
-each.
+each. A full href off `_CARD_HOSTS` (`eneco.py`) is passed over (`on_hosts`,
+`_links.py`), so a card name only it carries is read as a bare filename, on
+`_BASE_URL`: every card in the archive and on the listing on 2026-11-06 came
+from `cdn.eneco.be`.
 
 Zon & Wind Vast left the listing on 30 October 2026, Fix One being the fixed
 product sold since, and is withdrawn from that day (`_WITHDRAWN`,

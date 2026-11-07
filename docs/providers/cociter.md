@@ -92,7 +92,11 @@ contract's regex (`_VAR_RE` / `_DYN_RE`, `cociter.py`) to collect every
 `(url, yymm)` pair, sorts by the `YYMM` string, and returns the last (newest).
 Because `YYMM` is fixed-width and zero-padded, lexical sort equals
 chronological sort within a century. It raises `ExtractorError` when the
-listing links no matching card (`cociter.py`).
+listing links no matching card (`cociter.py`). Only a link on Cociter's own
+site counts (`_listed`, through `on_page_site` in `_links.py`): every card the
+index has linked, in the card archive and live on 2026-11-06, sits on
+`www.cociter.be`, so a link to another host is one a changed page carries and
+is not followed.
 
 ### Freshness probe: `probe`
 

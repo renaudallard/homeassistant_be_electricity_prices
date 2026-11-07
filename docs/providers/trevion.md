@@ -23,8 +23,11 @@ Read this with [the provider framework](../provider-framework.md) and
 | PDF reader | `fetch_pdf_text_layout` (`pdfplumber`) |
 
 The filenames end in `YYYYMM.pdf` or `YYYYMM-N.pdf`. `_find_card` scrapes the
-listing and hands it to `_resolve_card`, which resolves relative links against
-`https://trevion.be` and chooses the newest month, or the one asked for. The
+listing and hands it to `_resolve_card`, which chooses the newest month, or the
+one asked for. `_archive_links` reads each link against the listing and keeps
+it only on Trevion's own site (`on_page_site`, `_links.py`): every card the
+listing has linked, in the card archive and live on 2026-11-06, sits on
+`trevion.be`, so a link to another host is not followed. The
 split exists so a month and the card that settles it come out of one fetch of
 the page both are listed on. `fetch_for_month` uses the same catalog with an exact month filter
 and passes the parsed result through `archive_validity_check`.

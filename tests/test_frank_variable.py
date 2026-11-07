@@ -316,7 +316,7 @@ async def test_the_superseded_february_card_is_not_read(
     rows = [
         {
             "originalFilename": name,
-            "url": f"https://cdn/{i}.pdf",
+            "url": f"https://cdn.sanity.io/{i}.pdf",
             "_createdAt": created,
         }
         for i, (name, created) in enumerate(
@@ -350,7 +350,7 @@ async def test_the_superseded_february_card_is_not_read(
     with pytest.raises(ExtractorError, match="no Frank Energie tariff card"):
         await frank._resolve_pdf_url(None, "frank_variable_jn", date(2025, 2, 1))  # type: ignore[arg-type]
     found = await frank._resolve_pdf_url(None, "frank_variable_jn", date(2025, 5, 1))  # type: ignore[arg-type]
-    assert found == ("https://cdn/2.pdf", "mei 2025")
+    assert found == ("https://cdn.sanity.io/2.pdf", "mei 2025")
 
 
 async def test_a_variable_tier_resolves_on_its_own_product(
@@ -366,13 +366,21 @@ async def test_a_variable_tier_resolves_on_its_own_product(
             "_createdAt": created,
         }
         for name, url, created in (
-            ("Variabel JN November 2026", "https://cdn/jn.pdf", "2026-10-30T10:00:00Z"),
+            (
+                "Variabel JN November 2026",
+                "https://cdn.sanity.io/jn.pdf",
+                "2026-10-30T10:00:00Z",
+            ),
             (
                 "Variabel JN Pro November 2026",
-                "https://cdn/pro.pdf",
+                "https://cdn.sanity.io/pro.pdf",
                 "2026-10-30T11:00:00Z",
             ),
-            ("Variabel JN Oktober 2026", "https://cdn/oct.pdf", "2026-09-30T10:00:00Z"),
+            (
+                "Variabel JN Oktober 2026",
+                "https://cdn.sanity.io/oct.pdf",
+                "2026-09-30T10:00:00Z",
+            ),
         )
     ]
 
@@ -382,7 +390,7 @@ async def test_a_variable_tier_resolves_on_its_own_product(
 
     monkeypatch.setattr(frank, "_sanity_query", query)
     found = await frank._resolve_pdf_url(None, "frank_variable_jn")  # type: ignore[arg-type]
-    assert found == ("https://cdn/jn.pdf", "november 2026")
+    assert found == ("https://cdn.sanity.io/jn.pdf", "november 2026")
     assert 'match "*Variabel*"' in asked[0]
     assert "Dynamisch" not in asked[0]
 

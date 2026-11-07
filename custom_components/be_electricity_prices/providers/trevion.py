@@ -44,6 +44,7 @@ from ..const import (
     FLUVIUS_CARD_LABELS,
     REGION_FLANDERS,
 )
+from ._links import on_page_site
 from ._parse import (
     SIGN_CHARS,
     excise_tier_bands,
@@ -79,7 +80,6 @@ from .base import (
 )
 
 _LISTING_URL = "https://trevion.be/tariefkaarten/"
-_BASE_URL = "https://trevion.be"
 _NUM = r"[\d.,]+"
 _MONTH = "(?:" + "|".join(NL_MONTHS) + ")"
 _MONTH_NUMBERS = {name: index for index, name in enumerate(NL_MONTHS, 1)}
@@ -170,7 +170,7 @@ _STAMP_TAIL_RE = re.compile(r"-(\d{6})(?:-\d+)?\.pdf", re.IGNORECASE)
 
 
 def _archive_links(html: str, contract: _ContractDef) -> list[tuple[str, str]]:
-    """``(path, YYYYMM)`` for every link on the listing to one of
+    """``(url, YYYYMM)`` for every link on the listing to one of
     ``contract``'s cards: the product's name, then "particulier", then the
     stamp the path ends on, "-202610.pdf" or "-202610-1.pdf".
 
@@ -188,17 +188,17 @@ def _archive_links(html: str, contract: _ContractDef) -> list[tuple[str, str]]:
         mark = None if name is None else _PARTICULIER_RE.search(path, name.end())
         if mark is None:
             continue
+        # Read as a link on the listing, on Trevion's own site alone.
+        url = on_page_site(_LISTING_URL, path)
+        if url is None:
+            continue
         last = path.rfind("-", mark.end())
         for dash in (last, path.rfind("-", mark.end(), last) if last >= 0 else -1):
             stamp = _STAMP_TAIL_RE.fullmatch(path, dash) if dash >= 0 else None
             if stamp is not None:
-                out.append((path, stamp.group(1)))
+                out.append((url, stamp.group(1)))
                 break
     return out
-
-
-def _card_url(path: str) -> str:
-    return path if path.startswith("http") else _BASE_URL + path
 
 
 async def _find_card(
@@ -244,7 +244,7 @@ def _resolve_card(
                 f"Trevion: no archived card for {contract.id} {month:%Y-%m}"
             )
     path, stamp, _ = max(parsed, key=lambda item: item[2])
-    return _card_url(path), f"{stamp[:4]}-{stamp[4:]}"
+    return path, f"{stamp[:4]}-{stamp[4:]}"
 
 
 async def fetch(

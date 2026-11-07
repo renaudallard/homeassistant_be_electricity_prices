@@ -318,7 +318,7 @@ async def test_the_pages_as_served_link_the_cards() -> None:
     assert await aspiravi._current_card_url(session) == (
         f"{_UPLOADS}/2026/11/900027_Eco_Plus_flex_huishoudelijk-formule-2026.pdf"
     )
-    links = aspiravi._links(_page("aspiravi_tariefkaarten.html"))
+    links = aspiravi._links(_page("aspiravi_tariefkaarten.html"), aspiravi._ARCHIVE_URL)
     months = {
         month
         for _url, label in links
@@ -346,7 +346,7 @@ async def test_the_pages_as_served_link_the_cards() -> None:
 )
 def test_a_crafted_page_is_read_in_time_linear_in_its_length(crafted: str) -> None:
     started = time.perf_counter()
-    aspiravi._links(crafted)
+    aspiravi._links(crafted, aspiravi._DOWNLOADS_URL)
     assert time.perf_counter() - started < 2.0
 
 

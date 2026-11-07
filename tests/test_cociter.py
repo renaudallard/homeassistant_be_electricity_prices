@@ -492,7 +492,8 @@ def _august_from(september: str) -> str:
 
 def _settle(contract: str, family: str, cards: dict[str, str], month: date) -> Any:
     listing = "".join(
-        f'<a href="https://x/{family}_Coop-{yymm}-fr.pdf">m</a>' for yymm in cards
+        f'<a href="https://www.cociter.be/wp-content/uploads/{family}_Coop-{yymm}-fr.pdf">m</a>'
+        for yymm in cards
     )
 
     async def _pdf(_session: object, url: str, **_kw: object) -> str:
@@ -650,9 +651,9 @@ def test_wordpress_dedup_suffix_does_not_hide_a_month() -> None:
     )
 
     html = (
-        '<a href="https://x/RCDyn_SM3_Coop-2606-fr.pdf">jun</a>'
-        '<a href="https://x/RCDyn_SM3_Coop-2607-fr-1.pdf">jul</a>'
-        '<a href="https://x/RCVar_YMR_Coop-2607-fr-2.pdf">jul var</a>'
+        '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2606-fr.pdf">jun</a>'
+        '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2607-fr-1.pdf">jul</a>'
+        '<a href="https://www.cociter.be/wp-content/uploads/RCVar_YMR_Coop-2607-fr-2.pdf">jul var</a>'
     )
     assert sorted(m[1] for m in _DYN_RE.findall(html)) == ["2606", "2607"]
     assert sorted(m[1] for m in _VAR_RE.findall(html)) == ["2607"]
@@ -667,8 +668,8 @@ async def test_reupload_wins_over_the_superseded_card() -> None:
     from custom_components.be_electricity_prices.providers import cociter as cociter_mod
 
     html = (
-        '<a href="https://x/RCDyn_SM3_Coop-2607-fr.pdf">old</a>'
-        '<a href="https://x/RCDyn_SM3_Coop-2607-fr-1.pdf">new</a>'
+        '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2607-fr.pdf">old</a>'
+        '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2607-fr-1.pdf">new</a>'
     )
     seen: list[str] = []
 
@@ -709,7 +710,7 @@ async def test_an_unparseable_re_upload_falls_back_to_the_edition_it_displaced()
 
     from custom_components.be_electricity_prices.providers import cociter as cociter_mod
 
-    html = '<a href="https://x/RCDyn_SM3_Coop-2607-fr-1.pdf">jul</a>'
+    html = '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2607-fr-1.pdf">jul</a>'
     fetched: list[str] = []
 
     async def _fetch(_session: object, url: str, **_kw: object) -> str:
@@ -745,7 +746,7 @@ async def test_an_unparseable_re_upload_falls_back_to_the_edition_it_displaced()
     # A healthy month costs exactly one fetch: there is no suffix to strip, so
     # nothing extra is derived.
     fetched.clear()
-    html = '<a href="https://x/RCDyn_SM3_Coop-2606-fr.pdf">jun</a>'
+    html = '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2606-fr.pdf">jun</a>'
     with (
         patch.object(cociter_mod, "fetch_text", new=AsyncMock(return_value=html)),
         patch.object(cociter_mod, "fetch_pdf_text", new=_fetch),
@@ -775,11 +776,11 @@ async def test_the_live_card_and_the_archived_one_resolve_the_same_file() -> Non
     from custom_components.be_electricity_prices.providers import cociter as cociter_mod
 
     for html in (
-        '<a href="https://x/RCDyn_SM3_Coop-2607-fr.pdf">old</a>'
-        '<a href="https://x/RCDyn_SM3_Coop-2607-fr-1.pdf">new</a>',
+        '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2607-fr.pdf">old</a>'
+        '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2607-fr-1.pdf">new</a>',
         # Newest first, the ordering that used to pick the superseded file.
-        '<a href="https://x/RCDyn_SM3_Coop-2607-fr-1.pdf">new</a>'
-        '<a href="https://x/RCDyn_SM3_Coop-2607-fr.pdf">old</a>',
+        '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2607-fr-1.pdf">new</a>'
+        '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2607-fr.pdf">old</a>',
     ):
         with patch.object(cociter_mod, "fetch_text", new=AsyncMock(return_value=html)):
             url, label = await cociter_mod._find_latest(
@@ -791,8 +792,8 @@ async def test_the_live_card_and_the_archived_one_resolve_the_same_file() -> Non
 
     # A newer month still wins over a heavily re-uploaded older one.
     html = (
-        '<a href="https://x/RCDyn_SM3_Coop-2607-fr-9.pdf">jul</a>'
-        '<a href="https://x/RCDyn_SM3_Coop-2608-fr.pdf">aug</a>'
+        '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2607-fr-9.pdf">jul</a>'
+        '<a href="https://www.cociter.be/wp-content/uploads/RCDyn_SM3_Coop-2608-fr.pdf">aug</a>'
     )
     with patch.object(cociter_mod, "fetch_text", new=AsyncMock(return_value=html)):
         url, label = await cociter_mod._find_latest(
