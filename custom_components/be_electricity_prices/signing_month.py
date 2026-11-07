@@ -33,6 +33,7 @@ resolver, and the signing month is a fact about the entry like the others
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import date
 from typing import Any
@@ -80,8 +81,14 @@ def _tariff_card_month(entry: ConfigEntry) -> date | None:
     they already had. The day within the month is irrelevant to which monthly
     card applies, so normalise to the first.
     """
-    d = _parse_iso_date(entry.data.get(CONF_TARIFF_CARD_DATE)) or _parse_iso_date(
-        entry.data.get(CONF_CONTRACT_START_DATE)
+    return signing_month_of(entry.data)
+
+
+def signing_month_of(data: Mapping[str, Any]) -> date | None:
+    """:func:`_tariff_card_month` of an entry's settings, for a caller that
+    holds them rather than the entry: the config flow's answers."""
+    d = _parse_iso_date(data.get(CONF_TARIFF_CARD_DATE)) or _parse_iso_date(
+        data.get(CONF_CONTRACT_START_DATE)
     )
     if d is None:
         return None

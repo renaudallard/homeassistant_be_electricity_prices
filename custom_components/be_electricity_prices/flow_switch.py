@@ -65,6 +65,7 @@ from .const import (
     CONF_TARIFF_CARD_DATE,
     CONF_YTD_FROM_CONTRACT_START,
 )
+from .providers import signing_cards
 from .snapshot_resolve import analog_meter
 
 # The three optional dates the contract step asks.
@@ -106,10 +107,13 @@ def _add_contract_date_fields(fields: dict[Any, Any], defaults: dict[str, Any]) 
 
 
 def _validate_contract_dates(
-    user_input: dict[str, Any], data: Mapping[str, Any] | None = None
+    user_input: dict[str, Any],
+    data: Mapping[str, Any] | None = None,
+    stored: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
-    """Reject a future start or card date, an end date not after the start, or
-    a start before the last recorded supplier switch.
+    """Reject a future start or card date, an end date not after the start, a
+    start before the last recorded supplier switch, or a signing month whose
+    card the integration does not read for a withdrawn product.
 
     All three fields are independently optional: an end date without a start
     date is fine (a bare renewal reminder), so the ordering check only fires
@@ -124,9 +128,20 @@ def _validate_contract_dates(
     configured is the one supplying since the last of them, so it cannot have
     started before it: the year would price the contract left only from that
     start, and the cohort would look the signing card up a month too early.
+
+    The signing month is the card month, else the start date's, as the
+    cohort reads it (``signing_month_of``). Outside the cards whose formulas
+    a withdrawn product is read on (``Contract.signing_cards_from``) no card
+    would be read for it, and each month would bill on its own card's
+    formulas, the last card's once there is none, without a word. So the
+    field that gave the month is refused, naming the months read
+    (:func:`_signing_cards_placeholders`), unless it is the month ``stored``,
+    the entry's settings before this edit, already holds on the same
+    contract: an entry set up before the check, or before the months were
+    known, would otherwise be refused every edit, whatever it changed.
     """
     from .contract_periods import recorded_contracts
-    from .signing_month import _parse_iso_date
+    from .signing_month import _parse_iso_date, signing_month_of
 
     errors: dict[str, str] = {}
     start = _parse_iso_date(user_input.get(CONF_CONTRACT_START_DATE))
@@ -142,7 +157,34 @@ def _validate_contract_dates(
         errors[CONF_TARIFF_CARD_DATE] = "card_date_in_future"
     if start is not None and end is not None and end <= start:
         errors[CONF_CONTRACT_END_DATE] = "end_before_start"
+    answers = {**(data or {}), **user_input}
+    signed = signing_month_of(user_input)
+    window = signing_cards(answers.get(CONF_SUPPLIER), answers.get(CONF_CONTRACT))
+    kept = (
+        stored is not None
+        and not _another_contract(stored, answers)
+        and signing_month_of(stored) == signed
+    )
+    if (
+        signed is not None
+        and window is not None
+        and not kept
+        and not window[0] <= signed <= window[1]
+    ):
+        errors.setdefault(
+            CONF_TARIFF_CARD_DATE if card is not None else CONF_CONTRACT_START_DATE,
+            "card_month_unread",
+        )
     return errors
+
+
+def _signing_cards_placeholders(data: Mapping[str, Any]) -> dict[str, str] | None:
+    """The first and last card month the ``card_month_unread`` error names
+    for the contract in ``data``, or None for one that refuses no month."""
+    window = signing_cards(data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT))
+    if window is None:
+        return None
+    return {"first_card": f"{window[0]:%m/%Y}", "last_card": f"{window[1]:%m/%Y}"}
 
 
 _MANUAL_RATE_KEYS: tuple[str, ...] = (

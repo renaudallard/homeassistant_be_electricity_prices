@@ -88,6 +88,26 @@ index, as the fallback without a key.
 > factors run from 0,0665 to 0,0766 c€/kWh per EUR/MWh against the 0,068 of a
 > December 2025 card.
 >
+> **Which signing months are read.** A signing card gives the cohort its
+> energy and feed-in formulas alone, the network coming from each month's own
+> card. `signing_cards_from` names the first card whose formulas read: April
+> 2023, in both regions. On every card from April 2023 to July 2026 the energy
+> formula reproduces the rate the card prints at the index it names, and in
+> Flanders the BE_spotSPP feed-in formula its printed figure, within the
+> rounding to a hundredth of a cent; the January to March 2023 cards fail on their tax
+> block, and the CDN holds none before. The network tables do not all read:
+> the Flemish areas from March 2025 on (January and February 2025 print nine
+> figures a row where the reader reads ten, the 2023 and 2024 cards the areas
+> before the merger), the Walloon operators from January 2026 on (the 2025
+> cards print seven), and a signing card is not read for its network. The contract step
+> refuses a signing month outside April 2023 to July 2026 with
+> `card_month_unread`: no card would be read for it, and each month would bill
+> on its own card's formulas, July 2026's from August 2026 on, without a word.
+> A month an entry already holds on the same contract stands, so an entry set
+> up before the check still saves an edit. Such an entry is priced as before,
+> each month on its own card's formulas and July 2026's after it, which its
+> Repairs card covers with "where that card can be read".
+>
 > **The risk.** It is a variable contract and nobody publishes its card any
 > more. If EnergyVision changed its formulas, nothing here would see it: the
 > entry would go on pricing on the card the household signed. The transfer mail
@@ -129,9 +149,9 @@ publication stopped.
 
 ## Contracts
 
-| id | label | kind | regions | spot_indexed_injection | withdrawn |
-|---|---|---|---|---|---|
-| `dats24_groen_variabel` | `DATS 24 Elektriciteit Groen Variabel (transferred to EnergyVision)` | `variable` | Flanders, Wallonia | True | 2026-08-01 |
+| id | label | kind | regions | spot_indexed_injection | withdrawn | signing_cards_from |
+|---|---|---|---|---|---|---|
+| `dats24_groen_variabel` | `DATS 24 Elektriciteit Groen Variabel (transferred to EnergyVision)` | `variable` | Flanders, Wallonia | True | 2026-08-01 | 2023-04 |
 
 Only one `Contract` is declared (`dats24.py`). There is no fixed, TOU, or
 dynamic product, so `quarter_hourly` does not apply (that flag lives on
@@ -519,6 +539,8 @@ Under `tests/fixtures/`, exercised by `tests/test_dats24.py`:
 |---|---|---|
 | `dats24_groen_variabel_apr.pdf` | April 2026 card, comma decimals | the default fixture (`test_dats24.py`); all value asserts (energy, taxes, both region DSO blocks, injection, publication metadata) and every fatal-miss test |
 | `dats24_groen_variabel_may.pdf` | May 2026 card, dot decimals | dot-decimal tolerance across energy + DSO parsing (`test_dats24.py`); taxes deliberately not asserted (fixture artifact) |
+| `dats24_groen_variabel_2023-03.pdf` | March 2023 card | the last card before the window, failing on its tax block (`test_dats24.py`) |
+| `dats24_groen_variabel_2023-04.pdf` | April 2023 card | the first signing card, its formulas read in both regions (`test_dats24.py`) |
 | `dats24_groen_variabel_2025-12.pdf` | December 2025 card | the issue #169 example, signed on (BE_spotRLP x 0,1141 + 0,511) + 6% and BE_spotSPP x 0,068 - 1,11 (`test_dats24_transferred.py`) |
 | `dats24_groen_variabel_2026-07.pdf` | July 2026 card, the last | what `fetch` reads and an entry with no signing month is priced on (`test_dats24.py`, `test_dats24_transferred.py`) |
 

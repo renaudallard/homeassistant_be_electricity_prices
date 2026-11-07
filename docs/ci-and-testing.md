@@ -63,7 +63,7 @@ machinery.
 | `tests/test_cociter.py` | Cociter extractor |
 | `tests/test_custom.py` | Expert custom-formula supplier: its config flow, snapshot build and pricing |
 | `tests/test_dats24.py` | DATS 24 extractor |
-| `tests/test_dats24_transferred.py` | DATS 24's withdrawn product for the households EnergyVision took over: setup, a kept entry, the signing card, the network after the last card |
+| `tests/test_dats24_transferred.py` | DATS 24's withdrawn product for the households EnergyVision took over: setup and its refused signing months, a kept entry, the signing card, the network after the last card |
 | `tests/test_dots.py` | Dots Energy extractor |
 | `tests/test_ebem.py` | EBEM extractor |
 | `tests/test_ecofix.py` | Ecofix extractor |

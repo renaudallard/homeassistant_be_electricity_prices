@@ -89,7 +89,7 @@ from .providers import effective_kind, settlement_answer
 from .providers.base import (
     ExtractorError,
 )
-from .signing_month import _tariff_card_month
+from .signing_month import signing_month_of
 from .snapshot_resolve import (
     analog_meter,
     ensure_custom_network,
@@ -570,11 +570,7 @@ def _reprices_on_spots(period: ContractPeriod) -> bool:
         return False
     if _contract_is_month_indexed(data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT)):
         return True
-    return (
-        _kind(period) == "variable"
-        and _tariff_card_month(cast(ConfigEntry, _QuoteEntry(data=dict(data))))
-        is not None
-    )
+    return _kind(period) == "variable" and signing_month_of(data) is not None
 
 
 def periods_need_spots(periods: list[ContractPeriod]) -> bool:

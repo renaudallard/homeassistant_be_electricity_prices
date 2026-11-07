@@ -438,17 +438,52 @@ def test_the_last_card_is_never_asked_for_again() -> None:
 def test_the_product_is_withdrawn_rather_than_the_supplier() -> None:
     """Hiding the supplier hid the product from the households EnergyVision
     took over on its terms (issue #169), and stopped every fetch. The product
-    is withdrawn from the month after its last card instead."""
+    is withdrawn from the month after its last card instead, and names the
+    first card whose formulas read."""
     import custom_components.be_electricity_prices.providers.dats24 as mod
+    from custom_components.be_electricity_prices.providers import signing_cards
 
     assert mod.EXTRACTOR.deprecated_until is None
     assert mod.EXTRACTOR.deprecated_successor is None
     (contract,) = mod.EXTRACTOR.contracts
     assert contract.withdrawn == date(2026, 8, 1)
     assert "EnergyVision" in contract.label
+    assert signing_cards("dats24", contract.id) == (date(2023, 4, 1), date(2026, 7, 1))
     # Nothing is sold any more, so there is no listing for the live check to
     # hold the registry against.
     assert not hasattr(mod, "discover")
+
+
+@pytest.mark.parametrize("region", ["flanders", "wallonia"])
+def test_the_first_signing_card_is_the_first_whose_formulas_read(region: str) -> None:
+    """A signing card gives the cohort its formulas alone, so the window
+    starts at the first card whose energy formula checks against the rate
+    it prints and, in Flanders, whose feed-in is the BE_spotSPP formula:
+    April 2023's, the March 2023 card failing on its tax block."""
+    from custom_components.be_electricity_prices.providers import signing_cards
+
+    window = signing_cards("dats24", "dats24_groen_variabel")
+    assert window is not None
+    first = parse_snapshot(
+        fixture_text(f"dats24_groen_variabel_{window[0]:%Y-%m}.pdf", layout=True),
+        "test://dats24",
+        region,
+    )
+    assert isinstance(first.energy, VariableRates)
+    assert first.energy.formula_factor == pytest.approx(0.1139 * 10 * 1.06)
+    assert first.energy.month_indexed
+    if region == "flanders":
+        assert first.injection is not None
+        assert first.injection.spp_indexed
+        assert first.injection.factor == pytest.approx(0.73)
+    else:
+        assert first.injection is None
+    with pytest.raises(ExtractorError, match="tax block"):
+        parse_snapshot(
+            fixture_text("dats24_groen_variabel_2023-03.pdf", layout=True),
+            "test://dats24",
+            region,
+        )
 
 
 def test_injection_resolves_the_delivery_month_not_the_most_recent_value() -> None:

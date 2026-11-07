@@ -124,6 +124,7 @@ from .flow_switch import (
     _another_contract,
     _carried_card_month,
     _drop_left_contract_answers,
+    _signing_cards_placeholders,
     _validate_contract_dates,
 )
 from .providers import (
@@ -223,7 +224,9 @@ class _WizardStepsMixin:
             return self.async_abort(reason="supplier_region_unavailable")
         errors: dict[str, str] = {}
         if user_input is not None:
-            errors = _validate_contract_dates(user_input, self._data)
+            errors = _validate_contract_dates(
+                user_input, self._data, self._stored_data()
+            )
             stored = self._stored_data()
             put_back = False
             if _carried_card_month(stored, self._data, user_input):
@@ -274,7 +277,12 @@ class _WizardStepsMixin:
                 schema, {**dict.fromkeys(_CONTRACT_DATE_KEYS), **user_input}
             )
         return self.async_show_form(
-            step_id="contract", data_schema=schema, errors=errors
+            step_id="contract",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders=_signing_cards_placeholders(
+                {**self._data, **(user_input or {})}
+            ),
         )
 
     async def async_step_settlement(

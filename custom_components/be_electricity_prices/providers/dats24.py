@@ -114,6 +114,15 @@ _CONTRACT_LABEL = "DATS 24 Elektriciteit Groen Variabel (transferred to EnergyVi
 # card: the CDN has none for August 2026 or later.
 _WITHDRAWN = date(2026, 8, 1)
 _LAST_CARD = last_card_month(_WITHDRAWN)
+# The first card whose formulas read, the energy's checked against the rate it
+# prints and in Flanders the feed-in's against its figure: every card from
+# April 2023 to July 2026 does in both regions, and those of January to March
+# 2023 fail on their tax block, with none on the CDN before. A signing card
+# gives the cohort its formulas alone, the network coming from each month's
+# own card. A household that signed outside these is refused: no card would
+# be read for it, and each month would bill on its own card's formulas
+# without a word (``Contract.signing_cards_from``).
+_SIGNING_CARDS_FROM = date(2023, 4, 1)
 
 
 _FLANDERS_DSOS = FLUVIUS_AREA_LABELS_UPPER
@@ -628,6 +637,7 @@ EXTRACTOR = SupplierExtractor(
             # Offered marked as withdrawn to the households EnergyVision took
             # over on 1 September 2026 on the same contract and tariff.
             withdrawn=_WITHDRAWN,
+            signing_cards_from=_SIGNING_CARDS_FROM,
         ),
     ),
     fetch=fetch,

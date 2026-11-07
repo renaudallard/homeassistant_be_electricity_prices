@@ -105,22 +105,134 @@ async def test_a_new_setup_signed_on_a_card_read_goes_on(
 ) -> None:
     """The reporter's case: signed on the December 2025 card and supplied by
     DATS 24 from February 2026. The flow takes the card month alone, with
-    the start date beside it, or no date at all."""
+    the start date beside it, or no date at all. A card whose network table
+    does not read still gives its formulas, the network coming from each
+    month's own card: Flanders in January 2025, Wallonia in June 2025, and
+    both regions from April 2023."""
     freezer.move_to(_NOW)
-    for answers in (
-        {const.CONF_TARIFF_CARD_DATE: "2025-12-01"},
-        {
-            const.CONF_TARIFF_CARD_DATE: "2025-12-01",
-            const.CONF_CONTRACT_START_DATE: "2026-02-01",
-        },
-        {},
+    for region, answers in (
+        (const.REGION_FLANDERS, {const.CONF_TARIFF_CARD_DATE: "2025-12-01"}),
+        (
+            const.REGION_FLANDERS,
+            {
+                const.CONF_TARIFF_CARD_DATE: "2025-12-01",
+                const.CONF_CONTRACT_START_DATE: "2026-02-01",
+            },
+        ),
+        (const.REGION_FLANDERS, {}),
+        (const.REGION_FLANDERS, {const.CONF_TARIFF_CARD_DATE: "2025-01-01"}),
+        (const.REGION_WALLONIA, {const.CONF_TARIFF_CARD_DATE: "2025-06-01"}),
+        (const.REGION_WALLONIA, {const.CONF_CONTRACT_START_DATE: "2023-04-15"}),
     ):
-        result = await _contract_step(hass, const.REGION_FLANDERS)
+        result = await _contract_step(hass, region)
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {const.CONF_CONTRACT: _CONTRACT, **answers}
         )
         assert result["step_id"] != "contract", (answers, result)
         hass.config_entries.flow.async_abort(result["flow_id"])
+
+
+@pytest.mark.usefixtures("enable_custom_integrations", "_no_setup")
+@pytest.mark.parametrize(
+    ("region", "answers", "field"),
+    [
+        pytest.param(
+            const.REGION_FLANDERS,
+            {const.CONF_TARIFF_CARD_DATE: "2023-03-01"},
+            const.CONF_TARIFF_CARD_DATE,
+            id="before-the-first-card-read",
+        ),
+        pytest.param(
+            const.REGION_FLANDERS,
+            {const.CONF_CONTRACT_START_DATE: "2026-09-01"},
+            const.CONF_CONTRACT_START_DATE,
+            id="the-transfer-date-alone",
+        ),
+        pytest.param(
+            const.REGION_FLANDERS,
+            {const.CONF_TARIFF_CARD_DATE: "2026-08-01"},
+            const.CONF_TARIFF_CARD_DATE,
+            id="after-the-last-card",
+        ),
+        pytest.param(
+            const.REGION_WALLONIA,
+            {const.CONF_CONTRACT_START_DATE: "2023-01-10"},
+            const.CONF_CONTRACT_START_DATE,
+            id="wallonia-before-the-first-card-read",
+        ),
+    ],
+)
+async def test_a_signing_month_with_no_card_read_is_refused(
+    hass: HomeAssistant,
+    freezer: Any,
+    region: str,
+    answers: dict[str, str],
+    field: str,
+) -> None:
+    """No card is read for these months: before April 2023 the cards fail
+    to parse, and none was published after July 2026. Billed on, each month
+    took its own card's formulas without a word, July 2026's from August
+    2026 on. The field that gave the month is refused, naming the months
+    read."""
+    freezer.move_to(_NOW)
+    result = await _contract_step(hass, region)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {const.CONF_CONTRACT: _CONTRACT, **answers}
+    )
+    assert result["step_id"] == "contract"
+    assert result["errors"] == {field: "card_month_unread"}
+    assert result["description_placeholders"] == {
+        "first_card": "04/2023",
+        "last_card": "07/2026",
+    }
+
+
+@pytest.mark.usefixtures("enable_custom_integrations", "_no_setup")
+async def test_an_entry_kept_on_an_unread_card_month_still_saves_an_edit(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The edit passes the contract step with the stored dates, so an entry
+    set up before the check on a month no card is read for was refused
+    whatever it changed. The month it already holds stands; another one is
+    still refused."""
+    freezer.move_to(_NOW)
+    entry = make_entry(
+        supplier="dats24",
+        contract=_CONTRACT,
+        region=const.REGION_FLANDERS,
+        dso=const.DSO_FLUVIUS_ANTWERPEN,
+        tariff_card_date="2023-01-01",
+    )
+    entry.add_to_hass(hass)
+    configure = hass.config_entries.options.async_configure
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await configure(result["flow_id"], {"next_step_id": "edit"})
+    result = await configure(
+        result["flow_id"],
+        {const.CONF_SUPPLIER: "dats24", const.CONF_REGION: const.REGION_FLANDERS},
+    )
+    assert result["step_id"] == "contract"
+    moved = await configure(
+        result["flow_id"],
+        {const.CONF_CONTRACT: _CONTRACT, const.CONF_TARIFF_CARD_DATE: "2023-02-01"},
+    )
+    assert moved["errors"] == {const.CONF_TARIFF_CARD_DATE: "card_month_unread"}
+    result = await configure(
+        result["flow_id"],
+        {const.CONF_CONTRACT: _CONTRACT, const.CONF_TARIFF_CARD_DATE: "2023-01-01"},
+    )
+    assert result["step_id"] == "dso", result
+    result = await configure(
+        result["flow_id"], {const.CONF_DSO: const.DSO_FLUVIUS_WEST}
+    )
+    for _ in range(20):
+        if result["type"] != "form":
+            break
+        assert not result.get("errors"), result
+        result = await configure(result["flow_id"], {})
+    assert result["type"] == "create_entry", result
+    assert entry.data[const.CONF_DSO] == const.DSO_FLUVIUS_WEST
+    assert entry.data[const.CONF_TARIFF_CARD_DATE] == "2023-01-01"
 
 
 async def test_a_kept_entry_prices_again_on_the_last_card(
@@ -273,3 +385,32 @@ def test_the_withdrawn_product_card_names_the_signing_card() -> None:
             "of the month you signed, where that card can be read." in text
         )
         assert "If {supplier} moves you" not in text
+
+
+def test_a_month_held_on_another_contract_is_still_refused(freezer: Any) -> None:
+    """Only the month the entry holds on this very contract stands: a start
+    date kept from another supplier's contract is no DATS 24 signing month,
+    and moved onto DATS 24 it would be read as one."""
+    from custom_components.be_electricity_prices.flow_switch import (
+        _validate_contract_dates,
+    )
+
+    freezer.move_to(_NOW)
+    held = {const.CONF_CONTRACT_START_DATE: "2023-01-10"}
+    stored = {
+        const.CONF_SUPPLIER: "eneco",
+        const.CONF_CONTRACT: "power_flex",
+        const.CONF_REGION: const.REGION_FLANDERS,
+        **held,
+    }
+    moved = {**stored, const.CONF_SUPPLIER: "dats24"}
+    answers = {const.CONF_CONTRACT: _CONTRACT, **held}
+    assert _validate_contract_dates(answers, moved, stored) == {
+        const.CONF_CONTRACT_START_DATE: "card_month_unread"
+    }
+    on_dats24 = {
+        **stored,
+        const.CONF_SUPPLIER: "dats24",
+        const.CONF_CONTRACT: _CONTRACT,
+    }
+    assert _validate_contract_dates(answers, on_dats24, on_dats24) == {}

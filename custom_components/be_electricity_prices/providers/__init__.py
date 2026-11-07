@@ -142,6 +142,17 @@ def withdrawn_on(supplier_id: str | None, contract_id: str | None) -> date | Non
     return None if contract is None else contract.withdrawn
 
 
+def signing_cards(
+    supplier_id: str | None, contract_id: str | None
+) -> tuple[date, date] | None:
+    """The first and last month whose card gives a household that signed on
+    this withdrawn product its formulas (``Contract.signing_cards``), or
+    ``None`` where no signing month is refused, read from the registry for
+    the reason :func:`offers_quarter_hourly` gives."""
+    contract = _contract(supplier_id, contract_id)
+    return None if contract is None else contract.signing_cards()
+
+
 def feed_in_floor_from(supplier_id: str | None, contract_id: str | None) -> date | None:
     """The first signing month whose card guarantees the feed-in minimum
     (``Contract.feed_in_floor_from``), or ``None`` where every issue read

@@ -163,11 +163,27 @@ class Contract:
     # the product's terms is still billed. Purely declarative: nothing
     # compares it to the clock.
     withdrawn: date | None = None
+    # For a withdrawn product, the first month whose card's formulas the
+    # reader reads, the last being its last card (``last_card_month``). A
+    # signing card gives a cohort its energy and feed-in formulas alone. The
+    # config flow refuses a signing month outside: no card would be read for
+    # it, and each month would bill on its own card's formulas, the last
+    # card's once there is none, without a word. None where no signing month
+    # is refused.
+    signing_cards_from: date | None = None
     # The first signing month whose card guarantees the feed-in minimum the
     # card read for every month prints, for a product read off a later card
     # than the one its households signed: one that signed before it is
     # credited no floor (``signing_month.resolve_signed_feed_in_floor``).
     feed_in_floor_from: date | None = None
+
+    def signing_cards(self) -> tuple[date, date] | None:
+        """The first and last month whose card gives a household that signed
+        on this withdrawn product its formulas, or None where no signing
+        month is refused (``signing_cards_from``)."""
+        if self.withdrawn is None or self.signing_cards_from is None:
+            return None
+        return self.signing_cards_from, last_card_month(self.withdrawn)
 
 
 @dataclass(frozen=True, kw_only=True)
