@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import re
 from collections.abc import Callable, Iterator, Sequence
 from datetime import date
@@ -81,7 +82,7 @@ from custom_components.be_electricity_prices.providers.base import (
     TaxOverlay,
 )
 from scripts import card_texts
-from tests import FakeBody
+from tests import FIXTURES, FakeBody
 
 
 class _PdfResponse:
@@ -3094,3 +3095,32 @@ def test_the_render_stamp_covers_every_reader_and_no_download_code() -> None:
         assert source is not None and Path(source).resolve() in hashed, reader.__name__
     source = inspect.getsourcefile(fetch_pdf_text)
     assert source is not None and Path(source).resolve() not in hashed
+
+
+def test_a_render_of_ours_logs_what_pypdf_skips_at_debug(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """energie.be's November 2026 cards write a few ToUnicode entries as
+    five hex digits, which pypdf skips with a WARNING each time it reads
+    them (#165). Read by us, the card logs none of them above debug and its
+    text is the same; read by anything else, pypdf logs them as before."""
+    payload = (FIXTURES / "energiebe_variable_nov.pdf").read_bytes()
+    caplog.set_level(logging.DEBUG)
+    text = asyncio.run(_pdf.render_pdf("plain", "card", payload, extract_pdf_text))
+    pypdf_warnings = [
+        r
+        for r in caplog.records
+        if r.name.startswith("pypdf") and r.levelno >= logging.WARNING
+    ]
+    assert pypdf_warnings == []
+    assert any(
+        r.name == _pdf.__name__
+        and r.levelno == logging.DEBUG
+        and "Odd-length" in r.getMessage()
+        for r in caplog.records
+    )
+    caplog.clear()
+    assert asyncio.run(asyncio.to_thread(extract_pdf_text, payload)) == text
+    assert any(
+        r.name == "pypdf._cmap" and r.levelno == logging.WARNING for r in caplog.records
+    )

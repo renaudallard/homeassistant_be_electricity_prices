@@ -75,7 +75,7 @@ from typing import Final
 import aiohttp
 from homeassistant.util import dt as dt_util
 
-from .providers._pdf import read_capped
+from .providers._pdf import read_capped, render_in_thread
 from .providers._pdf_render import extract_pdf_text
 
 _LOGGER = logging.getLogger(__name__)
@@ -371,7 +371,7 @@ async def _read_pdf(session: aiohttp.ClientSession, url: str) -> str | None:
             _LOGGER.debug("Brugel sheet %s answered %d", url, r.status)
             return None
         payload = await read_capped(r, url)
-    return await asyncio.to_thread(extract_pdf_text, payload)
+    return await render_in_thread(extract_pdf_text, payload)
 
 
 async def _pdf_text(session: aiohttp.ClientSession, url: str) -> str | None:

@@ -30,13 +30,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import pkgutil
 import re
+import threading
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 
 import aiohttp
+import pypdf
 
 from ._parse import (
     to_float,
@@ -51,6 +54,44 @@ from .base import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# pypdf logs at WARNING what it skips or repairs while it reads a card: a
+# ToUnicode entry it cannot decode (every energie.be card from November
+# 2026 on), a header behind a byte order mark, its advice to install
+# fontTools. The text comes out as the tests pin it either way and nothing
+# there is for the user to act on, so while a render of ours runs, its
+# pypdf records go to this module's debug log instead. pypdf reads made by
+# anything else in Home Assistant log as before.
+_RENDERING = threading.local()
+
+
+class _PypdfToDebug(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not getattr(_RENDERING, "active", False):
+            return True
+        _LOGGER.debug("%s: %.300s", record.name, record.getMessage())
+        return False
+
+
+# pypdf logs to the logger of the module that met the problem.
+_TO_DEBUG = _PypdfToDebug()
+for _module in pkgutil.walk_packages(pypdf.__path__, "pypdf."):
+    logging.getLogger(_module.name).addFilter(_TO_DEBUG)
+
+
+def _render_quietly(render: Callable[[bytes], str], payload: bytes) -> str:
+    _RENDERING.active = True
+    try:
+        return render(payload)
+    finally:
+        _RENDERING.active = False
+
+
+async def render_in_thread(render: Callable[[bytes], str], payload: bytes) -> str:
+    """Run ``render`` on ``payload`` in a worker thread, the pypdf records
+    it causes logged at debug."""
+    return await asyncio.to_thread(_render_quietly, render, payload)
 
 
 def _read_version() -> str:
@@ -362,7 +403,7 @@ async def render_pdf(
     """
     hook = _RENDER_HOOK.get()
     if hook is None:
-        return await asyncio.to_thread(render, payload)
+        return await render_in_thread(render, payload)
     return await hook(variant, url, payload, render)
 
 
