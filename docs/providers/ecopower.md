@@ -117,14 +117,22 @@ fetch(session, contract_id, region)              ecopower.py
 
 ### Current card discovery
 
-- **gbs** (`_resolve_latest_pdf`, `ecopower.py`): GET the price page HTML, run `_CARD_RE`
-  (`ecopower.py`) over it to collect every `(sort_key, YYYYMM, url)` triple, **drop any URL
+- **gbs** (`_resolve_latest_pdf`, `ecopower.py`): GET the price page HTML, read its card links
+  with `_card_links` and `_CARD_RE` (`ecopower.py`) to collect every `(sort_key, YYYYMM, url)`
+  triple, **drop any URL
   containing `inschatting`** (the next-month estimation preview), sort ascending and take the
   highest. A definitive card is published in arrears, so this is last month's card standing in
   for the running month (in October, September's). Label is `YYYY-MM`.
-- **dbs** (`_resolve_latest_dbs_pdf`, `ecopower.py`): GET the dynamic product page, run
-  `_DBS_CARD_RE` (`ecopower.py`), sort and take the highest. The dynamic formula is
-  stable across months, so the newest card is the one in effect.
+- **dbs** (`_resolve_latest_dbs_pdf`, `ecopower.py`): GET the dynamic product page, read its
+  links with `_card_links` and `_DBS_CARD_RE` (`ecopower.py`), sort and take the highest. The
+  dynamic formula is stable across months, so the newest card is the one in effect.
+
+A link is the end of a double-quoted value from its first scheme on, stamped by the last card
+name past that scheme; the dynamic name must be followed by a `.pdf` in the same value
+(`_card_links`, `ecopower.py`). Each value is read on its own and once: as one pattern over the
+page, a value without its closing quote, or with schemes or card names and nothing after them,
+was read to its end again from every scheme and every name in it, the square of its length or
+worse.
 
 Both patterns accept a **six- or eight-digit** stamp. Ecopower named every card `YYYYMM_...` until
 the August 2026 dynamic card arrived as `20260801_dbs_tariefkaart.pdf`; the six-digit pattern could
@@ -390,9 +398,11 @@ Three matching strategies, in priority order:
 1. `_INJECTION_FIXED_RE` (`_ecopower_cards.py`): an authoritative `OPGELET t.e.m. <date> is de
    terugleververgoeding <value> euro/kWh en 100% vast` note. When present **and still in effect**
    (`_fixed_note_in_effect`, `_ecopower_cards.py`), this fixed value wins.
-2. `_INJECTION_RE` (`_ecopower_cards.py`): the label line, matching both the pre-May-2026 label
-   `Terugleververgoeding (digitale meter)` and the post-May-2026 label
-   `Injectie Groene Burgerstroom (terugleververgoeding)`.
+2. `_same_line_injection` (`_ecopower_cards.py`): the label line, under the post-May-2026 label
+   `Injectie Groene Burgerstroom (terugleververgoeding)` (`_INJECTION_RE`) or the pre-May-2026
+   label `Terugleververgoeding (digitale meter)` (`_OLD_INJECTION_RE`), whichever starts first.
+   Each line is tried at its first label of each kind only (`_first_on_its_line`): a later one on
+   the same line reaches nothing the first does not, so a line of labels is read once.
 3. `_INJECTION_VARIABEL_RE` (`_ecopower_cards.py`): the July 2026 `VAST` / `VARIABEL` layout,
    mirroring `_ENERGY_VARIABEL_RE` and anchored the same way. Before it existed the whole block
    missed and `_extract_injection` returned `None`, which costs a solar user their entire feed-in
@@ -470,8 +480,8 @@ Every non-obvious hazard the source comments flag:
   `test_fetch_for_month_skips_inschatting_preview` (`test_ecopower.py`).
 - **Issue #31, May 2026 injection relabel.** The injection row was renamed from
   `Terugleververgoeding (digitale meter)` to `Injectie Groene Burgerstroom (terugleververgoeding)`,
-  which the old regex missed, so the injection price went unavailable. `_INJECTION_RE` now matches
-  both labels (`_ecopower_cards.py`; `test_may_card_injection_label_is_matched`,
+  which the old regex missed, so the injection price went unavailable. `_same_line_injection`
+  now reads both labels (`_ecopower_cards.py`; `test_may_card_injection_label_is_matched`,
   `test_ecopower.py`).
 - **Split-layout cards (mid-2026).** The resolved energy and injection values moved onto the line
   **below** their label. `_ENERGY_SPLIT_RE` and `_INJECTION_SPLIT_RE` are the fallbacks
@@ -516,6 +526,17 @@ Every non-obvious hazard the source comments flag:
   backfill skip / silently-dropped mandatory charge (`_ecopower_overlays.py`).
 - **`discover` logs unreachable pages.** A partial page failure is logged, not swallowed, so a
   dropped family is not masked by a still-non-empty result (`ecopower.py`).
+- **A card costs its length.** A pattern tried from every place it could start, split or
+  backtrack to read the rest of a long run again from each: digits after the energy and feed-in
+  labels, blanks around a sign or a plus, a label over and over on one line, an unclosed SPP
+  bracket, `digitale meter` over and over with no figure after it, excise bands over and over,
+  and on the price pages links with no closing quote or no card name. A long digit run under a
+  wrapped network label was cut into four or more in every way (`_DBS_WRAPPED_LABEL_RE` now
+  counts the row a character at a time). Each run is now read once: a figure from the start of
+  its digits, a label's line up to the next such label (`_rest_of_line`), a footnote's gap up to
+  the next footnote, an optional sign or plus with its blanks as one piece. A crafted card of
+  100,000 characters takes milliseconds where it took seconds to hours
+  (`test_a_crafted_card_is_read_in_time_linear_in_its_length`, `test_ecopower.py`).
 
 ## Test fixtures
 
@@ -542,7 +563,8 @@ Ranked by likelihood of breaking when Ecopower re-renders a card:
    `_ENERGY_SPLIT_RE` (`_ecopower_cards.py`)
    for gbs, `_DBS_ENERGY_RE` (`_ecopower_cards.py`) for dbs. A `raise ExtractorError("could not
    parse ... rate/formula")` is the symptom.
-2. **Injection label / layout / note changed** -> `_INJECTION_RE`, `_INJECTION_SPLIT_RE`,
+2. **Injection label / layout / note changed** -> `_INJECTION_RE`, `_OLD_INJECTION_RE`,
+   `_INJECTION_SPLIT_RE`,
    `_INJECTION_FIXED_RE`, `_fixed_note_in_effect` (`_ecopower_cards.py`). Injection is nullable,
    so a miss shows as an unavailable injection sensor, not a hard error (watch for silent loss).
 3. **DSO table column shuffle or new sub-area label** -> `_DSO_LABELS` (`_ecopower_overlays.py`),

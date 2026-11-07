@@ -140,8 +140,10 @@ def _slice_between(text: str, start: str, end: str) -> str | None:
 # narrower dynamic card: "Fluvius Midden-" / "<numbers>" / "Vlaanderen"
 # on three lines. Stitch the two label fragments back together around the
 # rate row so the per-DSO row regex sees one line. [ \t] (not \s) keeps
-# the regex from swallowing the row's trailing newline.
-_DBS_WRAPPED_LABEL_RE = re.compile(r"(Fluvius\s+\S*-)\n((?:[\d,]+[ \t]*){4,})\n(\S+)")
+# the regex from swallowing the row's trailing newline. The row is counted a
+# character at a time: as runs of digits, a long run was cut into four or
+# more in every way before the line failed.
+_DBS_WRAPPED_LABEL_RE = re.compile(r"(Fluvius\s+\S*-)\n((?:[\d,][ \t]*){4,})\n(\S+)")
 
 
 def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
@@ -193,9 +195,14 @@ def _extract_dbs_dsos(text: str) -> dict[str, DsoOverlay]:
 # whatever its upper bound: "tussen 0 en 3.000 kWh: 0,04600 euro/kWh" until
 # October 2026, then "tussen 0 en 20.000 kWh: 0,0422 euro/kWh" once the law of
 # 25 October 2026 had flattened the household scheme. Pinned to 3.000, the
-# November cards were refused.
+# November cards were refused. The label's gap stops at the next label on its
+# line, the band's at the next band, and the rate is read from the start of
+# its digits: scanned on to the line's end from each, a line of labels, of
+# bands or of digits was read again from every one.
 _FEDERAL_EXCISE_RE = re.compile(
-    r"Bijzondere accijns[^\n]*tussen 0\s+en\s+[\d.]+\s*kWh[^\n]*?([\d,]+)\s*euro/kWh"
+    r"Bijzondere accijns(?:(?!Bijzondere accijns)[^\n])*"
+    r"tussen 0\s+en\s+[\d.]+\s*kWh"
+    r"(?:(?!tussen 0\s+en\s+[\d.]+\s*kWh)[^\n])*?(?<![\d,])([\d,]+)\s*euro/kWh"
 )
 _ENERGY_CONTRIB_RE = re.compile(r"Bijdrage op de energie\s+([\d,]+)\s*euro/kWh")
 _GSC_RE = re.compile(r"Kost GSC\s+([\d,]+)\s*euro/kWh")

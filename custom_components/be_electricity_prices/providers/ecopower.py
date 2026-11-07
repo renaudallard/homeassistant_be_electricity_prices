@@ -123,9 +123,43 @@ _PRICE_PAGE = f"{_BASE_URL}/groene-stroom/prijs-nieuw"
 # for a next-month "inschatting" (estimation) that gets replaced by the
 # definitive card on the 1st. Match only the definitive form.
 _CARD_RE = re.compile(
-    r'(https?://[^"]+/(?P<stamp>20\d{4}(?:\d{2})?)_gbs_tariefkaart\.pdf[^"]*)"',
-    re.IGNORECASE,
+    r"/(?P<stamp>20\d{4}(?:\d{2})?)_gbs_tariefkaart\.pdf", re.IGNORECASE
 )
+_SCHEME_RE = re.compile(r"https?://", re.IGNORECASE)
+_PDF_RE = re.compile(r"\.pdf", re.IGNORECASE)
+
+
+def _last_pdf(value: str) -> int:
+    """Where the last ".pdf" in ``value`` starts, or -1."""
+    last = -1
+    for match in _PDF_RE.finditer(value):
+        last = match.start()
+    return last
+
+
+def _card_links(
+    html: str, name: re.Pattern[str], *, pdf_after: bool
+) -> list[tuple[str, str]]:
+    """``(url, stamp)`` of every card link on ``html`` that ``name`` reads.
+
+    A link is the end of a double-quoted value from its first scheme on,
+    stamped by the last ``name`` past that scheme; ``pdf_after`` asks for a
+    ".pdf" after the name as well, which the gbs name carries itself. Only
+    the first scheme of a value can start one: a later one sees no name the
+    first does not. Read as one pattern over the page, a value without its
+    closing quote or its card name was read to its end again from every
+    scheme and every name in it, the square of its length or worse.
+    """
+    links: list[tuple[str, str]] = []
+    for value in html.split('"')[:-1]:
+        scheme = _SCHEME_RE.search(value)
+        if scheme is None:
+            continue
+        end = _last_pdf(value) if pdf_after else len(value)
+        names = list(name.finditer(value, scheme.end() + 1, max(end, 0)))
+        if names:
+            links.append((value[scheme.start() :], names[-1]["stamp"]))
+    return links
 
 
 def _card_stamp_keys(stamp: str) -> tuple[str, str]:
@@ -159,8 +193,11 @@ _DBS_PAGE = f"{_BASE_URL}/groene-stroom/dynamische-burgerstroom"
 # not see the dated card and kept resolving January's; the optional letter
 # is consumed but not captured so ordering stays numeric.
 _DBS_CARD_RE = re.compile(
-    r'(https?://[^"]+/(?P<stamp>20\d{4}(?:\d{2})?)[a-z]?_dbs_tariefkaart[^"]*\.pdf[^"]*)"',
-    re.IGNORECASE,
+    r"/(?P<stamp>20\d{4}(?:\d{2})?)[a-z]?_dbs_tariefkaart", re.IGNORECASE
+)
+# Any card family's name, which discover() reports when it is new.
+_FAMILY_RE = re.compile(
+    r"/20\d{4}(?:\d{2})?[a-z]?_(?:[a-z_]+_)?tariefkaart", re.IGNORECASE
 )
 
 # Identifier discover() emits for the dynamic card. Ecopower keys its
@@ -231,8 +268,8 @@ async def fetch_for_month(
     in_month = sorted(
         (sort_key, url)
         for sort_key, yyyymm, url in (
-            (*_card_stamp_keys(m.group("stamp")), m.group(1))
-            for m in _CARD_RE.finditer(html)
+            (*_card_stamp_keys(stamp), link)
+            for link, stamp in _card_links(html, _CARD_RE, pdf_after=False)
         )
         if yyyymm == target and "inschatting" not in url.lower()
     )
@@ -353,19 +390,23 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
             _LOGGER.warning("Ecopower discover: %s unreachable: %s", page, err)
     combined = "\n".join(bodies)
     out: set[str] = set()
-    if _CARD_RE.search(combined):
+    if _card_links(combined, _CARD_RE, pdf_after=False):
         out.add(_CONTRACT_ID)
-    if _DBS_CARD_RE.search(combined):
+    if _card_links(combined, _DBS_CARD_RE, pdf_after=True):
         out.add(_DBS_DISCOVER_ID)
     # Six OR eight digits, matching the card patterns above: pinned at six,
     # a family published under the YYYYMMDD naming would be invisible to
     # catalog drift detection, which is the one thing meant to notice a new
-    # Ecopower product.
-    for other in re.findall(
-        r'/(20\d{4}(?:\d{2})?[a-z]?_(?:[a-z_]+_)?tariefkaart[^"]*)\.pdf',
-        combined,
-        re.IGNORECASE,
-    ):
+    # Ecopower product. A quoted value names at most one family: from the
+    # first name in it that ends before its last ".pdf", up to that ".pdf".
+    # That is what one pattern over the page read, without reading the rest
+    # of the value again from every name in it.
+    for value in combined.split('"'):
+        end = _last_pdf(value)
+        head = _FAMILY_RE.search(value, 0, end) if end >= 0 else None
+        if head is None:
+            continue
+        other = value[head.start() + 1 : end]
         family = re.sub(r"^20\d{4}(?:\d{2})?[a-z]?_", "", other)
         family = re.sub(r"_tariefkaart.*$", "", family)
         if family and not family.startswith(("gbs", "dbs")):
@@ -434,8 +475,8 @@ async def _resolve_latest_pdf(
     matches = [
         (sort_key, yyyymm, url)
         for sort_key, yyyymm, url in (
-            (*_card_stamp_keys(m.group("stamp")), m.group(1))
-            for m in _CARD_RE.finditer(html)
+            (*_card_stamp_keys(stamp), link)
+            for link, stamp in _card_links(html, _CARD_RE, pdf_after=False)
         )
         if "inschatting" not in url.lower()
     ]
@@ -458,8 +499,8 @@ async def _resolve_latest_dbs_pdf(
     """
     html = await fetch_text(session, _DBS_PAGE)
     matches = sorted(
-        (*_card_stamp_keys(m.group("stamp")), m.group(1))
-        for m in _DBS_CARD_RE.finditer(html)
+        (*_card_stamp_keys(stamp), link)
+        for link, stamp in _card_links(html, _DBS_CARD_RE, pdf_after=True)
     )
     if not matches:
         raise ExtractorError(f"no Ecopower dbs tariefkaart link found on {_DBS_PAGE}")
@@ -491,8 +532,8 @@ async def _fetch_dbs_for_month(
     eligible = sorted(
         (sort_key, yyyymm, url)
         for sort_key, yyyymm, url in (
-            (*_card_stamp_keys(m.group("stamp")), m.group(1))
-            for m in _DBS_CARD_RE.finditer(html)
+            (*_card_stamp_keys(stamp), link)
+            for link, stamp in _card_links(html, _DBS_CARD_RE, pdf_after=True)
         )
         if yyyymm <= target
     )

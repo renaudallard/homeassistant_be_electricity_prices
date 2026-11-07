@@ -60,6 +60,21 @@ _MONTH_ALT = "|".join(_NL_MONTHS)
 # ---- energy ------------------------------------------------------------------
 
 
+# The consumption and feed-in labels.
+_ENERGY_LABEL = r"Afname\s+Groene\s+burgerstroom"
+_INJECTION_LABEL = r"Injectie\s+Groene\s+Burgerstroom\s*\(terugleververgoeding\)"
+
+
+def _rest_of_line(label: str) -> str:
+    """``label`` and the rest of its line, its line break included.
+
+    The rest stops at the next ``label`` on the line, which reads the same
+    lines below: run on to the line's end from each, a line of labels was
+    read again from every one.
+    """
+    return rf"{label}(?:(?!{label})[^\n])*\n"
+
+
 # Anchor on the start of the consumption line ("Groene burgerstroom" or
 # "Afname Groene burgerstroom"). Without the line anchor this also matched
 # the "Injectie Groene Burgerstroom ... euro/kWh" line, so a card that
@@ -68,9 +83,10 @@ _MONTH_ALT = "|".join(_NL_MONTHS)
 # figure instead of falling through to _ENERGY_SPLIT_RE. The leading
 # ``[^\w\n]*`` tolerates a bullet or other punctuation prefix a re-render
 # might add; it cannot consume the leading word of "Injectie", so that line
-# stays excluded.
+# stays excluded. The rate is read from the start of its digits: tried from
+# each digit of a long run, the run was read again from every one.
 _ENERGY_RE = re.compile(
-    r"^[^\w\n]*(?:Afname\s+)?Groene\s+burgerstroom[^\n]*?([\d,]+)\s*euro/kWh",
+    r"^[^\w\n]*(?:Afname\s+)?Groene\s+burgerstroom[^\n]*?(?<![\d,])([\d,]+)\s*euro/kWh",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -79,7 +95,7 @@ _ENERGY_RE = re.compile(
 # instead of trailing it on the same line. Fall back to this when the
 # same-line form misses.
 _ENERGY_SPLIT_RE = re.compile(
-    r"Afname\s+Groene\s+burgerstroom[^\n]*\n\s*([\d,]+)\s*euro/kWh",
+    _rest_of_line(_ENERGY_LABEL) + r"\s*([\d,]+)\s*euro/kWh",
     re.IGNORECASE,
 )
 
@@ -92,11 +108,11 @@ _ENERGY_SPLIT_RE = re.compile(
 # looser next-line-or-two fallback matched the "Kost WKK 0,00392 euro/kWh"
 # row two lines below the label on the older same-line cards, which would
 # bill the cogeneration levy as the commodity rate if the same-line regex
-# ever missed on one of them.
+# ever missed on one of them. The rate is read from the start of its digits,
+# as _ENERGY_RE's is.
 _ENERGY_VARIABEL_RE = re.compile(
-    r"Afname\s+Groene\s+burgerstroom[^\n]*\n"
-    r"\s*VAST[^\n]*\n"
-    r"\s*VARIABEL[^\n]*?([\d,]+)\s*euro/kWh",
+    _rest_of_line(_ENERGY_LABEL) + r"\s*VAST[^\n]*\n"
+    r"\s*VARIABEL[^\n]*?(?<![\d,])([\d,]+)\s*euro/kWh",
     re.IGNORECASE,
 )
 
@@ -107,7 +123,8 @@ _ENERGY_VARIABEL_RE = re.compile(
 #   >= Jul 2026: "VAST 50% x 0,17 euro" / "VARIABEL +50% x 0,11444616 euro
 #                 deze waarde is gelijk aan [EPEX RLP 1]."
 # The second figure on each is the index the card resolved the rate at. The
-# RLP on the VARIABEL row keeps the feed-in rows, which print SPP, out.
+# RLP on the VARIABEL row keeps the feed-in rows, which print SPP, out. The
+# VAST row's line stops at the next VAST row on it, as _rest_of_line does.
 _ENERGY_FORMULA_RES = (
     re.compile(
         r"\(\s*(\d+)\s*%\s*vast\s+aan\s+([\d,]+)\s*euro\s*\+\s*"
@@ -115,16 +132,20 @@ _ENERGY_FORMULA_RES = (
         re.IGNORECASE,
     ),
     re.compile(
-        r"VAST\s+(\d+)\s*%\s*[×xX*]\s*([\d,]+)\s*euro[^\n]*\n"
-        r"\s*VARIABEL\s*\+?\s*(\d+)\s*%\s*[×xX*]\s*([\d,]+)\s*euro[^\n]*RLP",
+        r"VAST\s+(\d+)\s*%\s*[×xX*]\s*([\d,]+)\s*euro"
+        r"(?:(?!VAST\s+\d+\s*%\s*[×xX*]\s*[\d,]+\s*euro)[^\n])*\n"
+        r"\s*VARIABEL\s*(?:\+\s*)?(\d+)\s*%\s*[×xX*]\s*([\d,]+)\s*euro[^\n]*RLP",
         re.IGNORECASE,
     ),
 )
 # Footnote 1, naming the month the printed index is for. A card resolved on
-# an estimate says so instead ("Dit is de inschatting die de VNR ...").
+# an estimate says so instead ("Dit is de inschatting die de VNR ..."). The
+# gap to the month stops at the next such footnote on the line: run on to the
+# line's end from each, a line of them was read again from every one.
 _RLP_MONTH_RE = re.compile(
-    rf"werkelijke\s+RLP\s+gewogen\s+gemiddelde[^\n]*?voor\s+de\s+maand\s+"
-    rf"({_MONTH_ALT})",
+    r"werkelijke\s+RLP\s+gewogen\s+gemiddelde"
+    r"(?:(?!werkelijke\s+RLP\s+gewogen\s+gemiddelde)[^\n])*?"
+    rf"voor\s+de\s+maand\s+({_MONTH_ALT})",
     re.IGNORECASE,
 )
 
@@ -200,10 +221,12 @@ def _extract_energy(text: str) -> EnergyRates:
 # additive base so a punctuation drift never flips the sign silently.
 # The cards up to September 2025 say "elk uur": the product settled on the
 # hourly EPEX DA price until the day-ahead market moved to quarter-hours, and
-# a past month is stored as the product it was.
+# a past month is stored as the product it was. The blanks before the sign
+# are taken whole: shared with those after it when no sign is printed, a run
+# of blanks was split between the two in every way.
 _DBS_ENERGY_RE = re.compile(
     r"Dynamische\s+burgerstroom\s+elk\s+(kwartier|uur)\s+"
-    r"([\d,]+)\s*[×xX*]\s*EPEX\s*DA\s*"
+    r"([\d,]+)\s*[×xX*]\s*EPEX\s*DA\s*+"
     rf"([{SIGN_CHARS}]?)\s*([\d,]+)\s*euro/kWh",
     re.IGNORECASE,
 )
@@ -257,24 +280,74 @@ def _extract_dbs_abonnement(text: str) -> float:
 # ---- injection ---------------------------------------------------------------
 
 
+# The feed-in figure, read after a gap on its line: a sign glyph or blanks,
+# the digits, the unit. A start inside a run of blanks or of digits is never
+# the first that reads, the start of the run reads the same, so it is not
+# tried: tried from every one, a long run was read again from each.
+_INJECTION_FIGURE = rf"((?:[{SIGN_CHARS}]|(?<![^\S\n]))\s*(?<![\d,])[\d,]+)\s*euro/kWh"
+# The injection row was relabelled on the May 2026 card. Read both:
+#   <= Apr 2026: "Terugleververgoeding (digitale meter) 2 -0,0200 euro/kWh"
+#   >= May 2026: "Injectie Groene Burgerstroom (terugleververgoeding)2 -0,0200 euro/kWh"
+# SIGN_CHARS covers every minus glyph (hyphen, figure/en/em dash, U+2212) a PDF
+# re-render might swap in, so the sign never flips silently.
+#
+# Each label is matched with the pattern one regex over both labels was, but
+# tried only from the first label of its kind on a line: a later one on the
+# same line reaches no "digitale meter" and no figure the first does not, so
+# once the first fails the line is passed over. Tried from every label, a line
+# of labels was read to its end again from each. The older label's gap to the
+# figure stops at the next "digitale meter", the one tried before it, which
+# reads what the open gap read: run on to the line's end from each, a line of
+# "digitale meter" with no figure after them was read again from every one.
+_INJECTION_LABEL_RE = re.compile(_INJECTION_LABEL, re.IGNORECASE)
 _INJECTION_RE = re.compile(
-    # The injection row was relabelled on the May 2026 card. Match both:
-    #   <= Apr 2026:  "Terugleververgoeding (digitale meter) 2 -0,0200 euro/kWh"
-    #   >= May 2026:  "Injectie Groene Burgerstroom (terugleververgoeding)2 -0,0200 euro/kWh"
-    # SIGN_CHARS covers every minus glyph (hyphen, figure/en/em dash, U+2212)
-    # a PDF re-render might swap in, so the sign never flips silently.
-    r"(?:Injectie\s+Groene\s+Burgerstroom\s*\(terugleververgoeding\)"
-    r"|Terugleververgoeding[^\n]*digitale\s+meter)"
-    rf"[^\n]*?([{SIGN_CHARS}]?\s*[\d,]+)\s*euro/kWh",
+    _INJECTION_LABEL + r"[^\n]*?" + _INJECTION_FIGURE, re.IGNORECASE
+)
+_OLD_INJECTION_LABEL_RE = re.compile("Terugleververgoeding", re.IGNORECASE)
+_OLD_INJECTION_RE = re.compile(
+    r"Terugleververgoeding[^\n]*digitale\s+meter"
+    r"(?:(?!digitale\s+meter)[^\n])*?" + _INJECTION_FIGURE,
     re.IGNORECASE,
 )
+
+
+def _first_on_its_line(
+    text: str, label: re.Pattern[str], row: re.Pattern[str]
+) -> re.Match[str] | None:
+    """``row`` matched at the first ``label`` that reads, each line tried at
+    its first ``label`` only."""
+    failed = -1
+    for found in label.finditer(text):
+        if found.end() <= failed:
+            continue
+        match = row.match(text, found.start())
+        if match is not None:
+            return match
+        failed = text.find("\n", found.end())
+        if failed < 0:
+            return None
+    return None
+
+
+def _same_line_injection(text: str) -> re.Match[str] | None:
+    """The feed-in figure on its label's line, under whichever label comes
+    first, as one pattern over both labels read it, or ``None``."""
+    found = [
+        m
+        for m in (
+            _first_on_its_line(text, _INJECTION_LABEL_RE, _INJECTION_RE),
+            _first_on_its_line(text, _OLD_INJECTION_LABEL_RE, _OLD_INJECTION_RE),
+        )
+        if m is not None
+    ]
+    return min(found, key=lambda match: match.start()) if found else None
+
 
 # Split-layout fallback: mid-2026 cards print the resolved injection
 # value on the formula line *below* the label rather than on the label
 # line. Anchor on the label, then take the value on the next line.
 _INJECTION_SPLIT_RE = re.compile(
-    r"Injectie\s+Groene\s+Burgerstroom\s*\(terugleververgoeding\)[^\n]*\n"
-    rf"[^\n]*?([{SIGN_CHARS}]?\s*[\d,]+)\s*euro/kWh",
+    _rest_of_line(_INJECTION_LABEL) + r"[^\n]*?" + _INJECTION_FIGURE,
     re.IGNORECASE,
 )
 
@@ -285,9 +358,9 @@ _INJECTION_SPLIT_RE = re.compile(
 # Without this the whole block missed and _extract_injection returned None,
 # which costs a solar user their entire feed-in credit without raising.
 _INJECTION_VARIABEL_RE = re.compile(
-    r"Injectie\s+Groene\s+Burgerstroom\s*\(terugleververgoeding\)[^\n]*\n"
-    r"\s*VAST[^\n]*\n"
-    rf"\s*VARIABEL[^\n]*?([{SIGN_CHARS}]?\s*[\d,]+)\s*euro/kWh",
+    _rest_of_line(_INJECTION_LABEL)
+    + r"\s*VAST[^\n]*\n\s*VARIABEL[^\n]*?"
+    + _INJECTION_FIGURE,
     re.IGNORECASE,
 )
 
@@ -333,11 +406,17 @@ def _fixed_note_in_effect(text: str) -> bool:
 # Anchored on the literal VAST / VARIABEL rows: the pre-July cards, and the
 # June split card, print the same words in prose without those rows, and the
 # June one pins an actual 100%-fixed credit that must keep winning.
+#
+# The bracket is checked for SPP ahead and then read whole, the plus sign and
+# its blanks are one optional piece, and the blanks before the base's sign
+# are taken whole: scanned on from each SPP in it, an unclosed bracket was
+# read to its end again from every one, and the blanks were split between
+# two runs in every way.
 _INJECTION_SPP_SPLIT_RE = re.compile(
-    r"Injectie\s+Groene\s+Burgerstroom\s*\(terugleververgoeding\)[^\n]*\n"
-    r"\s*VAST\s+(\d+)\s*%\s*[×xX*]\s*([\d,]+)\s*euro[^\n]*\n"
-    r"\s*VARIABEL\s*\+?\s*(\d+)\s*%[^\n]*?formule\s+"
-    r"([\d,]+)\s*[×xX*]\s*[\d,]+\s*\[[^\]]*SPP[^\]]*\]\s*"
+    _rest_of_line(_INJECTION_LABEL)
+    + r"\s*VAST\s+(\d+)\s*%\s*[×xX*]\s*([\d,]+)\s*euro[^\n]*\n"
+    r"\s*VARIABEL\s*(?:\+\s*)?(\d+)\s*%[^\n]*?formule\s+"
+    r"([\d,]+)\s*[×xX*]\s*[\d,]+\s*\[(?=[^\]]*SPP)[^\]]*+\]\s*+"
     rf"([{SIGN_CHARS}]?)\s*([\d,]+)",
     re.IGNORECASE,
 )
@@ -367,7 +446,7 @@ def _extract_injection(text: str) -> InjectionRates | None:
     if fixed is not None and _fixed_note_in_effect(text):
         return InjectionRates(current=abs(to_float(fixed.group(1))))
     match = (
-        _INJECTION_RE.search(text)
+        _same_line_injection(text)
         or _INJECTION_VARIABEL_RE.search(text)
         or _INJECTION_SPLIT_RE.search(text)
     )
@@ -419,12 +498,18 @@ def _extract_injection(text: str) -> InjectionRates | None:
 #    0,10051971 [EPEX SPP 2] - 0,01. -0,0502 euro/kWh"
 #   "2 Dit is het werkelijke SPP gewogen gemiddelde van de Day Ahead EPEX
 #    (EPEX DA) voor de maand september."
+#
+# The bracket is read up to the next one that opens, and the footnote's gap to
+# its month up to the next such footnote, as _RLP_MONTH_RE's: run on from
+# each, a run of formulas with no closing bracket, or a line of footnotes, was
+# read again from every one.
 _SPP_PRINTED_RE = re.compile(
-    r"formule\s+[\d,]+\s*[×xX*]\s*([\d,]+)\s*\[[^\]]*SPP", re.IGNORECASE
+    r"formule\s+[\d,]+\s*[×xX*]\s*([\d,]+)\s*\[[^\][]*SPP", re.IGNORECASE
 )
 _SPP_MONTH_RE = re.compile(
-    rf"werkelijke\s+SPP\s+gewogen\s+gemiddelde[^\n]*?voor\s+de\s+maand\s+"
-    rf"({_MONTH_ALT})",
+    r"werkelijke\s+SPP\s+gewogen\s+gemiddelde"
+    r"(?:(?!werkelijke\s+SPP\s+gewogen\s+gemiddelde)[^\n])*?"
+    rf"voor\s+de\s+maand\s+({_MONTH_ALT})",
     re.IGNORECASE,
 )
 
@@ -449,7 +534,7 @@ def printed_spp_index(text: str) -> tuple[int, float] | None:
 #   "Terugleververgoeding elk kwartier 0,00098 × EPEX DA - 0,015 euro/kWh"
 _DBS_INJECTION_RE = re.compile(
     r"Terugleververgoeding\s+elk\s+(?:kwartier|uur)\s+"
-    r"([\d,]+)\s*[×xX*]\s*EPEX\s*DA\s*"
+    r"([\d,]+)\s*[×xX*]\s*EPEX\s*DA\s*+"
     rf"([{SIGN_CHARS}]?)\s*([\d,]+)\s*euro/kWh",
     re.IGNORECASE,
 )

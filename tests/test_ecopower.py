@@ -28,6 +28,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import time
+from collections.abc import Callable
 from datetime import date
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -35,7 +38,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
-from custom_components.be_electricity_prices.providers import ecopower
+from custom_components.be_electricity_prices.providers import (
+    _ecopower_cards,
+    _ecopower_overlays,
+    ecopower,
+)
 from custom_components.be_electricity_prices.providers._ecopower_cards import (
     _extract_energy,
     _extract_injection,
@@ -1010,3 +1017,160 @@ async def test_probe_keys_on_the_card_the_fetcher_resolves() -> None:
     )
     assert await probe(make_text_session(""), "ecopower_burgerstroom", "x") is None
     assert await probe(gbs, "unknown", "flanders") is None
+
+
+def _quietly(read: Callable[[str], object]) -> Callable[[str], None]:
+    """``read``, whatever it makes of the text: these cards print nothing."""
+
+    def call(text: str) -> None:
+        with contextlib.suppress(ExtractorError):
+            read(text)
+
+    return call
+
+
+def _listing(read: Callable[[Any], Any]) -> Callable[[str], None]:
+    """``read`` on a price page that serves ``html``, whatever it finds."""
+
+    def call(html: str) -> None:
+        with contextlib.suppress(ExtractorError):
+            asyncio.run(read(make_text_session(html)))
+
+    return call
+
+
+_FEED_IN = "Injectie Groene Burgerstroom (terugleververgoeding)"
+
+
+# Card text and price pages a host could serve instead, about 100,000
+# characters each or more where one piece costs little, on which a pattern was
+# tried again from every place it could start, split or backtrack to: digits
+# after the energy and feed-in labels, blanks around a sign or a plus, a long
+# digit run under a wrapped network label, excise bands over and over, labels
+# repeated on one line, an unclosed SPP bracket, "digitale meter" with no
+# figure after it, and listings of links with no closing quote, of schemes
+# with no card name and of card names with no ".pdf" after them.
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    ("read", "crafted"),
+    [
+        pytest.param(
+            _quietly(_extract_energy),
+            "Groene burgerstroom" + "," * 100_000,
+            id="energy digits",
+        ),
+        pytest.param(
+            _quietly(_extract_energy),
+            "Afname Groene burgerstroom\nVAST\nVARIABEL" + "," * 100_000,
+            id="variabel digits",
+        ),
+        pytest.param(
+            _quietly(_extract_energy),
+            "Afname Groene burgerstroom " * 20_000,
+            id="energy labels",
+        ),
+        pytest.param(
+            _ecopower_cards._energy_formula,
+            "VAST 0%×,euro\nVARIABEL " + "\xa0" * 100_000,
+            id="formula plus",
+        ),
+        pytest.param(
+            _ecopower_cards._energy_formula,
+            "VAST 1% x 1 euro " * 30_000,
+            id="formula rows",
+        ),
+        pytest.param(
+            _quietly(ecopower._extract_dbs_energy),
+            "Dynamische burgerstroom elk kwartier ,×EPEXDA " + "\xa0" * 100_000,
+            id="dynamic sign",
+        ),
+        pytest.param(
+            _quietly(ecopower._extract_dbs_injection),
+            "Terugleververgoeding elk kwartier ,×EPEXDA " + "\xa0" * 100_000,
+            id="dynamic feed-in sign",
+        ),
+        pytest.param(_extract_injection, _FEED_IN + "," * 100_000, id="feed-in digits"),
+        pytest.param(
+            _extract_injection, _FEED_IN + "\na" + "0" * 100_000, id="split digits"
+        ),
+        pytest.param(
+            _extract_injection,
+            _FEED_IN + "\n" + " " * 100_000 + "0x",
+            id="split blanks",
+        ),
+        pytest.param(_extract_injection, _FEED_IN * 2_000, id="feed-in labels"),
+        pytest.param(
+            _extract_injection,
+            "Terugleververgoeding (digitale meter) " * 3_000,
+            id="older labels",
+        ),
+        pytest.param(
+            _extract_injection,
+            "Terugleververgoeding " + "digitale meter " * 7_000,
+            id="digitale meter",
+        ),
+        pytest.param(
+            _extract_injection,
+            _FEED_IN
+            + " -0,02 euro/kWh\nVAST 1% x 1 euro\nVARIABEL 1% formule 1 x 1 ["
+            + "SPP " * 25_000,
+            id="spp bracket",
+        ),
+        pytest.param(
+            _extract_injection,
+            _FEED_IN
+            + " -0,02 euro/kWh\nVAST 1% x 1 euro\nVARIABEL 1% formule 1 x 1 [SPP]"
+            + "\xa0" * 100_000,
+            id="spp sign",
+        ),
+        pytest.param(
+            _ecopower_cards.printed_spp_index,
+            "formule 1 x 1 [" * 7_000,
+            id="spp formulas",
+        ),
+        pytest.param(
+            _ecopower_cards.printed_spp_index,
+            "formule 1 x 1 [SPP] werkelijke SPP gewogen gemiddelde " * 6_000,
+            id="spp footnotes",
+        ),
+        pytest.param(
+            _quietly(_ecopower_overlays._extract_dbs_dsos),
+            "Nettarieven\nFluvius X-\n" + "0" * 100_000 + "\nHeffingen",
+            id="wrapped label",
+        ),
+        pytest.param(
+            _quietly(_ecopower_overlays._extract_taxes),
+            "Bijzondere accijns " + "tussen 0 en 1 kWh " * 6_000,
+            id="excise bands",
+        ),
+        pytest.param(
+            _listing(_resolve_latest_pdf),
+            "http://a/200000_gbs_tariefkaart.pdf" * 3_000,
+            id="unclosed links",
+        ),
+        pytest.param(
+            _listing(_resolve_latest_pdf), '"' + "http://a/" * 12_000, id="schemes"
+        ),
+        pytest.param(
+            _listing(_resolve_latest_dbs_pdf),
+            "http://a/200000_dbs_tariefkaart.pdf" * 3_000,
+            id="unclosed dynamic links",
+        ),
+        pytest.param(
+            _listing(_resolve_latest_dbs_pdf),
+            '"http://a/x.pdf' + "/200000_dbs_tariefkaart" * 20_000 + '"',
+            id="names with no pdf",
+        ),
+        pytest.param(
+            _listing(ecopower.discover),
+            "/200000_tariefkaart" * 6_000,
+            id="families",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[str], object], crafted: str
+) -> None:
+    started = time.perf_counter()
+    read(crafted)
+    assert time.perf_counter() - started < 2.0
