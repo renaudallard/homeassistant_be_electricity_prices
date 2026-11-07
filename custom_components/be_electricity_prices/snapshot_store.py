@@ -51,7 +51,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     DOMAIN,
 )
-from .providers._pdf import is_transient_fetch_error
+from .providers._pdf import is_transient_fetch_error, shown_text
 from .providers._validity import card_valid_until
 from .providers.base import (
     CardNotReadableError,
@@ -429,8 +429,15 @@ async def fetch_shared(
             # rides the shared row and resets the moment a fetch succeeds.
             prev = failed.get(key)
             fail_count = (prev[2] if prev is not None else 0) + 1
+            # Cut where it is kept: a parser's message can quote the card as
+            # long as the card makes it, and this one becomes last_error, the
+            # warning of every failed tick, the compare page's status and the
+            # Repairs card. Every check the taxonomy makes on it reads its
+            # start (is_transient_fetch_error, is_missing_card_error), which
+            # the cut keeps.
+            message = shown_text(str(err))
             if record_failure and _tuple_generation(hass, key) == gen_at_entry:
-                failed[key] = (dt_util.utcnow(), str(err), fail_count)
+                failed[key] = (dt_util.utcnow(), message, fail_count)
                 # Only a card that came back and could not be read: a network
                 # failure says nothing about the card behind the key. Nor a
                 # card with no text layer, which fails before any parse and
@@ -439,11 +446,11 @@ async def fetch_shared(
                 if (
                     probe_key is not None
                     and not isinstance(err, (TimeoutError, CardNotReadableError))
-                    and not is_transient_fetch_error(str(err))
+                    and not is_transient_fetch_error(message)
                 ):
                     unreadable[key] = (probe_key, dt_util.utcnow())
             return SharedFetch(
-                None, "failed", probe_key, confirmed, err, str(err), fail_count
+                None, "failed", probe_key, confirmed, err, message, fail_count
             )
 
 

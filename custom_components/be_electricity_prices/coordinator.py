@@ -82,6 +82,7 @@ from .providers import (
 from .providers import (
     get as get_extractor,
 )
+from .providers._pdf import shown_text
 from .snapshot_codec import (
     _SNAPSHOT_SCHEMA_VERSION,
     _MigratingStore,
@@ -547,7 +548,7 @@ class BePricesCoordinator(
             # from _sync_stale_issue.
             if self._snapshot is not None and self._snapshot_fetched_at is not None:
                 if not self._last_error:
-                    self._last_error = str(err)
+                    self._last_error = shown_text(str(err))
                 self._sync_stale_issue(self._snapshot_overdue())
             raise
 

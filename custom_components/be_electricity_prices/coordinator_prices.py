@@ -81,6 +81,7 @@ from .providers import (
     SpotMonthlyRates,
     SupplierSnapshot,
 )
+from .providers._pdf import shown_text
 from .providers._rates import EnergyRates
 from .snapshot_months import _proxy_for_month
 from .spot_stats import (
@@ -220,8 +221,11 @@ class _PricesMixin:
                     # erase.
                     self._last_error = ""
             except EntsoeAuthError as err:
-                self._sync_entsoe_auth_issue(True, str(err))
-                raise UpdateFailed(str(err)) from err
+                # Cut where it is kept: ENTSO-E's answer is quoted in the
+                # message, as long as the answer makes it.
+                message = shown_text(str(err))
+                self._sync_entsoe_auth_issue(True, message)
+                raise UpdateFailed(message) from err
             except EntsoeError as err:
                 # A transient ENTSO-E outage must not blank the entry: the
                 # last good day-ahead curve is still usable for breakdown
@@ -231,12 +235,15 @@ class _PricesMixin:
                 # curve from an earlier day rather than pricing today off it.
                 # Already labelled: the fallback names ENTSO-E's half and
                 # each keyless source's.
-                self._last_error = str(err)
-                _LOGGER.warning("ENTSO-E refresh failed; serving cached spots: %s", err)
+                self._last_error = shown_text(str(err))
+                _LOGGER.warning(
+                    "ENTSO-E refresh failed; serving cached spots: %s",
+                    self._last_error,
+                )
                 spot_prices = self._fallback_spots()
                 if not spot_prices:
                     self._sync_entsoe_auth_issue(False)
-                    raise UpdateFailed(str(err)) from err
+                    raise UpdateFailed(self._last_error) from err
         elif _injection_needs_spot(
             self._snapshot, self.entry
         ) or _injection_needs_month_spot(self._snapshot, self.entry):
@@ -251,13 +258,14 @@ class _PricesMixin:
                 spot_prices = await self._fetch_spot_prices()
             except (EntsoeError, EntsoeAuthError) as err:
                 _LOGGER.debug(
-                    "injection spot fetch failed (energy unaffected): %s", err
+                    "injection spot fetch failed (energy unaffected): %s",
+                    shown_text(str(err)),
                 )
                 if isinstance(err, EntsoeAuthError):
                     # A rejected key is not an outage: the credit stays out
                     # until the key is replaced, and the key step promised a
                     # notice when that happens.
-                    auth_error = str(err)
+                    auth_error = shown_text(str(err))
                 spot_prices = self._fallback_spots()
         self._sync_entsoe_auth_issue(auth_error is not None, auth_error or "")
         return spot_prices

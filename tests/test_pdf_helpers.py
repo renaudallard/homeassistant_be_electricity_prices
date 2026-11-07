@@ -481,7 +481,7 @@ async def test_a_disguised_404_page_is_still_a_permanent_parse_failure() -> None
     session = _FakeBodySession(b"<!DOCTYPE html><html><title>404</title></html>")
     with pytest.raises(ExtractorError) as excinfo:
         await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
-    assert str(excinfo.value).startswith("expected a PDF at https://x/card.pdf")
+    assert str(excinfo.value).startswith("expected a PDF, got a web page")
     assert not is_transient_fetch_error(str(excinfo.value))
 
 
@@ -526,7 +526,7 @@ async def test_what_came_instead_of_a_card_stays_out_of_its_error(
     session = _FakeBodySession(body)
     with pytest.raises(ExtractorError) as excinfo:
         await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
-    assert str(excinfo.value) == f"expected a PDF at https://x/card.pdf, got {got}"
+    assert str(excinfo.value) == f"expected a PDF, got {got}, at https://x/card.pdf"
     assert "x.test" in caplog.text
 
 

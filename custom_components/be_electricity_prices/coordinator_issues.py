@@ -72,6 +72,7 @@ from .fees import (
 from .markdown_text import escape_markdown
 from .providers import get as get_extractor
 from .providers import offers_direct_debit
+from .providers._pdf import shown_text
 from .providers._rates import Contract
 from .providers._resolve import omits_brussels_power_term
 from .providers._validity import card_valid_until
@@ -732,7 +733,7 @@ class _IssuesMixin:
         self._sync_issue(
             "entsoe_auth_failed",
             active,
-            extra={"error": escape_markdown(message or "401 Unauthorized")},
+            extra={"error": escape_markdown(shown_text(message or "401 Unauthorized"))},
             severity=ir.IssueSeverity.ERROR,
         )
 

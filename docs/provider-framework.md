@@ -669,9 +669,15 @@ Internals worth knowing:
   it the message ended in a bare colon -- and that message is user-visible on the
   `snapshot_stale` Repairs card, the `last_error` sensor attribute, and in
   diagnostics. The ENTSO-E client uses it for the same reason (`api.py`). It and
-  every address a message here names are cut to 500 characters (`_shown`): most
-  links are read off a supplier's page, and the longest real one, Elegant's
-  archive, is 366.
+  every address a message here names are cut to 500 characters (`shown_text`):
+  most links are read off a supplier's page, and the longest real one,
+  Elegant's archive, is 366. The same cut holds every message where last_error
+  keeps it, since a parser's message can quote what it read, as long as the
+  card or answer makes it: `fetch_shared` (`snapshot_store.py`) cuts the
+  failed fetch's message it hands back and caches, the coordinator cuts a
+  failed tick's and ENTSO-E's (`coordinator.py`, `coordinator_prices.py`), and
+  `_sync_entsoe_auth_issue` the text the `entsoe_auth_failed` Repairs card
+  quotes.
 - `_is_pdf_payload` (`_pdf.py`) validates by magic bytes (`%PDF`, allowing a
   leading UTF-8 BOM that OCTA+ prepends and blank space after it, which some
   servers emit), not Content-Type, because some CDNs return 200 + text/html for
@@ -682,9 +688,12 @@ Internals worth knowing:
   file with `No /Root object! - Is this really a PDF?`, which reads like a
   corrupt card rather than a few stray bytes. pypdf recovers on its own, so this
   is what keeps the `aligned` and `layout` variants working on such a card.
-  A payload that is not a PDF raises `expected a PDF at <url>, got a web page`
+  A payload that is not a PDF raises `expected a PDF, got a web page, at <url>`
   when it opens with a tag past any blank space, which `is_missing_card_error`
-  reads as a card not there, and `... got something else` otherwise. What came
+  reads as a card not there, and `expected a PDF, got something else, at <url>`
+  otherwise. Both say what came before the address, so the check reads the
+  message's start and a cut of the message, where last_error keeps it, cannot
+  change the answer. What came
   goes to the debug log only: the message reaches `last_error`, the Repairs
   card and the sensors' attributes, and copying the payload's first 80 bytes
   into it put whatever the server sent there, links and images included.
