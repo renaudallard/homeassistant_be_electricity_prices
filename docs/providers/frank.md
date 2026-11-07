@@ -579,6 +579,13 @@ This parsed date is what makes `archive_validity_check` authoritative in `fetch_
   `tests/test_frank.py`).
 - Hourly billing: no tier sets `quarter_hourly`, so the integration aggregates ENTSO-E's
   15-minute curve to hourly (`_rates.py`).
+- A card costs its length. Read as two runs of blanks either side of an optional bracket
+  or footnote star, or around a line break, a run of blanks after the variable formula's
+  factor, the excise and fund labels or a network row's figure was split between them in
+  every way before what follows failed. The optional piece now takes its own blanks and
+  the DSO rows break their lines with `LINE_BREAK` (`providers/_parse.py`), so a crafted
+  card of 100,000 characters takes milliseconds
+  (`test_a_crafted_card_is_read_in_time_linear_in_its_length`, `tests/test_frank.py`).
 
 ## Test fixtures
 

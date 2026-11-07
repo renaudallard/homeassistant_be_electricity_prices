@@ -102,6 +102,7 @@ from ..const import (
 )
 from ._frank_variable import variable_energy, variable_injection
 from ._parse import (
+    LINE_BREAK,
     SIGN_CHARS,
     parse_sign,
     parse_vreg_network_ceiling,
@@ -739,14 +740,18 @@ def _extract_injection(text: str) -> InjectionRates:
 
 # ---- taxes -------------------------------------------------------------------
 
+# The footnote stars of the excise and fund rows, with the blanks after them,
+# are one optional piece: as runs of blanks either side of optional stars, a
+# run of blanks was split between the two in every way before the figure
+# failed.
 _EXCISE_RE = re.compile(
-    r"Bijzondere\s+accijns\s+op\s+Energie\s*\(EURct/kWh\)\s*\*{0,2}\s*" + _NUM
+    r"Bijzondere\s+accijns\s+op\s+Energie\s*\(EURct/kWh\)\s*(?:\*{1,2}\s*)?" + _NUM
 )
 _ENERGY_CONTRIB_RE = re.compile(r"Bijdrage\s+op\s+Energie\s*\(EURct/kWh\)\s*" + _NUM)
 _GSC_RE = re.compile(r"GSC\s*\(EURct/kWh\)\s*" + _NUM)
 _WKK_RE = re.compile(r"WKK\s*\(EURct/kWh\)\s*" + _NUM)
 _FUND_RE = re.compile(
-    r"Bijdrage\s+Energiefonds\s+Residentieel\s*\(EUR/maand\)\s*\*?\s*" + _NUM
+    r"Bijdrage\s+Energiefonds\s+Residentieel\s*\(EUR/maand\)\s*(?:\*\s*)?" + _NUM
 )
 
 
@@ -790,8 +795,8 @@ def _extract_dsos(text: str) -> dict[str, DsoOverlay]:
             r"\-", r"[\s\-]*"
         )
         row = re.search(
-            rf"Fluvius\s*[\[\(]\s*{escaped}\s*[\]\)]\s*\n"
-            rf"\s*{_NUM}\s*\n\s*{_NUM}\s*\n\s*{_NUM}\s*\n\s*{_NUM}",
+            rf"Fluvius\s*[\[\(]\s*{escaped}\s*[\]\)]{LINE_BREAK}"
+            rf"{_NUM}{LINE_BREAK}{_NUM}{LINE_BREAK}{_NUM}{LINE_BREAK}{_NUM}",
             section,
             re.IGNORECASE,
         )

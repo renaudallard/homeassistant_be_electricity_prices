@@ -62,9 +62,11 @@ _NUM = NUM_NO_THOUSANDS
 
 # The HV card of September 2026 writes "BELPEX RLP_BE", and the Plus cards of
 # October and November 2026 print a stray bracket after the factor
-# ("(0,10100] x Belpex RLP_BE + 0,485) x 1,06").
+# ("(0,10100] x Belpex RLP_BE + 0,485) x 1,06"). The bracket and the blanks
+# after it are one optional piece: as runs of blanks either side of an
+# optional bracket, a run of blanks was split between the two in every way.
 _ENERGY_RE = re.compile(
-    rf"Formule\s+Stroomprijs:\s*\(\s*{_NUM}\s*\]?\s*x\s*Belpex\s*RLP_BE\s*"
+    rf"Formule\s+Stroomprijs:\s*\(\s*{_NUM}\s*(?:\]\s*)?x\s*Belpex\s*RLP_BE\s*"
     rf"([{SIGN_CHARS}])\s*{_NUM}\s*\)\s*x\s*{_NUM}",
     re.IGNORECASE,
 )

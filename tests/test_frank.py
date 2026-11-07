@@ -27,6 +27,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import time
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import date
 from types import SimpleNamespace
@@ -44,6 +47,9 @@ from custom_components.be_electricity_prices.providers import (
     effective_kind,
     frank,
     offers_quarter_hourly,
+)
+from custom_components.be_electricity_prices.providers._frank_variable import (
+    variable_energy,
 )
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
@@ -949,3 +955,51 @@ async def test_a_card_without_a_waiver_keeps_its_subscription(
     kept = await frank._with_waived_fee(None, "frank_dynamic_jn", text, snap)  # type: ignore[arg-type]
     assert kept is snap
     frank._resolve_pdf_url.assert_not_called()  # type: ignore[attr-defined]
+
+
+def _read(fn: Callable[..., object], *args: object) -> None:
+    with contextlib.suppress(ExtractorError):
+        fn(*args)
+
+
+# Card text a host could serve instead, about 100,000 characters each, on
+# which a pattern split a run of blanks between two of its own runs in every
+# way before what follows failed: the variable formula's factor, the excise
+# and fund rows' labels, and a network row's figures followed by blank lines.
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    "read",
+    [
+        pytest.param(
+            lambda: _read(
+                variable_energy, "Formule Stroomprijs: (1" + " " * 100_000, 0.0
+            ),
+            id="variable formula",
+        ),
+        pytest.param(
+            lambda: frank._EXCISE_RE.findall(
+                "Bijzondere accijns op Energie (EURct/kWh)" + " " * 100_000
+            ),
+            id="excise",
+        ),
+        pytest.param(
+            lambda: frank._FUND_RE.search(
+                "Bijdrage Energiefonds Residentieel (EUR/maand)" + " " * 100_000
+            ),
+            id="fund",
+        ),
+        pytest.param(
+            lambda: _read(
+                frank._extract_dsos,
+                "Digitale meter\nFluvius (Imewo)\n1" + "\n" * 100_000,
+            ),
+            id="network rows",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    read: Callable[[], object],
+) -> None:
+    started = time.perf_counter()
+    read()
+    assert time.perf_counter() - started < 2.0
