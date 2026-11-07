@@ -173,7 +173,9 @@ anchored because Brusol files each card under the month it uploaded it. The host
 the page's own (`_on_page_site`): every card Brusol's pages have linked sits on
 `www.brusol.be`, so a link to any other host, even over https and for a newer month, is one
 a changed page carries and is not followed. A page whose only links leave its site reads as
-"no listing entry". Either way the card
+"no listing entry". The card's name is looked for ahead and the href then read to its last
+`.pdf` once (`_card_href_re`), so a value naming the card over and over costs its length.
+Either way the card
 is layout-extracted with `fetch_pdf_text_layout` (the layout extractor keeps column
 alignment, important for the DSO table), then parsed.
 
@@ -244,7 +246,9 @@ and shares `_extract_dsos` + `_extract_taxes` across both cards (their DSO and t
 are identical). `_NUM = r"([\d]+(?:[.,][\d]+)?)"` accepts both decimal separators; a
 dot-decimal re-render must not truncate a mandatory value.
 `test_dot_decimal_render_matches_comma` pins that a comma card and its dot-replaced twin
-parse identically.
+parse identically. The unit after a figure is `_CENT` (`providers/_energyvision_cards.py`):
+the euro sign and the blanks after it are one optional piece, shared by every `€cent/kWh`
+row of both languages.
 
 ## Units: the dynamic card is EUR/MWh HTVA (Bolt axis, no c€/kWh trap)
 
@@ -752,6 +756,15 @@ figures are billed as each card prints them.
   (`providers/_energyvision_overlays.py`).
 - **Kempen and Midden-Vlaanderen map to non-obvious keys** (`fluvius_iveka`,
   `fluvius_intergem`).
+- **A card costs its length.** Read as two runs of blanks either side of an optional euro
+  sign, bracket or gap, a run of blanks after a figure or label was split between them in
+  every way before the unit failed; a formula's factor and the VAT rate were tried from every
+  digit of a long run; the dynamic formula's gap to its colon and the tranche row's gap to its
+  bracket ran past the next row name; and
+  the listing's script path was read to its end again from every mention of the cards'
+  folder. Each now reads its text once, so a crafted card of 100,000 characters takes
+  milliseconds where it took seconds to minutes
+  (`test_a_crafted_card_is_read_in_time_linear_in_its_length`, `tests/test_energyvision.py`).
 
 ## Test fixtures
 

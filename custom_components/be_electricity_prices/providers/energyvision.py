@@ -466,11 +466,14 @@ def _card_href_re(code: str, token: str) -> re.Pattern[str]:
     a site-relative one reads too, and Brusol has ended one in a space
     ("EV-1026-GSG-BXL-nl.pdf "). The directory is not anchored: Brusol files
     each card under the month it uploaded it. Nor is the host, which
-    :func:`_on_page_site` holds to the page's.
+    :func:`_on_page_site` holds to the page's. The card's name is looked for
+    ahead and the value then read to its last ".pdf" once: split around the
+    name, a value naming the card over and over with no closing quote was
+    read to its end again from each.
     """
     return re.compile(
-        rf'href="((?:https?://[^"/]+)?/sites/default/files/[^"]*?'
-        rf'EV-\d{{4}}-{re.escape(code)}-{re.escape(token)}[^"]*\.pdf)\s*"',
+        rf'href="((?:https?://[^"/]+)?/sites/default/files/'
+        rf'(?=[^"]*?EV-\d{{4}}-{re.escape(code)}-{re.escape(token)})[^"]*\.pdf)\s*"',
         re.IGNORECASE,
     )
 
@@ -495,8 +498,10 @@ def _on_page_site(page: str, href: str) -> str | None:
 # The script the listing draws its cards with, as the listing names it, and
 # one product of its catalogue: the code, then the fields before the
 # product's first nested object (its legacy file map) or its end. Neither
-# backtracks past the next quote or brace.
-_SCRIPT_SRC_RE = re.compile(r'src="([^"]*/tariefkaarten[^"]*)"')
+# backtracks past the next quote or brace. The script's path is checked ahead
+# and then taken whole: split around the folder name, a value naming it over
+# and over was read to its end again from each.
+_SCRIPT_SRC_RE = re.compile(r'src="((?=[^"]*/tariefkaarten)[^"]*)"')
 _PRODUCT_RE = re.compile(r'\{code:"([A-Z0-9-]+)",([^{}]*)')
 _SOLD_REGION_RE = re.compile(r'region:"(?:vlaanderen|wallonie)"')
 

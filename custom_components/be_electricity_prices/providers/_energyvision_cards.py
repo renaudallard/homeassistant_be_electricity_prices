@@ -39,6 +39,11 @@ from ._rates import DynamicRates, FixedRates, InjectionRates, SpotMonthlyRates
 from .base import ExtractorError
 
 _NUM = NUM_NO_THOUSANDS
+# The unit after a figure: "€cent", "€ cent" or "cent". The euro sign and
+# the blanks after it are one optional piece: spelt as runs of blanks either
+# side of an optional sign, a run of blanks was split between the two in every
+# way before the unit failed.
+_CENT = r"\s*(?:€\s*)?cent"
 
 
 def _direct_debit_discount(text: str, fee: float) -> float | None:
@@ -252,14 +257,17 @@ def _extract_tiered(
 # Dynamic card: "afnametarief ... formule (exclusief btw): 1,05 x Belpex per
 # kwartier + 15 EUR/MWh" and "injectietarief ... formule: 1 x Belpex per
 # kwartier - 15 EUR/MWh". One findall yields both rows; group 1 keys which.
+# The gap to the colon stops at the next row name, whose own gap reaches the
+# same colon: run on to it, a card naming the rows over and over with no
+# colon after them was read to its end again from each name.
 _DYN_FORMULA_RE = re.compile(
-    rf"(afname|injectie)tarief\b[^:]*?:\s*"
+    rf"(afname|injectie)tarief\b(?:(?!(?:afname|injectie)tarief\b)[^:])*?:\s*"
     rf"{_NUM}\s*x\s*Belpex\s+per\s+kwartier\s*"
     rf"([{SIGN_CHARS}])\s*{_NUM}\s*EUR\s*/\s*MWh",
     re.IGNORECASE,
 )
 _FIXED_INJECTION_RE = re.compile(
-    rf"Injectie\s*[{SIGN_CHARS}]\s*variabel\s+{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    rf"Injectie\s*[{SIGN_CHARS}]\s*variabel\s+{_NUM}{_CENT}\s*/\s*kWh",
     re.IGNORECASE,
 )
 # A tranche bound as the cards print it: "1.800", or "1 800" on the Walloon
@@ -268,10 +276,13 @@ _FIXED_INJECTION_RE = re.compile(
 # which would read 1.800 kWh as one point eight.
 _TIER_BOUND = r"(\d{1,3}(?:[.    ]\d{3})+|\d+)"
 # Tiered cards, page 1: "Groene stroom (<1.800 kWh - vast tarief) 10,60
-# €cent/kWh" and its ">" twin for the remainder.
+# €cent/kWh" and its ">" twin for the remainder. The gap to the bracket stops
+# at the next "Groene stroom" on the line, whose own gap reaches the same
+# bracket: run on past it, a line of the label with no bracket was read to its
+# end again from each.
 _TIER_FIXED_RE = re.compile(
-    rf"Groene\s+stroom[^(\n]*\(\s*<\s*{_TIER_BOUND}\s*kWh\s*[{SIGN_CHARS}]\s*"
-    rf"vast\s+tarief\s*\)\s*{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    rf"Groene\s+stroom(?:(?!Groene\s+stroom)[^(\n])*\(\s*<\s*{_TIER_BOUND}\s*kWh\s*[{SIGN_CHARS}]\s*"
+    rf"vast\s+tarief\s*\)\s*{_NUM}{_CENT}\s*/\s*kWh",
     re.IGNORECASE,
 )
 # Their feed-in row is either indexed ("variabel") or fixed for the term
@@ -279,17 +290,21 @@ _TIER_FIXED_RE = re.compile(
 # whether _spp_injection finds a formula to index it on.
 # The Brusol "Groene stroom" card qualifies the row, "Injectie - variabel
 # (indien van toepassing) 1,28€cent/kWh", so the parenthetical is tolerated.
-# It cannot swallow a figure: the group still has to be the next number.
+# It cannot swallow a figure: the group still has to be the next number. The
+# blanks before the parenthetical go with it: as a run of their own beside the
+# one after it, a run of blanks was split between the two in every way.
 _TIER_INJECTION_RE = re.compile(
-    rf"Injectie\s*[{SIGN_CHARS}]\s*(?:variabel|vast)\s*(?:\([^)]*\))?\s+"
-    rf"{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    rf"Injectie\s*[{SIGN_CHARS}]\s*(?:variabel|vast)(?:\s*\([^)]*\))?\s+"
+    rf"{_NUM}{_CENT}\s*/\s*kWh",
     re.IGNORECASE,
 )
 # The tranche's remainder: "1,12 x Belpex-RLP-M + 20 EUR/MWh". Same shape as
 # the SPP formula below and matched the same way, with the index name's
-# hyphens literal so the sign group cannot bind one of them.
+# hyphens literal so the sign group cannot bind one of them. Both formulas
+# are read from the start of the factor's digits: tried from each digit of a
+# long run, the run was read again from every one.
 _RLP_FORMULA_RE = re.compile(
-    rf"{_NUM}\s*x\s*Belpex[\s{SIGN_CHARS}]*RLP[\s{SIGN_CHARS}]*M\s*"
+    rf"(?<!\d){_NUM}\s*x\s*Belpex[\s{SIGN_CHARS}]*RLP[\s{SIGN_CHARS}]*M\s*"
     rf"([{SIGN_CHARS}])\s*{_NUM}\s*EUR\s*/\s*MWh",
     re.IGNORECASE,
 )
@@ -298,7 +313,7 @@ _RLP_FORMULA_RE = re.compile(
 # index name are hyphens, so they are matched literally rather than through
 # SIGN_CHARS, which would let the sign group bind one of them.
 _SPP_FORMULA_RE = re.compile(
-    rf"{_NUM}\s*x\s*Belpex[\s{SIGN_CHARS}]*SPP[\s{SIGN_CHARS}]*M\s*"
+    rf"(?<!\d){_NUM}\s*x\s*Belpex[\s{SIGN_CHARS}]*SPP[\s{SIGN_CHARS}]*M\s*"
     rf"([{SIGN_CHARS}])\s*{_NUM}\s*EUR\s*/\s*MWh",
     re.IGNORECASE,
 )
@@ -308,18 +323,21 @@ _SPP_FORMULA_RE = re.compile(
 _GUARANTEE_RE = re.compile(
     r"(?:garanderen\s+wij\s+in\s+elk\s+geval"
     r"|garantissons\s+en\s+tout\s+(?:é|e)tat\s+de\s+cause)"
-    rf"\s*{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    rf"\s*{_NUM}{_CENT}\s*/\s*kWh",
     re.IGNORECASE,
 )
 # Brusol's "Groene stroom" footnote, which prices a direct-debit payer: "De
 # vaste vergoeding bedraagt € 250 . Indien je kiest voor domiciliëring dan
 # krijg je een extra korting van € 20 , zodat je totale vaste vergoeding
 # € 230 bedraagt." All three figures are captured so the reduction can be
-# checked against the total the same sentence states.
+# checked against the total the same sentence states. Each run of blanks is
+# read once: spelt as two runs either side of an optional euro sign, or one
+# beside a gap that takes blanks too, a run of blanks was split between them
+# in every way before what follows failed.
 _DIRECT_DEBIT_RE = re.compile(
-    rf"vaste\s+vergoeding\s+bedraagt\s*€?\s*{_NUM}\s*€?[\s.]*"
-    rf"Indien\s+je\s+kiest\s+voor\s+domicili[eë]ring[^0-9]*{_NUM}\s*€?"
-    rf"[^0-9]*?vaste\s*\n?\s*vergoeding\s*€?\s*{_NUM}",
+    rf"vaste\s+vergoeding\s+bedraagt\s*(?:€\s*)?{_NUM}(?:\s*€)?[\s.]*"
+    rf"Indien\s+je\s+kiest\s+voor\s+domicili[eë]ring[^0-9]*{_NUM}"
+    rf"[^0-9]*?vaste\s*vergoeding\s*(?:€\s*)?{_NUM}",
     re.IGNORECASE,
 )
 
@@ -333,13 +351,14 @@ def _fee(text: str) -> float:
     return to_float(m.group(1))
 
 
-# The card header prints "Alle prijzen en tarieven zijn inclusief 6% BTW".
-_VAT_RE = re.compile(r"(\d+)\s*%\s*BTW", re.IGNORECASE)
+# The card header prints "Alle prijzen en tarieven zijn inclusief 6% BTW",
+# read from the start of the digits like the formulas above.
+_VAT_RE = re.compile(r"(?<!\d)(\d+)\s*%\s*BTW", re.IGNORECASE)
 # Fixed card energy + its printed monthly injection indicative (page 1).
 # "Groene stroom - vast tarief 13,57" until October 2026, "Groene stroom -
 # vast 18,40" from November.
 _FIXED_ENERGY_RE = re.compile(
-    rf"Groene\s+stroom\s*[{SIGN_CHARS}]\s*vast(?:\s+tarief)?\s+{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    rf"Groene\s+stroom\s*[{SIGN_CHARS}]\s*vast(?:\s+tarief)?\s+{_NUM}{_CENT}\s*/\s*kWh",
     re.IGNORECASE,
 )
 _FEE_RE = re.compile(rf"Vaste\s+vergoeding\s+{_NUM}\s*€\s*/\s*jaar", re.IGNORECASE)

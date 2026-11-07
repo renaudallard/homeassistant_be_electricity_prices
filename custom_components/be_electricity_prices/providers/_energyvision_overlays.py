@@ -40,6 +40,7 @@ from ..const import (
     REGION_BRUSSELS,
     REGION_FLANDERS,
 )
+from ._energyvision_cards import _CENT
 from ._parse import numeric_row, parse_sibelga_row, regional_tax_overlay, to_float
 from ._pdf import NUM_NO_THOUSANDS
 from .base import DsoOverlay, ExtractorError, TaxOverlay
@@ -149,7 +150,7 @@ _FLAT_EXCISE_RE = re.compile(rf"Bijzondere\s+accijns\s+{_NUM}", re.IGNORECASE)
 # "Kosten Groene stroom 2,737 €cent/kWh". The "Kosten" is what keeps this off
 # the page-1 energy rows, which name the same product without it.
 _BRUSSELS_GREEN_RE = re.compile(
-    rf"Kosten\s+Groene\s+stroom\s+{_NUM}\s*€?\s*cent", re.IGNORECASE
+    rf"Kosten\s+Groene\s+stroom\s+{_NUM}{_CENT}", re.IGNORECASE
 )
 # The Flanders DSO table prints two blocks (digital + analog meter). Only the
 # digital-meter block is billed (modern smart meters); its five columns are

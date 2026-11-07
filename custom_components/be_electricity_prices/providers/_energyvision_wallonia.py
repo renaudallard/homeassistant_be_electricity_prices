@@ -36,7 +36,7 @@ from __future__ import annotations
 import re
 
 from ..const import DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW
-from ._energyvision_cards import _TIER_BOUND, _spp_injection, _tiered_legs
+from ._energyvision_cards import _CENT, _TIER_BOUND, _spp_injection, _tiered_legs
 from ._energyvision_contracts import _CONTRACTS_BY_ID
 from ._parse import SIGN_CHARS, excise_tier_bands, to_float
 from ._pdf import NUM_NO_THOUSANDS, printed_vat_rate
@@ -243,11 +243,11 @@ _VAT_FR_RE = re.compile(r"TVA\s*(?:à|a)\s*(\d+)\s*%", re.IGNORECASE)
 # the first and a U+2013 en dash on the second, both already in SIGN_CHARS.
 _FIXED_ENERGY_FR_RE = re.compile(
     rf"Électricité\s+verte\s*[{SIGN_CHARS}]\s*tarif\s+fixe\s+"
-    rf"{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    rf"{_NUM}{_CENT}\s*/\s*kWh",
     re.IGNORECASE,
 )
 _FIXED_INJECTION_FR_RE = re.compile(
-    rf"Injection\s*[{SIGN_CHARS}]\s*variable\s+{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    rf"Injection\s*[{SIGN_CHARS}]\s*variable\s+{_NUM}{_CENT}\s*/\s*kWh",
     re.IGNORECASE,
 )
 # The Walloon tiered card's tranche row, "Électricité verte (<1.800 kWh –
@@ -255,10 +255,11 @@ _FIXED_INJECTION_FR_RE = re.compile(
 # the flat card's "Électricité verte – tarif fixe", which _FIXED_ENERGY_FR_RE
 # reads and which correctly misses this one. From November 2026 the bound
 # groups the thousand with a space, "(<1 800 kWh", which _TIER_BOUND reads as
-# it reads the dot.
+# it reads the dot. The gap to the bracket stops at the next label on the line,
+# as in the Dutch row.
 _TIER_FIXED_FR_RE = re.compile(
-    rf"Électricité\s+verte[^(\n]*\(\s*<\s*{_TIER_BOUND}\s*kWh\s*[{SIGN_CHARS}]\s*"
-    rf"tarif\s+fixe\s*\)\s*{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    rf"Électricité\s+verte(?:(?!Électricité\s+verte)[^(\n])*\(\s*<\s*{_TIER_BOUND}\s*kWh\s*[{SIGN_CHARS}]\s*"
+    rf"tarif\s+fixe\s*\)\s*{_NUM}{_CENT}\s*/\s*kWh",
     re.IGNORECASE,
 )
 _FEE_FR_RE = re.compile(rf"Frais\s+fixes\s+{_NUM}\s*€\s*/\s*an", re.IGNORECASE)
@@ -276,7 +277,7 @@ _EXCISE_FR_RE = re.compile(
 # the special excise and flattened it, so the card prints one rate under
 # "Accise speciale" instead of the four-tier consumption table.
 _EXCISE_FLAT_FR_RE = re.compile(
-    rf"Accise\s+sp[ée]ciale\s+{_NUM}\s*€?\s*cent\s*/\s*kWh", re.IGNORECASE
+    rf"Accise\s+sp[ée]ciale\s+{_NUM}{_CENT}\s*/\s*kWh", re.IGNORECASE
 )
 _CONTRIB_FR_RE = re.compile(rf"Contribution\s+énergétique\s+{_NUM}", re.IGNORECASE)
 _CONNECTION_FR_RE = re.compile(
@@ -287,7 +288,7 @@ _CONNECTION_FR_RE = re.compile(
 # 2,860 for the same month), so it is always read off this card.
 _CV_FR_RE = re.compile(
     rf"certificats\s+verts\s+et\s+certificats\s+de\s+cogénération"
-    rf"[^\d]*{_NUM}\s*€?\s*cent\s*/\s*kWh",
+    rf"[^\d]*{_NUM}{_CENT}\s*/\s*kWh",
     re.IGNORECASE,
 )
 # Walloon DSO row label -> DSO key. EnergyVision drops the "ORES" prefix from

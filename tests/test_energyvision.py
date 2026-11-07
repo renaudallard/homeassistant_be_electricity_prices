@@ -27,6 +27,8 @@
 
 from __future__ import annotations
 
+import re
+import time
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import Any
@@ -45,7 +47,13 @@ from custom_components.be_electricity_prices.const import (
     WELCOME_CREDIT_ANNIVERSARY,
     WELCOME_CREDIT_PRO_RATA,
 )
-from custom_components.be_electricity_prices.providers import EXTRACTORS
+from custom_components.be_electricity_prices.providers import (
+    EXTRACTORS,
+    _energyvision_cards,
+    _energyvision_overlays,
+    _energyvision_wallonia,
+    energyvision,
+)
 from custom_components.be_electricity_prices.providers._energyvision_contracts import (
     _BRUSOL_GRS_URL,
 )
@@ -2218,3 +2226,133 @@ def test_a_stored_answer_does_not_reach_a_card_that_grants_no_reduction() -> Non
     entry = _entry(direct_debit=True)
     resolved = snapshot_resolve._resolve_snapshot(entry, _tiered_1800())  # type: ignore[arg-type]
     assert resolved.energy.yearly_fixed_fee == pytest.approx(50.0)
+
+
+_BLANKS = " " * 100_000
+
+
+# Card text a host could serve instead, about 100,000 characters each, on
+# which a pattern was tried again from every place it could start or split a
+# run of blanks between two of its own runs in every way: a figure followed by
+# blanks and no unit, a row label followed by blanks, a line of the tranche
+# row's label with no bracket (280,000, since each costs less), digits with
+# no formula after them, the direct-debit sentence broken off at each of its
+# figures, row names with no colon after them, a script path naming the
+# cards' folder over and over with no closing quote, and a card's href naming
+# the card over and over the same way (400,000, since each costs less).
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    ("pattern", "crafted"),
+    [
+        pytest.param(
+            _energyvision_cards._FIXED_ENERGY_RE,
+            "Groene stroom - vast 1" + _BLANKS,
+            id="fixed energy",
+        ),
+        pytest.param(
+            _energyvision_cards._FIXED_INJECTION_RE,
+            "Injectie - variabel 1" + _BLANKS,
+            id="fixed injection",
+        ),
+        pytest.param(
+            _energyvision_cards._TIER_FIXED_RE,
+            "Groene stroom (<1.800 kWh - vast tarief) 1" + _BLANKS,
+            id="tier",
+        ),
+        pytest.param(
+            _energyvision_cards._TIER_FIXED_RE,
+            "Groene stroom " * 20_000,
+            id="tier labels",
+        ),
+        pytest.param(
+            _energyvision_cards._TIER_INJECTION_RE,
+            "Injectie - variabel" + _BLANKS,
+            id="tier injection label",
+        ),
+        pytest.param(
+            _energyvision_cards._TIER_INJECTION_RE,
+            "Injectie - variabel 1" + _BLANKS,
+            id="tier injection figure",
+        ),
+        pytest.param(_energyvision_cards._RLP_FORMULA_RE, "1" * 100_000, id="rlp"),
+        pytest.param(_energyvision_cards._SPP_FORMULA_RE, "1" * 100_000, id="spp"),
+        pytest.param(_energyvision_cards._VAT_RE, "1" * 100_000, id="vat"),
+        pytest.param(
+            _energyvision_cards._GUARANTEE_RE,
+            "garanderen wij in elk geval 1" + _BLANKS,
+            id="guarantee",
+        ),
+        pytest.param(
+            _energyvision_cards._DIRECT_DEBIT_RE,
+            "vaste vergoeding bedraagt" + _BLANKS,
+            id="direct debit label",
+        ),
+        pytest.param(
+            _energyvision_cards._DIRECT_DEBIT_RE,
+            "vaste vergoeding bedraagt 250" + _BLANKS,
+            id="direct debit fee",
+        ),
+        pytest.param(
+            _energyvision_cards._DIRECT_DEBIT_RE,
+            "vaste vergoeding bedraagt 250 . Indien je kiest voor domiciliëring 20"
+            + _BLANKS,
+            id="direct debit reduction",
+        ),
+        pytest.param(
+            _energyvision_cards._DYN_FORMULA_RE,
+            "afnametarief " * 7_700,
+            id="dynamic names",
+        ),
+        pytest.param(
+            _energyvision_overlays._BRUSSELS_GREEN_RE,
+            "Kosten Groene stroom 1" + _BLANKS,
+            id="brussels green",
+        ),
+        pytest.param(
+            _energyvision_wallonia._FIXED_ENERGY_FR_RE,
+            "Électricité verte - tarif fixe 1" + _BLANKS,
+            id="walloon energy",
+        ),
+        pytest.param(
+            _energyvision_wallonia._FIXED_INJECTION_FR_RE,
+            "Injection - variable 1" + _BLANKS,
+            id="walloon injection",
+        ),
+        pytest.param(
+            _energyvision_wallonia._TIER_FIXED_FR_RE,
+            "Électricité verte (<1.800 kWh - tarif fixe) 1" + _BLANKS,
+            id="walloon tier",
+        ),
+        pytest.param(
+            _energyvision_wallonia._TIER_FIXED_FR_RE,
+            "Électricité verte " * 20_000,
+            id="walloon tier labels",
+        ),
+        pytest.param(
+            _energyvision_wallonia._EXCISE_FLAT_FR_RE,
+            "Accise spéciale 1" + _BLANKS,
+            id="walloon excise",
+        ),
+        pytest.param(
+            _energyvision_wallonia._CV_FR_RE,
+            "certificats verts et certificats de cogénération 1" + _BLANKS,
+            id="walloon certificates",
+        ),
+        pytest.param(
+            energyvision._SCRIPT_SRC_RE,
+            'src="' + "/tariefkaarten" * 7_150,
+            id="listing script",
+        ),
+        pytest.param(
+            energyvision._card_href_re("GRS", "BXL-nl"),
+            'href="/sites/default/files/' + "EV-1026-GRS-BXL-nl.pdf" * 18_000,
+            id="index page",
+        ),
+    ],
+)
+def test_a_crafted_card_is_read_in_time_linear_in_its_length(
+    pattern: re.Pattern[str], crafted: str
+) -> None:
+    started = time.perf_counter()
+    assert pattern.search(crafted) is None
+    assert time.perf_counter() - started < 2.0
