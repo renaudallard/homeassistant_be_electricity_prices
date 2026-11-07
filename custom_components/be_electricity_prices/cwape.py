@@ -257,7 +257,8 @@ async def ensure_network(session: aiohttp.ClientSession, year: int, dso: str) ->
     and the year before's where those do not cover the year, never raising.
 
     Only for a custom Walloon entry that takes its network from its operator's
-    grid. Nothing for another operator or a year before :data:`FIRST_YEAR`.
+    grid, and a withdrawn product past its last card's year. Nothing for
+    another operator or a year before :data:`FIRST_YEAR`.
     """
     operator = _OPERATORS.get(dso)
     if operator is None or _covered(dso, year) == (True, True):

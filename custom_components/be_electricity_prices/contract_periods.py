@@ -630,8 +630,8 @@ async def ensure_period_analog_rates(
     for period in periods:
         dso = str(period.data.get(CONF_DSO, ""))
         years = range(period.start.year, period.end.year + 1)
-        # An earlier custom contract that took its network off its region's
-        # sheet, for the same reason.
+        # An earlier contract that took its network off its region's sheet,
+        # a custom one or a withdrawn product, for the same reason.
         for year in years:
             await ensure_custom_network(session, period.data, year)
         if not analog_meter(period.data, period.start):

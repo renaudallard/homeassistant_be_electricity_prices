@@ -1398,7 +1398,12 @@ successful refresh:
   sold, and raises no card of its own about the missing file. Only when
   none of those is at hand (nothing stored, and the archive box unticked
   or the archive out of reach) do the sensors go unavailable, and
-  `extractor_card_missing` then says why until a card is found. If your
+  `extractor_card_missing` then says why until a card is found. That card
+  prints its own year's network tariffs, so a month of a later year takes
+  its distribution, capacity and data management off the regulator's sheet
+  of that year instead, the same Fluvius area sheet, Brugel sheet or CWaPE
+  grid the custom supplier can take them from, the year before standing in
+  until the next is published; the energy price stays the card's. If your
   supplier moves you to another product, record it with **Record a
   supplier switch**, dated the first day of the new product. The product
   is no longer offered when setting up an entry or as a comparison target.
@@ -2253,8 +2258,9 @@ And it writes `network.json`: for each month of last year and this one, what
 each regulator's sheet gives a custom entry taking its network from it,
 every Fluvius area, Brugel's sheet and each Walloon operator's CWaPE grid,
 read as an installation reads them. A month no longer read keeps what was
-written, and such an entry takes from it only what its own reading of the
-sheets leaves unset for a month, ahead of the figures typed.
+written, and such an entry, or a withdrawn product past its last card's
+year, takes from it only what its own reading of the sheets leaves unset
+for a month, ahead of the figures typed or printed.
 The *Read past cards from the project's archive* box on the meters step,
 on by default, switches all four off per entry: the integration then never
 contacts GitHub, those months are priced on the current card, a rate a

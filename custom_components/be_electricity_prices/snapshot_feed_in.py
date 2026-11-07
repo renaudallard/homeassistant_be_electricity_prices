@@ -53,7 +53,7 @@ from .const import CONF_QUARTER_HOURLY, CONF_SOLAR_REGIME, SOLAR_REGIME_INJECTIO
 from .providers import EXTRACTORS
 from .providers._settle import settled_stand_in
 from .providers.base import SupplierExtractor, SupplierSnapshot
-from .snapshot_resolve import _resolve_snapshot
+from .snapshot_resolve import _proxy_for_month, _resolve_snapshot
 from .spot_stats import spots_available
 
 
@@ -133,7 +133,7 @@ async def stand_in_for_month(
         )
     if entry is None or current_raw is None:
         return current
-    proxy = snapshot_months._proxy_for_month(entry, current, current_raw, year_month)
+    proxy = _proxy_for_month(entry, current, current_raw, year_month)
     inj = current_raw.injection
     if ref is None or inj is None:
         return proxy

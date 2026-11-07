@@ -33,6 +33,7 @@ adding a new module + an entry below.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import date
 from typing import Any
 
 from ..const import CONF_CONTRACT, CONF_QUARTER_HOURLY, CONF_SUPPLIER
@@ -127,13 +128,28 @@ def is_professional(supplier_id: str | None, contract_id: str | None) -> bool:
     ``offers_quarter_hourly`` gives below, and tolerant of an unknown pair the
     OptionsFlow can hold after a catalogue change.
     """
+    contract = _contract(supplier_id, contract_id)
+    return contract is not None and contract.professional
+
+
+def withdrawn_on(supplier_id: str | None, contract_id: str | None) -> date | None:
+    """The first day this product was no longer sold (``Contract.withdrawn``),
+    or ``None`` while it is, read from the registry for the reason
+    :func:`offers_quarter_hourly` gives."""
+    contract = _contract(supplier_id, contract_id)
+    return None if contract is None else contract.withdrawn
+
+
+def _contract(supplier_id: str | None, contract_id: str | None) -> Contract | None:
+    """The registry's contract for the pair, or ``None`` for a pair it does
+    not know, which the OptionsFlow can hold after a catalogue change."""
     if not supplier_id or not contract_id:
-        return False
+        return None
     try:
         contracts = get(supplier_id).contracts
     except ExtractorError:
-        return False
-    return any(c.id == contract_id and c.professional for c in contracts)
+        return None
+    return next((c for c in contracts if c.id == contract_id), None)
 
 
 def offers_quarter_hourly(supplier_id: str | None, contract_id: str | None) -> bool:
@@ -147,13 +163,8 @@ def offers_quarter_hourly(supplier_id: str | None, contract_id: str | None) -> b
     Tolerates an unknown supplier or contract, which the OptionsFlow can hold
     after a catalogue change, for the same reason ``_contract_kind`` does.
     """
-    if not supplier_id or not contract_id:
-        return False
-    try:
-        contracts = get(supplier_id).contracts
-    except ExtractorError:
-        return False
-    return any(c.id == contract_id and c.quarter_hourly_option for c in contracts)
+    contract = _contract(supplier_id, contract_id)
+    return contract is not None and contract.quarter_hourly_option
 
 
 def offers_direct_debit(supplier_id: str | None, contract_id: str | None) -> bool:
@@ -167,13 +178,8 @@ def offers_direct_debit(supplier_id: str | None, contract_id: str | None) -> boo
     Tolerates an unknown supplier or contract, which the OptionsFlow can hold
     after a catalogue change.
     """
-    if not supplier_id or not contract_id:
-        return False
-    try:
-        contracts = get(supplier_id).contracts
-    except ExtractorError:
-        return False
-    return any(c.id == contract_id and c.direct_debit_discount for c in contracts)
+    contract = _contract(supplier_id, contract_id)
+    return contract is not None and contract.direct_debit_discount
 
 
 def effective_kind(
@@ -205,19 +211,12 @@ def effective_kind(
     Returns ``""`` for a contract the registry does not know, exactly as
     ``_contract_kind`` did, so a stale OptionsFlow entry still renders.
     """
-    if not supplier_id or not contract_id:
+    contract = _contract(supplier_id, contract_id)
+    if contract is None:
         return ""
-    try:
-        contracts = get(supplier_id).contracts
-    except ExtractorError:
-        return ""
-    for c in contracts:
-        if c.id != contract_id:
-            continue
-        if quarter_hourly and c.quarter_hourly_option:
-            return "dynamic"
-        return c.kind
-    return ""
+    if quarter_hourly and contract.quarter_hourly_option:
+        return "dynamic"
+    return contract.kind
 
 
 def settlement_answer(data: Mapping[str, Any]) -> bool:

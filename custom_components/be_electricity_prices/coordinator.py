@@ -291,6 +291,10 @@ class BePricesCoordinator(
         # and an analog meter's kWh rate read off its area's.
         self._snapshot_ceiling: float | None = None
         self._snapshot_analog: float | None = None
+        # And what a network sheet gives the entry's area, where it reads one:
+        # a withdrawn product past its card's year bills the sheet, which
+        # arrives after the stored card is resolved on a restart.
+        self._snapshot_network: dict[str, float | None] = {}
         # The VAT rates the snapshot was resolved at (coordinator_snapshot.py).
         self._snapshot_vat: tuple[float, float] = (0.0, 0.0)
         self._snapshot_excise: tuple[float | None, float | None] = (None, None)

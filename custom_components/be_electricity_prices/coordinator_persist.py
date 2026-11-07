@@ -67,7 +67,7 @@ from .providers.base import SupplierSnapshot
 from .snapshot_codec import _MigratingStore, _snapshot_from_dict, _snapshot_to_dict
 from .snapshot_feed_in import reference_rows_to_store, restore_reference_rows
 from .snapshot_months import monthly_rows_to_store, restore_monthly_rows
-from .snapshot_resolve import takes_sheet_network
+from .snapshot_resolve import reads_network_sheet
 from .spot_stats import spots_available
 from .vat_rates import held_table as held_vat_table
 from .vat_rates import restore as restore_vat_rates
@@ -666,8 +666,8 @@ class _PersistMixin:
         payload["excise_law"] = held_excise_table()
         payload["law_archive"] = held_law_table()
         # What the card archive kept of the network sheets, where the entry
-        # takes its network from one.
-        if takes_sheet_network(self.entry.data):
+        # may take its network from one.
+        if reads_network_sheet(self.entry.data):
             payload["network_archive"] = held_network_table()
         # And the figures read off Fluvius's tariff sheets: the VREG ceiling,
         # the minimum peak and an analog meter's kWh rate.

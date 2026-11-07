@@ -471,9 +471,10 @@ async def ensure_area_terms(
     are held, and return them or ``None``, never raising.
 
     Only for a custom entry that takes its network from Fluvius rather than
-    typing it. ``None`` for a key that is not a Fluvius area. Where the
-    listing has no sheet for the year yet, the year before is read off the
-    same listing to stand in (:func:`cached_area_terms`).
+    typing it, and a withdrawn product past its last card's year. ``None``
+    for a key that is not a Fluvius area. Where the listing has no sheet for
+    the year yet, the year before is read off the same listing to stand in
+    (:func:`cached_area_terms`).
     """
     area = _AREA_SLUGS.get(dso)
     if area is None:

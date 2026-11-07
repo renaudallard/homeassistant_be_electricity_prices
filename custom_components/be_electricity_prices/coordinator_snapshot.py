@@ -80,6 +80,7 @@ from .snapshot_resolve import (
     _resolve_snapshot,
     entry_analog_surcharge,
     entry_annual_kwh,
+    sheet_network,
 )
 from .snapshot_stand_ins import (
     card_for_unreadable_month,
@@ -172,6 +173,7 @@ class _SnapshotMixin:
     _snapshot_power_term: tuple[float, float] | None
     _snapshot_ceiling: float | None
     _snapshot_analog: float | None
+    _snapshot_network: dict[str, float | None]
     _snapshot_vat: tuple[float, float]
     _snapshot_excise: tuple[float | None, float | None]
     _snapshot_month: tuple[int, int] | None
@@ -421,7 +423,9 @@ class _SnapshotMixin:
         resolved on its own printed excise, and only this puts the law's
         back once the tick has read it, and so is the VREG ceiling, read off
         Fluvius's sheet on the tick like Brugel's term, and an analog meter's
-        kWh rate off its area's sheet. The month is the last input: the
+        kWh rate off its area's sheet, and a network sheet a withdrawn product
+        bills past its card's year: a Walloon one is held by no store, so it
+        is read after every restart. The month is the last input: the
         resolver reads the ceiling of the year it runs in, so a December card
         held into January kept the ceiling of a year that had ended. Every
         input is stamped, and any of them moving re-resolves.
@@ -432,6 +436,7 @@ class _SnapshotMixin:
         power_term = cached_power_term(dt_util.now().year)
         ceiling = cached_network_ceiling(dt_util.now().year)
         analog = entry_analog_surcharge(self.entry, dt_util.now().year)
+        network = sheet_network(self.entry.data, dt_util.now().date())
         vat = _vat_now()
         excise = _excise_now()
         month = _month_now()
@@ -440,6 +445,7 @@ class _SnapshotMixin:
             and self._snapshot_power_term == power_term
             and self._snapshot_ceiling == ceiling
             and self._snapshot_analog == analog
+            and self._snapshot_network == network
             and self._snapshot_vat == vat
             and self._snapshot_excise == excise
             and self._snapshot_month == month
@@ -452,6 +458,7 @@ class _SnapshotMixin:
         self._snapshot_power_term = power_term
         self._snapshot_ceiling = ceiling
         self._snapshot_analog = analog
+        self._snapshot_network = network
         self._snapshot_vat = vat
         self._snapshot_excise = excise
         self._snapshot_month = month
@@ -488,6 +495,7 @@ class _SnapshotMixin:
         self._snapshot_power_term = cached_power_term(dt_util.now().year)
         self._snapshot_ceiling = cached_network_ceiling(dt_util.now().year)
         self._snapshot_analog = entry_analog_surcharge(self.entry, dt_util.now().year)
+        self._snapshot_network = sheet_network(self.entry.data, dt_util.now().date())
         self._snapshot_vat = _vat_now()
         self._snapshot_excise = _excise_now()
         self._snapshot_month = _month_now()

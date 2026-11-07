@@ -535,7 +535,8 @@ async def _build_context(
                 await ensure_analog_surcharge(
                     coordinator._session, year, str(entry.data[CONF_DSO])
                 )
-    # A custom entry's network off its region's sheet, for the same reason.
+    # An entry's network off its region's sheet, a custom one's or a
+    # withdrawn product's, for the same reason.
     for year in years:
         await ensure_custom_network(coordinator._session, entry.data, year)
     return _BackfillContext(
@@ -828,9 +829,10 @@ async def _months_not_read(
                 )
             )
         month = following
-    # A custom entry taking its network off its region's sheet, the running
-    # month included: a month of this year none of it was read for is priced
-    # on the figures typed, which a read that failed just now replaces once it
+    # A custom entry taking its network off its region's sheet, and a withdrawn
+    # product past its last card's year, the running month included: a month
+    # of this year none of it was read for is priced on the figures typed or
+    # the card's own table, which a read that failed just now replaces once it
     # works, so it is left out for a later run, as a card that failed is.
     month = first.replace(day=1)
     while month <= last:

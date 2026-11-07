@@ -603,7 +603,8 @@ repository's own card archive first for a closed month (`_archived_card_from_git
 archives into), then the extractor's `fetch_for_month` archive for a month the project's does not
 hold or holds only as the estimate a month-indexed card printed while it ran (see
 [provider-framework.md](provider-framework.md)), and falls back to the current live snapshot only
-when neither holds the month, with the federal levies that month owes (`_proxy_for_month`).
+when neither holds the month, with the federal levies that month owes (`_proxy_for_month`), and
+for a withdrawn product the network of that month's year (`past_last_card`).
 A live row whose card names another month than the one asked counts as a row the archive does
 not hold (`names_other_month`, `providers/_validity.py`): the archive files a live card under
 the month its title names, so such a row was written over, as the replay of 3 November 2026
@@ -767,9 +768,10 @@ cost. Two rules enforce this:
   month), and every month of a contract whose signing month is one
   (`month_card_failed`, `snapshot_months.py`, which tells a failed read from a
   month no archive holds, since `month_card` answers None for both), and a
-  month of this year a custom entry taking its network off its region's sheet
-  has none of it for, neither a sheet of that year or an earlier one nor the
-  card archive's copy, the running month included (`network_sheet_unread`,
+  month of this year a custom entry taking its network off its region's sheet,
+  or a withdrawn product past its last card's year, has none of it for,
+  neither a sheet of that year or an earlier one nor the card archive's copy,
+  the running month included (`network_sheet_unread`,
   `snapshot_resolve.py`; an earlier year keeps the figures typed, since a
   regulator may never have published it). An
   earlier contract no archive kept is priced on the stand-in the live walk
@@ -1528,6 +1530,15 @@ a network error where the integration logs, and holds it to the cards (see
 archive reads them the same way every day and keeps each month's in
 `network.json`, which stands in for a month no sheet held covers
 (`network_archive.py`), ahead of the figures typed.
+
+A withdrawn product takes the same overlay, off the same sheets, for a month
+of a later year than its last card's (`past_last_card`, `snapshot_resolve.py`):
+that card prints its own year's network and no later card comes to bring the
+next one's. The months of the card's own year keep its table. That year is
+the one of the day before `Contract.withdrawn`, the last day the product was
+sold (`last_card_year`), which the backfill's hold reads too. Brugel's sheet
+and the CWaPE's grids stand in for a withdrawn product's months in Brussels
+and Wallonia the same way.
 
 ### Caching and failure
 

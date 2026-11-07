@@ -118,7 +118,7 @@ from .providers._rates import DynamicRates, EnergyRates, SpotMonthlyRates
 from .snapshot_resolve import (
     analog_meter,
     ensure_custom_network,
-    takes_sheet_network,
+    reads_network_sheet,
 )
 from .snapshot_store import cached_month_card
 from .spot_stats import _injection_is_quarter_hourly
@@ -279,7 +279,8 @@ class _TickMixin:
                 await ensure_analog_surcharge(
                     self._session, year, str(self.entry.data.get(CONF_DSO, ""))
                 )
-        # A custom entry taking its network off its region's sheet.
+        # An entry taking its network off its region's sheet: a custom one
+        # that asks for it, and a withdrawn product past its card's year.
         await ensure_custom_network(self._session, self.entry.data, dt_util.now().year)
         # The month's VAT rate, read before the card is resolved like the term
         # above, and from the card archive, so only where the entry reads it;
@@ -287,9 +288,9 @@ class _TickMixin:
         if self.entry.data.get(CONF_CARD_ARCHIVE, DEFAULT_CARD_ARCHIVE):
             await ensure_vat_rates(self._session)
             await ensure_law_archive(self._session)
-            # And what it kept of the network sheets, for an entry taking its
-            # network from one: a month its own reading does not cover.
-            if takes_sheet_network(self.entry.data):
+            # And what it kept of the network sheets, for an entry that may
+            # take its network from one: a month its own reading does not cover.
+            if reads_network_sheet(self.entry.data):
                 await ensure_network_archive(self._session)
         # The excise the law sets, read before the card is resolved for the
         # same reason, and for every entry, since every residential card's

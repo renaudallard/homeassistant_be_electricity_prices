@@ -86,6 +86,7 @@ machinery.
 | `tests/test_vat_table.py` | The archive's VAT table: the consensus `scripts/archive_cards.py` writes from the cards and `vat_rates.py` reading it |
 | `tests/test_law_archive.py` | The archive's law table: what `scripts/archive_cards.py` writes from the law, `law_archive.py` reading it, and the months `excise_law.py` bills on it |
 | `tests/test_network_archive.py` | The archive's network table (`network_archive.py`): each DSO's month read whole or not at all, kept until a table replaces it, read by a custom entry taking its network from a sheet and kept in its store |
+| `tests/test_withdrawn_network.py` | A withdrawn product's network past its last card's year (`past_last_card`, `snapshot_resolve.py`): the Fluvius, Brugel and CWaPE sheets on real withdrawn cards, the year before standing in, the walk's months (`_proxy_for_month`), the sheet read and the store, a sheet read after the card was resolved and what the card archive kept of it, the backfill's hold for a sheet not read, the hold and the resolver agreeing on every withdrawn product's year, and no other region's sheet |
 | `tests/test_card_vat.py` | The VAT basis each card records: the rate it states, or the one its parser grossed a formula by |
 | `tests/test_frank.py` | Frank Energie extractor |
 | `tests/test_frank_variable.py` | Frank Energie's variable tiers, on their real cards |

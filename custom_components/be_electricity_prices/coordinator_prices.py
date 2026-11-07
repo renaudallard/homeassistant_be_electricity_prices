@@ -83,7 +83,7 @@ from .providers import (
 )
 from .providers._pdf import shown_text
 from .providers._rates import EnergyRates
-from .snapshot_months import _proxy_for_month
+from .snapshot_resolve import _proxy_for_month
 from .spot_stats import (
     _energy_is_rlp_indexed,
     _injection_is_spp_indexed,

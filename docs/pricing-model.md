@@ -296,7 +296,7 @@ the law has been read at all.
 The consolidated text is only the wording in force, so a month before the
 first step it holds is billed as the card prints it, which is every month
 before August 2026. A card standing in for such a month is the exception
-(`_proxy_for_month`, `snapshot_months.py`): it prints another month's levies,
+(`_proxy_for_month`, `snapshot_resolve.py`): it prints another month's levies,
 so the month takes the household excise schedule and the energy contribution
 the law then set, read from Justel's archived copy of the article as it stood
 before the measure (`EXCISE_LAW_ARCHIVE_URL`), ended where the archive's note

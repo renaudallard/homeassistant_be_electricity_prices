@@ -43,7 +43,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import aiohttp
@@ -55,6 +55,7 @@ from .const import (
     CONF_ANALOG_METER,
     CONF_ANALOG_REPLACED,
     CONF_ANNUAL_CONSUMPTION_KWH,
+    CONF_CONTRACT,
     CONF_CUSTOM_DSO_FROM_BRUGEL,
     CONF_CUSTOM_DSO_FROM_CWAPE,
     CONF_CUSTOM_DSO_FROM_FLUVIUS,
@@ -95,7 +96,12 @@ from .fluvius import (
     tariff_sheet_held,
 )
 from .network_archive import fields_for as archived_network
-from .providers import is_professional, offers_direct_debit, offers_quarter_hourly
+from .providers import (
+    is_professional,
+    offers_direct_debit,
+    offers_quarter_hourly,
+    withdrawn_on,
+)
 from .providers._resolve import (
     apply_vat,
     on_card_basis,
@@ -295,6 +301,44 @@ def meter_segment(data: Mapping[str, Any], day: date) -> date:
     return first
 
 
+def last_card_year(supplier: str | None, contract: str | None) -> int | None:
+    """The year a withdrawn product's last card was printed for, or None for
+    a product still sold: that of the last day it was sold, the day before
+    ``Contract.withdrawn``, whose month's card is the last one published.
+    Every product registered agrees: GS's last card is of September 2025 and
+    it was withdrawn on 1 October, and the others were withdrawn on 1 or 30
+    October or 1 November 2026, after a card of that year. One answer for the
+    resolver (:func:`past_last_card`) and the backfill's hold
+    (:func:`network_sheet_unread`), which has no card to read a date off."""
+    withdrawn = withdrawn_on(supplier, contract)
+    return None if withdrawn is None else (withdrawn - timedelta(days=1)).year
+
+
+def past_last_card(
+    entry: ConfigEntry, snap: SupplierSnapshot, month: date, region: str
+) -> bool:
+    """Whether ``snap`` is a withdrawn product's card billed in ``region`` for
+    a calendar year after the one it was printed for.
+
+    A card prints its own year's network tariffs, and a withdrawn product has
+    no later card to bring the next year's: a product withdrawn in October
+    2026 would bill every month of 2027 on the 2026 table its last card
+    prints. Such a month takes its network off the regulator's sheet of its
+    own year, the one a custom entry can take it from, with the year before
+    standing in until that one is out, and the months of the card's own year
+    keep the card's table. The card's year is the last month the product was
+    sold (:func:`last_card_year`).
+
+    Asked of the card in hand rather than of the entry, for the reason
+    :func:`_quarter_hourly` gives: a compare-page proxy carries this entry's
+    contract and another supplier's card.
+    """
+    printed = last_card_year(snap.supplier, snap.contract)
+    if printed is None or entry.data.get(CONF_REGION) != region:
+        return False
+    return month.year > printed
+
+
 def takes_fluvius_network(data: Mapping[str, Any]) -> bool:
     """Whether this entry is a custom one taking its network rates off
     Fluvius's sheet for its area rather than the figures it typed."""
@@ -307,7 +351,8 @@ def _resolve_fluvius_network(
     entry: ConfigEntry, snap: SupplierSnapshot, month: date
 ) -> SupplierSnapshot:
     """A custom entry's network overlay as Fluvius's sheet of the delivery
-    year gives it for the entry's area, where the entry asks for it.
+    year gives it for the entry's area, where the entry asks for it, and a
+    withdrawn product's past its card's year (:func:`past_last_card`).
 
     While no sheet of that year or an earlier one is held, the month the card
     archive kept stands in (network_archive.py), and without it the figures
@@ -319,12 +364,13 @@ def _resolve_fluvius_network(
     and day/night split go with the typed figures. The ceiling and an analog
     meter's surcharge are laid on after it, as on every card.
     """
-    if not takes_fluvius_network(entry.data):
+    if not (
+        takes_fluvius_network(entry.data)
+        or past_last_card(entry, snap, month, REGION_FLANDERS)
+    ):
         return snap
     dso = str(entry.data.get(CONF_DSO, ""))
-    terms = cached_area_terms(month.year, dso)
-    read = {} if terms is None else terms.overlay_fields()
-    return _with_sheet(snap, month, dso, read)
+    return _with_sheet(snap, month, dso, _sheet_read(REGION_FLANDERS, month, dso))
 
 
 def takes_brugel_network(data: Mapping[str, Any]) -> bool:
@@ -341,7 +387,8 @@ def _resolve_brugel_network(
     entry: ConfigEntry, snap: SupplierSnapshot, month: date
 ) -> SupplierSnapshot:
     """A custom Brussels entry's network overlay as Brugel's sheet of the
-    delivery year gives it, where the entry asks for it.
+    delivery year gives it, where the entry asks for it, and a withdrawn
+    product's past its card's year (:func:`past_last_card`).
 
     While no sheet of that year or an earlier one is held, the month the card
     archive kept stands in, and without it the figures typed. The sheet is
@@ -351,12 +398,13 @@ def _resolve_brugel_network(
     above 13 kVA beside it, so :func:`resolve_brussels_power_term` leaves it
     alone; the OSP fee typed stays, since the sheet does not print it.
     """
-    if not takes_brugel_network(entry.data):
+    if not (
+        takes_brugel_network(entry.data)
+        or past_last_card(entry, snap, month, REGION_BRUSSELS)
+    ):
         return snap
     dso = str(entry.data.get(CONF_DSO, ""))
-    terms = cached_network_terms(month.year)
-    read = {} if terms is None else terms.overlay_fields()
-    return _with_sheet(snap, month, dso, read)
+    return _with_sheet(snap, month, dso, _sheet_read(REGION_BRUSSELS, month, dso))
 
 
 def takes_cwape_network(data: Mapping[str, Any]) -> bool:
@@ -375,7 +423,8 @@ def _resolve_cwape_network(
 ) -> SupplierSnapshot:
     """A custom Walloon entry's network overlay as its operator's grid valid
     on the delivery month gives it, and the transport grid, where the entry
-    asks for it.
+    asks for it, and a withdrawn product's past its card's year
+    (:func:`past_last_card`).
 
     Each stands on its own: for one not read yet, what the card archive kept
     of the month stands in, and without it the figures typed, so a transport
@@ -384,41 +433,74 @@ def _resolve_cwape_network(
     and Impact band is set, and the entry's meter and tariff mode decide
     which it bills.
     """
-    if not takes_cwape_network(entry.data):
+    if not (
+        takes_cwape_network(entry.data)
+        or past_last_card(entry, snap, month, REGION_WALLONIA)
+    ):
         return snap
     dso = str(entry.data.get(CONF_DSO, ""))
+    return _with_sheet(snap, month, dso, _sheet_read(REGION_WALLONIA, month, dso))
+
+
+def _sheet_read(region: str, month: date, dso: str) -> dict[str, float | None]:
+    """The overlay fields ``region``'s sheet held gives ``dso`` for ``month``,
+    excluding VAT, or nothing before one is read: Fluvius's area sheet,
+    Brugel's, or the operator's and the transport grid off the CWaPE's, each
+    of those standing on its own."""
     read: dict[str, float | None] = {}
-    for terms in cached_cwape_network(month, dso):
-        if terms is not None:
-            read.update(terms.overlay_fields())
-    return _with_sheet(snap, month, dso, read)
+    if region == REGION_WALLONIA:
+        for grid in cached_cwape_network(month, dso):
+            if grid is not None:
+                read.update(grid.overlay_fields())
+        return read
+    terms = (
+        cached_area_terms(month.year, dso)
+        if region == REGION_FLANDERS
+        else cached_network_terms(month.year)
+    )
+    return read if terms is None else terms.overlay_fields()
+
+
+def sheet_network(data: Mapping[str, Any], month: date) -> dict[str, float | None]:
+    """What this entry's region's sheet gives its area for ``month``, with
+    what the card archive kept of it beneath, or nothing for an entry that
+    reads none (:func:`_sheet_region`). The coordinator stamps it, so a sheet
+    read after the card was resolved reaches the card on the next tick."""
+    region = _sheet_region(data)
+    if region is None:
+        return {}
+    dso = str(data.get(CONF_DSO, ""))
+    return {**archived_network(month, dso), **_sheet_read(region, month, dso)}
 
 
 def network_sheet_unread(data: Mapping[str, Any], month: date) -> bool:
-    """Whether a custom entry taking its network off its region's sheet has
-    none of it for ``month`` of this year: no sheet of that year or an earlier
-    one held, nor what the card archive kept, so the figures typed stand in.
+    """Whether an entry taking its network off its region's sheet has none of
+    it for ``month`` of this year: no sheet of that year or an earlier one
+    held, nor what the card archive kept, so the figures typed stand in, or
+    a withdrawn product's card's own table for a month past that card's year.
 
     This year only, whose sheet every regulator publishes before it starts,
     or else the year before's stands in: a read that failed just now may work
     later. An earlier year keeps the figures typed, since a regulator may
     never have published it (Brugel serves no final sheet for 2025, and the
-    CWaPE's grids are read from 2026).
+    CWaPE's grids are read from 2026). A withdrawn product's card year is
+    the last month it was sold, which is the year of its last card.
     """
-    if not takes_sheet_network(data) or month.year != dt_util.now().year:
+    region = _sheet_region(data)
+    if region is None or month.year != dt_util.now().year:
         return False
+    if not takes_sheet_network(data):
+        printed = last_card_year(data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT))
+        if printed is None or month.year <= printed:
+            return False
     dso = str(data.get(CONF_DSO, ""))
     archived = archived_network(month, dso)
-    if takes_cwape_network(data):
+    if region == REGION_WALLONIA:
         grid, transport = cached_cwape_network(month, dso)
         return (grid is None and "distribution_single" not in archived) or (
             transport is None and "transport" not in archived
         )
-    if takes_fluvius_network(data):
-        held: object = cached_area_terms(month.year, dso)
-    else:
-        held = cached_network_terms(month.year)
-    return held is None and not archived
+    return not _sheet_read(region, month, dso) and not archived
 
 
 def takes_sheet_network(data: Mapping[str, Any]) -> bool:
@@ -428,6 +510,28 @@ def takes_sheet_network(data: Mapping[str, Any]) -> bool:
         or takes_brugel_network(data)
         or takes_cwape_network(data)
     )
+
+
+def _sheet_region(data: Mapping[str, Any]) -> str | None:
+    """The region whose sheet this entry's network may come from, or None:
+    a custom entry's that takes it from one, and a withdrawn product's, which
+    takes it for a year its last card does not cover (:func:`past_last_card`)."""
+    if takes_fluvius_network(data):
+        return REGION_FLANDERS
+    if takes_brugel_network(data):
+        return REGION_BRUSSELS
+    if takes_cwape_network(data):
+        return REGION_WALLONIA
+    if withdrawn_on(data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT)) is None:
+        return None
+    region = data.get(CONF_REGION)
+    return region if isinstance(region, str) else None
+
+
+def reads_network_sheet(data: Mapping[str, Any]) -> bool:
+    """Whether this entry reads its region's network sheet and what the card
+    archive kept of it (:func:`ensure_custom_network`)."""
+    return _sheet_region(data) is not None
 
 
 def _with_sheet(
@@ -466,23 +570,29 @@ def _on_sheet(
 async def ensure_custom_network(
     session: aiohttp.ClientSession, data: Mapping[str, Any], year: int
 ) -> None:
-    """Read the sheet a custom entry takes its network rates from for
-    ``year``, where it takes them from one: its area's off Fluvius's listing,
-    Brugel's, or its operator's and the transport grid off the CWaPE's.
+    """Read the sheet an entry takes its network rates from for ``year``,
+    where it takes them from one (:func:`_sheet_region`): its area's off
+    Fluvius's listing, Brugel's, or its operator's and the transport grid off
+    the CWaPE's.
+
+    A withdrawn product's is read whatever year its card covers: the resolver
+    decides per month whether the card's table or the sheet bills it, and one
+    sheet a year is what the custom entries already read.
 
     Before the card is resolved, which reads the caches synchronously and
     cannot await. Never raises, as each reader promises.
     """
-    if takes_fluvius_network(data):
+    region = _sheet_region(data)
+    if region == REGION_FLANDERS:
         await ensure_area_terms(session, year, str(data.get(CONF_DSO, "")))
-    elif takes_brugel_network(data):
+    elif region == REGION_BRUSSELS:
         await ensure_power_term(session, year)
         # Brugel has no listing to find the year before on, as Fluvius does,
         # and nothing it reads is kept over a restart, so until the year's
         # final sheet is out the one before is read to stand in.
         if cached_network_terms(year) is None:
             await ensure_power_term(session, year - 1)
-    elif takes_cwape_network(data):
+    elif region == REGION_WALLONIA:
         await ensure_cwape_network(session, year, str(data.get(CONF_DSO, "")))
 
 
@@ -781,3 +891,49 @@ def _resolve_snapshot(
         quarter_hourly=_quarter_hourly(entry, snap),
         impact=impact,
     )
+
+
+def _proxy_for_month(
+    entry: ConfigEntry,
+    current: SupplierSnapshot,
+    raw: SupplierSnapshot,
+    year_month: date,
+) -> SupplierSnapshot:
+    """``current`` standing in for ``year_month``, with the federal levies
+    that month owes, and a withdrawn product's network as that month's year
+    bills it.
+
+    ``current`` was resolved for today: no energy contribution from August
+    2026 and the flat August excise, which a January to July month did not
+    owe. ``raw`` resolved for that month as a stand-in bills the household
+    schedule and contribution the law then set, once its archived wording is
+    read, the card's own until then. Only those two figures are taken from
+    it, where they differ from ``raw`` resolved for today, so all else the
+    caller applied to ``current`` stands: identity where they match.
+
+    A withdrawn product's card takes the network of a month after its own
+    year off that year's sheet (:func:`past_last_card`), and ``current``
+    holds today's, so the entry's own overlay is taken from the month as
+    well, where it differs: otherwise a walk in January 2027 would bill
+    December 2026 of a 2026 card on the 2027 sheet rather than the card's
+    table.
+    """
+    today = _resolve_snapshot(entry, raw)
+    month = _resolve_snapshot(entry, raw, delivery_month=year_month, stand_in=True)
+    changes = {
+        name: getattr(month.taxes, name)
+        for name in ("energy_contribution", "federal_excise")
+        if getattr(month.taxes, name) != getattr(today.taxes, name)
+    }
+    out = current
+    if changes:
+        out = replace(out, taxes=replace(out.taxes, **changes))
+    dso = str(entry.data.get(CONF_DSO, ""))
+    network = month.dsos.get(dso)
+    if (
+        network is not None
+        and network != today.dsos.get(dso)
+        and withdrawn_on(raw.supplier, raw.contract) is not None
+    ):
+        out = replace(out, dsos={**out.dsos, dso: network})
+    return out

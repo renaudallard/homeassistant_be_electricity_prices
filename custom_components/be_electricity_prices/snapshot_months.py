@@ -698,37 +698,6 @@ async def _snapshot_for_month(
     )
 
 
-def _proxy_for_month(
-    entry: ConfigEntry,
-    current: SupplierSnapshot,
-    raw: SupplierSnapshot,
-    year_month: date,
-) -> SupplierSnapshot:
-    """``current`` standing in for ``year_month``, with the federal levies
-    that month owes.
-
-    ``current`` was resolved for today: no energy contribution from August
-    2026 and the flat August excise, which a January to July month did not
-    owe. ``raw`` resolved for that month as a stand-in bills the household
-    schedule and contribution the law then set, once its archived wording is
-    read, the card's own until then. Only those two figures are taken from
-    it, where they differ from ``raw`` resolved for today, so all else the
-    caller applied to ``current`` stands: identity where they match.
-    """
-    today = _resolve_snapshot(entry, raw).taxes
-    month = _resolve_snapshot(
-        entry, raw, delivery_month=year_month, stand_in=True
-    ).taxes
-    changes = {
-        name: getattr(month, name)
-        for name in ("energy_contribution", "federal_excise")
-        if getattr(month, name) != getattr(today, name)
-    }
-    if not changes:
-        return current
-    return replace(current, taxes=replace(current.taxes, **changes))
-
-
 async def month_card(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
