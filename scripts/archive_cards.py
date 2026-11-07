@@ -53,8 +53,11 @@ for the N closed months before this one, at most ``--keep-months``, through
 the same ``fetch_for_month`` the integration uses, and stores each month not
 held yet. That makes this a mirror of the supplier archives: insurance against a
 supplier dropping its own, and a cheap read for any month a supplier's own
-path cannot serve. It only ever holds what was walked while the supplier was
-still publishing. A month the
+path cannot serve. A withdrawn product whose households are billed on the
+card they signed is asked back to the first one it prices a signing on,
+within the retention (``Contract.signing_cards``): DATS 24's from April 2023,
+so from November 2023 on in a November 2026 run, which the Colruyt CDN still
+served then. A month the
 supplier answers None for is left absent, as is a card still flagged
 provisional, so a later backfill fills it once it has settled.
 
@@ -1697,6 +1700,32 @@ def _targets(
     return out
 
 
+def _backfill_depth(
+    extractor: SupplierExtractor,
+    contract: str,
+    region: str,
+    today: date,
+    months: int,
+    keep_months: int,
+) -> int:
+    """How many closed months before ``today``'s the backfill asks for.
+
+    ``months``, or back to the first card a withdrawn product prices a
+    signing on where that is further (``Contract.signing_cards``): those
+    cards are what its households are billed on for as long as they stay,
+    and the supplier's copy can go at any time. Only on a run that asks for
+    a backfill at all: one asking none, a capture alone, asks no month. Never
+    past the retention, where a month would be stored only to be pruned and
+    its PDFs uploaded only to be deleted.
+    """
+    registered = next((c for c in extractor.contracts if c.id == contract), None)
+    window = None if registered is None else registered.signing_cards()
+    if window is not None and months > 0:
+        first = window[0]
+        months = max(months, (today.year - first.year) * 12 + today.month - first.month)
+    return min(months, keep_months)
+
+
 # Card addresses a supplier has moved, as (old prefix, new prefix). A row
 # names the address it was read under, and its replay asks for the new one:
 # Energy Knights put every card under "par" in October 2026, which left all
@@ -2255,9 +2284,13 @@ async def archive(
                     continue
                 if ex.id in patience.given_up:
                     continue
-                # Past the retention a month would be stored only to be
-                # pruned, and its PDFs uploaded only to be deleted.
-                for back in range(1, min(backfill_months, keep_months) + 1):
+                for back in range(
+                    1,
+                    _backfill_depth(
+                        ex, contract, region, today, backfill_months, keep_months
+                    )
+                    + 1,
+                ):
                     if ex.id in patience.given_up:
                         break
                     month_id = _months_before(today, back)

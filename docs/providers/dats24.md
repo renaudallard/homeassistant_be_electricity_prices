@@ -213,8 +213,11 @@ backfill shares the same cache, so those prices were written into the recorder
 too, where they do not self-heal.
 
 Returns `None` for a month the CDN does not hold, and without a request for any
-month after the last card. The card archive walks DATS 24 again, so its last
-twelve months are mirrored like any supplier's.
+month after the last card. The card archive backfills every month from the first
+signing card, April 2023, as far back as its 36 months reach (`_backfill_depth`,
+`scripts/archive_cards.py`), so the cards stay readable once the CDN is emptied.
+The signing cards of April to October 2023 are already past that reach in
+November 2026 and are read from the CDN alone.
 
 ## Parsing
 

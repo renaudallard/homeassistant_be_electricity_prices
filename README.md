@@ -2160,8 +2160,11 @@ supplier's year with no one asking and keeps those months readable should a
 supplier drop its own archive. The archive keeps 36 months, as long as a
 fixed contract runs on its signing card, and a manual run can mirror up to
 that many.
-That covers DATS 24 again since its one product is withdrawn rather than the
-supplier: past the supplier's withdrawal date it was not walked at all.
+A withdrawn product whose households are billed on the card they signed is
+mirrored further back, to the first card it prices a signing on: DATS 24's
+from April 2023, as far back as the 36 months reach (November 2023 in
+November 2026), up to its last card of July 2026, so they stay readable once
+its own server drops them, for as long as the 36 months keep them.
 
 **Finding a stored card by hand.** Everything is addressed by the same
 three ids the integration uses, which are the directory names under

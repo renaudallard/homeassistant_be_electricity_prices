@@ -3470,6 +3470,69 @@ def test_dats24_is_walked_again_once_its_product_is_withdrawn() -> None:
     ]
 
 
+async def test_a_withdrawn_product_is_backfilled_to_its_first_signing_card(
+    tmp_path: Path,
+) -> None:
+    """A household on a withdrawn product is billed on the card it signed for
+    as long as it stays, and the supplier can drop those cards at any time.
+    The backfill reaches back to the first one the product prices a signing
+    on, further than the run's months, and never past the retention; a
+    product still sold is asked for the run's months only."""
+    asked: dict[str, list[str]] = {}
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        asked.setdefault(contract, []).append(f"{month:%Y-%m}")
+        return None
+
+    extractor = SupplierExtractor(
+        id="acme",
+        label="Acme",
+        contracts=(
+            Contract(
+                id="acme_gone",
+                label="Gone",
+                kind="variable",
+                regions=frozenset({"wallonia"}),
+                withdrawn=date(2026, 8, 1),
+                signing_cards_from=date(2025, 11, 1),
+            ),
+            Contract(
+                id="acme_fix",
+                label="Fix",
+                kind="fixed",
+                regions=frozenset({"wallonia"}),
+            ),
+        ),
+        fetch=_card_fetch("september 2026"),
+        fetch_for_month=fetch_for_month,
+    )
+    await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=2, now=NOW, sleep=_no_sleep
+    )
+    assert asked["acme_fix"] == ["2026-08", "2026-07"]
+    assert asked["acme_gone"][0] == "2026-08"
+    assert asked["acme_gone"][-1] == "2025-11"
+    assert len(asked["acme_gone"]) == 10
+    asked.clear()
+    await ac.archive(
+        tmp_path,
+        extractors=[extractor],
+        backfill_months=2,
+        keep_months=6,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert asked["acme_gone"][-1] == "2026-03"
+    # A run asking no backfill, a capture alone, asks no month of it either.
+    asked.clear()
+    await ac.archive(
+        tmp_path, extractors=[extractor], backfill_months=0, now=NOW, sleep=_no_sleep
+    )
+    assert asked == {}
+
+
 def test_prune_removes_months_older_than_the_retention(tmp_path: Path) -> None:
     for month in ("2023-08", "2023-09", "2026-09"):
         card = tmp_path / "cards/acme/acme_fix/wallonia" / f"{month}.json"

@@ -168,8 +168,8 @@ class Contract:
     # signing card gives a cohort its energy and feed-in formulas alone. The
     # config flow refuses a signing month outside: no card would be read for
     # it, and each month would bill on its own card's formulas, the last
-    # card's once there is none, without a word. None where no signing month
-    # is refused.
+    # card's once there is none, without a word. The card archive's backfill
+    # reaches back to the first. None where no signing month is refused.
     signing_cards_from: date | None = None
     # The first signing month whose card guarantees the feed-in minimum the
     # card read for every month prints, for a product read off a later card

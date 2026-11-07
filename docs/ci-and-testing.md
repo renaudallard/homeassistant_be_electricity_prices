@@ -1472,8 +1472,11 @@ back as it was (Luminus on a next card naming another month) is left alone and c
 September 2026 was the first month the archive held live
 for every supplier, and Eneco, EBEM, Mega and Trevion were billed on those rows until this. The branch thus mirrors the supplier
 archives: insurance against a supplier dropping its own, and a cheap read for
-any month a supplier's own path cannot serve. DATS 24 was not walked past its supplier withdrawal
-date, and is again since its product carries the withdrawal instead (issue #169). The daily schedule runs with `--backfill 12`,
+any month a supplier's own path cannot serve. A withdrawn product whose households bill on the
+card they signed is asked further back, to the first card it prices a signing on, within the
+retention (`Contract.signing_cards`, `_backfill_depth`): DATS 24's from April 2023, November 2023 on
+in a November 2026 run, its households' only copy once the Colruyt CDN empties. A run asking no backfill,
+`--backfill 0`, asks no month for it either. The daily schedule runs with `--backfill 12`,
 so a newly added supplier gets its last year mirrored on the first run after it lands, a year
 being as far back as a promotion's signing month matters; the workflow's manual dispatch takes the
 number as an input, 12 by default. A month on disk is never asked again, so once the year is
