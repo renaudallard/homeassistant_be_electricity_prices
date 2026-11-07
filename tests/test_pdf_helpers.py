@@ -701,7 +701,7 @@ async def test_a_body_past_the_cap_is_refused_as_it_streams(
 
     monkeypatch.setattr(_pdf, "MAX_RESPONSE_BYTES", 1000)
     # The local test server speaks plain http, on the loopback.
-    monkeypatch.setattr(_pdf, "_refusal", lambda _url: None)
+    monkeypatch.setattr(_pdf, "_refusal", lambda _url, _hosts=None: None)
 
     async def chunked(request: web.Request) -> web.StreamResponse:
         resp = web.StreamResponse()
@@ -3326,7 +3326,7 @@ async def test_a_page_that_is_not_utf8_is_read_not_raised(
     from aiohttp.test_utils import TestServer
 
     # The local test server speaks plain http, on the loopback.
-    monkeypatch.setattr(_pdf, "_refusal", lambda _url: None)
+    monkeypatch.setattr(_pdf, "_refusal", lambda _url, _hosts=None: None)
 
     async def latin1(_request: web.Request) -> web.Response:
         return web.Response(body=b"Tarif \xe9lectricit\xe9", content_type="text/html")

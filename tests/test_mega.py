@@ -1972,7 +1972,7 @@ async def test_pro_textless_card_is_not_rolled_back_to_last_month() -> None:
 
     served: list[str] = []
 
-    async def _serve(session: object, url: str, *, timeout: int = 30) -> bytes:
+    async def _serve(session: object, url: str, **_kw: object) -> bytes:
         served.append(url)
         return textless
 

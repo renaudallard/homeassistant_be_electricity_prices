@@ -27,9 +27,10 @@
 """Where a card link read off a supplier's page or API answer may lead.
 
 The integration fetches a card wherever the page or answer points, and
-``checked_request`` holds only to https and public addresses, so a page
-changed to link another host would have Home Assistant fetch whatever
-that host serves. Each supplier is held to where its cards really sit.
+``checked_request`` holds only to https and public addresses unless its
+caller names the hosts, so a page changed to link another host would have
+Home Assistant fetch whatever that host serves. Each supplier is held to
+where its cards really sit.
 """
 
 from __future__ import annotations
@@ -65,7 +66,8 @@ def on_page_site(page: str, href: str) -> str | None:
     For the links a supplier's page lists. Every card such a page has
     linked sits on that page's own site: Brusol's on www.brusol.be,
     Cociter's on www.cociter.be, Aspiravi's on aspiravi-energy.be and
-    Trevion's on trevion.be, in the card archive and on 2026-11-06 alike.
+    Trevion's on trevion.be, in the card archive and on 2026-11-06 alike,
+    and Dots's on www.dotsenergy.be on 2026-11-07, its first day here.
     A link anywhere else is one the page was changed to carry, and
     following it would fetch whatever that page points at.
     """

@@ -58,6 +58,7 @@ from .bolt import EXTRACTOR as _BOLT
 from .cociter import EXTRACTOR as _COCITER
 from .custom import EXTRACTOR as _CUSTOM
 from .dats24 import EXTRACTOR as _DATS24
+from .dots import EXTRACTOR as _DOTS
 from .ebem import EXTRACTOR as _EBEM
 from .ecofix import EXTRACTOR as _ECOFIX
 from .ecopower import EXTRACTOR as _ECOPOWER
@@ -99,6 +100,7 @@ EXTRACTORS: dict[str, SupplierExtractor] = with_moved_fallbacks(
         _ASPIRAVI.id: _ASPIRAVI,
         _SOCIAL.id: _SOCIAL,
         _ELEGANT.id: _ELEGANT,
+        _DOTS.id: _DOTS,
         # Expert escape hatch, listed last so it sorts to the bottom of the
         # supplier dropdown.
         _CUSTOM.id: _CUSTOM,

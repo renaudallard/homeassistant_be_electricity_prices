@@ -103,6 +103,7 @@ _SUPPLIERS: tuple[str, ...] = (
     "aspiravi",
     "social",
     "elegant",
+    "dots",
 )
 
 
@@ -727,6 +728,11 @@ _KNOWN_TAX_BLOCKS: dict[tuple[str, float, float], tuple[date, str]] = {
         "prints the excise and the contribution of before August 2026; both "
         "levies are billed from the law",
     ),
+    ("dots", 0.04876, 0.002042): (
+        date(2027, 1, 1),
+        "the November 2026 cards print October's excise beside the abolished "
+        "contribution; both levies are billed from the law",
+    ),
 }
 
 
@@ -756,6 +762,7 @@ _STATES_VAT = frozenset(
     {
         "aspiravi",
         "cociter",
+        "dots",
         "ebem",
         "ecofix",
         "ecopower",
@@ -1595,6 +1602,10 @@ async def _check_elegant(
     await _check_flanders_supplier(session, elegant, "elegant")
 
 
+async def _check_dots(session: aiohttp.ClientSession, dots: types.ModuleType) -> None:
+    await _check_flanders_supplier(session, dots, "dots")
+
+
 async def _check_social(
     session: aiohttp.ClientSession, social: types.ModuleType
 ) -> None:
@@ -2432,6 +2443,7 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
     "aspiravi": lambda m: {c.id for c in m.EXTRACTOR.contracts},
     "elegant": lambda m: {c.contract_id for c in m._CONTRACTS},
     "trevion": lambda m: {c.id for c in m._CONTRACTS},
+    "dots": lambda m: {p.contract_id for p in m._PRODUCTS},
 }
 
 
@@ -4241,8 +4253,8 @@ async def _check_card_freshness(
 
     Covered: the eight supplier-families that pick a card from a set of
     several advertised ones, which is the shape that can silently resolve
-    an older card. OCTA+, TotalEnergies, Engie and Luminus construct one
-    URL per contract with no candidate set, so a wrong resolution 404s
+    an older card. OCTA+, TotalEnergies, Engie, Luminus and Dots construct
+    one URL per contract with no candidate set, so a wrong resolution 404s
     loudly instead; a row here would be noise, not coverage.
     """
     bolt = modules.get("bolt")
@@ -6145,6 +6157,7 @@ _CHECKS_BY_SUPPLIER: dict[
     "aspiravi": _check_aspiravi,
     "social": _check_social,
     "elegant": _check_elegant,
+    "dots": _check_dots,
 }
 assert set(_CHECKS_BY_SUPPLIER) == set(_SUPPLIERS), (
     "live check supplier list and check registry disagree: "

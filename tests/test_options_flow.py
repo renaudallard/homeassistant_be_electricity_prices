@@ -7766,8 +7766,9 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # sorts with them at the tail of the sweep. Its Dynamisch VT tier,
         # withdrawn on 1 November 2026, comes out. Its five Variabel tiers
         # sold add five monthly cards at the same 28,4 s, VT's twin withdrawn
-        # with it.
-        ("flanders", "spot", False): 42,
+        # with it. Dots Energy adds its two dynamic cards, which read in
+        # about 1,5 s each.
+        ("flanders", "spot", False): 44,
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,

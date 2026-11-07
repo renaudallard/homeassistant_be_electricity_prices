@@ -55,8 +55,10 @@ from custom_components.be_electricity_prices import (
     fluvius,
     synergrid,
 )
+from custom_components.be_electricity_prices.providers import dots
 from custom_components.be_electricity_prices.providers._pdf import (
     _fetch_validated_pdf_bytes,
+    checked_request,
     fetch_pdf_text,
     fetch_text,
     head_freshness_key,
@@ -64,6 +66,7 @@ from custom_components.be_electricity_prices.providers._pdf import (
     head_or_raise,
 )
 from custom_components.be_electricity_prices.providers.base import ExtractorError
+from tests import FIXTURES
 
 # Every name the fetches below ask for, on the one TLS server. The LAN
 # device has a name too, so a redirect can reach it by name as well as by
@@ -79,6 +82,7 @@ _NAMES = (
     "www.synergrid.be",
     "www.cwape.be",
     "www.fluvius.be",
+    "www.dotsenergy.be",
     "lan.test",
 )
 
@@ -395,6 +399,53 @@ async def test_a_redirect_to_another_site_over_https_is_followed(net: _Net) -> N
     )
     assert payload == b"%PDF-1.7 card"
     assert net.asked == ["GET supplier.test/document", "GET storage.test/blob/card.pdf"]
+
+
+_DOTS_CARD = "www.dotsenergy.be/api/tariefkaarten/dots-dynamic"
+
+
+async def test_a_dots_card_redirect_off_its_site_is_never_requested(
+    net: _Net,
+) -> None:
+    """Dots's card address answers with a redirect to the month's card, which
+    has always sat on its own site, so a redirect anywhere else is refused
+    before it is asked."""
+    net.redirect(_DOTS_CARD, "https://storage.test/tariefkaart-dots-dynamic.pdf")
+    net.answer(
+        "storage.test/tariefkaart-dots-dynamic.pdf", b"%PDF-1.7 card", "application/pdf"
+    )
+    with pytest.raises(ExtractorError, match="its redirect is off the supplier's site"):
+        await dots.fetch(net.session, "dots_dynamic", "flanders")
+    assert net.asked == [f"GET {_DOTS_CARD}"]
+
+
+async def test_a_first_address_off_the_hosts_named_is_never_requested(
+    net: _Net,
+) -> None:
+    """The hosts a caller names hold the address it asks first, not only the
+    hops a redirect points to."""
+    net.answer("storage.test/card.pdf", b"%PDF-1.7 card", "application/pdf")
+    with pytest.raises(ExtractorError, match="off the supplier's site"):
+        async with checked_request(
+            net.session,
+            "https://storage.test/card.pdf",
+            timeout=10,
+            hosts=("supplier.test",),
+        ):
+            pass
+    assert net.asked == []
+
+
+async def test_a_dots_card_redirect_on_its_site_is_followed(net: _Net) -> None:
+    card = (
+        "www.dotsenergy.be/documents/tariefkaarten/tariefkaart-dots-dynamic-11-2026.pdf"
+    )
+    net.redirect(_DOTS_CARD, f"/{card.split('/', 1)[1]}")
+    payload = (FIXTURES / "dots_dynamic_2026-11.pdf").read_bytes()
+    net.answer(card, payload, "application/pdf")
+    snap = await dots.fetch(net.session, "dots_dynamic", "flanders")
+    assert snap.publication_label == "november 2026"
+    assert net.asked == [f"GET {_DOTS_CARD}", f"GET {card}"]
 
 
 @pytest.mark.parametrize("status", [301, 302, 303, 307, 308])

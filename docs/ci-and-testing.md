@@ -63,6 +63,7 @@ machinery.
 | `tests/test_cociter.py` | Cociter extractor |
 | `tests/test_custom.py` | Expert custom-formula supplier: its config flow, snapshot build and pricing |
 | `tests/test_dats24.py` | DATS 24 extractor |
+| `tests/test_dots.py` | Dots Energy extractor |
 | `tests/test_ebem.py` | EBEM extractor |
 | `tests/test_ecofix.py` | Ecofix extractor |
 | `tests/test_ecopower.py` | Ecopower extractor |
@@ -137,7 +138,7 @@ machinery.
 | `tests/test_archive_errors.py` | Every provider's archive lookup (`fetch_for_month`) raises on a transient failure |
 | `tests/test_window_service.py` | The window search behind the `cheapest_window` and `most_expensive_window` services |
 | `tests/test_pdf_helpers.py` | Shared PDF fetching and text extraction (`providers/_pdf.py`, `providers/_pdf_render.py`) |
-| `tests/test_redirect_hops.py` | Every redirect hop is checked before it is asked (`checked_request`, `providers/_pdf.py`), over a local TLS server and a stand-in LAN device that records every connection |
+| `tests/test_redirect_hops.py` | Every redirect hop is checked before it is asked (`checked_request`, `providers/_pdf.py`), over a local TLS server and a stand-in LAN device that records every connection, and Dots's card redirect is followed on its own site and never off it |
 | `tests/test_markup.py` | The tags taken out of a fetched page (`providers/_markup.py`): every real page the suite holds reads as through the plain pattern, and a page of stray brackets costs its length |
 | `tests/test_parse.py` | The shared card readers of `providers/_parse.py` on crafted card text: the Brussels OSP table, the ORES sub-area rows and the degressive excise rows cost the length of the text, and `LINE_BREAK` reads what `\s*\n\s*` reads |
 | `tests/test_link_site.py` | A card link read off Cociter's, Aspiravi's or Trevion's page is followed only on that page's own site, and one read off Ecopower's pages, Eneco's listing, energie.be's APIs or Frank's Sanity answer only on that supplier's card host (`on_page_site`, `on_hosts`, `providers/_links.py`) |
@@ -161,7 +162,8 @@ Shared helpers live in `tests/__init__.py`:
 - `fixture_text(name, *, layout=False, aligned=False)` reads a fixture PDF and runs it through the
   real extractor, `extract_pdf_text` (pypdf) by default, `extract_pdf_text_layout` (pdfplumber)
   when `layout=True` for the column-positional cards (Bolt, DATS 24, Ecopower, TotalEnergies), or
-  `extract_pdf_text_aligned` with OCTA+'s word joining when `aligned=True` (`tests/__init__.py`).
+  `extract_pdf_text_aligned` with OCTA+'s word joining when `aligned=True`, which Dots's cards are
+  read with too (`tests/__init__.py`).
   Reading the cards is most of what the suite spends, so the text is kept on disk across runs
   under `tmp/fixture_text/`, one directory per extractor: the directory is named by a digest of
   what the card archive stamps a stored text with (`card_texts.readers_line`): the render code in
@@ -342,7 +344,7 @@ main()                       scripts/live_check.py  asyncio.run(_run()); rc=8 on
       ...                                                 bolt, octaplus, frank, energiebe,
                                                           energyvision, energyknights,
                                                           trevion, aspiravi, social,
-                                                          elegant)
+                                                          elegant, dots)
     _check_catalogs(...)     scripts/live_check.py   run each discover(), flag new and vanished product ids
     _check_card_freshness()  scripts/live_check.py   resolved card == newest advertised
     _fetch_with_retry(...)   scripts/live_check.py   transient-only retry with backoff
@@ -1170,8 +1172,8 @@ see [coordinator.md](coordinator.md)).
 One card `fetch` refuses is kept all the same: a live card whose network table lacks one of its
 region's areas. The integration refuses it as its live card, since an entry on the missing area
 would have no network figures (`require_every_area`, `providers/_parse.py`), but it is still the
-card of its month, and for Ecofix, which keeps no archive of its own, the only copy there will
-be. The error carries the card (`ShortNetworkTableError`, `providers/base.py`) and the archive
+card of its month, and for Ecofix and Dots Energy, which keep no archive of their own, the only
+copy there will be. The error carries the card (`ShortNetworkTableError`, `providers/base.py`) and the archive
 files it (`_published`, `scripts/archive_cards.py`). The integration bills a closed month on it,
 taking the missing area from the nearest card of the same year that prints it
 (`_with_nearest_area`, `snapshot_areas.py`), and passes it over where it would stand in for an

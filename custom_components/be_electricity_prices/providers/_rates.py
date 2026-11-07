@@ -355,8 +355,8 @@ class DynamicRates:
     Eneco, Energy Knights Agilis Online) price per clock hour, so the
     integration aggregates ENTSO-E's 15-minute day-ahead curve to hourly.
     Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower (Dynamische
-    Burgerstroom), Bolt (Dynamisch), energie.be, EnergyVision and Energy
-    Knights (Agilior Online) bill per quarter-hour (their cards multiply
+    Burgerstroom), Bolt (Dynamisch), energie.be, EnergyVision, Energy Knights
+    (Agilior Online) and Dots Energy bill per quarter-hour (their cards multiply
     the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot); those
     extractors set this True so the live price table, current /
     next-slot sensors and the cheapest-window service keep the native

@@ -162,7 +162,7 @@ month at the current rate. Return-value semantics:
   `dats24.py` always did.
 - `None` when the supplier has no accessible archive for that month. This
   applies to the suppliers that overwrite their cards in place and keep no
-  archive (Ecofix, TotalEnergies; OCTA+ overwrites its live cards too, but its
+  archive (Ecofix, TotalEnergies, Dots Energy; OCTA+ overwrites its live cards too, but its
   site's archive answers for past months), the
   running month on a supplier that publishes in arrears (energie.be), and any
   month before the supplier's archive horizon (Engie's 2023 cards predate the
@@ -274,7 +274,7 @@ price slot, against the ENTSO-E BE day-ahead spot.
 Eneco, Energy Knights (Agilis Online), Frank Energie (by default), Luminus, Mega
 and TotalEnergies price per clock hour, so the integration aggregates the
 15-minute day-ahead curve to hourly and these leave the flag `False`. Cociter,
-EBEM, Ecofix, Ecopower (Dynamische Burgerstroom), energie.be, Energy Knights
+Dots Energy, EBEM, Ecofix, Ecopower (Dynamische Burgerstroom), energie.be, Energy Knights
 (Agilior Online, Optima Online), EnergyVision, Engie, OCTA+ and Trevion bill per quarter-hour
 (their cards multiply the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot)
 and set it `True`; Bolt and Frank sell one card on both settlements, and
@@ -543,6 +543,7 @@ EXTRACTORS: dict[str, SupplierExtractor] = with_moved_fallbacks({
     _ASPIRAVI.id: _ASPIRAVI,
     _SOCIAL.id: _SOCIAL,
     _ELEGANT.id: _ELEGANT,
+    _DOTS.id: _DOTS,
     # Expert escape hatch, listed last so it sorts to the bottom of the
     # supplier dropdown.
     _CUSTOM.id: _CUSTOM,
@@ -987,7 +988,10 @@ Internals worth knowing:
   API the extractors read is served over https by a public name, so this refuses
   nothing real. The redirect is not held to the requested site, since a supplier
   legitimately leaves it: energie.be's document API on azurewebsites.net
-  answers with a redirect to its storage on blob.core.windows.net. The hops
+  answers with a redirect to its storage on blob.core.windows.net. A caller that
+  knows where its cards sit passes `hosts`, and every hop is held to those hosts
+  as `on_hosts` holds a link (`_refusal`): Dots's card address redirects to the
+  month's card on its own site, and `fetch_pdf_text_aligned` takes it. The hops
   share the caller's timeout, a chain of more than `MAX_REDIRECTS` (5) raises
   aiohttp's `TooManyRedirects` as aiohttp's own limit of ten did, and on
   2026-11-06 no source answered with more than one. A refused address raises an
@@ -1002,10 +1006,11 @@ Internals worth knowing:
   address on one of the hosts given, on the default port, and drops any other.
   `on_page_site(page, href)` reads a link a page lists against that page, and
   drops it where it leaves the page's own site. EnergyVision's Brusol cards and
-  listing script, Cociter's index, Aspiravi's two pages and Trevion's listing go
-  through `on_page_site`; Ecopower's pages, Eneco's listing, energie.be's two
-  APIs and Frank's Sanity answer go through `on_hosts`, each with a
-  `_CARD_HOSTS` of its own. Every card these sources have named, in the card
+  listing script, Cociter's index, Aspiravi's two pages, Trevion's listing and
+  Dots's home page go through `on_page_site`; Ecopower's pages, Eneco's listing,
+  energie.be's two APIs and Frank's Sanity answer go through `on_hosts`, each
+  with a `_CARD_HOSTS` of its own, and the redirects of Dots's card addresses
+  through the `hosts` of `checked_request`. Every card these sources have named, in the card
   archive and live on 2026-11-06, sits there, so a link to another host, even
   over https, is one a changed page or answer carries.
 - `is_transient_fetch_error(message: str) -> bool` (`_pdf.py`) classifies an
@@ -1050,7 +1055,7 @@ downstream regex would miss silently.
 | --- | --- | --- |
 | `parse_sibelga_row` | `parse_sibelga_row(text: str) -> DsoOverlay \| None` | Build the Brussels overlay from the eight-column Sibelga row, which Engie's French cards and EnergyVision's Dutch Brusol cards print identically: distribution Normal/Pleines/Creuses/Excl Nuit, metering fee, power term at or below 13 kVA, power term above it, transport. Folds the metering fee into each power band, since a connection pays both, and calls `parse_brussels_osp` for the OSP table. `None` when the row is absent, leaving the caller to decide whether that is a card without a Brussels table or a drift to refuse. Bolt, Mega and TotalEnergies print other layouts and keep their own readers (`_parse.py`). |
 | `parse_brussels_osp` | `parse_brussels_osp(text: str) -> dict[str, float] \| None` | Parse the Brussels Brugel OSP annual-fee table off a Sibelga card. Anchors on the public-service-obligation block in either language (`Obligations de Service` or the Dutch `Taks openbare dienstverplichtingen`; case-insensitive, since Bolt lowercases the `s`) and each `<bound> kVA <value>` row, returning every band the card prints (`le1_44` through `gt56`) or `None` when absent. The open-ended top row is told apart by the `>` in front of its bound, since `> 36 et <= 56 kVA` and `> 56 kVA` both end in `56 kVA`. Populates `DsoOverlay.brussels_osp_by_tier` (`_parse.py`). |
-| `require_every_area` | `require_every_area(supplier, card, keys, *, block=None) -> None` | Raise `ShortNetworkTableError`, an `ExtractorError` carrying the card, naming the areas its network table lacks; the card archive keeps the card for its month (`_published`, `scripts/archive_cards.py`). A partial table is worse than none: a card adopted without one area leaves every entry on it failing each tick while the last good card is gone from the cache, and an empty one lets the backfill skip whole months. Aspiravi, Bolt, Cociter, EBEM, Ecopower, Elegant, Eneco, energie.be, Energy Knights, EnergyVision, Frank, OCTA+ and Trevion ask it in `fetch` alone, so a past month's card keeps a short table: its energy is still what the month and a signing cohort are billed, and the month cache bills the missing area on the nearest card of the same calendar year that prints it, never another year's, whose network tariffs differ (`_with_nearest_area`, `snapshot_areas.py`). Ecofix keeps no archive of its own and asks it in `fetch` alone (`_parse.py`). |
+| `require_every_area` | `require_every_area(supplier, card, keys, *, block=None) -> None` | Raise `ShortNetworkTableError`, an `ExtractorError` carrying the card, naming the areas its network table lacks; the card archive keeps the card for its month (`_published`, `scripts/archive_cards.py`). A partial table is worse than none: a card adopted without one area leaves every entry on it failing each tick while the last good card is gone from the cache, and an empty one lets the backfill skip whole months. Aspiravi, Bolt, Cociter, EBEM, Ecopower, Elegant, Eneco, energie.be, Energy Knights, EnergyVision, Frank, OCTA+ and Trevion ask it in `fetch` alone, so a past month's card keeps a short table: its energy is still what the month and a signing cohort are billed, and the month cache bills the missing area on the nearest card of the same calendar year that prints it, never another year's, whose network tariffs differ (`_with_nearest_area`, `snapshot_areas.py`). Ecofix and Dots Energy keep no archive of their own and ask it in `fetch` alone (`_parse.py`). |
 | `running_month_short_of_an_area` | `running_month_short_of_an_area(out, keys, year_month) -> bool` | Whether `year_month` is still running and its card's network table lacks one of `keys`. The month walk reads the running month through `fetch_for_month`, which is the live card again: Aspiravi, Bolt, Cociter, EBEM, Ecopower, Elegant, Eneco, energie.be, Energy Knights, EnergyVision, Frank, OCTA+ and Trevion answer `None` on it, so the current card stands in, as it does when `fetch` refuses the same card. A closed month keeps its short table (`_parse.py`). |
 | `parse_valid_until` | `parse_valid_until(text: str) -> date \| None` | Best-effort parse of the card's validity date, anchored within ~200 chars after a validity keyword (`geldig`/`valable`/`validit`/`valid `). Tries spelled-out `<day> <month> <year>`, numeric `DD/MM/YYYY` (or `DD/MM/YY`), then bare `<month> <year>` (last day of month). Clamps candidates to a symmetric 5-year horizon around Brussels-local today so a corrupted footer date does not produce a bogus year. Returns the latest match or `None`. Populates `SupplierSnapshot.valid_until` (`_validity.py`). |
 | `text_mentions_month` | `text_mentions_month(text, year_month: date, month_names: tuple[str, ...]) -> bool` | Heuristic that `text` references the requested month+year inside an anchored window (first 1000 chars where the card title prints, plus validity-keyword windows). Accent-folds both sides and collapses whitespace so `mei\n2026` matches (`_validity.py`). |

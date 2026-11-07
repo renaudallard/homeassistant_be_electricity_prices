@@ -27,6 +27,7 @@ from custom_components.be_electricity_prices.providers import (
     _totalenergies_cards,
     bolt,
     cociter,
+    dots,
     ebem,
     ecofix,
     ecopower,
@@ -93,6 +94,18 @@ _PRINTING = {
         fixture_text,
         lambda t: cociter.parse_snapshot(t, "cociter_variable", "t://", "2026-04"),
         (cociter._VAT_RE,),
+    ),
+    "dots": _Card(
+        "dots_dynamic_2026-11.pdf",
+        _aligned,
+        lambda t: dots.parse_snapshot("dots_dynamic", t, "t://"),
+        (dots._VAT_RE,),
+    ),
+    "dots_insights": _Card(
+        "dots_dynamic_insights_2026-11.pdf",
+        _aligned,
+        lambda t: dots.parse_snapshot("dots_dynamic_insights", t, "t://"),
+        (dots._VAT_RE,),
     ),
     "ebem": _Card(
         "ebem_variable_2026-05.pdf",
@@ -398,6 +411,9 @@ def test_a_card_stating_no_rate_records_what_was_assumed(
         ("mega_dynamic", (None, VAT_RATE_REDUCED)),
         ("eneco", (None, VAT_RATE_REDUCED)),
         ("luminus", (None, VAT_RATE_REDUCED)),
+        ("dots", (None, VAT_RATE_REDUCED)),
+        # Its dongle is "inclusief 21% BTW", which is no rate of the card's.
+        ("dots_insights", (None, VAT_RATE_REDUCED)),
     ],
 )
 def test_a_card_whose_rate_is_gone_records_an_assumption_only_if_it_grossed_on_one(

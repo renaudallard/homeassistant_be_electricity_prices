@@ -51,6 +51,7 @@ changes, look here" reference tied to the provider's tests and fixtures.
 | Bolt | [providers/bolt.md](providers/bolt.md) |
 | Cociter | [providers/cociter.md](providers/cociter.md) |
 | DATS 24 | [providers/dats24.md](providers/dats24.md) |
+| Dots Energy | [providers/dots.md](providers/dots.md) |
 | EBEM | [providers/ebem.md](providers/ebem.md) |
 | Ecofix | [providers/ecofix.md](providers/ecofix.md) |
 | Ecopower | [providers/ecopower.md](providers/ecopower.md) |

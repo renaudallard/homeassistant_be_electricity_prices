@@ -1163,7 +1163,7 @@ async def test_a_textless_card_is_not_treated_as_an_unpublished_one() -> None:
     textless = _textless_pdf()
     served: list[str] = []
 
-    async def _serve(session: object, url: str, *, timeout: int = 30) -> bytes:
+    async def _serve(session: object, url: str, **_kw: object) -> bytes:
         served.append(url)
         return textless
 
@@ -1189,7 +1189,7 @@ async def test_an_unpublished_card_still_falls_back_to_last_month() -> None:
     real = (FIXTURES / "bolt_fix.pdf").read_bytes()
     served: list[str] = []
 
-    async def _serve(session: object, url: str, *, timeout: int = 30) -> bytes:
+    async def _serve(session: object, url: str, **_kw: object) -> bytes:
         served.append(url)
         if len(served) == 1:
             raise ExtractorError(f"HTTP 404 fetching {url}")
@@ -1236,7 +1236,7 @@ async def test_a_transient_failure_is_not_treated_as_an_unpublished_card(
 
     served: list[str] = []
 
-    async def _serve(session: object, url: str, *, timeout: int = 30) -> bytes:
+    async def _serve(session: object, url: str, **_kw: object) -> bytes:
         served.append(url)
         raise ExtractorError(message)
 

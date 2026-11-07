@@ -34,7 +34,14 @@ import json
 import logging
 import re
 import socket
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+from collections.abc import (
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Collection,
+    Iterator,
+    Mapping,
+)
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -42,6 +49,7 @@ from pathlib import Path
 import aiohttp
 from yarl import URL
 
+from ._links import on_hosts
 from ._parse import (
     to_float,
 )
@@ -275,7 +283,7 @@ def _internal_address(host: str) -> bool:
     )
 
 
-def _refusal(url: URL) -> str | None:
+def _refusal(url: URL, hosts: Collection[str] | None = None) -> str | None:
     """Why ``url`` is not fetched, or None when it may be.
 
     Every card, listing and API the integration reads is served over https
@@ -284,6 +292,9 @@ def _refusal(url: URL) -> str | None:
     on the way; a redirect to one, or to a LAN address, is how a host the
     integration trusts could send Home Assistant into the LAN. An address
     carrying a login is refused too, since aiohttp would send it along.
+
+    ``hosts``, where given, are the only hosts it may be on (:func:`on_hosts`):
+    Dots's card address redirects to the month's card on its own site.
     """
     if url.scheme != "https":
         return "not an https address"
@@ -291,6 +302,8 @@ def _refusal(url: URL) -> str | None:
         return "an address carrying credentials"
     if not url.host or _internal_address(url.host):
         return "not a public address"
+    if hosts is not None and on_hosts(str(url), hosts) is None:
+        return "off the supplier's site"
     return None
 
 
@@ -312,6 +325,7 @@ async def checked_request(
     head: bool = False,
     params: Mapping[str, str] | None = None,
     headers: Mapping[str, str] | None = None,
+    hosts: Collection[str] | None = None,
 ) -> AsyncIterator[aiohttp.ClientResponse]:
     """GET ``url``, or HEAD it, and yield the answer, following a redirect
     only once :func:`_refusal` has let its address through.
@@ -330,10 +344,11 @@ async def checked_request(
     TooManyRedirects as its own limit did, so a caller's handling of a
     timeout or a client error holds as it was. A refused address raises an
     ExtractorError naming ``url``; where the redirect pointed goes to the
-    debug log only, since that can be a device on the LAN.
+    debug log only, since that can be a device on the LAN. ``hosts`` holds
+    every hop to those hosts (:func:`_refusal`).
     """
     try:
-        refused = _refusal(URL(url))
+        refused = _refusal(URL(url), hosts)
     except ValueError:
         refused = "not an address"
     if refused is not None:
@@ -371,7 +386,7 @@ async def checked_request(
                 hop = URL(location)
                 if not hop.scheme:
                     hop = resp.url.join(hop)
-                refused = _refusal(hop)
+                refused = _refusal(hop, hosts)
             except ValueError:
                 refused = "not an address"
         if refused is not None:
@@ -430,7 +445,11 @@ def _storage_error_code(payload: bytes) -> str | None:
 
 
 async def _fetch_validated_pdf_bytes(
-    session: aiohttp.ClientSession, url: str, *, timeout: int = 30
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    timeout: int = 30,
+    hosts: Collection[str] | None = None,
 ) -> bytes:
     """Download ``url`` and return its bytes once validated as a PDF.
 
@@ -445,7 +464,11 @@ async def _fetch_validated_pdf_bytes(
     """
     try:
         async with checked_request(
-            session, url, timeout=timeout, headers={"User-Agent": USER_AGENT}
+            session,
+            url,
+            timeout=timeout,
+            headers={"User-Agent": USER_AGENT},
+            hosts=hosts,
         ) as resp:
             if resp.status >= 400:
                 raise ExtractorError(f"HTTP {resp.status} fetching {shown_text(url)}")
@@ -490,6 +513,7 @@ async def _pdf_text(
     variant: str,
     timeout: int,
     render: Callable[[bytes], str],
+    hosts: Collection[str] | None = None,
 ) -> str:
     """Download ``url`` and extract its text, or serve both from the memo.
 
@@ -510,7 +534,9 @@ async def _pdf_text(
     downloads = _DOWNLOADS.get()
     payload = None if downloads is None else downloads.get(url)
     if payload is None:
-        payload = await _fetch_validated_pdf_bytes(session, url, timeout=timeout)
+        payload = await _fetch_validated_pdf_bytes(
+            session, url, timeout=timeout, hosts=hosts
+        )
         if downloads is not None:
             downloads[url] = payload
     text = await render_pdf(variant, url, payload, render)
@@ -552,8 +578,10 @@ async def fetch_pdf_text_aligned(
     x_join_threshold: float = 0.0,
     *,
     timeout: int = 30,
+    hosts: Collection[str] | None = None,
 ) -> str:
-    """Word-coordinate aligned variant of :func:`fetch_pdf_text`."""
+    """Word-coordinate aligned variant of :func:`fetch_pdf_text`, every hop
+    held to ``hosts`` where given (:func:`checked_request`)."""
     return await _pdf_text(
         session,
         url,
@@ -562,6 +590,7 @@ async def fetch_pdf_text_aligned(
         variant=f"aligned:{x_join_threshold}",
         timeout=timeout,
         render=lambda payload: extract_pdf_text_aligned(payload, 3, x_join_threshold),
+        hosts=hosts,
     )
 
 

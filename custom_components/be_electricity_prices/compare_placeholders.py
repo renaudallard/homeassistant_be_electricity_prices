@@ -631,7 +631,8 @@ class _PlaceholdersMixin(OptionsFlow):
         # as the current_year_cost sensor prices it. The quoted side takes
         # one of two paths:
         #   1. Archive-capable pairs, both suppliers keeping a month archive
-        #      (every scraped supplier but Ecofix and TotalEnergies today),
+        #      (every scraped supplier but Ecofix, TotalEnergies and Dots
+        #      Energy today),
         #      with a spot-priced side only once the entry's day-ahead cache
         #      covers the window: the same engine against its snapshot chain,
         #      so per-month tariff transitions and the proration model the

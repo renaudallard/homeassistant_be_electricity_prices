@@ -43,6 +43,7 @@ import pytest
 
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.providers import cociter as cociter_mod
+from custom_components.be_electricity_prices.providers import dots as dots_mod
 from custom_components.be_electricity_prices.providers import ebem as ebem_mod
 from custom_components.be_electricity_prices.providers import ecofix as ecofix_mod
 from custom_components.be_electricity_prices.providers import ecopower as ecopower_mod
@@ -654,6 +655,12 @@ def test_ecopower_discover_surfaces_genuinely_new_family() -> None:
     assert "ecopower_zakelijk_stroom" in discovered - {ecopower_mod._CONTRACT_ID}
 
 
+def test_dots_discover_matches_registry() -> None:
+    session = _FakeSession(_read("dots.html"))
+    discovered = _run(dots_mod.discover(session))
+    assert discovered == {c.id for c in dots_mod.EXTRACTOR.contracts}
+
+
 def test_discover_returns_empty_on_http_error() -> None:
     session = _FakeSession("", status=503)
     assert _run(mega_mod.discover(session)) == set()
@@ -676,6 +683,8 @@ def test_discover_returns_empty_on_http_error() -> None:
     assert _run(energyknights_mod.discover(session)) == set()
     assert _run(energyvision_mod.discover(session)) == set()
     assert _run(elegant_mod.discover(session)) == set()
+    # Dots reads its home page.
+    assert _run(dots_mod.discover(session)) == set()
 
 
 def test_readme_counts_the_spot_indexed_injection_contracts_correctly() -> None:

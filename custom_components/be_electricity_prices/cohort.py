@@ -255,9 +255,9 @@ async def _cohort_legs(
     the contract with it. The archived signing-month card fills in every field
     left blank when an archive holds it: the supplier's own, or the
     repository's, which from August 2026 also holds the cards of suppliers
-    that keep none (TotalEnergies, Ecofix). Asking the supplier's alone left
-    those cohorts billed on each month's card. The month's own card fills in
-    otherwise.
+    that keep none (TotalEnergies, Ecofix, Dots Energy). Asking the supplier's
+    alone left those cohorts billed on each month's card. The month's own
+    card fills in otherwise.
 
     Both legs are ``None`` for a ``contract`` that isn't the entry's own (the
     OptionsFlow compare path walks an alternative contract with no signing
