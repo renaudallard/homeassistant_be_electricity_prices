@@ -646,16 +646,17 @@ Internals worth knowing:
   for their tables and plain for their sentences, and each reading had
   downloaded the card again; a coordinator tick runs outside the memo, so only
   this spares it.
-- `render_in_thread` (`_pdf.py`) runs a render in a worker thread, as
-  `render_pdf` does for every reader and Brugel's sheet does for itself. While
-  it runs, what pypdf logs about the card goes to `_pdf.py`'s debug log: pypdf
-  warns at every read about what it skips or repairs, a ToUnicode entry it
-  cannot decode on energie.be's November 2026 cards (#165), a header behind a
-  byte order mark on Luminus's, its advice to install fontTools on Engie's and
-  EBEM's, and none of it changes the text or is for the user to act on. The
+- `render_in_thread` (`_render_thread.py`) runs a render in a worker thread,
+  as `render_pdf` does for every reader and Brugel's sheet does for itself.
+  While it runs, what pypdf logs about the card goes to that module's debug
+  log: pypdf warns at every read about what it skips or repairs, a ToUnicode
+  entry it cannot decode on energie.be's November 2026 cards (#165), a header
+  behind a byte order mark on Luminus's, its advice to install fontTools on
+  Engie's and EBEM's, and none of it changes the text or is for the user to
+  act on. The
   filter sits on every pypdf module's logger and holds only in the thread of
   one of these renders, so another integration's pypdf reads log as before.
-  It lives here and not in `_pdf_render.py`, since it changes no text and the
+  It lives apart from `_pdf_render.py`, since it changes no text and the
   render stamp would otherwise render every kept card again.
 - `_fetch_validated_pdf_bytes` (`_pdf.py`) is shared by the three
   `fetch_pdf_text*` variants. It catches both `aiohttp.ClientError` and

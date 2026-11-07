@@ -75,8 +75,9 @@ from typing import Final
 import aiohttp
 from homeassistant.util import dt as dt_util
 
-from .providers._pdf import read_capped, render_in_thread
+from .providers._pdf import read_capped
 from .providers._pdf_render import extract_pdf_text
+from .providers._render_thread import render_in_thread
 
 _LOGGER = logging.getLogger(__name__)
 

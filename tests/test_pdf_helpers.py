@@ -44,6 +44,7 @@ from custom_components.be_electricity_prices.providers import (
     _pdf,
     _pdf_bound,
     _pdf_bound_pdfminer,
+    _render_thread,
 )
 from custom_components.be_electricity_prices.providers._parse import (
     numeric_row,
@@ -3114,7 +3115,7 @@ def test_a_render_of_ours_logs_what_pypdf_skips_at_debug(
     ]
     assert pypdf_warnings == []
     assert any(
-        r.name == _pdf.__name__
+        r.name == _render_thread.__name__
         and r.levelno == logging.DEBUG
         and "Odd-length" in r.getMessage()
         for r in caplog.records
