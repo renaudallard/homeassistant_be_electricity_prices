@@ -1598,7 +1598,11 @@ with a peak meter, BT without one and BT without metering. A residential
 connection is BT without a peak meter, the fourth figure (`_bt_figure`). The
 kWh rows of the peak-metered block above carry the same labels and print that
 column as a dash, which is how the block a household is billed on is told
-apart. Read, for 2026, excluding VAT:
+apart. The two power-term rows are read as the last figure on the label's line,
+from the start of its digits, the gap to it stopping at the next copy of the
+label (`_LE13_RE`, `_GT13_RE`): tried from each digit of a long run, or run on
+from every label of a line of them, a crafted sheet cost the square of its
+length. Read, for 2026, excluding VAT:
 
 | Row | Figure |
 | --- | --- |

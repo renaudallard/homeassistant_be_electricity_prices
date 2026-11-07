@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
@@ -96,6 +97,33 @@ def _clear_brugel_cache() -> Iterator[None]:
 def test_the_power_term_is_read_off_the_published_sheet() -> None:
     """47,24 and 94,48 EUR/year, excluding VAT, for 2026."""
     assert brugel._parse(_SHEET) == (pytest.approx(47.24), pytest.approx(94.48))
+
+
+# A sheet a host could serve instead: each row's label followed on its line by
+# 100,000 digits and no decimal comma, which was read again from every digit
+# before the row failed, or a line of the label over and over (130,000), read
+# to its end again from each.
+@pytest.mark.parametrize(
+    "crafted",
+    [
+        pytest.param(
+            "Puissance mise à disposition inférieure ou égale à 13 kVA "
+            + "1" * 100_000
+            + "\nPuissance mise à disposition supérieure à 13 kVA "
+            + "1" * 100_000
+            + "\n",
+            id="digits",
+        ),
+        pytest.param(
+            "Puissance mise à disposition inférieure ou égale à 13 kVA " * 2_200,
+            id="labels",
+        ),
+    ],
+)
+def test_a_crafted_sheet_is_read_in_time_linear_in_its_length(crafted: str) -> None:
+    started = time.perf_counter()
+    assert brugel._parse(crafted) is None
+    assert time.perf_counter() - started < 2.0
 
 
 def test_the_per_day_figure_beside_it_is_not_mistaken_for_the_term() -> None:

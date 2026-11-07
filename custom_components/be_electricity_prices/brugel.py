@@ -103,15 +103,19 @@ _MAX_EUR: Final = 500.0
 
 # The two rows, in the "Sans mesure de pointe" block a residential connection
 # is billed on. Each ends in the same value repeated once per BT column, so
-# the LAST number on the line is the one either column charges.
+# the LAST number on the line is the one either column charges. The figure is
+# read from the start of its digits, and the gap to it stops at the next copy
+# of the row's label on the line, which reads the same figure: tried from each
+# digit of a long run, or run on to the line's end from every label, a long
+# line was read again from each place.
+_LE13_LABEL = r"Puissance mise [àa] disposition inf[ée]rieure ou [ée]gale [àa] 13\s*kVA"
+_GT13_LABEL = r"Puissance mise [àa] disposition sup[ée]rieure [àa] 13\s*kVA"
 _LE13_RE = re.compile(
-    r"Puissance mise [àa] disposition inf[ée]rieure ou [ée]gale [àa] 13\s*kVA"
-    r"[^\n]*?([\d]+,[\d]+)\s*$",
+    rf"{_LE13_LABEL}(?:(?!{_LE13_LABEL})[^\n])*?(?<!\d)([\d]+,[\d]+)\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 _GT13_RE = re.compile(
-    r"Puissance mise [àa] disposition sup[ée]rieure [àa] 13\s*kVA"
-    r"[^\n]*?([\d]+,[\d]+)\s*$",
+    rf"{_GT13_LABEL}(?:(?!{_GT13_LABEL})[^\n])*?(?<!\d)([\d]+,[\d]+)\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 # The grid's year headings, "Annee 2026", and on its later pages the value
