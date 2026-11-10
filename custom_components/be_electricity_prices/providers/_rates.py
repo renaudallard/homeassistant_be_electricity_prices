@@ -107,7 +107,8 @@ class Contract:
     # delivery month's mean and its card prints last month's figure: Aspiravi
     # Eco Plus Flex, Cociter Variable and Trihoraire, Ecopower Groene
     # Burgerstroom (whose card is published once its month is over), EBEM
-    # Groen Variabel and B@sic+, Elegant Flex and ComfortFlex, the withdrawn
+    # Groen Variabel and B@sic+, Elegant Flex and ComfortFlex, Belvus Flex
+    # Online and Smart Plus, the withdrawn
     # DATS 24 Groen Variabel, Engie's EPEXDAM cards, Luminus MaxxFlex,
     # SmartFlex and BasicFlex, OCTA+ Smart Variable / Flux / Eco Flux / Boost
     # Flex / Eco Boost Flex / Basic Online, Eneco Flex and Flex One,
@@ -379,8 +380,9 @@ class DynamicRates:
     integration aggregates ENTSO-E's 15-minute day-ahead curve to hourly.
     Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower (Dynamische
     Burgerstroom), Bolt (Dynamisch), energie.be, EnergyVision, Energy Knights
-    (Agilior Online) and Dots Energy bill per quarter-hour (their cards multiply
-    the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot); those
+    (Agilior Online), Dots Energy and Belvus (Dynamisch) bill per quarter-hour
+    (their cards multiply the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA /
+    Belpex_15M spot); those
     extractors set this True so the live price table, current /
     next-slot sensors and the cheapest-window service keep the native
     15-minute slots. YTD billing stays hourly regardless: Home Assistant

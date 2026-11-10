@@ -59,6 +59,7 @@ machinery.
 | Test module | Covers |
 | --- | --- |
 | `tests/test_aspiravi.py` | Aspiravi Energy extractor |
+| `tests/test_belvus.py` | Belvus extractor |
 | `tests/test_bolt.py` | Bolt extractor (`providers/bolt.py`) |
 | `tests/test_cociter.py` | Cociter extractor |
 | `tests/test_custom.py` | Expert custom-formula supplier: its config flow, snapshot build and pricing |
@@ -345,7 +346,7 @@ main()                       scripts/live_check.py  asyncio.run(_run()); rc=8 on
       ...                                                 bolt, octaplus, frank, energiebe,
                                                           energyvision, energyknights,
                                                           trevion, aspiravi, social,
-                                                          elegant, dots)
+                                                          elegant, dots, belvus)
     _check_catalogs(...)     scripts/live_check.py   run each discover(), flag new and vanished product ids
     _check_card_freshness()  scripts/live_check.py   resolved card == newest advertised
     _fetch_with_retry(...)   scripts/live_check.py   transient-only retry with backoff

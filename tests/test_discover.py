@@ -41,6 +41,7 @@ from typing import Any, cast
 import aiohttp
 import pytest
 
+from custom_components.be_electricity_prices.providers import belvus as belvus_mod
 from custom_components.be_electricity_prices.providers import bolt as bolt_mod
 from custom_components.be_electricity_prices.providers import cociter as cociter_mod
 from custom_components.be_electricity_prices.providers import dots as dots_mod
@@ -661,6 +662,12 @@ def test_dots_discover_matches_registry() -> None:
     assert discovered == {c.id for c in dots_mod.EXTRACTOR.contracts}
 
 
+def test_belvus_discover_matches_registry() -> None:
+    session = _FakeSession(_read("belvus.html"))
+    discovered = _run(belvus_mod.discover(session))
+    assert discovered == {c.id for c in belvus_mod.EXTRACTOR.contracts}
+
+
 def test_discover_returns_empty_on_http_error() -> None:
     session = _FakeSession("", status=503)
     assert _run(mega_mod.discover(session)) == set()
@@ -683,8 +690,9 @@ def test_discover_returns_empty_on_http_error() -> None:
     assert _run(energyknights_mod.discover(session)) == set()
     assert _run(energyvision_mod.discover(session)) == set()
     assert _run(elegant_mod.discover(session)) == set()
-    # Dots reads its home page.
+    # Dots reads its home page, Belvus its current cards page.
     assert _run(dots_mod.discover(session)) == set()
+    assert _run(belvus_mod.discover(session)) == set()
 
 
 def test_readme_counts_the_spot_indexed_injection_contracts_correctly() -> None:
@@ -853,6 +861,7 @@ def test_readme_archive_lists_name_every_supplier_that_keeps_one() -> None:
 
     labels = {
         "aspiravi": "Aspiravi",
+        "belvus": "Belvus",
         "bolt": "Bolt fix",
         "cociter": "Cociter",
         "dats24": "DATS 24",

@@ -7748,8 +7748,10 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # range adds its 5-year fixed card in Flanders and Wallonia and its
         # 3-year one in Wallonia, and takes out the Walloon 1-year card it
         # withdrew. The three read in the time its older 3-year card took,
-        # well inside the supplier's 9,1 s reservation.
-        ("flanders", "static", False): 58,
+        # well inside the supplier's 9,1 s reservation. Belvus adds Flex
+        # Online and Smart Plus, two month-indexed variable cards that read
+        # in about 0,3 s each.
+        ("flanders", "static", False): 60,
         ("flanders", "static", True): 20,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land
@@ -7768,8 +7770,8 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # withdrawn on 1 November 2026, comes out. Its five Variabel tiers
         # sold add five monthly cards at the same 28,4 s, VT's twin withdrawn
         # with it. Dots Energy adds its two dynamic cards, which read in
-        # about 1,5 s each.
-        ("flanders", "spot", False): 44,
+        # about 1,5 s each, and Belvus Dynamisch one more at about 0,5 s.
+        ("flanders", "spot", False): 45,
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,

@@ -17,7 +17,7 @@ body:
     attributes:
       label: Supplier
       description: The company's name as it appears on the card.
-      placeholder: e.g. Sparki, Belvus
+      placeholder: e.g. Sparki, HOA Energy
     validations:
       required: true
 

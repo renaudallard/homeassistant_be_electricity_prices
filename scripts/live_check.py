@@ -104,6 +104,7 @@ _SUPPLIERS: tuple[str, ...] = (
     "social",
     "elegant",
     "dots",
+    "belvus",
 )
 
 
@@ -748,6 +749,11 @@ _KNOWN_TAX_BLOCKS: dict[tuple[str, float, float], tuple[date, str]] = {
         "the November 2026 cards print October's excise beside the abolished "
         "contribution; both levies are billed from the law",
     ),
+    ("belvus", 0.050329, 0.002042): (
+        date(2027, 1, 1),
+        "prints the excise and the contribution of before August 2026; both "
+        "levies are billed from the law",
+    ),
 }
 
 
@@ -772,7 +778,7 @@ _KNOWN_VREG_CEILINGS: dict[tuple[str, float], tuple[date, str]] = {
 # records as taxes.card_vat_rate and grosses its formula by. A card of one of
 # them that comes back without it was grossed on the assumed residential rate
 # instead: a reworded sentence, silent until a rate change bills it wrong.
-# Bolt and energie.be state none; OCTA+ stopped in June 2026.
+# Bolt, energie.be and Belvus state none; OCTA+ stopped in June 2026.
 _STATES_VAT = frozenset(
     {
         "aspiravi",
@@ -1621,6 +1627,12 @@ async def _check_dots(session: aiohttp.ClientSession, dots: types.ModuleType) ->
     await _check_flanders_supplier(session, dots, "dots")
 
 
+async def _check_belvus(
+    session: aiohttp.ClientSession, belvus: types.ModuleType
+) -> None:
+    await _check_flanders_supplier(session, belvus, "belvus")
+
+
 async def _check_social(
     session: aiohttp.ClientSession, social: types.ModuleType
 ) -> None:
@@ -2458,6 +2470,7 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
     "elegant": lambda m: {c.contract_id for c in m._CONTRACTS},
     "trevion": lambda m: {c.id for c in m._CONTRACTS},
     "dots": lambda m: {p.contract_id for p in m._PRODUCTS},
+    "belvus": lambda m: {p.contract_id for p in m._PRODUCTS},
 }
 
 
@@ -3880,6 +3893,20 @@ _allow_network(
     "fluvius_antwerpen",
     {"distribution_single": 0.0524},
     "the dynamic card prints 5,24 where EBEM's own other cards print 5,35; "
+    "billed as printed",
+)
+_allow_network(
+    "belvus",
+    "fluvius_west",
+    {"distribution_exclusive_night": 0.056},
+    "prints 5,6 where Fluvius's sheet and every other card print 5,99; "
+    "billed as printed",
+)
+_allow_network(
+    "belvus",
+    "fluvius_imewo",
+    {"distribution_single": 0.0542},
+    "prints 5,42 where Fluvius's sheet and every other card print 5,54; "
     "billed as printed",
 )
 _allow_network(
@@ -6172,6 +6199,7 @@ _CHECKS_BY_SUPPLIER: dict[
     "social": _check_social,
     "elegant": _check_elegant,
     "dots": _check_dots,
+    "belvus": _check_belvus,
 }
 assert set(_CHECKS_BY_SUPPLIER) == set(_SUPPLIERS), (
     "live check supplier list and check registry disagree: "

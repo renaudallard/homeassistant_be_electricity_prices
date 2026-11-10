@@ -54,6 +54,7 @@ from .base import (
     SupplierSnapshot,
     TaxOverlay,
 )
+from .belvus import EXTRACTOR as _BELVUS
 from .bolt import EXTRACTOR as _BOLT
 from .cociter import EXTRACTOR as _COCITER
 from .custom import EXTRACTOR as _CUSTOM
@@ -101,6 +102,7 @@ EXTRACTORS: dict[str, SupplierExtractor] = with_moved_fallbacks(
         _SOCIAL.id: _SOCIAL,
         _ELEGANT.id: _ELEGANT,
         _DOTS.id: _DOTS,
+        _BELVUS.id: _BELVUS,
         # Expert escape hatch, listed last so it sorts to the bottom of the
         # supplier dropdown.
         _CUSTOM.id: _CUSTOM,

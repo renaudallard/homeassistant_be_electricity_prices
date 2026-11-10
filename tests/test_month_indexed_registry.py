@@ -24,6 +24,7 @@ from custom_components.be_electricity_prices.flow_contracts import (
 from custom_components.be_electricity_prices.providers import (
     EXTRACTORS,
     aspiravi,
+    belvus,
     bolt,
     cociter,
     dats24,
@@ -88,6 +89,20 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
         "aspiravi_eco_plus_flex",
         lambda: aspiravi.parse_snapshot(
             "aspiravi_eco_plus_flex", fixture_text("aspiravi_eco_plus_flex_2026-09.pdf")
+        ),
+    ),
+    (
+        "belvus",
+        "belvus_flex_online",
+        lambda: belvus.parse_snapshot(
+            "belvus_flex_online", fixture_text("belvus_flex_online_2026-11.pdf")
+        ),
+    ),
+    (
+        "belvus",
+        "belvus_dynamisch",
+        lambda: belvus.parse_snapshot(
+            "belvus_dynamisch", fixture_text("belvus_dynamisch_2026-11.pdf")
         ),
     ),
     (

@@ -184,12 +184,13 @@ async def _ytd_hourly_energy(
 
     Quarter-hourly dynamic contracts (Engie, Cociter, EBEM, Ecofix, OCTA+,
     Ecopower DBS, Bolt Dynamisch, energie.be, EnergyVision, Energy Knights
-    Agilior Online, Dots Energy) bill the live price on 15-minute slots, but the
-    recorder only retains hourly long-term statistics, so this YTD replay
-    aggregates consumption / injection to the clock hour and prices each
-    hour at its hourly spot. When intra-hour load correlates with the
-    intra-hour price the YTD total is a close approximation, not a
-    bit-exact reconciliation with the live 15-minute sensor.
+    Agilior Online, Dots Energy, Belvus Dynamisch) bill the live price on
+    15-minute slots, but the recorder only retains hourly long-term
+    statistics, so this YTD replay aggregates consumption / injection to the
+    clock hour and prices each hour at its hourly spot. When intra-hour load
+    correlates with the intra-hour price the YTD total is a close
+    approximation, not a bit-exact reconciliation with the live 15-minute
+    sensor.
 
     Solar handling is uniform across both paths:
       - ``compensation``: the hour's net ``cons - inj`` lands in its meter
