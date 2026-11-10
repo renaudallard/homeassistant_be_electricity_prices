@@ -60,6 +60,7 @@ from custom_components.be_electricity_prices.coordinator_profiles import (
 from custom_components.be_electricity_prices.providers._rates import (
     InjectionRates,
     SpotMonthlyRates,
+    VariableRates,
 )
 from tests import make_entry
 from tests.test_options_flow import _real_coordinator, _stub_snapshot
@@ -214,6 +215,8 @@ async def test_a_card_priced_without_its_curve_says_so(
     )
     assert row.annual is not None
     assert row.profile_missing and not row.day_ahead_missing
+    # Priced on a month mean the running month may still move.
+    assert row.provisional
     with patch.object(type(coord), "_ensure_historical_spots", AsyncMock()):
         p = await _compare_placeholders(
             hass,
@@ -325,6 +328,59 @@ async def test_the_nightly_ranking_fetches_the_curves_before_pricing(
         assert held_at_resolve[-2:] == [True, True]
         # The entry's own pricing is untouched: it loads what its card needs.
         assert not coord._rlp_weights
+
+
+def test_a_price_the_period_may_still_move_is_provisional() -> None:
+    """A card indexed on the running month or quarter is priced on its printed
+    rate or the running mean until the period settles; one fixed for the term,
+    or a month that has settled, is not."""
+    from custom_components.be_electricity_prices.compare_engine import _provisional
+
+    fixed = _stub_snapshot("eneco", "power_fix", 0.18)
+    indexed = replace(
+        fixed,
+        energy=VariableRates(
+            current=0.12, formula_factor=1.1, formula_base=0.01, month_indexed=True
+        ),
+    )
+    assert not _provisional(fixed)
+    assert _provisional(indexed)
+    assert not _provisional(
+        replace(indexed, energy=replace(indexed.energy, index_realised=0.09))
+    )
+    assert _provisional(_rlp_card())
+
+
+def test_the_ranking_marks_a_provisional_price() -> None:
+    rows = [
+        RankedRow(label="Eneco Power Fix", annual=1200.0, is_own=True),
+        RankedRow(label="Mega Smart Flex", annual=1100.0, provisional=True),
+    ]
+    table = _ranking_table(rows)
+    assert "EUR - Mega Smart Flex ~ · -100,00\n" in table
+    note = (
+        "~ a provisional price: its card is indexed on the running month or "
+        "quarter, which may still move it."
+    )
+    assert table.count(note) == 1
+    assert "~" not in _ranking_table(rows[:1])
+    stored = DailyCompare(
+        rows=tuple(rows),
+        own=1200.0,
+        priced=2,
+        total=2,
+        ran_at=datetime(2026, 11, 10, 3, tzinfo=UTC),
+    )
+    restored = _daily_compare_from_dict(_daily_compare_to_dict(stored))
+    assert restored is not None
+    assert [row.provisional for row in restored.rows] == [False, True]
+    # A ranking stored before the mark existed restores without it.
+    old = _daily_compare_to_dict(stored)
+    for raw in old["rows"]:
+        del raw["provisional"]
+    restored = _daily_compare_from_dict(old)
+    assert restored is not None
+    assert not any(row.provisional for row in restored.rows)
 
 
 def test_the_ranking_says_which_rows_lack_their_curve() -> None:

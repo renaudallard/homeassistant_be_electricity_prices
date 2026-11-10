@@ -76,6 +76,8 @@ from .flow_contracts import (
 from .providers import get as get_extractor
 from .providers import offers_direct_debit, settlement_answer
 from .providers._pdf import memoise_text_fetches
+from .providers._rates import SpotMonthlyRates
+from .providers._settle import has_unsettled_index
 from .spot_stats import own_day_ahead, spots_available
 
 _LOGGER = logging.getLogger(__name__)
@@ -620,6 +622,7 @@ class _SweepEngine(_HouseholdMixin):
             label=label,
             annual=annual,
             is_own=True,
+            provisional=hh.raw_snapshot is not None and _provisional(hh.raw_snapshot),
             feed_in_uncredited=_feed_in_left_out(hh.current_snapshot, credit, hh),
             profile_missing=gaps.profile,
             day_ahead_missing=gaps.day_ahead,
@@ -767,6 +770,7 @@ class _SweepEngine(_HouseholdMixin):
             label=label,
             annual=annual,
             read_by_ocr=read_by_ocr,
+            provisional=_provisional(snap),
             feed_in_uncredited=_feed_in_left_out(resolved, credit, hh),
             # The target inherits the household's answer, which the entry
             # holds only where its own card asks the question.
@@ -775,6 +779,18 @@ class _SweepEngine(_HouseholdMixin):
             profile_missing=gaps.profile,
             day_ahead_missing=gaps.day_ahead,
         )
+
+
+def _provisional(snapshot: Any) -> bool:
+    """Whether a row's figure is priced on a value its month or quarter may
+    still move: an index the card names that has not settled yet, the
+    printed rate standing in for it, or a month mean of the day-ahead price
+    while the month runs. Asked of the card as fetched, since the cohort
+    splice turns a month-indexed leg into a month mean."""
+    energy = snapshot.energy
+    return has_unsettled_index(snapshot) or (
+        isinstance(energy, SpotMonthlyRates) and energy.index_realised is None
+    )
 
 
 def _feed_in_left_out(snapshot: Any, credit: float | None, hh: Any) -> bool:

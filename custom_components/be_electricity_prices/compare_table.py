@@ -158,6 +158,12 @@ class RankedRow:
     # rather than no price, but a reading, and the row says so: a figure you
     # might switch supplier over must not hide where it came from.
     read_by_ocr: bool = False
+    # The card is indexed on the running month or quarter, which has not
+    # settled yet (``compare_engine._provisional``), so its figure is priced
+    # on a value the period may still move: the printed rate, computed on an
+    # earlier month's index, or the running mean. Marked ``~``, as the gas
+    # integration marks such a price.
+    provisional: bool = False
     # The card credits the household's feed-in and the figure leaves it out:
     # a per-slot spot-indexed credit short of a full year of day-ahead and of
     # the household's export, as the projection leaves it out. The figure is
@@ -249,6 +255,8 @@ def _eur(value: float) -> str:
 # The tag on a ranking row whose feed-in credit was left out, and the start
 # of the line under the table that says what it means.
 _NO_FEED_IN = "`NO FEED-IN`"
+# A row priced on an index its month or quarter may still move.
+_PROVISIONAL = "~"
 # The same for a row priced as not paying by direct debit for want of an answer.
 _NO_DIRECT_DEBIT = "`NO DIRECT DEBIT`"
 # And for a row priced without the Synergrid profile its card's index names.
@@ -329,6 +337,8 @@ def _ranking_table(
     for n, row in enumerate(priced, 1):
         annual = row.annual if row.annual is not None else 0.0
         line = f"{n}. {_eur(annual)} EUR - {row.label}"
+        if row.provisional:
+            line += f" {_PROVISIONAL}"
         if row.is_own:
             # Inline code, which the dialog paints as a filled band: in a
             # list this long the row you are comparing everything against
@@ -351,6 +361,12 @@ def _ranking_table(
         if row.profile_missing:
             line += f" {_NO_PROFILE}"
         out.append(line)
+    if any(row.provisional for row in priced):
+        out.append("")
+        out.append(
+            f"{_PROVISIONAL} a provisional price: its card is indexed on the "
+            "running month or quarter, which may still move it."
+        )
     if any(row.feed_in_uncredited for row in priced):
         out.append("")
         out.append(

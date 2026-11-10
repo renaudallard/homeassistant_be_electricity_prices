@@ -303,6 +303,14 @@ def _leg_settled(leg: EnergyRates | InjectionRates) -> bool:
     return getattr(leg, "index_realised", None) is not None
 
 
+def has_unsettled_index(snap: SupplierSnapshot) -> bool:
+    """Whether a leg ``snap`` indexes on the month or the quarter is still
+    without what that period settled at, so the period may still move the
+    price its card gives: a card whose rate is the running month's index,
+    printed from an earlier month's."""
+    return any(not _leg_settled(leg) for leg in _indexed_legs(snap))
+
+
 def is_settled(snap: SupplierSnapshot) -> bool:
     """Whether every leg ``snap`` indexes on the month carries what the
     month settled at.

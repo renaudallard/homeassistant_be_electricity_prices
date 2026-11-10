@@ -788,6 +788,7 @@ def _daily_compare_to_dict(result: Any) -> dict[str, Any]:
                 "status": row.status,
                 "is_own": row.is_own,
                 "read_by_ocr": row.read_by_ocr,
+                "provisional": row.provisional,
                 "feed_in_uncredited": row.feed_in_uncredited,
                 "direct_debit_assumed": row.direct_debit_assumed,
                 "profile_missing": row.profile_missing,
@@ -861,6 +862,7 @@ def _daily_compare_from_dict(blob: dict[str, Any]) -> Any | None:
                 # Absent from every blob written before the tag existed, and
                 # a ranking restored without it must still render.
                 read_by_ocr=raw.get("read_by_ocr") is True,
+                provisional=raw.get("provisional") is True,
                 feed_in_uncredited=raw.get("feed_in_uncredited") is True,
                 direct_debit_assumed=raw.get("direct_debit_assumed") is True,
                 profile_missing=raw.get("profile_missing") is True,

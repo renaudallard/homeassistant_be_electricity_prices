@@ -872,6 +872,7 @@ class PotentialSavingSensor(CoordinatorEntity[BePricesCoordinator], SensorEntity
                         else {}
                     ),
                     **({"profile_missing": True} if row.profile_missing else {}),
+                    **({"provisional": True} if row.provisional else {}),
                 }
                 for row in sorted(
                     result.rows,

@@ -1760,7 +1760,7 @@ def test_a_row_short_of_its_feed_in_credit_is_tagged_and_explained() -> None:
     rows = (
         RankedRow(label="Eneco Zon & Wind Flex", annual=1200.0, is_own=True),
         RankedRow(label="Bolt Fixe", annual=1366.0, feed_in_uncredited=True),
-        RankedRow(label="Mega Online Fixed", annual=1150.0),
+        RankedRow(label="Mega Online Fixed", annual=1150.0, provisional=True),
     )
     lines = _ranking_table(rows, ran_at=None, deferred=0).splitlines()
     bolt = next(line for line in lines if "Bolt" in line)
@@ -1775,6 +1775,7 @@ def test_a_row_short_of_its_feed_in_credit_is_tagged_and_explained() -> None:
     sensor = PotentialSavingSensor(_coord(entry, _result(rows=rows)))  # type: ignore[arg-type]
     ranking = sensor.extra_state_attributes["ranking"]
     assert [r.get("feed_in_uncredited") for r in ranking] == [None, None, True]
+    assert [r.get("provisional") for r in ranking] == [True, None, None]
 
 
 def test_every_annual_row_on_the_page_clamps_per_register() -> None:
