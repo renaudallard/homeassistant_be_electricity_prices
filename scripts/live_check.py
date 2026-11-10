@@ -161,14 +161,14 @@ def _load_providers() -> dict[str, types.ModuleType]:
     _RATE_IMPACT = rates.ImpactRates
     _RATE_SPOT_MONTHLY = rates.SpotMonthlyRates
     pdf = _load("be_pkg.providers._pdf", PKG / "providers" / "_pdf.py")
-    global _is_transient_fetch_error, _fetch_text, _EXTRACTOR_ERROR, _render_through
+    global _fetch_error_heals, _fetch_text, _EXTRACTOR_ERROR, _render_through
     global _memoise_text_fetches
     # The readers' render seam, from the copy of _pdf the providers loaded
     # here actually consult; the real package's would be a different
     # ContextVar and the hook would never be seen.
     _render_through = pdf.render_through
     _memoise_text_fetches = pdf.memoise_text_fetches
-    _is_transient_fetch_error = pdf.is_transient_fetch_error
+    _fetch_error_heals = pdf.is_transient_fetch_error
     _fetch_text = pdf.fetch_text
     # The providers read every body through this copy's read_capped, looked
     # up at call time, so wrapping it here counts the bytes of all of them.
@@ -372,8 +372,23 @@ def _memoise_text_fetches(_store: dict[str, str]) -> AbstractContextManager[None
 # Bound by _load_providers to providers/_pdf.is_transient_fetch_error so
 # _fetch_with_retry shares the coordinator's transient/permanent split
 # rather than duplicating it. Placeholder until the providers package loads.
-def _is_transient_fetch_error(_message: str) -> bool:
+def _fetch_error_heals(_message: str) -> bool:
     return False
+
+
+# What aiohttp's error for a certificate the client cannot verify names,
+# inside the network error the fetch helpers wrap it in.
+_CERTIFICATE_REFUSED = "SSLCertVerificationError"
+
+
+def _is_transient_fetch_error(message: str) -> bool:
+    """The coordinator's split, except that a certificate the client cannot
+    verify is never transient. The fetch helpers wrap it as a network error,
+    but a host that changed its chain stays unverifiable until a release
+    ships what verifies it, as api.atrias.be's did for the gas integration
+    on 10 November 2026: such a row fails rather than passing as not
+    fetched."""
+    return _CERTIFICATE_REFUSED not in message and _fetch_error_heals(message)
 
 
 # Bound by _load_providers to providers/_pdf.fetch_text, so the freshness

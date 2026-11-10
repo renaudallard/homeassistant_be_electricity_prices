@@ -4020,6 +4020,32 @@ def test_a_network_sheet_that_stops_reading_is_reported(
     assert row.ok and dns in row.detail
 
 
+def test_a_certificate_that_does_not_verify_is_never_transient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fetch helpers wrap aiohttp's certificate error as a network
+    error, which a row would pass as not fetched, but a host that changed
+    its chain does not heal on its own: the live check's classifier leaves
+    it out, and the sheet's row fails."""
+    monkeypatch.setattr(lc, "_fetch_error_heals", lc._fetch_error_heals)
+    lc._load_providers()
+    refused = (
+        "network error fetching https://www.cwape.be/rest/documents: Cannot "
+        "connect to host www.cwape.be:443 ssl:True [SSLCertVerificationError: "
+        "(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: "
+        "unable to get local issuer certificate (_ssl.c:1127)')]"
+    )
+    dns = "network error fetching https://www.cwape.be/rest/documents: timeout"
+    assert lc._is_transient_fetch_error(dns)
+    assert is_transient_fetch_error(refused)
+    assert not lc._is_transient_fetch_error(refused)
+    lc._check_network_sheets(
+        {}, {("wallonia", "ores"): refused}, None, date(2026, 11, 10)
+    )
+    (cwape,) = lc.CHECKS
+    assert not cwape.ok and "ores: network error fetching" in cwape.detail
+
+
 def test_each_network_sheet_is_read_through_the_integration_s_reader(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

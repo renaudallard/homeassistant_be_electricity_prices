@@ -1109,7 +1109,11 @@ immediately so a real regression is not masked by retries. A fresh awaitable
 is built via `factory()` per attempt (awaitables are single-use), which is why callers pass
 `functools.partial(...)` rather than a pre-created coroutine. The transient predicate is imported
 from `providers/_pdf.py` (`scripts/live_check.py`) so the harness and the coordinator classify
-errors identically and cannot drift apart.
+errors identically and cannot drift apart, with one exception: a message naming aiohttp's
+`SSLCertVerificationError` is never transient here. The fetch helpers wrap a certificate the
+client cannot verify as a network error, but a host that changed its chain stays unverifiable until
+a release ships what verifies it (api.atrias.be's did for the gas integration on 10 November
+2026), so a row that would pass a network error as not fetched fails on it instead.
 
 This retry helper is CI-only. Do not port it into the coordinator (`coordinator_snapshot.py`): it has its own
 retry/backoff behaviour, and duplicating this logic there would create two divergent policies.
