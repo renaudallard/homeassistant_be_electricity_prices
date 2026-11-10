@@ -962,9 +962,10 @@ Internals worth knowing:
   alone handed to pypdf's check of a move) leaves the text as it was, so a card under the bound
   renders to the same text as before, and only these refuse: a file a
   reader cannot open is left to it to fail on.
-  The manifest asks for pypdf 6.7.1 or later, the first release that maps
+  The bound needs pypdf 6.7.1 or later, the first release that maps
   at most 100 000 codes for a font, which the bound counts once the map is
-  built; 6.6.0 was the first whose text extraction loads its fonts through
+  built, and the manifest asks for 6.16.2, the gas integration's floor
+  (see `docs/architecture.md`); 6.6.0 was the first whose text extraction loads its fonts through
   `Font.from_font_resource`, which the bound counts too. pypdf 6.20.0 moved
   its font module into its `generic` package, and the bound takes it from
   either place.
