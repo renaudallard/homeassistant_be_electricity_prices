@@ -1249,6 +1249,48 @@ def _unparsed_sources(cards: _Cards) -> list[dict[str, str]]:
     return [{"url": url, "pdf": digest} for url, digest in sorted(seen.items())]
 
 
+def _name_refused(
+    cards: _Cards,
+    refused: dict[str, list[dict[str, str]]],
+    unreadable: dict[str, list[dict[str, str]]],
+) -> None:
+    """Name the cards a past month's fetch refused, under the month asked.
+
+    A reader answers None for a month whose card it downloaded and would not
+    read, so that the month cache does not retry it every hour, and no error
+    reaches the walk. Belvus's cards up to August 2026 went that way: kept,
+    uploaded under the month of the run, and named by no row or cell.
+
+    Only the bytes no row names are taken: a fetch that read another month's
+    card on its way to None has that card named by its own row. A card not
+    uploaded yet goes under the month asked, the first that asked for it,
+    and each is marked as coming from the supplier's archive, which the
+    backfill asks again while the month has no row, so ``_retry_unparsed``
+    leaves it alone.
+    """
+    if not refused:
+        return
+    held, _kept = _kept_rows(cards.out)
+    named = {
+        digest
+        for by_month in held.values()
+        for months in by_month.values()
+        for row in months.values()
+        for digest in row.digests
+    }
+    for key, sources in sorted(refused.items()):
+        left = [
+            {**source, "via": "archive"}
+            for source in sources
+            if source["pdf"] not in named
+        ]
+        if not left or key in unreadable:
+            continue
+        unreadable[key] = left
+        named.update(source["pdf"] for source in left)
+        cards.file(key.rsplit("/", 1)[1], [source["pdf"] for source in left])
+
+
 def _read_unparsed(out: Path) -> dict[str, list[Any]]:
     """What earlier runs recorded as downloaded but unreadable."""
     path = out / _UNPARSED
@@ -2070,6 +2112,10 @@ async def _retry_unparsed(
         label = f"{supplier}/{contract}/{region}/{month}"
         if (out / _ROWS / supplier / contract / region / f"{month}.json").exists():
             continue
+        if any(source.get("via") == "archive" for source in sources):
+            # A card the supplier's archive still serves: the backfill asks
+            # for it again (_name_refused).
+            continue
         extractor = extractors.get(supplier)
         if extractor is None:
             continue
@@ -2211,6 +2257,9 @@ async def archive(
     # become. A card that failed on the network read no bytes and leaves
     # nothing here.
     unreadable: dict[str, list[dict[str, str]]] = {}
+    # The cards a past month's fetch downloaded and answered None for, by
+    # the month asked (_name_refused).
+    refused: dict[str, list[dict[str, str]]] = {}
     stamp = out / _PARSER_STAMP
     parser = _parser_digest()
     stamped = _read_stamp(stamp, parser)
@@ -2374,6 +2423,12 @@ async def archive(
                         # live row stays what the archive holds meanwhile.
                         if held is None:
                             summary.absent += 1
+                        if held is None and past is None:
+                            read = _unparsed_sources(cards)
+                            if read:
+                                refused[
+                                    _unparsed_key(ex.id, contract, region, month_id)
+                                ] = read
                         continue
                     if (
                         settle is not None
@@ -2469,6 +2524,7 @@ async def archive(
         # read the same way: a sheet that failed costs the cards nothing, and
         # network.json keeps what it held of its months.
         network = await _network_months(session, today, sleep)
+    _name_refused(cards, refused, unreadable)
     cards.file_the_rest()
     _write_unparsed(out, unreadable, keep_months, today)
     summary.rendered = cards.rendered

@@ -2934,6 +2934,108 @@ async def test_a_card_that_would_not_parse_is_still_named_on_the_sheet(
     assert "(not parsed) |" not in (out / "coverage/acme.md").read_text()
 
 
+async def test_a_past_card_its_reader_refused_is_named_under_its_month(
+    tmp_path: Path,
+) -> None:
+    """A reader answers None for a past month whose card it downloaded and
+    would not read, so no error reaches the walk. Belvus's cards up to
+    August 2026 were kept that way under the month of the run, with no row
+    and no cell. Such a card is named under the month asked and filed there;
+    a card of another month read on the way is not, its own row names it."""
+    out, pdfs = tmp_path / "out", tmp_path / "pdfs"
+    base = "https://cards.test/releases/download"
+    old_url = "https://acme.test/2026-08.pdf"
+    session = _PdfSession({PDF_URL: b"%PDF v1", old_url: b"%PDF old layout"})
+    digest = hashlib.sha256(b"%PDF old layout").hexdigest()
+    reads: list[str] = []
+
+    def render(payload: bytes) -> str:
+        return payload.decode()
+
+    async def fetch_for_month(
+        _session: Any, contract: str, region: str, month: date
+    ) -> SupplierSnapshot | None:
+        # July reads the live card on its way to None, August its own card.
+        url = old_url if month == date(2026, 8, 1) else PDF_URL
+        text = await _pdf._pdf_text(
+            _session if isinstance(_session, ac._ReplaySession) else session,  # type: ignore[arg-type]
+            url,
+            variant="plain",
+            timeout=5,
+            render=render,
+        )
+        reads.append(url)
+        if "parsed" not in text:
+            return None
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=0.25),
+            publication_label="augustus 2026",
+            source_url=url,
+        )
+
+    extractor = replace(
+        _extractor(_pdf_fetch(session, [])), fetch_for_month=fetch_for_month
+    )
+    summary = await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        pdf_base_url=base,
+        backfill_months=2,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert (summary.stored, summary.backfilled, summary.absent) == (1, 0, 2)
+    assert json.loads((out / "unparsed.json").read_text()) == {
+        "acme/acme_fix/wallonia/2026-08": [
+            {"url": old_url, "pdf": digest, "via": "archive"}
+        ]
+    }
+    assert (pdfs / f"electricity-2026-08/{digest}.pdf").exists()
+    assert not (pdfs / f"electricity-2026-09/{digest}.pdf").exists()
+    (out / "pdfs.json").write_text(
+        json.dumps({digest: f"electricity-2026-08/{digest}.pdf"})
+    )
+    ac._write_listings(out, base, None)
+    url = f"{base}/electricity-2026-08/{digest}.pdf"
+    assert f"[pdf]({url}) (not parsed)" in (out / "coverage/acme.md").read_text()
+
+    # A changed parser does not hand it to the live reader: the backfill
+    # asks the supplier's archive for it again on every run.
+    reads.clear()
+    summary = await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        pdf_base_url=base,
+        backfill_months=2,
+        reparse=True,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert summary.unreplayable == []
+    assert reads.count(old_url) == 1
+    assert "acme/acme_fix/wallonia/2026-08" in json.loads(
+        (out / "unparsed.json").read_text()
+    )
+
+    # The day the reader reads it, the month has a row and the entry goes.
+    session.pdfs[old_url] = b"%PDF old layout, parsed"
+    await ac.archive(
+        out,
+        extractors=[extractor],
+        pdf_dir=pdfs,
+        pdf_base_url=base,
+        backfill_months=2,
+        now=NOW,
+        sleep=_no_sleep,
+    )
+    assert (out / "cards/acme/acme_fix/wallonia/2026-08.json").exists()
+    assert not (out / "unparsed.json").exists()
+
+
 async def test_a_card_inside_a_document_is_stored_once_not_twice(
     tmp_path: Path,
 ) -> None:

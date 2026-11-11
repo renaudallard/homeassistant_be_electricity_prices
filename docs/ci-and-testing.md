@@ -1356,7 +1356,13 @@ entry whose month has a row is dropped, so a month that starts parsing leaves by
 whose cards a row the walk filed for the same contract and region already reads: a card filed
 under the month it names rather than the one it was captured in. A row the backfill settled does
 not count, since Trevion settles a month off the index alone on the next card, whose own month may
-still fail to parse.
+still fail to parse. A past month's card that its reader downloaded and answered None for, which
+a reader does so the month cache does not ask again every hour, is named too (`_name_refused`):
+under the month asked, filed in that month's release, and only where no row names its bytes, since
+a fetch may read another month's card on its way to None. Belvus's cards up to August 2026 were
+kept so, under the month of the run with nothing naming them. Such an entry is marked `"via":
+"archive"` and `_retry_unparsed` skips it, as the backfill asks the supplier's archive for that
+month again while it has no row.
 `_write_vat` writes `vat.json` from the rows too: per card month, the VAT rate the rows' cards
 state (`taxes.card_vat_rate`), `residential` from the residential contracts and `standard` from
 the professional ones. A month gets a `rate` only when at least three suppliers state one and
