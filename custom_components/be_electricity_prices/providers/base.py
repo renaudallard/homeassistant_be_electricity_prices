@@ -474,6 +474,13 @@ class SupplierSnapshot:
     # ``signing_month_snapshot`` withholds such a credit from any contract
     # whose card month is not this one.
     welcome_credit_signing_month: date | None = None
+    # The year of the network tariffs the card prints, where its reader knows
+    # it is an earlier one than the card's own: Belvus's cards of January to
+    # April 2026 print Fluvius's 2025 table. A month of a later year is billed
+    # its network off the regulator's sheet of its own year
+    # (``snapshot_resolve.past_last_card``), on a contract flagged
+    # ``Contract.earlier_network_cards``. None for the card's own year.
+    network_year: int | None = None
 
 
 SnapshotFetcher = Callable[

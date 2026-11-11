@@ -177,6 +177,10 @@ class Contract:
     # than the one its households signed: one that signed before it is
     # credited no floor (``signing_month.resolve_signed_feed_in_floor``).
     feed_in_floor_from: date | None = None
+    # True when some of this product's cards print an earlier year's network
+    # table (``SupplierSnapshot.network_year``), so an entry on it reads its
+    # area's sheet to bill those months on.
+    earlier_network_cards: bool = False
 
     def signing_cards(self) -> tuple[date, date] | None:
         """The first and last month whose card gives a household that signed

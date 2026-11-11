@@ -9,6 +9,7 @@ year, the year before standing in until that one is out
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -149,6 +150,56 @@ def test_a_product_still_sold_keeps_its_card_s_network() -> None:
     entry = _entry("trevion", "groene_stroom_flex", "flanders", _ZENNE_DIJLE)
     later = _resolve_snapshot(entry, snap, delivery_month=date(2027, 2, 1))
     assert _network(later.dsos[_ZENNE_DIJLE]) == _network(snap.dsos[_ZENNE_DIJLE])
+
+
+def test_a_card_printing_an_earlier_year_s_table_bills_the_sheet() -> None:
+    """Belvus's cards of January to April 2026 print Fluvius's 2025 network
+    table, which its reader marks. A 2026 month on such a card bills the
+    area's 2026 sheet, to its last decimal; a month of the year the table is
+    of keeps it, and so does a card of the same product carrying no mark."""
+    terms = _hold_zenne_dijle_2026()
+    card = trevion.parse_snapshot(
+        "groene_stroom_flex", fixture_text("trevion_flex_2026-09.pdf", layout=True)
+    )
+    snap = replace(card, network_year=2025)
+    entry = _entry("trevion", "groene_stroom_flex", "flanders", _ZENNE_DIJLE)
+
+    billed = _resolve_snapshot(entry, snap, delivery_month=date(2026, 2, 1))
+    overlay = billed.dsos[_ZENNE_DIJLE]
+    assert overlay.distribution_single == pytest.approx(terms.kwh_normal * 1.06)
+    assert overlay.capacity_eur_per_kw_year == pytest.approx(
+        terms.capacity_per_kw_year * 1.06
+    )
+    assert _network(billed.dsos["fluvius_antwerpen"]) == _network(
+        snap.dsos["fluvius_antwerpen"]
+    )
+    own = _resolve_snapshot(entry, snap, delivery_month=date(2025, 12, 1))
+    assert _network(own.dsos[_ZENNE_DIJLE]) == _network(snap.dsos[_ZENNE_DIJLE])
+    unmarked = _resolve_snapshot(entry, card, delivery_month=date(2026, 2, 1))
+    assert _network(unmarked.dsos[_ZENNE_DIJLE]) == _network(card.dsos[_ZENNE_DIJLE])
+    # Only the region the entry is in: a Walloon entry's card is not touched.
+    walloon = _entry("trevion", "groene_stroom_flex", "wallonia", _ZENNE_DIJLE)
+    assert not snapshot_resolve.past_last_card(
+        walloon, snap, date(2026, 2, 1), "flanders"
+    )
+
+
+async def test_a_product_flagged_for_earlier_tables_reads_its_area_s_sheet() -> None:
+    """An entry on a product some of whose cards print an earlier year's
+    table reads its area's sheet, as a withdrawn product's does, so the
+    months those cards bill find it held (``Contract.earlier_network_cards``);
+    the hold that waits for a withdrawn product's sheet does not apply."""
+    session = object()
+    area = AsyncMock()
+    data = _entry("trevion", "groene_stroom_flex", "flanders", _ZENNE_DIJLE).data
+    with (
+        patch.object(snapshot_resolve, "ensure_area_terms", area),
+        patch.object(snapshot_resolve, "prints_earlier_network", return_value=True),
+    ):
+        await snapshot_resolve.ensure_custom_network(session, data, 2026)  # type: ignore[arg-type]
+        area.assert_awaited_once_with(session, 2026, _ZENNE_DIJLE)
+        assert snapshot_resolve.reads_network_sheet(data)
+        assert not snapshot_resolve.network_sheet_unread(data, date(2026, 2, 1))
 
 
 @pytest.mark.usefixtures("_cwape_held")

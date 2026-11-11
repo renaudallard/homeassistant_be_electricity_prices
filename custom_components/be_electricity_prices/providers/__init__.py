@@ -144,6 +144,14 @@ def withdrawn_on(supplier_id: str | None, contract_id: str | None) -> date | Non
     return None if contract is None else contract.withdrawn
 
 
+def prints_earlier_network(supplier_id: str | None, contract_id: str | None) -> bool:
+    """Whether some of this product's cards print an earlier year's network
+    table (``Contract.earlier_network_cards``), read from the registry for
+    the reason :func:`offers_quarter_hourly` gives."""
+    contract = _contract(supplier_id, contract_id)
+    return contract is not None and contract.earlier_network_cards
+
+
 def signing_cards(
     supplier_id: str | None, contract_id: str | None
 ) -> tuple[date, date] | None:

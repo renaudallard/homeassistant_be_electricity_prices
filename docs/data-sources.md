@@ -1540,6 +1540,13 @@ sold (`last_card_year`), which the backfill's hold reads too. Brugel's sheet
 and the CWaPE's grids stand in for a withdrawn product's months in Brussels
 and Wallonia the same way.
 
+A card whose reader found it printing an earlier year's network table says
+which year (`SupplierSnapshot.network_year`), and a month of a later year on
+it takes the same overlay. The product carries
+`Contract.earlier_network_cards`, so an entry on it reads its area's sheet
+like a withdrawn product's. The backfill's hold
+does not wait for that sheet: until it is read, the card's table bills.
+
 ### Caching and failure
 
 `ensure_tariff_sheet` runs in the tick of a Flemish entry, before the card

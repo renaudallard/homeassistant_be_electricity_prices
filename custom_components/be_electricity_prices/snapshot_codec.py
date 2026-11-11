@@ -728,6 +728,7 @@ def _snapshot_to_dict(
             if snap.welcome_credit_signing_month
             else None
         ),
+        "network_year": snap.network_year,
     }
 
 
@@ -826,6 +827,7 @@ def _snapshot_from_dict(
         welcome_credit_signing_month=_iso_date(
             data.get("welcome_credit_signing_month")
         ),
+        network_year=_year(data.get("network_year")),
     )
 
 
@@ -874,7 +876,12 @@ _FIGURE_BOUNDS = {
         _MAX_FRACTION,
     ),
     **dict.fromkeys(
-        ("tier_kwh", "welcome_credit_kwh", "welcome_credit_after_months"),
+        (
+            "tier_kwh",
+            "welcome_credit_kwh",
+            "welcome_credit_after_months",
+            "network_year",
+        ),
         _MAX_QUANTITY,
     ),
 }
@@ -947,6 +954,11 @@ def _archived_snapshot_from_dict(data: dict[str, Any]) -> SupplierSnapshot:
     snap = _snapshot_from_dict(data, min_schema_version=_DEGRADED_MIN_SCHEMA_VERSION)
     _check_figures(snap)
     return snap
+
+
+def _year(value: Any) -> int | None:
+    """A year a row stores, or ``None`` for a missing or unreadable one."""
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
 def _iso_date(value: Any) -> date | None:

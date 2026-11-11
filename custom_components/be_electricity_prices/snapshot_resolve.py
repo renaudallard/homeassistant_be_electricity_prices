@@ -100,6 +100,7 @@ from .providers import (
     is_professional,
     offers_direct_debit,
     offers_quarter_hourly,
+    prints_earlier_network,
     withdrawn_on,
 )
 from .providers._rates import last_card_month
@@ -320,8 +321,9 @@ def last_card_year(supplier: str | None, contract: str | None) -> int | None:
 def past_last_card(
     entry: ConfigEntry, snap: SupplierSnapshot, month: date, region: str
 ) -> bool:
-    """Whether ``snap`` is a withdrawn product's card billed in ``region`` for
-    a calendar year after the one it was printed for.
+    """Whether ``snap`` is billed in ``region`` for a calendar year after the
+    one whose network table it prints: a withdrawn product's card, or one
+    printing an earlier year's table.
 
     A card prints its own year's network tariffs, and a withdrawn product has
     no later card to bring the next year's: a product withdrawn in October
@@ -332,11 +334,18 @@ def past_last_card(
     keep the card's table. The card's year is the last month the product was
     sold (:func:`last_card_year`).
 
+    A card whose reader found it printing an earlier year's table is billed
+    the same way from the next year on, which is its own: Belvus's cards of
+    January to April 2026 print Fluvius's 2025 table
+    (``SupplierSnapshot.network_year``).
+
     Asked of the card in hand rather than of the entry, for the reason
     :func:`_quarter_hourly` gives: a compare-page proxy carries this entry's
     contract and another supplier's card.
     """
-    printed = last_card_year(snap.supplier, snap.contract)
+    printed = snap.network_year
+    if printed is None:
+        printed = last_card_year(snap.supplier, snap.contract)
     if printed is None or entry.data.get(CONF_REGION) != region:
         return False
     return month.year > printed
@@ -517,15 +526,19 @@ def takes_sheet_network(data: Mapping[str, Any]) -> bool:
 
 def _sheet_region(data: Mapping[str, Any]) -> str | None:
     """The region whose sheet this entry's network may come from, or None:
-    a custom entry's that takes it from one, and a withdrawn product's, which
-    takes it for a year its last card does not cover (:func:`past_last_card`)."""
+    a custom entry's that takes it from one, a withdrawn product's, which
+    takes it for a year its last card does not cover, and that of a product
+    some of whose cards print an earlier year's table (:func:`past_last_card`)."""
     if takes_fluvius_network(data):
         return REGION_FLANDERS
     if takes_brugel_network(data):
         return REGION_BRUSSELS
     if takes_cwape_network(data):
         return REGION_WALLONIA
-    if withdrawn_on(data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT)) is None:
+    supplier, contract = data.get(CONF_SUPPLIER), data.get(CONF_CONTRACT)
+    if withdrawn_on(supplier, contract) is None and not prints_earlier_network(
+        supplier, contract
+    ):
         return None
     region = data.get(CONF_REGION)
     return region if isinstance(region, str) else None

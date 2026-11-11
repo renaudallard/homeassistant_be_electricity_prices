@@ -456,6 +456,7 @@ def test_every_snapshot_field_survives_the_round_trip() -> None:
         "welcome_credit_after_months": 14,
         "welcome_credit_injection_eur_per_kwh": 0.0106,
         "welcome_credit_signing_month": date(2026, 10, 1),
+        "network_year": 2025,
     }
     defaulted = {
         f.name
@@ -492,6 +493,16 @@ async def _served(row: dict[str, Any]) -> ArchivedCard | None:
         return await _archived_card_from_github(
             MagicMock(), "trevion", "groene_stroom_flex", "flanders", date(2026, 9, 1)
         )
+
+
+async def test_an_archive_row_naming_its_network_year_still_reads() -> None:
+    """A year is no figure per kWh: a row whose card prints an earlier year's
+    network table reads back with it, where the bound on a rate refused it."""
+    row = {**_ARCHIVED_ROW, "network_year": 2025}
+    card = await _served(row)
+    assert card is not None
+    assert card.snapshot.network_year == 2025
+    assert _figure_bound("network_year") > 2025
 
 
 async def test_a_real_archive_row_still_reads() -> None:
