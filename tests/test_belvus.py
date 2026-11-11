@@ -23,7 +23,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Belvus extractor tests against its September to November 2026 cards."""
+"""Belvus extractor tests against its January to November 2026 cards."""
 
 from __future__ import annotations
 
@@ -33,9 +33,20 @@ from datetime import date
 from unittest.mock import AsyncMock
 
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.be_electricity_prices.const import FLUVIUS_KEYS, REGION_FLANDERS
-from custom_components.be_electricity_prices.providers import EXTRACTORS, belvus
+from custom_components.be_electricity_prices import fluvius
+from custom_components.be_electricity_prices.const import (
+    DOMAIN,
+    FLUVIUS_KEYS,
+    REGION_FLANDERS,
+)
+from custom_components.be_electricity_prices.providers import (
+    EXTRACTORS,
+    _belvus_older,
+    belvus,
+)
+from custom_components.be_electricity_prices.providers._pdf import NL_MONTHS
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     VariableRates,
@@ -44,6 +55,7 @@ from custom_components.be_electricity_prices.providers.base import (
     ExtractorError,
     SupplierSnapshot,
 )
+from custom_components.be_electricity_prices.snapshot_resolve import _resolve_snapshot
 from tests import FIXTURES, fixture_text, make_text_session
 
 _DYNAMISCH = "belvus_dynamisch"
@@ -55,6 +67,12 @@ _CARDS = {
     (_FLEX, "2026-11"): "belvus_flex_online_2026-11.pdf",
     (_FLEX, "2026-10"): "belvus_flex_online_2026-10.pdf",
     (_SMART, "2026-11"): "belvus_smart_plus_2026-11.pdf",
+    (_FLEX, "2026-09"): "belvus_flex_online_2026-09.pdf",
+    # The older layout: January to March, April, and May to August.
+    (_SMART, "2026-01"): "belvus_smart_plus_2026-01.pdf",
+    (_SMART, "2026-02"): "belvus_smart_plus_2026-02.pdf",
+    (_SMART, "2026-04"): "belvus_smart_plus_2026-04.pdf",
+    (_FLEX, "2026-08"): "belvus_flex_online_2026-08.pdf",
 }
 _HOST = "https://www.belvus.be"
 
@@ -85,6 +103,10 @@ def test_belvus_sells_three_flemish_contracts() -> None:
     for contract in by_id.values():
         assert contract.regions == frozenset({REGION_FLANDERS})
         assert not contract.quarter_hourly_option
+    # The older cards of January to April 2026 print Fluvius's 2025 table.
+    assert by_id[_FLEX].earlier_network_cards
+    assert by_id[_SMART].earlier_network_cards
+    assert not by_id[_DYNAMISCH].earlier_network_cards
     assert extractor.fetch_for_month is not None
     assert extractor.probe is not None
     assert extractor.settles_on_next_card
@@ -153,7 +175,7 @@ def test_each_formula_gives_back_the_price_its_card_prints(
     SPP-M, which it names: that pins the units, EUR/MWh on an index in
     EUR/MWh, before VAT."""
     text = _card(contract, month)
-    energy_block, feed_in_block = belvus._blocks(text)
+    energy_block, feed_in_block = belvus._price_blocks(text)
     rlp = belvus.named_index(energy_block, "RLP")
     spp = belvus.named_index(feed_in_block, "SPP")
     assert rlp is not None and spp is not None
@@ -331,9 +353,9 @@ def test_a_card_the_reader_does_not_know_is_refused(
         belvus.parse_snapshot(contract, text.replace(old, new), "t://")
 
 
-def test_the_template_before_september_is_not_read() -> None:
-    """The cards up to August 2026 were the Energy Together template, with no
-    page header, and are refused rather than misread."""
+def test_a_card_in_neither_layout_is_refused() -> None:
+    """A card with no page header and none of the older layout's sections is
+    refused rather than misread."""
     text = "\n".join(
         line
         for line in _card(_FLEX).splitlines()
@@ -363,6 +385,260 @@ def test_the_template_before_september_is_not_read() -> None:
 )
 def test_named_index(block: str, name: str, expected: object) -> None:
     assert belvus.named_index(block, name) == expected
+
+
+# ---- the older layout, January to August 2026 ------------------------------
+
+
+@pytest.mark.parametrize(
+    ("contract", "month", "factor", "base", "fee", "printed", "feed_in", "year"),
+    [
+        # January to March: Smart Plus's first formula, and Fluvius's 2025
+        # network table.
+        (_SMART, "2026-01", 1.037, 12.21, 130.0, 10.27, 6.73, 2025),
+        # April: spaced wider, the year split over two lines and "EL" on a
+        # line of its own, the 2025 table still.
+        (_SMART, "2026-04", 1.1, 19.0, 130.0, 12.64, 3.32, 2025),
+        # May to August: "€4MWh" and 2026's table.
+        (_FLEX, "2026-08", 1.21, 4.0, 50.0, 14.25, 4.26, None),
+    ],
+)
+def test_the_older_cards(
+    contract: str,
+    month: str,
+    factor: float,
+    base: float,
+    fee: float,
+    printed: float,
+    feed_in: float,
+    year: int | None,
+) -> None:
+    """Read like the later cards: the formula before VAT on the delivery
+    month's RLP-weighted mean, the printed price at last month's RLP-M as the
+    fallback, the feed-in on the SPP-weighted one. The cards of January to
+    April name the 2025 network table they print."""
+    snap = _snap(contract, month)
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.formula_factor == pytest.approx(factor * 1.06)
+    assert energy.formula_base == pytest.approx(base / 1000.0 * 1.06)
+    assert energy.current == pytest.approx(printed / 100.0 * 1.06)
+    assert energy.yearly_fixed_fee == pytest.approx(fee)
+    assert energy.month_indexed and energy.rlp_indexed
+    assert energy.rlp_blend == "columns"
+    injection = snap.injection
+    assert injection is not None and injection.spp_indexed
+    assert injection.factor == pytest.approx(1.0)
+    assert injection.base == pytest.approx(-0.020)
+    assert injection.current == pytest.approx(feed_in / 100.0)
+    assert snap.network_year == year
+    number = int(month[5:])
+    assert snap.publication_label == f"{NL_MONTHS[number - 1]} 2026"
+    assert set(snap.dsos) == set(FLUVIUS_KEYS)
+    taxes = snap.taxes
+    assert taxes.federal_excise == pytest.approx(0.050329)
+    assert taxes.energy_contribution == pytest.approx(0.002042)
+    assert taxes.flanders_renewables == pytest.approx(0.016)
+    # The household's row, € 0 a month, not the non-residential one.
+    assert taxes.energy_fund_eur_per_month == 0.0
+    assert taxes.card_vat_rate is None
+    assert taxes.assumed_vat_rate == pytest.approx(0.06)
+
+
+@pytest.mark.parametrize(
+    ("contract", "month", "rows"),
+    [
+        (
+            _SMART,
+            "2026-01",
+            {
+                # Fluvius's 2025 figures, the fee and Antwerpen's first.
+                "fluvius_antwerpen": (18.56, 53.26, 0.0599, 0.0498, 58.42),
+                # The label wraps as "MIDDEN-" and "VLAANDEREN".
+                "fluvius_intergem": (18.56, 51.99, 0.0561, 0.0473, 59.75),
+                "fluvius_halle_vilvoorde": (18.56, 59.56, 0.062, 0.0523, 65.45),
+                # 7,47 and 6,14 on the 2025 sheet: the normal rate misprinted.
+                "fluvius_west": (18.56, 60.35, 0.0561, 0.0614, 72.92),
+            },
+        ),
+        (
+            _FLEX,
+            "2026-08",
+            {
+                "fluvius_antwerpen": (18.92, 52.37, 0.0535, 0.0481, 54.63),
+                # "MIDDENVLAANDEREN" on a line of its own.
+                "fluvius_intergem": (18.92, 53.13, 0.0528, 0.0479, 59.23),
+                # "ZENNE-" and "DIJLE" in the classic table.
+                "fluvius_zenne_dijle": (18.92, 59.49, 0.0587, 0.0532, 65.51),
+                "fluvius_west": (18.92, 60.52, 0.067, 0.056, 69.59),
+            },
+        ),
+    ],
+)
+def test_the_older_network_tables(
+    contract: str, month: str, rows: dict[str, tuple[float, ...]]
+) -> None:
+    snap = _snap(contract, month)
+    for key, (fee, capacity, single, night, prosumer) in rows.items():
+        overlay = snap.dsos[key]
+        assert overlay.data_management_per_year == pytest.approx(fee), key
+        assert overlay.capacity_eur_per_kw_year == pytest.approx(capacity), key
+        assert overlay.distribution_single == pytest.approx(single), key
+        assert overlay.distribution_exclusive_night == pytest.approx(night), key
+        assert overlay.prosumer_eur_per_kva_year == pytest.approx(prosumer), key
+        assert overlay.transport == 0.0
+    assert all(o.prosumer_eur_per_kva_year is not None for o in snap.dsos.values())
+
+
+@pytest.mark.parametrize(
+    ("contract", "old", "new", "error"),
+    [
+        pytest.param(
+            _FLEX, "", "", "card is for SMART PLUS, not FlexOnline", id="product"
+        ),
+        pytest.param(
+            _SMART,
+            "Particulier Elektriciteit \n",
+            "Professioneel Elektriciteit \n",
+            "card is for professionals",
+            id="professional",
+        ),
+        pytest.param(
+            _SMART,
+            "**€c 10,27/kWh",
+            "**€c 10,37/kWh",
+            "energy formula does not give the price printed",
+            id="price check",
+        ),
+        pytest.param(
+            _SMART,
+            "€12,21/MWh",
+            "€12,21/kWh",
+            "energy formula not found",
+            id="unit",
+        ),
+        pytest.param(
+            _SMART,
+            "Belpex_SPP x 1",
+            "Belpex_RLP x 1",
+            "feed-in formula is on Belpex_RLP",
+            id="index",
+        ),
+        pytest.param(
+            _SMART,
+            "Alle prijzen zijn inclusief BTW",
+            "Alle prijzen zijn exclusief BTW",
+            "does not state its prices with VAT",
+            id="basis",
+        ),
+        pytest.param(
+            _SMART,
+            "GSC €c 1,18",
+            "(Belpex_RLP x 1,2) + €1/MWh\nGSC €c 1,18",
+            "more than one energy formula",
+            id="second formula",
+        ),
+        pytest.param(
+            _SMART,
+            "Jaarlijkse abonnementskost €130",
+            "Jaarlijkse abonnementskost",
+            "yearly fee not found",
+            id="fee",
+        ),
+    ],
+)
+def test_an_older_card_the_reader_does_not_know_is_refused(
+    contract: str, old: str, new: str, error: str
+) -> None:
+    text = _card(_SMART, "2026-01")
+    assert old in text
+    with pytest.raises(ExtractorError, match=error):
+        belvus.parse_snapshot(contract, text.replace(old, new, 1), "t://")
+
+
+@pytest.mark.parametrize(
+    ("contract", "month", "following", "rlp", "spp", "factor", "base"),
+    [
+        # Between two older cards.
+        (_SMART, "2026-01", "2026-02", 0.11104, 0.11416, 1.037, 0.01221),
+        # August's older card settled on September's.
+        (_FLEX, "2026-08", "2026-09", 0.135111, 0.079108, 1.21, 0.004),
+    ],
+)
+async def test_an_older_month_settles_on_the_next_card(
+    monkeypatch: pytest.MonkeyPatch,
+    contract: str,
+    month: str,
+    following: str,
+    rlp: float,
+    spp: float,
+    factor: float,
+    base: float,
+) -> None:
+    file = "SmartPlus" if contract == _SMART else "FlexOnline"
+    monkeypatch.setattr(belvus, "fetch_text", _pages(""))
+    monkeypatch.setattr(
+        belvus,
+        "fetch_pdf_text",
+        _cards_served(
+            {
+                f"{month}/Tariefkaart_{file}": _card(contract, month),
+                f"{following}/Tariefkaart_{file}": _card(contract, following),
+            }
+        ),
+    )
+    first = date(2026, int(month[5:]), 1)
+    snap = await belvus.fetch_for_month(
+        make_text_session(""), contract, REGION_FLANDERS, first
+    )
+    assert snap is not None and not snap.provisional
+    energy, injection = snap.energy, snap.injection
+    assert isinstance(energy, VariableRates) and injection is not None
+    assert energy.index_realised == pytest.approx(rlp)
+    assert energy.current == pytest.approx((factor * rlp + base) * 1.06)
+    assert injection.index_realised == pytest.approx(spp)
+    assert injection.current == pytest.approx(spp - 0.020)
+
+
+def test_an_older_card_of_2026_bills_fluvius_s_2026_sheet() -> None:
+    """January's card prints Zenne-Dijle's 2025 rate, 6,42 c€/kWh; the month
+    is billed Fluvius's 2026 sheet, 5,87 to its last decimal. August's card
+    prints 2026's table and keeps it."""
+    terms = fluvius.parse_area_terms(
+        (FIXTURES / "fluvius_zenne_dijle_2026.xlsx").read_bytes(), 2026
+    )
+    assert terms is not None
+    fluvius._area[(2026, _ZENNE_DIJLE)] = terms
+    january = _snap(_SMART, "2026-01")
+    assert january.dsos[_ZENNE_DIJLE].distribution_single == pytest.approx(0.0642)
+    billed = _resolve_snapshot(
+        _entry(_SMART), january, delivery_month=date(2026, 1, 1)
+    ).dsos[_ZENNE_DIJLE]
+    assert billed.distribution_single == pytest.approx(terms.kwh_normal * 1.06)
+    assert billed.capacity_eur_per_kw_year == pytest.approx(
+        terms.capacity_per_kw_year * 1.06
+    )
+    august = _snap(_FLEX, "2026-08")
+    kept = _resolve_snapshot(
+        _entry(_FLEX), august, delivery_month=date(2026, 8, 1)
+    ).dsos[_ZENNE_DIJLE]
+    assert kept.distribution_single == pytest.approx(0.0587)
+
+
+_ZENNE_DIJLE = "fluvius_zenne_dijle"
+
+
+def _entry(contract: str) -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "belvus",
+            "contract": contract,
+            "region": REGION_FLANDERS,
+            "dso": _ZENNE_DIJLE,
+            "meter": "mono",
+        },
+    )
 
 
 def _pages(current: str, history: str = "") -> AsyncMock:
@@ -647,8 +923,70 @@ async def test_discover_surfaces_a_new_card() -> None:
             id="excise blanks",
         ),
         pytest.param(
-            lambda: belvus._NAMED_INDEX_RE.search("Belpex RLP-M " * 30_000),
+            lambda: _belvus_older.NAMED_INDEX_RE.search("Belpex RLP-M " * 30_000),
             id="named index",
+        ),
+        pytest.param(
+            lambda: _belvus_older.NAMED_INDEX_RE.search("Belpex RLP " * 30_000),
+            id="named index blanks",
+        ),
+        pytest.param(
+            lambda: _belvus_older._COVER_RE.search(
+                "Tariefkaart\nParticulier Elektriciteit\n" + "A " * 100_000
+            ),
+            id="older cover",
+        ),
+        pytest.param(
+            lambda: _belvus_older._FORMULA_RE.search("(Belpex_RLP x 1) + €" * 20_000),
+            id="older formula rows",
+        ),
+        pytest.param(
+            lambda: _belvus_older._FORMULA_RE.search(
+                "(Belpex_RLP x 1) + €" + " " * 200_000
+            ),
+            id="older formula blanks",
+        ),
+        pytest.param(
+            lambda: _belvus_older._PRINTED_RE.match("*€c" + " " * 200_000),
+            id="older estimates",
+        ),
+        pytest.param(
+            lambda: _belvus_older._FEE_RE.search(
+                "Jaarlijkse abonnementskost" + " " * 200_000
+            ),
+            id="older fee blanks",
+        ),
+        pytest.param(
+            lambda: _belvus_older._GSC_RE.search("GSC" + " " * 200_000),
+            id="older levy blanks",
+        ),
+        pytest.param(
+            lambda: _belvus_older._EXCISE_RE.search(
+                "Bijzondere accijns" + " " * 200_000
+            ),
+            id="older excise blanks",
+        ),
+        pytest.param(
+            lambda: _belvus_older._CONTRIBUTION_RE.search(
+                "Bijdrage op energie" + " " * 200_000
+            ),
+            id="older contribution blanks",
+        ),
+        pytest.param(
+            lambda: _belvus_older._FUND_RE.search(
+                "Laagspanning residentieel" + " " * 200_000
+            ),
+            id="older fund blanks",
+        ),
+        pytest.param(
+            lambda: _belvus_older._ROW_RE.findall("FLUVIUS WEST " * 30_000),
+            id="older network labels",
+        ),
+        pytest.param(
+            lambda: _belvus_older._ROW_RE.findall(
+                "FLUVIUS WEST " + "1,1 " * 100_000 + "x"
+            ),
+            id="older network figures",
         ),
         pytest.param(
             lambda: belvus._PRINTED_RE.search("1" * 200_000 + ",1\n"),

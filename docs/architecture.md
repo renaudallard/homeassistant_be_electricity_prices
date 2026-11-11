@@ -186,7 +186,9 @@ document in a different language rather than a variant of the Dutch one, and
 has `_cociter_settle.py`, which reads the BELIX its next card prints for a
 closed month (`_settle.py` settles the month on it), and `_cociter_rows.py`, the
 per-meter rows its card readers call: the indicative rate, the BELIX formula and
-the price ceiling. The
+the price ceiling. Belvus has `_belvus_older.py`, which reads its cards of
+January to August 2026 in the older layout into the shapes `belvus.py` reads
+its later ones into. The
 supplier module keeps the urls, the archive and `parse_snapshot`, which calls
 into them.
 

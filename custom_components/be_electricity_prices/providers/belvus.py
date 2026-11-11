@@ -55,10 +55,12 @@ card names for it. Over January to October 2026 Belvus's RLP-M ran about
 blends, and its SPP-M is the series EBEM, Elegant and Trevion publish.
 
 Up to August 2026 the cards were a copy of the Energy Together template, in
-another layout, which is not read: a month before September falls back to
-the card archive. The tax block of the November 2026 cards still prints the
-excise and the energy contribution of before August 2026; both levies are
-billed from the law.
+another layout, read by ``_belvus_older.py``; the ones of January to April
+print Fluvius's 2025 network table. Smart Plus's formula was
+``(Belpex_RLP x 1,037) + 12,21 EUR/MWh`` in January and February 2026, and a
+contract keeps the formula of its card for its year. The tax block of the
+November 2026 cards still prints the excise and the energy contribution of
+before August 2026; both levies are billed from the law.
 """
 
 from __future__ import annotations
@@ -71,6 +73,15 @@ from typing import Any
 import aiohttp
 
 from ..const import FLUVIUS_CARD_LABELS, REGION_FLANDERS, VAT_RATE_REDUCED
+from ._belvus_older import (
+    Card,
+    Leg,
+    held_to_price,
+    is_older,
+    named_index,
+)
+from ._belvus_older import blocks as older_blocks
+from ._belvus_older import read as read_older
 from ._parse import (
     SIGN_CHARS,
     numeric_row,
@@ -177,14 +188,6 @@ _FORMULA_RE = re.compile(
 # "**".
 _PRINTED_RE = re.compile(
     rf"^([{SIGN_CHARS}]?)(\d+,\d+)[ \t]*\n\*\*[ \t]*$", re.MULTILINE
-)
-# The index that price is worked out at, "Belpex RLP-M oktober 2026 van
-# 181,836 EUR/MWh" on Dynamisch's card and "Belpex RLP-M 10/2026:
-# €181,836/MWh" on the others.
-_NAMED_INDEX_RE = re.compile(
-    r"Belpex\s+(RLP|SPP)-M\s+(?:(\d{1,2})/(20\d{2}):\s*€\s*|([a-z]+)\s+(20\d{2})\s+van\s+)"
-    rf"({_NUM})\s*(?:EUR)?/MWh",
-    re.IGNORECASE,
 )
 # Where the energy block starts, and where the feed-in block starts and ends.
 _ENERGY_START = "Tarieven excl. btw"
@@ -353,7 +356,7 @@ async def _settle_on_next_card(
         found = None
     changed: dict[str, Any] = {}
     if found is not None:
-        energy_block, feed_in_block = _blocks(found[1])
+        energy_block, feed_in_block = _price_blocks(found[1])
         rlp = named_index(energy_block, "RLP")
         spp = named_index(feed_in_block, "SPP")
         # The month is checked, not assumed: a card that skipped a month
@@ -372,25 +375,6 @@ async def _settle_on_next_card(
     ):
         return replace(snap, provisional=True, **changed)
     return replace(snap, **changed)
-
-
-def named_index(block: str, name: str) -> tuple[date, float] | None:
-    """The month and the value in EUR/MWh a block names for Belpex
-    ``name``-M, the index its printed price is worked out at, or None."""
-    for match in _NAMED_INDEX_RE.finditer(block):
-        kind, number, year, word, word_year, value = match.groups()
-        if kind.upper() != name:
-            continue
-        if number is not None:
-            month, at = int(number), int(year)
-        elif word.lower() in NL_MONTHS:
-            month, at = NL_MONTHS.index(word.lower()) + 1, int(word_year)
-        else:
-            return None
-        if not 1 <= month <= 12:
-            return None
-        return date(at, month, 1), to_float(value)
-    return None
 
 
 async def probe(
@@ -427,38 +411,62 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
 def parse_snapshot(
     contract_id: str, text: str, source_url: str = _CURRENT_URL
 ) -> SupplierSnapshot:
-    """Parse one card's text as pypdf extracts it."""
+    """Parse one card's text as pypdf extracts it, in either layout."""
     product = _product(contract_id, REGION_FLANDERS)
-    month = _card_month(text, product)
+    if is_older(text):
+        card = read_older(text, product.file, product.indices)
+    else:
+        card = _read_card(text, product)
     if _REGION_RE.search(text) is None:
         raise ExtractorError(f"{_LABEL}: card is not for Flemish households")
-    if _LEVIES_HEAD not in text:
-        raise ExtractorError(f"{_LABEL}: levies not stated including VAT")
-    energy, injection = _legs(text, product)
+    energy, injection = _rates(product, card)
+    month = card.month
     return with_vat_basis(
         SupplierSnapshot(
             supplier=_SUPPLIER,
             contract=contract_id,
             energy=energy,
             injection=injection,
-            dsos=_dsos(text),
-            taxes=regional_tax_overlay(
-                text,
-                supplier=_LABEL,
-                region=REGION_FLANDERS,
-                excise=(_EXCISE_RE,),
-                renewables=(_GSC_RE, _WKK_RE),
-                contribution=_CONTRIBUTION_RE,
-                fund=_FUND_RE,
-            ),
+            dsos=card.dsos,
+            taxes=card.taxes,
             source_url=source_url,
             publication_label=f"{NL_MONTHS[month.month - 1]} {month.year}",
             valid_until=end_of_month(month.year, month.month),
+            network_year=card.network_year,
         ),
         # The cards state no rate; the formulas are grossed by the
         # residential one, recorded as assumed.
         None,
     )
+
+
+def _read_card(text: str, product: _Product) -> Card:
+    """A card of the layout used since September 2026."""
+    month = _card_month(text, product)
+    if _LEVIES_HEAD not in text:
+        raise ExtractorError(f"{_LABEL}: levies not stated including VAT")
+    energy, feed_in, fee = _legs(text, product)
+    return Card(
+        month=month,
+        fee=fee,
+        energy=energy,
+        feed_in=feed_in,
+        dsos=_dsos(text),
+        taxes=regional_tax_overlay(
+            text,
+            supplier=_LABEL,
+            region=REGION_FLANDERS,
+            excise=(_EXCISE_RE,),
+            renewables=(_GSC_RE, _WKK_RE),
+            contribution=_CONTRIBUTION_RE,
+            fund=_FUND_RE,
+        ),
+    )
+
+
+def _price_blocks(text: str) -> tuple[str, str]:
+    """A card's energy block and its feed-in block, in either layout."""
+    return older_blocks(text) if is_older(text) else _blocks(text)
 
 
 def _card_month(text: str, product: _Product) -> date:
@@ -499,66 +507,70 @@ def _formula(match: re.Match[str]) -> tuple[str, float, float]:
     )
 
 
-def _leg(
-    block: str, index: str, named: str, leg: str
-) -> tuple[tuple[str, float, float], float, str]:
-    """A block's formula as :func:`_formula` reads it, its printed price in
-    c€/kWh and its text, before VAT, once the formula gives back the printed
-    price at the index the block names."""
+def _leg(block: str, index: str, named: str, what: str) -> Leg:
+    """A block's formula and its printed price, before VAT, once the formula
+    gives back the printed price at the index the block names."""
     match = _FORMULA_RE.search(block)
     if match is None:
-        raise ExtractorError(f"{_LABEL}: {leg} formula not found")
-    formula = _formula(match)
-    found, factor, base = formula
+        raise ExtractorError(f"{_LABEL}: {what} formula not found")
+    found, factor, base = _formula(match)
     if found != index:
-        raise ExtractorError(f"{_LABEL}: {leg} formula is on {found}, not {index}")
+        raise ExtractorError(f"{_LABEL}: {what} formula is on {found}, not {index}")
     printed = _PRINTED_RE.search(block)
     at = named_index(block, named)
     if printed is None or at is None:
-        raise ExtractorError(f"{_LABEL}: {leg} price check not found")
-    price = parse_sign(printed.group(1)) * to_float(printed.group(2))
-    # c€/kWh from EUR/MWh, against a price printed to the cent.
-    if abs((factor * at[1] + base) / 10.0 - price) > 0.006:
-        raise ExtractorError(f"{_LABEL}: {leg} formula does not give the price printed")
-    return formula, price, " ".join(match.group(0).split())
+        raise ExtractorError(f"{_LABEL}: {what} price check not found")
+    leg = Leg(
+        indexed_on=found,
+        factor=factor,
+        base=base,
+        price=parse_sign(printed.group(1)) * to_float(printed.group(2)),
+        written=" ".join(match.group(0).split()),
+    )
+    held_to_price(leg, at[1], what)
+    return leg
 
 
-def _legs(text: str, product: _Product) -> tuple[EnergyRates, InjectionRates]:
+def _legs(text: str, product: _Product) -> tuple[Leg, Leg, float]:
+    """The energy and feed-in legs and the yearly fee."""
     energy_block, feed_in_block = _blocks(text)
-    formula, price, written = _leg(energy_block, product.indices[0], "RLP", "energy")
+    energy = _leg(energy_block, product.indices[0], "RLP", "energy")
     # The third page restates the energy formula; any formula outside the
     # feed-in block that says something else is a card to look at.
     head, tail = text.split(feed_in_block, 1)
+    formula = (energy.indexed_on, energy.factor, energy.base)
     if {_formula(m) for m in _FORMULA_RE.finditer(head + tail)} != {formula}:
         raise ExtractorError(f"{_LABEL}: the card prints more than one energy formula")
-    fee_match = _FEE_RE.search(text)
-    if fee_match is None:
+    fee = _FEE_RE.search(text)
+    if fee is None:
         raise ExtractorError(f"{_LABEL}: yearly fee not found")
-    fee = to_float(fee_match.group(1))
-    feed, feed_price, feed_written = _leg(
-        feed_in_block, product.indices[1], "SPP", "feed-in"
-    )
+    feed_in = _leg(feed_in_block, product.indices[1], "SPP", "feed-in")
+    return energy, feed_in, to_float(fee.group(1))
+
+
+def _rates(product: _Product, card: Card) -> tuple[EnergyRates, InjectionRates]:
     # EUR/MWh against an index in EUR/MWh is EUR/kWh against one in EUR/kWh
     # for the factor; the base goes from EUR/MWh to EUR/kWh.
-    factor, base = formula[1], formula[2] / 1000.0
-    feed_factor, feed_base = feed[1], feed[2] / 1000.0
+    energy_leg, feed_in = card.energy, card.feed_in
+    factor, base = energy_leg.factor, energy_leg.base / 1000.0
+    feed_factor, feed_base = feed_in.factor, feed_in.base / 1000.0
     vat = 1.0 + VAT_RATE_REDUCED
     energy: EnergyRates
     if product.kind == "dynamic":
         energy = DynamicRates(
             factor=factor * vat,
             base=base * vat,
-            yearly_fixed_fee=fee,
+            yearly_fixed_fee=card.fee,
             quarter_hourly=True,
         )
         # Per quarter hour like the energy, so the printed price is no rate.
         return energy, InjectionRates(
-            factor=feed_factor, base=feed_base, formula=feed_written
+            factor=feed_factor, base=feed_base, formula=feed_in.written
         )
     energy = VariableRates(
-        current=price / 100.0 * vat,
-        yearly_fixed_fee=fee,
-        formula=f"{written} excl. btw",
+        current=energy_leg.price / 100.0 * vat,
+        yearly_fixed_fee=card.fee,
+        formula=f"{energy_leg.written} excl. btw",
         formula_factor=factor * vat,
         formula_base=base * vat,
         month_indexed=True,
@@ -567,10 +579,10 @@ def _legs(text: str, product: _Product) -> tuple[EnergyRates, InjectionRates]:
     )
     # Residential feed-in is VAT-exempt, so neither figure is grossed.
     return energy, InjectionRates(
-        current=feed_price / 100.0,
+        current=feed_in.price / 100.0,
         factor=feed_factor,
         base=feed_base,
-        formula=feed_written,
+        formula=feed_in.written,
         spp_indexed=True,
     )
 
@@ -631,6 +643,8 @@ EXTRACTOR = SupplierExtractor(
             regions=frozenset({REGION_FLANDERS}),
             spot_indexed_injection=p.kind == "variable",
             month_indexed_energy=p.kind == "variable",
+            # The older cards of January to April 2026 (_belvus_older.py).
+            earlier_network_cards=p.kind == "variable",
         )
         for p in _PRODUCTS
     ),

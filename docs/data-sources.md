@@ -1542,9 +1542,10 @@ and Wallonia the same way.
 
 A card whose reader found it printing an earlier year's network table says
 which year (`SupplierSnapshot.network_year`), and a month of a later year on
-it takes the same overlay. The product carries
-`Contract.earlier_network_cards`, so an entry on it reads its area's sheet
-like a withdrawn product's. The backfill's hold
+it takes the same overlay: Belvus's cards of January to April 2026 print
+Fluvius's 2025 table, where every other supplier's card of those months has
+2026's. The product carries `Contract.earlier_network_cards`, so an entry on
+it reads its area's sheet like a withdrawn product's. The backfill's hold
 does not wait for that sheet: until it is read, the card's table bills.
 
 ### Caching and failure

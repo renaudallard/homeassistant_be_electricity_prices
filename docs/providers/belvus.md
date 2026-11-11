@@ -22,7 +22,7 @@ framework and pricing references:
 | Publication form | One PDF card per product and month, read with pypdf | `fetch` |
 | Card path | `https://www.belvus.be/public/tariefkaarten/<YYYY-MM>/Tariefkaart_<Product>_EL.pdf` | `_card_url` |
 | Current card | The newest month `/diensten` or `/historische-tariefkaarten` links, at the link it carries | `fetch`, `_listed` |
-| Archive | The same path for any month; read from September 2026 | `fetch_for_month` |
+| Archive | The same path for any month; read from January 2026, in two layouts | `fetch_for_month`, `_belvus_older.py` |
 | Probe | The newest card's link, whose `?v=` hash changes when the card is uploaded again | `probe` |
 | Discovery | The residential cards `/diensten` links | `discover` |
 
@@ -66,6 +66,14 @@ comparison.
 | Dynamisch | `(Belpex_15M × 1,01) + € 7,50/MWh` | `(Belpex_15M × 1) + € -13/MWh` | € 8/jaar |
 | Flex Online | `(Belpex_RLP × 1,21) + € 4/MWh` | `(Belpex_SPP × 1) + € -20/MWh` | € 50/jaar |
 | Smart Plus | `(Belpex_RLP × 1,1) + € 19/MWh` | `(Belpex_SPP × 1) + € -20/MWh` | € 130/jaar |
+| Smart Plus, January and February 2026 | `(Belpex_RLP x 1,037) + €12,21/MWh` | `(Belpex_SPP x 1) + €-20/MWh` | €130 |
+
+The cards since September 2026 say the formula stays as it is for the
+contract's year ("De prijsformule blijft gedurende deze termijn
+ongewijzigd"), so an entry with a signing month is billed its signing card's
+coefficients, the way every variable cohort is (`cohort.py`): a Smart Plus
+contract signed in January or February 2026 keeps 1,037 and 12,21 until it
+renews.
 
 Every formula is in EUR/MWh on an index in EUR/MWh, so against a spot in
 EUR/kWh the factor keeps its value and the base is divided by a thousand.
@@ -142,12 +150,38 @@ are not read as bands. The stale excise and the contribution are listed among
 the live check's known tax blocks. The VREG ceiling is not printed, so it is
 filled from Fluvius's sheet (`resolve_vreg_network_ceiling`).
 
-## Not read
+## The older layout
 
 The cards up to August 2026 copied the Energy Together template, which the
-gas integration reads for its gas cards, in another layout with no page
-header; the reader refuses them, so a month before September 2026 falls back
-to the card archive and then to the current card.
+gas integration reads for its gas cards: numbered sections, the product and
+the month on the cover, each formula on one line with its two estimates
+("Formule (Belpex_RLP x 1,21) + €4/MWh *€c 10,49/kWh **€c 10,95/kWh"), and a
+network table whose area labels wrap. `_belvus_older.py` reads them into the
+same shapes `belvus.py` reads the later ones into (`Card`, `Leg`), and
+`parse_snapshot` picks the reader by the sections the text carries
+(`is_older`). Each formula is held to its "**" price the same way
+(`held_to_price`), at the index the block names ("Belpex RLP -M 12/2025:
+€87,23/MWh"), and a closed month settles on the next card, of either layout.
+
+Three variants were published, and each is read:
+
+| Months | What differs |
+| --- | --- |
+| January to March 2026 | The base layout; the levies on one page, the excise as "Bijzondere accijns op Energie1 €c5,0329/kWh". |
+| April 2026 | Spaced wider; the year split as "202" and "6" on the cover, and Smart Plus's "EL" on a line of its own. |
+| May to August 2026 | The energy fund in rows of its own ("Laagspanning residentieel € 0"), the excise as "Bijzondere accijns (**) €c5,0329", and Flex Online's formula printed "€4MWh". |
+
+The cards of January to April 2026 print Fluvius's 2025 network table, where
+every other supplier's card of those months prints 2026's, and three of its
+figures do not match even the 2025 sheet: Limburg's and West's normal rates,
+5,63 and 5,61 c€/kWh where it has 6,80 and 7,47, and Imewo's exclusive-night
+rate, 4,91 for 5,21. Those cards name 2025 (`SupplierSnapshot.network_year`),
+the contracts carry `Contract.earlier_network_cards`, and the months are
+billed their network off Fluvius's 2026 sheet (`past_last_card`,
+`snapshot_resolve.py`). The sheet sets the normal and exclusive-night rates,
+the capacity and the data management fee; the prosumer rate stays the card's,
+2025's. The cards of May to August print the 2026 table with the same four
+figures as the later cards.
 
 ## Not modelled
 
@@ -161,12 +195,15 @@ to the card archive and then to the current card.
 ## Tests
 
 `tests/test_belvus.py` reads the November 2026 cards of the three products,
-Flex Online's October card and Dynamisch's September one
-(`tests/fixtures/belvus_*.pdf`), and holds every formula to the price its
-card prints at the index it names, the network table as printed, the levies,
-the refusals (another product's card, a professional card, another index,
-unit or basis, a price check that does not hold, a second energy formula, the
-older template), the settlement of a closed month on the next card and the
-provisional month, the links the pages carry and the time of every pattern
+Flex Online's September and October cards and Dynamisch's September one, and
+of the older layout Smart Plus's January, February and April cards and Flex
+Online's August one (`tests/fixtures/belvus_*.pdf`). It holds every formula to
+the price its card prints at the index it names, the network tables as
+printed, the levies, the refusals of either layout (another product's card, a
+professional card, another index, unit or basis, a price check that does not
+hold, a second energy formula, a card in neither layout), the settlement of a
+closed month on the next card, between two older cards and from the older
+layout to the later one, the provisional month, January's network billed on
+Fluvius's 2026 sheet, the links the pages carry and the time of every pattern
 on crafted text. `discover` is read against the saved card links of
 `/diensten` (`tests/fixtures/discover/belvus.html`).
