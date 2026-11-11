@@ -2289,9 +2289,11 @@ And it writes `network.json`: for each month of last year and this one, what
 each regulator's sheet gives a custom entry taking its network from it,
 every Fluvius area, Brugel's sheet and each Walloon operator's CWaPE grid,
 read as an installation reads them. A month no longer read keeps what was
-written, and such an entry, or a withdrawn product past its last card's
-year, takes from it only what its own reading of the sheets leaves unset
-for a month, ahead of the figures typed or printed.
+written, and such an entry, a withdrawn product past its last card's
+year, or a card that prints an earlier year's network table (Belvus's of
+January to April 2026 print Fluvius's 2025 one), takes from it only what its
+own reading of the sheets leaves unset for a month, ahead of the figures
+typed or printed.
 The *Read past cards from the project's archive* box on the meters step,
 on by default, switches all four off per entry: the integration then never
 contacts GitHub, those months are priced on the current card, a rate a
@@ -2311,7 +2313,10 @@ show) just misses that day's capture; and a card no parser can read
 (Ecofix's page images) is read by an OCR engine built for those cards and
 stored as an ordinary row, flagged so an entry served one says where the
 figures came from. One that even the OCR refuses is kept as a PDF and named
-on the coverage sheet with no JSON beside it. The OCR reads a font only
+on the coverage sheet with no JSON beside it, and so is a past month's card
+a supplier's archive serves that its reader refuses: named under its own
+month, and asked for again by every run that mirrors that month while it
+has no row. The OCR reads a font only
 through the glyphs it has learnt, and no Ecofix card it learnt from sets a
 bold 4, 7, 8, 9, Q, X, Y or Z; a card published as page images still embeds
 the fonts of the text set over its picture, so each run looks at the cards
