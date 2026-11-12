@@ -3523,3 +3523,17 @@ def test_a_formula_gives_back_the_price_its_card_prints() -> None:
     assert formula_gives(19.1481 / 1.06, 0.075, 174.19, 5.0, tolerance=0.001)
     assert not formula_gives(19.1481 / 1.06, 0.75, 174.19, 5.0, tolerance=0.001)
     assert not formula_gives(19.1481 / 1.06, 0.075, 174.19, 0.5, tolerance=0.001)
+
+
+def test_a_price_printed_near_zero_is_held_to_its_rounding() -> None:
+    """A feed-in formula crossing zero in a month of low prices prints a few
+    hundredths of a cent, which its rounding puts out by more than any share
+    of it; ``floor`` allows that much and no more."""
+    from custom_components.be_electricity_prices.providers._parse import (
+        formula_gives,
+    )
+
+    # 0,095 x 26,8 - 2,5 gives 0,046 c€/kWh, printed 0,05.
+    assert not formula_gives(0.05, 0.095, 26.8, -2.5, tolerance=0.02)
+    assert formula_gives(0.05, 0.095, 26.8, -2.5, tolerance=0.02, floor=0.005)
+    assert not formula_gives(0.05, 0.95, 26.8, -2.5, tolerance=0.02, floor=0.005)

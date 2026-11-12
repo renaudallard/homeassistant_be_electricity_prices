@@ -341,17 +341,27 @@ def stated_unit(
 
 
 def formula_gives(
-    printed: float, factor: float, index: float, base: float, *, tolerance: float
+    printed: float,
+    factor: float,
+    index: float,
+    base: float,
+    *,
+    tolerance: float,
+    floor: float = 0.0,
 ) -> bool:
     """Whether ``factor`` x ``index`` + ``base`` gives back the price a card
-    prints beside its formula, within ``tolerance`` of it as a share.
+    prints beside its formula, within ``tolerance`` of it as a share, or
+    within ``floor`` outright where that is wider.
 
     For a card that states no unit for its formula but prints the index its
     price is worked out at: a formula read on the wrong scale, or off the
-    wrong row, does not give the printed price back. All four figures in one
-    unit and on one VAT basis.
+    wrong row, does not give the printed price back. All five figures in one
+    unit and on one VAT basis. ``floor`` is for a price printed near zero, a
+    feed-in formula crossing zero in a month of low prices, whose rounding to
+    the card's last decimal is more than any share of it.
     """
-    return abs(factor * index + base - printed) <= tolerance * abs(printed)
+    allowed = max(tolerance * abs(printed), floor)
+    return abs(factor * index + base - printed) <= allowed
 
 
 def parse_brussels_osp(text: str) -> dict[str, float] | None:
