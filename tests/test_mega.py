@@ -3124,3 +3124,164 @@ def test_a_crafted_card_is_read_in_time_linear_in_its_length(
     started = time.perf_counter()
     read(crafted)
     assert time.perf_counter() - started < 2.0
+
+
+_COSY = "mega_cosy_flex_v_2026-10.pdf"
+
+
+def _cosy(text: str) -> VariableRates:
+    energy = parse_snapshot("mega_cosy_flex", text, "flanders").energy
+    assert isinstance(energy, VariableRates)
+    return energy
+
+
+@pytest.mark.parametrize("contract", ["mega_dynamic", "mega_pro_dynamic"])
+def test_a_day_ahead_stated_in_another_unit_refuses_the_dynamic_formulas(
+    contract: str,
+) -> None:
+    """Both dynamic factors are taken as printed because the card states the
+    Day Ahead they multiply in c€/kWh, "(en c€/kWh): 13,951". On a Day Ahead
+    stated in EUR/MWh the factor printed for it would be ten times smaller,
+    and read as printed it would bill a tenth of the spot's share of the
+    price. The consumption formula then fails the card and the feed-in one is
+    read as none, the table's figure standing."""
+    name = (
+        "mega_dynamic_w.pdf" if contract == "mega_dynamic" else "mega_pro_dynamic_w.pdf"
+    )
+    text = fixture_text(name)
+    snap = parse_snapshot(contract, text, "wallonia")
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(1.0)
+    assert text.count("(en c€/kWh)") == 1
+    restated = text.replace("(en c€/kWh)", "(en €/MWh)")
+    with pytest.raises(ExtractorError, match="dynamic index in €/MWh, not c€/kWh"):
+        parse_snapshot(contract, restated, "wallonia")
+    leg = cards_mod._extract_injection(restated, "dynamic")
+    assert leg is not None
+    assert leg.factor is None
+    assert leg.base is None
+    assert leg.formula is None
+    assert leg.current == pytest.approx(snap.injection.current)
+    with pytest.raises(ExtractorError, match="dynamic index in no stated unit"):
+        parse_snapshot(contract, text.replace("(en c€/kWh)", "c€/kWh"), "wallonia")
+
+
+@pytest.mark.parametrize(
+    ("stated", "field"),
+    [
+        ("Epex * 1,113 + 3,35 c€/kWh", "formula_base"),
+        ("Epex * 1,2455 + 3,35 c€/kWh", "formula_base_peak"),
+        ("0,999 +\n3,35 c€/kWh", "formula_base_exclusive_night"),
+    ],
+)
+def test_a_formula_missing_its_cent_sign_is_read_in_cents(
+    stated: str, field: str
+) -> None:
+    """The Cosy Flex cards in Flanders since July 2026 print their off-peak
+    formula "Epex * 0,999 + 3,35 €/kWh" between three in c€/kWh. A base of
+    3,35 EUR/kWh is no tariff, and the same slip on any formula of the
+    sentence is the same misprint: dropping that formula billed a bi-hourly
+    meter on the mono pair, and dropping the mono one the month before's
+    printed rate."""
+    text = fixture_text(_COSY)
+    kept = _cosy(text)
+    # The card's own "+ 3,35 €/kWh", read in cents.
+    assert kept.formula_base_offpeak == pytest.approx(3.35 * 1.06 / 100)
+    assert text.count(stated) == 1
+    energy = _cosy(text.replace(stated, stated.replace("c€/kWh", "€/kWh")))
+    assert energy == kept
+    assert getattr(energy, field) == pytest.approx(3.35 * 1.06 / 100)
+
+
+@pytest.mark.parametrize(
+    ("stated", "field"),
+    [
+        ("Epex * 1,113 + 3,35 c€/kWh", "formula_factor"),
+        ("Epex * 1,2455 + 3,35 c€/kWh", "formula_factor_peak"),
+        ("Epex * 0,999 + 3,35 €/kWh", "formula_factor_offpeak"),
+        ("0,999 +\n3,35 c€/kWh", "formula_factor_exclusive_night"),
+    ],
+)
+def test_a_formula_really_restated_in_euros_is_not_read(
+    stated: str, field: str
+) -> None:
+    """The same base really restated in EUR/kWh prints "0,0335 €/kWh", which
+    read in cents would bill a hundredth of it. Mega's bases run from 0,85 to
+    3,6 c€/kWh, so a €/kWh figure under 0,5 is read as a formula the card does
+    not print: the mono one leaves the card on its printed rates, a band one
+    its meter on the mono pair."""
+    text = fixture_text(_COSY)
+    kept = _cosy(text)
+    assert text.count(stated) == 1
+    restated = stated.replace("3,35", "0,0335").replace("c€/kWh", "€/kWh")
+    energy = _cosy(text.replace(stated, restated))
+    assert getattr(energy, field) is None
+    assert energy.month_indexed is (field != "formula_factor")
+    assert (energy.current, energy.peak, energy.offpeak, energy.exclusive_night) == (
+        kept.current,
+        kept.peak,
+        kept.offpeak,
+        kept.exclusive_night,
+    )
+
+
+def test_the_lowest_base_mega_prints_is_read_without_its_cent_sign() -> None:
+    """The Off-peak Flex cards print "Epex * 0,999 + 0,85 c€/kWh", the lowest
+    base of any card. Printed with the c dropped it is still above the half a
+    euro no EUR/kWh formula reaches, and read in cents."""
+    text = fixture_text(_COSY)
+    stated = "Epex * 0,999 + 3,35 €/kWh"
+    assert text.count(stated) == 1
+    energy = _cosy(text.replace(stated, "Epex * 0,999 + 0,85 €/kWh"))
+    assert energy.formula_base_offpeak == pytest.approx(0.85 * 1.06 / 100)
+
+
+def test_the_night_formula_needs_its_unit_past_the_page_footer() -> None:
+    """On the Smart Flex cards of Flanders for September 2025 and of Wallonia
+    for February to June 2026 the page footer falls between the exclusive
+    night formula's base and its "c€/kWh". The pattern made that unit
+    optional for the layout, which let a formula restated in EUR/MWh be read
+    ten times high. It is required now, past the footer or right after the
+    base, and a night formula without it is read as none, its meter on the
+    mono pair."""
+    text = fixture_text("mega_smart_flex_w.pdf")
+    kept = parse_snapshot("mega_smart_flex", text, "wallonia").energy
+    assert isinstance(kept, VariableRates)
+    assert kept.formula_factor_exclusive_night == pytest.approx(0.94 * 1.06)
+    assert kept.formula_base_exclusive_night == pytest.approx(3.6 * 1.06 / 100)
+    stated = "www.mega.be\n \nc€/kWh. Cette"
+    assert text.count(stated) == 1
+    energy = parse_snapshot(
+        "mega_smart_flex",
+        text.replace(stated, stated.replace("c€/kWh", "€/MWh")),
+        "wallonia",
+    ).energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed
+    assert energy.formula_factor_exclusive_night is None
+    assert energy.formula_base_exclusive_night is None
+    assert energy.formula_factor == pytest.approx(kept.formula_factor)
+    assert energy.exclusive_night == kept.exclusive_night
+
+    # The same on a card printing it right after the base.
+    text = fixture_text(_COSY)
+    energy = _cosy(text.replace("0,999 +\n3,35 c€/kWh", "0,999 +\n33,5 €/MWh"))
+    assert energy.formula_factor_exclusive_night is None
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    "crafted",
+    [
+        "exclusif nuit : Epex * 1 + 1 Sources d'énergie " + "x" * 100_000,
+        "exclusif nuit : Epex * 1 + 1 " * 10_000,
+        "valeur connue du paramètre pour le mois précédent (" * 10_000,
+        "est la suivante (en " * 20_000,
+    ],
+)
+def test_a_crafted_statement_is_read_in_time(crafted: str) -> None:
+    started = time.perf_counter()
+    cards_mod._variable_band_coefficients(crafted)
+    cards_mod._INDEX_UNIT_RE.search(crafted)
+    assert time.perf_counter() - started < 2.0

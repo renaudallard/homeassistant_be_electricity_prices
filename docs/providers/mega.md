@@ -553,6 +553,14 @@ Illustrative: factor 1.05 x 1.06 and base 0.0135 x 1.06 EUR on the residential c
 1.05 and 0.0135 on the professional one, fee 42.4 EUR/yr (`test_mega.py`); injection
 factor 1.0, base -0.04 EUR (`test_mega.py`).
 
+The spot is in c€/kWh because the card says so, once, after both formulas: "la
+dernière valeur connue du paramètre pour le mois précédent (...) est la suivante (en
+c€/kWh): 23.226", spelled so on every dynamic card since July 2025. `_index_unit`
+(`_mega_cards.py`) reads it, and a card stating another unit, or none, is refused: the
+consumption formula raises, and the feed-in one is read as none, the table's figure
+standing. The variable and Impact cards never state the unit of their Epex, only that
+of each formula's result, so only the result's unit is checked on them.
+
 ### DSO overlays
 
 The region dispatch in `parse_snapshot` (`mega.py`) selects exactly one DSO
@@ -789,13 +797,21 @@ The land mines a future maintainer must know, drawn from the module comments:
   split affects `Fluvius` label matching (matched via `re.IGNORECASE` and `\s`).
 - **`Redevance fixe` heading splits differently on dynamic vs fixed cards**; accept
   both the joined and the split layout (`_mega_cards.py`).
-- **A variable formula can drop the c of its unit.** The September 2026 Cosy Flex
-  card in Flanders prints "heures creuses : Epex * 0,999 + 3,35 €/kWh" between
-  three formulas in `c€/kWh`. The mono, peak and off-peak patterns take `c?€/kWh`
-  and read the base in cents, since 3,35 EUR/kWh is no tariff; the `€/kWh` stays
-  mandatory because it is what stops the match wandering. The live check fails a
+- **A variable formula can drop the c of its unit.** The Cosy Flex cards in Flanders
+  since July 2026 print "heures creuses : Epex * 0,999 + 3,35 €/kWh" between three
+  formulas in `c€/kWh`. Every formula of the sentence takes `c€/kWh`, or `€/kWh` on a
+  base of 0,5 or more, read in cents (`_cents_base`): the bases run from 0,85 to 3,6
+  c€/kWh on every card since January 2024, so the same bases really restated in
+  EUR/kWh would print 0,0085 to 0,036, and such a formula is read as none
+  (`test_a_formula_really_restated_in_euros_is_not_read`). The live check fails a
   row that has one of the peak and off-peak formulas without the other
   (`test_a_band_formula_missing_its_cent_sign_is_still_read`).
+- **The page footer can split the exclusive-night formula from its unit.** On the
+  Smart Flex cards of Flanders for September 2025 and of Wallonia for February to
+  June 2026, "Sources d'énergie pour : ... www.mega.be" falls between "+ 3,6" and
+  its "c€/kWh". The pattern requires the unit right after the base or, on that
+  layout, past the footer
+  (`test_the_night_formula_needs_its_unit_past_the_page_footer`).
 - **Off-peak Impact cards lack the `Compteur mono-horaire` anchor** and use a bare
   `PIC` (not `Tarif PIC`) on the last row; the tier regex is permissive on the
   prefix (`_mega_cards.py`).

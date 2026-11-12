@@ -44,7 +44,7 @@ from dataclasses import replace
 from datetime import date
 from typing import Any
 
-from ._parse import LINE_BREAK, SIGN_CHARS, parse_sign, to_float
+from ._parse import LINE_BREAK, SIGN_CHARS, parse_sign, stated_unit, to_float
 from ._pdf import (
     FR_MONTHS,
     vat_multiplier,
@@ -89,6 +89,27 @@ _INJECTION_FORMULA_RE = re.compile(
 )
 
 
+# The Day Ahead both formulas multiply is stated once, after them: "la
+# dernière valeur connue du paramètre pour le mois précédent (le 31/10 entre
+# 23h45 et 24h) est la suivante (en c€/kWh): 23.226", in c€/kWh on every card
+# since July 2025, the first archived. It ends 444 to 819 characters after
+# the consumption factor and 1215 to 2308 after the feed-in one, which the
+# card prints first, a distance that has moved by 500 from one month to the
+# next. The sentence is the only one on the card stating a unit in brackets,
+# so the reach can be wide.
+_INDEX_UNIT_RE = re.compile(
+    r"valeur\s+connue\s+du\s+param[eè]tre\s+pour\s+le\s+mois\s+pr[ée]c[ée]dent"
+    r"\s*\([^()]{0,40}\)\s*est\s+la\s+suivante\s*\(en\s+([^()]{0,20})\)"
+)
+_INDEX_UNIT = "c€/kWh"
+_INDEX_UNIT_REACH = 3500
+
+
+def _index_unit(text: str, formula: re.Match[str]) -> str | None:
+    """The unit the card states the Day Ahead in, behind ``formula``."""
+    return stated_unit(text, _INDEX_UNIT_RE, formula.span(1), after=_INDEX_UNIT_REACH)
+
+
 def _parse_formula(match: re.Match[str] | None) -> tuple[float, float] | None:
     if match is None:
         return None
@@ -103,14 +124,19 @@ def _parse_formula(match: re.Match[str] | None) -> tuple[float, float] | None:
 # c€/kWh (same as the dynamic formula) so the factor maps directly to spot in
 # EUR/kWh with no /MWh unit conversion.
 #
-# The c of the unit is optional on the formulas of this sentence. The
-# September 2026 Cosy Flex Flanders card prints its off-peak one as
-# "Epex * 0,999 + 3,35 €/kWh" between three that say c€/kWh, and a base of
-# 3,35 EUR/kWh is no tariff, so the figure is read in cents like the rest.
-# The €/kWh itself stays mandatory: it is what stops the match wandering.
+# The unit ends each pattern, and it is what the base is scaled on: every
+# formula of the sentence says c€/kWh on every card since January 2024 but
+# in one place: the Cosy Flex cards in Flanders since July 2026 print the
+# off-peak formula as "Epex * 0,999 + 3,35 €/kWh" between three that say
+# c€/kWh, the c dropped. A base of 3,35 EUR/kWh is no tariff, but a formula
+# really restated in EUR/kWh would print the same unit and read a hundred
+# times low as cents, so :func:`_cents_base` reads the misprint only on a
+# base no EUR/kWh formula could have. The labels are matched in any case,
+# the unit as the cards print it.
+_FORMULA_UNIT = r"((?-i:c?€/kWh))"
 _VARIABLE_MONO_FORMULA_RE = re.compile(
     rf"Compteur mono-horaire\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
-    rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c?€/kWh",
+    rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*{_FORMULA_UNIT}",
     re.IGNORECASE,
 )
 # The same sentence continues with the bi-hourly bands, which carry their own
@@ -119,12 +145,12 @@ _VARIABLE_MONO_FORMULA_RE = re.compile(
 _VARIABLE_BAND_FORMULA_RES: dict[str, re.Pattern[str]] = {
     "peak": re.compile(
         rf"heures pleines\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
-        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c?€/kWh",
+        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*{_FORMULA_UNIT}",
         re.IGNORECASE,
     ),
     "offpeak": re.compile(
         rf"heures creuses\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
-        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*c?€/kWh",
+        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*{_FORMULA_UNIT}",
         re.IGNORECASE,
     ),
     # And the dedicated night circuit, a FOURTH formula in the same sentence:
@@ -133,17 +159,36 @@ _VARIABLE_BAND_FORMULA_RES: dict[str, re.Pattern[str]] = {
     # key: they are separate contractual formulas and Mega can move one
     # without the other.
     #
-    # The trailing unit is optional HERE ONLY. This formula is last in the
-    # sentence and pypdf splices the page footer in right after "+ 3,6", so a
-    # mandatory "c€/kWh" matches nothing at all. The other three end in a real
-    # unit, and that mandatory €/kWh is what stops them wandering, so it is
-    # not relaxed on them beyond the c.
+    # It is last in the sentence, and on the Smart Flex cards of Flanders for
+    # September 2025 and of Wallonia for February to June 2026 the page
+    # footer, "Sources d'énergie pour : ... www.mega.be", falls between
+    # its base and its unit, 333 to 350 characters of it. The unit is
+    # required all the same, past that footer or right after the base, where
+    # every other card prints it.
     "exclusive_night": re.compile(
         rf"exclusif\s+nuit\s*:\s*Epex\s*\*\s*([\d.,]+)\s*"
-        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*(?:c€/kWh)?",
+        rf"([{SIGN_CHARS}])\s*([\d.,]+)\s*"
+        r"(?:Sources\s+d.énergie(?:(?!www\.mega\.be)[^€]){0,450}www\.mega\.be\s*)?"
+        + _FORMULA_UNIT,
         re.IGNORECASE,
     ),
 }
+
+# The bases of the sentence run from 0,85 to 3,6 c€/kWh on every card since
+# January 2024, so the same bases restated in EUR/kWh would print 0,0085 to
+# 0,036. A figure of 0,5 or more stated in €/kWh, half a euro on every kWh
+# before the index, is the misprinted cents.
+_MISPRINTED_CENTS = 0.5
+
+
+def _cents_base(match: re.Match[str]) -> float | None:
+    """The signed base in c€/kWh of a formula of the variable sentence, or
+    None for one in a unit the cards have not used: "€/kWh" on a base it
+    could really be in."""
+    base = to_float(match.group(3))
+    if match.group(4) != "c€/kWh" and base < _MISPRINTED_CENTS:
+        return None
+    return parse_sign(match.group(2)) * base
 
 
 def _impact_band_formula_re(band: str) -> re.Pattern[str]:
@@ -223,12 +268,11 @@ def _variable_cohort_coefficients(
     keeps the plain mean.
     """
     match = _VARIABLE_MONO_FORMULA_RE.search(re.sub(r"\s+", " ", text))
-    if match is None:
+    base = None if match is None else _cents_base(match)
+    if match is None or base is None:
         return None, None
     vat_mult = _cohort_vat_multiplier(text, professional=professional)
-    factor = to_float(match.group(1)) * vat_mult
-    base = parse_sign(match.group(2)) * to_float(match.group(3)) * vat_mult / 100.0
-    return factor, base
+    return to_float(match.group(1)) * vat_mult, base * vat_mult / 100.0
 
 
 # The residential rate as the cards state it: "(TVA de 6% incluse)" beside the
@@ -269,12 +313,10 @@ def _variable_band_coefficients(
     out: dict[str, tuple[float, float]] = {}
     for band, pattern in _VARIABLE_BAND_FORMULA_RES.items():
         match = pattern.search(flat)
-        if match is None:
+        base = None if match is None else _cents_base(match)
+        if match is None or base is None:
             continue
-        out[band] = (
-            to_float(match.group(1)) * vat_mult,
-            parse_sign(match.group(2)) * to_float(match.group(3)) * vat_mult / 100.0,
-        )
+        out[band] = (to_float(match.group(1)) * vat_mult, base * vat_mult / 100.0)
     return out
 
 
@@ -314,9 +356,17 @@ def _extract_energy(
 ) -> EnergyRates:
     yearly_fee = _extract_yearly_fee(text)
     if kind == "dynamic":
-        consumption = _parse_formula(_CONSUMPTION_FORMULA_RE.search(text))
-        if consumption is None:
+        match = _CONSUMPTION_FORMULA_RE.search(text)
+        consumption = _parse_formula(match)
+        if match is None or consumption is None:
             raise ExtractorError("could not parse Mega dynamic consumption formula")
+        unit = _index_unit(text, match)
+        if unit != _INDEX_UNIT:
+            # The factor is used as printed only because the Day Ahead is in
+            # c€/kWh, so a card stating another unit is refused.
+            raise ExtractorError(
+                f"Mega dynamic index in {unit or 'no stated unit'}, not {_INDEX_UNIT}"
+            )
         # The formula is printed excluding VAT, like the variable and Impact
         # ones on the same cards: the residential card's table prices it at the
         # year's forecast and adds 6% (15,827 c/kWh at 145,02 EUR/MWh, printed
@@ -829,6 +879,10 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # Residential injection is VAT-exempt so the HTVA value is
         # already what the user receives.
         inj_match = _INJECTION_FORMULA_RE.search(text)
+        if inj_match is not None and _index_unit(text, inj_match) != _INDEX_UNIT:
+            # On a Day Ahead in another unit, read as a formula the card does
+            # not print: the table's figure stands.
+            inj_match = None
         parsed = _parse_formula(inj_match)
         if parsed is not None and inj_match is not None:
             factor, base = parsed
