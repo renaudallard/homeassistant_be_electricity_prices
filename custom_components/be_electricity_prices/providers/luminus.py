@@ -64,7 +64,6 @@ from ._luminus_cards import (
     _VAT_PATTERNS,
     _extract_energy,
     _extract_injection,
-    _extract_promo,
     _named_month,
     published_indices,
 )
@@ -78,6 +77,7 @@ from ._luminus_overlays import (
     _green_cost_folded,
     _wallonia_distribution,
 )
+from ._luminus_promo import _extract_promo
 from ._parse import (
     require_contract,
 )

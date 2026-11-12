@@ -25,22 +25,29 @@
 
 """Luminus: the product legs its card prints.
 
-The energy formula and its per-slot coefficients, the feed-in leg and the
-signing campaign whose credit rides on the contract for a year. This is what
-Luminus charges for power, as opposed to what it collects for someone else.
+The energy formula and its per-slot coefficients, and the feed-in leg. This
+is what Luminus charges for power, as opposed to what it collects for someone
+else. The signing campaign is read in ``_luminus_promo.py``.
 """
 
 from __future__ import annotations
 
 import re
-from bisect import bisect_left
 from collections.abc import Callable, Iterable
 from dataclasses import replace
 from datetime import date
 
-from ..const import WELCOME_CREDIT_ANNIVERSARY, WELCOME_CREDIT_PRO_RATA
+from ._luminus_formulas import (
+    _bands_give_printed,
+    _expected_index,
+    _gives_printed,
+    _require_energy_unit,
+    _require_unit,
+    _signed,
+    _signed_cents,
+)
 from ._luminus_overlays import _NUM
-from ._parse import SIGN_CHARS, numeric_row, parse_sign, tier_bound_kwh, to_float
+from ._parse import SIGN_CHARS, numeric_row, parse_sign, to_float
 from ._pdf import _MONTH_NAMES, vat_multiplier
 from ._rates import (
     DynamicRates,
@@ -52,149 +59,6 @@ from ._rates import (
     VariableRates,
 )
 from .base import ExtractorError
-
-
-def _extract_promo(text: str, card_month: str = "") -> dict[str, object]:
-    """Luminus's new-customer campaign, or ``{}`` when the card runs none.
-
-    Returned as the snapshot fields it fills, so the caller does not restate
-    which is which. Two shapes are read, both verified against the September
-    2026 cards and against Luminus's own published conditions: a PERCENTAGE of
-    the energy cost paid across the invoices it covers (33% on Comfy, 29% on
-    ComfyFlex), and a VOLUME of free energy paid as a cashback after a stated
-    wait (750 kWh on MaxxFix, MaxxFlex and both Plus cards).
-
-    Scoped to the campaign SENTENCE, not the card. The cards print standing
-    loyalty discounts in the same block and in nearly the same words, and
-    those are a different thing: "12 mois apres la date de debut, une
-    reduction de 5 % sur les couts energetiques ... pendant 12 mois ... au
-    pro rata de la consommation de votre 2e annee". They are a year-2 and
-    year-3 benefit this does not model, they also say "pendant 12 mois", and
-    they carry their own exclusive-night exclusion. Reading the card as a
-    whole picked that exclusion up and attached it to the campaign, and a
-    looser amount pattern would have read 5% as a welcome credit. The gate
-    phrase is what separates them, because only a campaign is tied to the
-    month of signing.
-
-    A promo stated without that gate is left alone rather than guessed at:
-    Luminus Dynamic prints "Reduction unique Cashback de 130 EUR TVA incl.
-    apres 12 mois" with no signing condition, so nothing on the card says
-    whether an existing customer gets it too.
-
-    The campaign is tied to the month it is signed in, which the sentence
-    names ("en octobre 2026") or, where it drops that phrase, the card the
-    campaign is printed on does: ``card_month`` is that card's own label
-    ("octobre 2026"). It lands in ``welcome_credit_signing_month``, so a
-    household signed in another month is not credited with it, a compare
-    candidate included.
-    """
-    flat = re.sub(r"\s+", " ", text)
-    # The curly apostrophe matters as much as the pairing: April's Comfy closes
-    # its flat sentence with a curly gate and its percentage one with a
-    # straight gate, so a plain string search for one form skipped the near
-    # gate entirely and scoped the campaign across 11.512 characters.
-    #
-    # ONE sentence supplies everything: the amount, the payout wording, the
-    # wait and the night exclusion. A card can carry two of these sentences,
-    # and April's Comfy does (60,00 EUR flat at 1.283, 11% of the energy cost
-    # at 12.513, both naming the same product and signing month), but the
-    # snapshot holds ONE payout kind and one wait, so taking the amount from
-    # one sentence and the conditions from another is how the 11% campaign
-    # came out marked as a cashback at the wait quoted after the flat one.
-    #
-    # The percentage and volume shapes are preferred where a card states one,
-    # because they are the shapes that ride a year and carry the exclusions.
-    # A card whose only campaign is a flat amount is read on its own terms.
-    # Each GATE with the LAST anchor before it, not each anchor with the next
-    # gate. An anchor whose own sentence carries no gate would otherwise borrow
-    # the next sentence's, and its span then runs across everything between the
-    # two: on real wording that reads the standing "remise de 5 %" loyalty
-    # clause as the campaign where the card grants 33%, 215,99 EUR a year on a
-    # 3.500 kWh Comfy, and picks up that clause's exclusive-night exclusion on
-    # the way, which takes a night-metered household to nothing. Pairing from
-    # the gate backwards cannot span a sentence boundary that way, because the
-    # nearest anchor is by definition the one the gate belongs to.
-    #
-    # Read so that a card costs its length. The anchor before each gate is
-    # found by bisection, and a span is kept only when it is a sentence's
-    # length and does not end where the span kept before it ends: such a span
-    # is a tail of that one, so none of the amounts can read in it where they
-    # read nothing in the longer one. A sentence on every card on file is at
-    # most 290 characters (November 2026); a span past _PROMO_SPAN_MAX is no
-    # sentence and is left unread. Without both, a card of anchors and gates
-    # with one full stop at its end kept a span from every anchor to that
-    # stop and read each one: the square of its length.
-    starts = [m.start() for m in _PROMO_ANCHOR_RE.finditer(flat)]
-    spans: list[tuple[int, str]] = []
-    kept_end = -1
-    for gate_at in _PROMO_GATE_RE.finditer(flat):
-        before = bisect_left(starts, gate_at.start())
-        if not before:
-            continue
-        start = starts[before - 1]
-        end = flat.find(".", gate_at.start()) + 1
-        if not end or end == kept_end or end - start > _PROMO_SPAN_MAX:
-            continue
-        kept_end = end
-        spans.append((start, flat[start:end]))
-
-    sentence = payout = valuation = ""
-    pct = kwh = eur = None
-    for want_flat in (False, True):
-        for start, span in spans:
-            found_pct = _PROMO_PCT_RE.search(span)
-            found_kwh = _PROMO_KWH_RE.search(span)
-            found_eur = _PROMO_EUR_RE.search(span)
-            if want_flat:
-                if found_eur is None:
-                    continue
-            elif found_pct is None and found_kwh is None:
-                continue
-            pct, kwh, eur = found_pct, found_kwh, found_eur
-            sentence = span
-            end = start + len(span)
-            payout = flat[end : end + 240]
-            valuation = flat[end : end + 600]
-            break
-        if sentence:
-            break
-
-    out: dict[str, object] = {}
-    if pct is not None:
-        out["welcome_credit_pct_of_energy"] = to_float(pct.group(1)) / 100.0
-    if kwh is not None:
-        out["welcome_credit_kwh"] = tier_bound_kwh(kwh.group(1))
-        # The rate the volume is valued at, when the clause after the
-        # campaign names the card's yearly estimate rather than its printed
-        # single rate. Left unset if the row is missing, which values the
-        # volume at the printed rate as every earlier card asked.
-        valued = _PROMO_VALUED_AT_ESTIMATE_RE.search(valuation)
-        estimate = _ANNUAL_ESTIMATE_RE.search(flat) if valued is not None else None
-        if estimate is not None:
-            out["welcome_credit_kwh_rate"] = to_float(estimate.group(1)) / 100.0
-    if eur is not None:
-        # to_float, not tier_bound_kwh: this is money with a decimal comma
-        # ("60,00"), where a volume bound is an integer with a thousands dot
-        # ("1.000 kWh"). Reading one with the other's reader gives 6000,00.
-        out["welcome_credit_eur"] = to_float(eur.group(1))
-    if not out:
-        return {}
-    cashback = _PROMO_CASHBACK_RE.search(payout)
-    if cashback is not None:
-        out["welcome_credit_kind"] = WELCOME_CREDIT_ANNIVERSARY
-        out["welcome_credit_after_months"] = int(cashback.group(1))
-    else:
-        # "repartie au pro rata sur vos prochains decomptes": paid across the
-        # invoices of the period it covers, not at its end.
-        out["welcome_credit_kind"] = WELCOME_CREDIT_PRO_RATA
-    if _PROMO_NIGHT_RE.search(sentence):
-        out["welcome_credit_excludes_night_meter"] = True
-    signing = _named_month(_PROMO_MONTH_RE.search(sentence)) or _named_month(
-        _LABEL_MONTH_RE.fullmatch(card_month.strip())
-    )
-    if signing is not None:
-        out["welcome_credit_signing_month"] = signing
-    return out
 
 
 def _named_month(match: re.Match[str] | None) -> date | None:
@@ -227,6 +91,8 @@ def _energy_row(text: str, columns: int, before: str | None = None) -> list[str]
         if row:
             break
         row = numeric_row(text, label, columns, before=_ESTIMATE_HEADING)
+    if row:
+        _require_energy_unit(text, row)
     return row
 
 
@@ -316,9 +182,18 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         # SmartFlex indexes each band on the delivery month, same sentence as
         # its bi-hourly siblings: "Votre tarif sera indexe tous les mois. La
         # valeur Belpex du mois en cours n'est connue qu'a la fin du mois."
-        # So the printed triplet is the previous month's.
+        # So the printed triplet is the previous month's, the Belpex the card
+        # names, and a formula that does not give it back there is dropped.
         coefs = _monthly_tou_coefficients(text)
-        if not coefs:
+        printed = {
+            "peak": peak,
+            "transition": transition,
+            "offpeak": offpeak,
+            "sunday": tou_rates.sunday,
+        }
+        if not coefs or not _bands_give_printed(
+            coefs, printed, _named_index(text, "Belpex")
+        ):
             return tou_rates
         return replace(
             tou_rates,
@@ -343,11 +218,24 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
         # Spot in EUR/kWh = Belpex_eur_mwh / 1000. Convert to:
         #   factor_eur_kwh = factor_pdf * vat * 1000 / 100 = factor_pdf * vat * 10
         #   base_eur_kwh   = base_cents  * vat / 100
-        return DynamicRates(
+        dynamic = DynamicRates(
             factor=factor_pdf * vat * 10.0,
             base=base_pre_vat_cents * vat / 100.0,
             yearly_fixed_fee=fee,
         )
+        # The estimate the card prints, VAT included, is this formula at the
+        # Belpex H it expects for the year ahead.
+        estimate = _ANNUAL_ESTIMATE_RE.search(text)
+        if not _gives_printed(
+            None if estimate is None else to_float(estimate.group(1)) / 100.0,
+            (dynamic.factor, dynamic.base),
+            _expected_index(text, _DYNAMIC_ENERGY_BLOCK_RE),
+        ):
+            raise ExtractorError(
+                "Luminus: the dynamic formula does not give the estimate its "
+                "card prints at the Belpex H it expects"
+            )
+        return dynamic
 
     energy_row = _energy_row(text, 4)
     if not energy_row:
@@ -383,7 +271,20 @@ def _extract_energy(text: str, kind: TariffKind) -> EnergyRates:
     quarterly = not coefs
     if quarterly:
         coefs = _quarterly_energy_coefficients(text)
-    if not coefs:
+    # The printed rates are the formulas at the index the card names for the
+    # period before, BasicFlex's RLP-weighted one where it prices on it. A
+    # formula that does not give them back there is dropped, as one that does
+    # not read.
+    printed = {
+        "single": mono,
+        "peak": peak,
+        "offpeak": offpeak,
+        "exclusive_night": excl_night,
+    }
+    name = "Belpex RLP M" if rlp else "Belpex"
+    if not coefs or not _bands_give_printed(
+        coefs, printed, _named_index(text, name, quarterly=quarterly)
+    ):
         return rates
     if rlp:
         # BasicFlex's index is the month's Belpex weighted by "la moyenne
@@ -551,6 +452,28 @@ def _belpex_h_pair(
     return factor, base, rows[0].group(0)
 
 
+def _named_index(text: str, name: str, *, quarterly: bool = False) -> float | None:
+    """The value in EUR/kWh the card names for the index ``name``, the one its
+    printed rates were worked out at, or None (``published_indices``)."""
+    found = published_indices(text, quarterly=quarterly).get(name)
+    return None if found is None else found[1]
+
+
+def _feed_in_row(text: str) -> re.Match[str] | None:
+    """The feed-in row, or None where the card prints none, refused where its
+    label states another unit than c€/kWh (``_INJECTION_UNIT_RE``)."""
+    row = _INJECTION_ROW_RE.search(text)
+    if row is not None:
+        _require_unit(
+            text,
+            _INJECTION_UNIT_RE,
+            row.span("single"),
+            _INJECTION_UNIT_REACH,
+            "feed-in row",
+        )
+    return row
+
+
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     # Anchor on the applicable "Tarif de l'énergie injectée" row, not the
     # "Estimation annuelle du tarif de l'énergie injectée" forecast
@@ -566,21 +489,29 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     # the value. Use \s+ between every word: the row wraps mid-phrase
     # ("Tarif de l'énergie \ninjectée"). The cards until December 2025
     # call the row "Compensation pour l'énergie injectée".
-    indicative = _INJECTION_ROW_RE.search(text)
-    current = to_float(indicative.group(1)) / 100.0 if indicative else None
+    indicative = _feed_in_row(text)
+    current = _signed_cents(indicative, "single")
 
     factor: float | None = None
     base: float | None = None
     formula: str | None = None
     month_indexed = False
     monthly: re.Match[str] | None = None
+    index: float | None = None
     if kind == "dynamic":
         pair = _belpex_h_pair(text, _DYNAMIC_INJECTION_BLOCK_RE)
         if pair is not None:
-            factor_pdf, base_pdf_cents, formula = pair
+            factor_pdf, base_pdf_cents, row = pair
             # Residential injection is VAT-exempt in Belgium.
-            factor = factor_pdf * 10.0
-            base = base_pdf_cents / 100.0
+            hourly = (factor_pdf * 10.0, base_pdf_cents / 100.0)
+            # Kept where it gives back the estimate the card prints at the
+            # Belpex H it expects, and dropped as one that does not read.
+            if _gives_printed(
+                _signed_cents(_INJECTION_ESTIMATE_RE.search(text), "estimate"),
+                hourly,
+                _expected_index(text, _DYNAMIC_INJECTION_BLOCK_RE),
+            ):
+                (factor, base), formula = hourly, row
     else:
         # A non-dynamic card indexes the credit on the delivery month and says
         # the printed figure is not it: "Votre tarif sera indexe tous les mois.
@@ -597,14 +528,23 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         if monthly is not None:
             # c/kWh per EUR/MWh of index, and the block is HTVA with the card
             # noting "La TVA s'eleve a 0%", so nothing is grossed.
-            factor = to_float(monthly.group("factor")) * 10.0
-            base = (
+            indexed = (
+                to_float(monthly.group("factor")) * 10.0,
                 parse_sign(monthly.group("sign"))
                 * to_float(monthly.group("base"))
-                / 100.0
+                / 100.0,
             )
-            formula = " ".join(monthly.group(1).split())
-            month_indexed = True
+            # The printed figure is the formula at the index the block names,
+            # of the month or the quarter before. A formula that does not give
+            # it back there is dropped, as one that does not read.
+            quarterly = monthly.group("cadence") == "trimestres"
+            index = _named_index(text, "Belpex", quarterly=quarterly)
+            if _gives_printed(current, indexed, index):
+                factor, base = indexed
+                formula = " ".join(monthly.group(1).split())
+                month_indexed = True
+            else:
+                monthly = None
 
     if current is None and factor is None:
         # Both Luminus card families always publish injection: the
@@ -622,11 +562,14 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     )
     if kind not in ("fixed", "variable") or indicative is None:
         return leg
-    return _with_registers(leg, indicative, monthly)
+    return _with_registers(leg, indicative, monthly, index)
 
 
 def _with_registers(
-    leg: InjectionRates, row: re.Match[str], block: re.Match[str] | None
+    leg: InjectionRates,
+    row: re.Match[str],
+    block: re.Match[str] | None,
+    index: float | None,
 ) -> InjectionRates:
     """``leg`` with a bi-hourly meter's day and night credit, where the card
     prices them apart from the single register.
@@ -641,11 +584,15 @@ def _with_registers(
     own formula where the card indexes the credit, as the social tariff's
     cards are read; taken as one rate, a bi-hourly meter would be credited
     the single register's figure at every hour.
+
+    Each register's formula gives back its own figure at ``index``, the one
+    the block names, as the single register's does, or the card is refused
+    as one missing it.
     """
-    if row.group(2) is None:
+    if row.group("day") is None:
         return leg
-    day = to_float(row.group(2)) / 100.0
-    night = to_float(row.group(3)) / 100.0
+    day = _signed_cents(row, "day")
+    night = _signed_cents(row, "night")
     if day == leg.current and night == leg.current:
         return leg
     leg = replace(leg, peak=day, offpeak=night, bi_hourly=True)
@@ -654,6 +601,14 @@ def _with_registers(
     pairs = _formula_pairs(block.group(0), _ENERGY_BANDS, _band_formula_re, 1.0)
     if "peak" not in pairs or "offpeak" not in pairs:
         raise ExtractorError("Luminus: a feed-in register's formula is missing")
+    if not (
+        _gives_printed(day, pairs["peak"], index)
+        and _gives_printed(night, pairs["offpeak"], index)
+    ):
+        raise ExtractorError(
+            "Luminus: a feed-in register's formula does not give the rate its "
+            "card prints at the index it names"
+        )
     return replace(
         leg,
         factor_peak=pairs["peak"][0],
@@ -663,74 +618,11 @@ def _with_registers(
     )
 
 
-# Luminus runs occasional new-customer campaigns and prints them in one
-# regular sentence:
-#
-#   "(***) En tant que nouveau client, vous beneficiez d'une remise de 33% sur
-#    les couts energetiques, non-valable sur un compteur exclusif nuit, sur
-#    votre consommation annuel en heures pleines et creuses pendant 12 mois
-#    pour la conclusion d'un contrat Luminus Comfy Electricite en septembre
-#    2026."
-#
-# followed by how it is paid: "repartie au pro rata sur vos prochains
-# decomptes" for a percentage, or "accordee 12 mois apres la date de debut via
-# un cashback" for a volume.
-#
-# These are SIGNING-MONTH offers, which is what "pour la conclusion d'un
-# contrat ... en septembre 2026" says, so an entry is credited off the card of
-# the month it SIGNED, which `signing_month_snapshot` already resolves. Across
-# the nine archived months of 2026 exactly one carried a campaign, on six
-# contracts, so the normal answer here is no promo at all.
-# Both apostrophes, because the cards print both. The April Comfy card uses a
-# straight one in this sentence and a curly one elsewhere, and a plain string
-# search then bound the gate to whichever occurrence came first in the file
-# rather than to the campaign's own: the scope ran from the first anchor to a
-# gate 11.000 characters later, which is the whole card, pulling both standing
-# loyalty clauses and their exclusive-night exclusion inside it. A card
-# printing this sentence curly read as no campaign at all.
-#
-# The October 2026 ComfyFlex card drops the signing phrase and names the
-# product in the anchor instead: "En tant que nouveau client pour Luminus
-# ComfyFlex Electricite, vous beneficiez pour chaque kWh consomme d'une remise
-# de 27 % ... pendant 12 mois". That is as plainly a new-customer offer, so the
-# product name is a gate of its own. The loyalty clauses open "Si vous etes
-# client ... depuis au moins" and match neither form.
-_PROMO_GATE_RE = re.compile(
-    r"pour la conclusion d['\u2019]un contrat|nouveau\s+client\s+pour\s+Luminus\b",
-    re.IGNORECASE,
-)
-_PROMO_ANCHOR_RE = re.compile(r"En\s+tant\s+que\s+nouveau\s+client", re.IGNORECASE)
-# The longest span read as a campaign sentence (``_extract_promo``).
-_PROMO_SPAN_MAX = 2_000
-_PROMO_PCT_RE = re.compile(r"remise\s+de\s+(\d+(?:[,.]\d+)?)\s*%", re.IGNORECASE)
-# A campaign stated as a flat amount: April's Comfy card prints "une remise de
-# 60,00 EUR TVA incl." in its own sentence, under the same signing gate as the
-# percentage one lower down. TVA incl. on a residential card is the basis the
-# credit is already carried on, so nothing is scaled here.
-#
-# Up to four digits and an optional decimal comma, which is every amount these
-# cards print. A thousands separator is deliberately NOT accepted: "1.250,00"
-# matches nothing and the campaign is left unread, where a reader that took it
-# would have to guess whether the dot separates thousands or decimals and bill
-# 1,25 EUR or 125.000 when it guessed wrong. An unread campaign is a card to
-# look at; an invented figure is a wrong bill.
-_PROMO_EUR_RE = re.compile(r"remise\s+de\s+(\d{1,4}(?:,\d{1,2})?)\s*EUR", re.IGNORECASE)
-# The volume carries a thousands separator on the cards that print one:
-# May 2026 Comfy says "une remise de 1.000 kWh", where a plain decimal
-# read gives 1,0 kWh. tier_bound_kwh is the shared reader for exactly
-# that, written for the excise tranche bounds ("20.000 kWh").
-_PROMO_KWH_RE = re.compile(r"remise\s+de\s+(\d[\d\s.,]*\d|\d)\s*kWh", re.IGNORECASE)
-# "Ce montant est calcule en multipliant par 675 kWh le prix unitaire en
-# EUR/kWh TVAC de l'estimation annuelle de l'energie fournie applicable aux
-# compteurs mono-horaires" (October 2026 MaxxFlex and ComfyFlex+). MaxxFix
-# says "des couts energetiques" there, its printed rate, and earlier cards
-# "du cout de l'energie".
-_PROMO_VALUED_AT_ESTIMATE_RE = re.compile(
-    r"Ce\s+montant\s+est\s+calcul[ée][^.]*?estimation\s+annuelle\s+de\s+l['\u2019]",
-    re.IGNORECASE,
-)
-# Its mono-hourly figure, the first on the row; the label wraps and a footnote
-# marker may sit against the closing parenthesis ("(c€/kWh)3 20,70 24,11").
+# The mono-hourly figure of the card's annual estimate, the first on the row:
+# the price a campaign's volume is valued at (``_luminus_promo.py``), and on
+# a dynamic card the one its formula gives at the Belpex H it expects. The
+# label wraps and a footnote marker may sit against the closing parenthesis
+# ("(c€/kWh)3 20,70 24,11").
 # The cards reissued on 29 October 2026 head the row "Estimation annuelle
 # du prix de l'énergie" and label it as the energy row above it is.
 _ANNUAL_ESTIMATE_RE = re.compile(
@@ -741,16 +633,8 @@ _ANNUAL_ESTIMATE_RE = re.compile(
     r"|\s*\+\s*énergie\s+verte)\s+)?"
     r"(\d+,\d+)"
 )
-# "pour la conclusion d'un contrat Luminus MaxxFix Electricite en octobre
-# 2026", and the card's own "(octobre 2026)" label.
-_PROMO_MONTH_RE = re.compile(r"\ben\s+([^\W\d_]+)\s+(20\d{2})\b")
+# The card's own "(octobre 2026)" label, read for the month it prices.
 _LABEL_MONTH_RE = re.compile(r"([^\W\d_]+)\s+(20\d{2})")
-_PROMO_NIGHT_RE = re.compile(
-    r"non[-\s]valable\s+sur\s+un\s+compteur\s+exclusif\s+nuit", re.IGNORECASE
-)
-_PROMO_CASHBACK_RE = re.compile(
-    r"accord[ée]e?\s+(\d+)\s+mois\s+apr[eè]s[^.]{0,60}?cashback", re.IGNORECASE
-)
 # A dynamic card's two formula blocks, energy and feed-in, each from its
 # heading to the "Les montants mentionnes sont arrondis" sentence closing it.
 # The rows inside are one per meter register, in three spellings: since
@@ -771,18 +655,37 @@ _DYNAMIC_INJECTION_BLOCK_RE = re.compile(
     r"(?:(?!Formule\s+tarifaire|Les\s+montants).)*",
     re.S,
 )
+# A dynamic card's feed-in estimate, "Estimation annuelle du tarif de l'énergie
+# injectée (c€/kWh)3 13,56", "de la compensation de" until December 2025.
+_INJECTION_ESTIMATE_RE = re.compile(
+    r"Estimation\s+annuelle\s+(?:du\s+tarif|de\s+la\s+compensation)\s+de\s+"
+    r"l['\u2019]énergie\s+injectée\s*\(c€/kWh\)\d*\s+" + _signed("estimate")
+)
 # The feed-in row, one figure per meter register: single, then a bi-hourly
 # meter's day and night, all on the one line ("(c€/kWh)2 6,71 8,64 3,75 -").
-# The gap to the figures stops at the next label, whose own gap reaches the
-# same figures: run on to them from each, a run of labels with no figure
-# after them was read to the end again from every one.
+# The label is skipped up to the first digit or sign, so a sign ahead of the
+# single figure is kept with it. The gap to the figures stops at the next
+# label, whose own gap reaches the same figures: run on to them from each, a
+# run of labels with no figure after them was read to the end again from
+# every one.
 _INJECTION_ROW_LABEL = (
     r"(?:Tarif\s+de|Compensation\s+pour)\s+l[\"'’©]énergie\s+injectée"
 )
 _INJECTION_ROW_RE = re.compile(
-    rf"{_INJECTION_ROW_LABEL}(?:(?!{_INJECTION_ROW_LABEL})[^0-9-])*"
-    rf"(?:\d+\s+)?({_NUM})(?:[ \t]+({_NUM})[ \t]+({_NUM}))?"
+    rf"{_INJECTION_ROW_LABEL}(?:(?!{_INJECTION_ROW_LABEL})[^0-9{SIGN_CHARS}])*"
+    rf"(?:\d+\s+)?{_signed('single')}"
+    rf"(?:[ \t]+{_signed('day')}[ \t]+{_signed('night')})?"
 )
+# The unit the feed-in row's label states, "Tarif de l'énergie injectée
+# (c€/kWh)", "Compensation pour l'énergie injectée (c€/kWh)" until December
+# 2025, the only unit any card on file prints there, ending 2 characters
+# ahead of the single figure after the footnote marker. The label starts 48
+# characters ahead at most, and no other statement of it lies within reach.
+# A card stating the row in another unit, or in none, prints a figure read
+# ten or a hundred times out, which the formula check passes when the
+# formula is restated with it, and is refused.
+_INJECTION_UNIT_RE = re.compile(rf"{_INJECTION_ROW_LABEL}\s*\(([^()]{{0,20}})\)")
+_INJECTION_UNIT_REACH = 100
 # One register's row with its label, which runs back to the block's colon or
 # to the row before it: "Injection (Compteur mono-horaire et bi-horaire) =
 # 0,1019 x Belpex H - 1,2737". Every place in a label reaches the same "=",
@@ -816,7 +719,8 @@ _INJECTION_INDEXED_RE = re.compile(
     rf"=\s*((?P<factor>{_NUM})\s*x\s*Belpex\s*"
     rf"(?P<sign>[{SIGN_CHARS}])\s*(?P<base>{_NUM}))"
     r"(?:(?!Formule\s+tarifaire|Votre\s+tarif\s+sera\s+indexé).){0,400}?"
-    r"Votre\s+tarif\s+sera\s+indexé\s+(?:chaque|tous\s+les)\s+(?:mois|trimestres)\b",
+    r"Votre\s+tarif\s+sera\s+indexé\s+(?:chaque|tous\s+les)\s+"
+    r"(?P<cadence>mois|trimestres)\b",
     re.S,
 )
 # MaxxFlex indexes the COMMODITY on the delivery month too: "Le parametre

@@ -376,6 +376,7 @@ def test_a_crafted_card_is_read_in_time_linear_in_its_length(
     from custom_components.be_electricity_prices.providers import (
         _luminus_cards,
         _luminus_overlays,
+        _luminus_promo,
     )
 
     bands = (
@@ -393,7 +394,7 @@ def test_a_crafted_card_is_read_in_time_linear_in_its_length(
         "taxes": lambda text: _luminus_overlays._tax_block_values(text, "flanders"),
         "flanders": _luminus_overlays._extract_flanders_renewables,
         "wallonia": _luminus_overlays._extract_wallonia_renewables,
-        "promo": _luminus_cards._extract_promo,
+        "promo": _luminus_promo._extract_promo,
     }
     started = time.perf_counter()
     try:
@@ -1062,6 +1063,37 @@ def test_maxxflex_parses_as_variable() -> None:
     assert isinstance(snap.energy, VariableRates)
     assert snap.energy.current is not None
     assert set(snap.dsos) == {"aieg", "aiesh", "ores", "resa", "rew"}
+
+
+@pytest.mark.parametrize(
+    "crafted",
+    [
+        pytest.param(
+            "Tarif de l'énergie injectée (c€/kWh)" + " " * 100_000 + "x", id="row"
+        ),
+        pytest.param(
+            "Tarif de l'énergie injectée (c€/kWh)2" + " " * 100_000 + "x",
+            id="row after a footnote marker",
+        ),
+        pytest.param(
+            "Estimation annuelle du tarif de l'énergie injectée (c€/kWh)"
+            + " " * 100_000
+            + "x",
+            id="estimate",
+        ),
+    ],
+)
+def test_a_run_of_blanks_before_a_feed_in_figure_is_read_in_linear_time(
+    crafted: str,
+) -> None:
+    """A signed figure starts only at its sign or its first digit, so a run of
+    blanks ahead of where one is looked for is crossed once."""
+    from custom_components.be_electricity_prices.providers import _luminus_cards
+
+    started = time.perf_counter()
+    _luminus_cards._INJECTION_ROW_RE.search(crafted)
+    _luminus_cards._INJECTION_ESTIMATE_RE.search(crafted)
+    assert time.perf_counter() - started < 2.0
 
 
 def test_smartflex_parses_as_time_of_use() -> None:
@@ -2079,7 +2111,7 @@ def test_the_new_customer_campaign_is_read_off_the_card() -> None:
     2026." Worth 254,56 EUR on the September card at 3500 kWh, and nothing was
     read at all.
     """
-    from custom_components.be_electricity_prices.providers._luminus_cards import (
+    from custom_components.be_electricity_prices.providers._luminus_promo import (
         _extract_promo,
     )
 
@@ -2257,7 +2289,7 @@ def test_the_campaign_is_read_from_its_own_sentence_not_the_card() -> None:
     card: it is the real structure with the loyalty clause worded the way the
     campaign is, which is exactly the case the scope rule exists for.
     """
-    from custom_components.be_electricity_prices.providers._luminus_cards import (
+    from custom_components.be_electricity_prices.providers._luminus_promo import (
         _extract_promo,
     )
 
@@ -2289,7 +2321,7 @@ def test_the_signing_gate_is_read_whichever_apostrophe_the_card_prints() -> None
     anchor to a gate in a later sentence and swallowed the loyalty clauses the
     scope rule exists to keep out.
     """
-    from custom_components.be_electricity_prices.providers._luminus_cards import (
+    from custom_components.be_electricity_prices.providers._luminus_promo import (
         _extract_promo,
     )
 
@@ -2339,7 +2371,7 @@ def test_the_campaign_scope_is_one_sentence_on_a_card_carrying_two() -> None:
     """
     import re
 
-    from custom_components.be_electricity_prices.providers._luminus_cards import (
+    from custom_components.be_electricity_prices.providers._luminus_promo import (
         _extract_promo,
     )
 
@@ -2376,7 +2408,7 @@ def test_a_campaign_stated_only_in_euro_is_read() -> None:
     sentence with the conditions of another is what marked the 11% campaign as
     a cashback at the wait quoted after the flat one.
     """
-    from custom_components.be_electricity_prices.providers._luminus_cards import (
+    from custom_components.be_electricity_prices.providers._luminus_promo import (
         _extract_promo,
     )
 
@@ -2419,7 +2451,7 @@ def test_an_anchor_without_a_gate_cannot_borrow_the_next_sentence_s() -> None:
     Pairing each GATE with the LAST anchor before it cannot cross a sentence
     boundary, because the nearest anchor is the one the gate belongs to.
     """
-    from custom_components.be_electricity_prices.providers._luminus_cards import (
+    from custom_components.be_electricity_prices.providers._luminus_promo import (
         _extract_promo,
     )
 
@@ -2773,3 +2805,364 @@ async def test_a_closed_november_is_billed_on_its_own_card(
     assert len(asked) == 2
     assert "signing=2026-11" in asked[0]
     assert "productId=id-dynamic&date=2026-11&" in asked[1]
+
+
+def test_a_dynamic_formula_that_misses_its_estimate_is_refused() -> None:
+    """No formula block states the unit of its result, only "(HTVA)", so a
+    formula restated on another scale would read clean. The card prints what
+    its formula gives at the Belpex H it expects for the year ahead: "0,1019 x
+    Belpex H + 2,4591" at 110,75 EUR/MWh with 6% VAT is the 14,56 c/kWh beside
+    it. Read ten times over, the card is refused, as one whose formula does
+    not read is."""
+    text = fixture_text("luminus_dynamic_w.pdf")
+    energy = parse_snapshot("luminus_dynamic", text, "wallonia").energy
+    assert isinstance(energy, DynamicRates)
+    assert energy.factor == pytest.approx(1.08014)
+    assert energy.base == pytest.approx(0.02606646)
+    restated = text.replace(
+        "0,1019  x  Belpex H  +  2,4591", "1,0190  x  Belpex H  +  2,4591"
+    )
+    assert restated != text
+    with pytest.raises(ExtractorError, match="does not give the estimate"):
+        parse_snapshot("luminus_dynamic", restated, "wallonia")
+
+
+def test_a_dynamic_feed_in_formula_that_misses_its_estimate_is_dropped() -> None:
+    """The feed-in block prints its estimate the same way, 9,37 c/kWh for
+    "0,1019 x Belpex H - 1,2737". Read ten times over, the formula is dropped
+    as one that does not read, and a dynamic card, which prints no credit in
+    force beside it, is then refused."""
+    text = fixture_text("luminus_dynamic_w.pdf")
+    inj = parse_snapshot("luminus_dynamic", text, "wallonia").injection
+    assert inj is not None
+    assert inj.factor == pytest.approx(1.019)
+    assert inj.base == pytest.approx(-0.012737)
+    restated = text.replace("0,1019 x Belpex H - 1,2737", "1,0190 x Belpex H - 1,2737")
+    assert restated != text
+    with pytest.raises(ExtractorError, match="injection rate"):
+        parse_snapshot("luminus_dynamic", restated, "wallonia")
+
+
+def _printed_alone(leg: Any) -> Any:
+    """``leg`` as the card's printed rates alone give it, with no formula and
+    so no index to settle on."""
+    from dataclasses import fields
+
+    indexed = ("month_indexed", "quarter_indexed", "rlp_indexed", "rlp_blend")
+    return replace(
+        leg,
+        **{
+            f.name: f.default
+            for f in fields(leg)
+            if f.name.startswith("formula_") or f.name in indexed
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("contract", "fixture", "region", "old", "new"),
+    [
+        # MaxxFlex on the month's plain Belpex: "Compteur mono-horaire =
+        # 0,1096 x Belpex + 3,4516", the printed 14,41 at March's 92,61.
+        (
+            "luminus_maxxflex",
+            "luminus_maxxflex_w.pdf",
+            "wallonia",
+            "0,1096  x  Belpex  +  3,4516",
+            "1,0960  x  Belpex  +  3,4516",
+        ),
+        # SmartFlex, a formula per slot: "Prelevement Heures pleines = 0,1303
+        # x Belpex + 2,9139", the printed 20,95 at August's 129,32.
+        (
+            "luminus_smartflex",
+            "luminus_smartflex_w_oct.pdf",
+            "wallonia",
+            "0,1303  x  Belpex  + 2,9139",
+            "1,3030  x  Belpex  + 2,9139",
+        ),
+        # BasicFlex until October 2026 on the RLP-weighted Belpex: "0,1043 x
+        # Belpex RLP M + 1,4519", 19,72 at September's 164,42; its base this
+        # time.
+        (
+            "luminus_basicflex",
+            "luminus_basicflex_w_oct.pdf",
+            "wallonia",
+            "Belpex RLP M  +  1,4519",
+            "Belpex RLP M  +  14,5190",
+        ),
+        # ComfyFlex on the quarter: "0,1096 x Belpex + 0,0000 x Endex 1-0-3 +
+        # 4,2102", 15,58 at the first quarter's 95,75.
+        (
+            "luminus_comfyflex",
+            "luminus_comfyflex_v.pdf",
+            "flanders",
+            "0,1096  x  Belpex  +   0,0000",
+            "1,0960  x  Belpex  +   0,0000",
+        ),
+    ],
+    ids=["maxxflex", "smartflex", "basicflex", "comfyflex"],
+)
+def test_an_energy_formula_that_misses_its_printed_rate_is_dropped(
+    contract: str, fixture: str, region: str, old: str, new: str
+) -> None:
+    """The rates an indexed card prints are its formulas at the index it
+    names for the period before. Read ten times over, a formula is dropped,
+    as one that does not read, and the card bills its printed rates."""
+    text = fixture_text(fixture)
+    energy = parse_snapshot(contract, text, region).energy
+    assert isinstance(energy, (VariableRates, TimeOfUseRates))
+    assert energy != _printed_alone(energy)
+    restated = text.replace(old, new)
+    assert restated != text
+    assert parse_snapshot(contract, restated, region).energy == _printed_alone(energy)
+
+
+@pytest.mark.parametrize(
+    ("contract", "fixture", "region", "printed"),
+    [
+        # "Votre tarif sera indexe tous les mois": 3,81 at March's 92,61.
+        ("luminus_maxxflex", "luminus_maxxflex_w.pdf", "wallonia", 0.0381),
+        # "tous les trimestres": 3,96 at the first quarter's 95,75.
+        ("luminus_comfyflex", "luminus_comfyflex_v.pdf", "flanders", 0.0396),
+    ],
+    ids=["month", "quarter"],
+)
+def test_a_feed_in_formula_that_misses_its_printed_rate_is_dropped(
+    contract: str, fixture: str, region: str, printed: float
+) -> None:
+    """The feed-in figure is "0,0481 x Belpex - 0,6392" at the index the block
+    names, of the month or the quarter before. Read ten times over, the
+    formula is dropped, as one that does not read, and the printed figure
+    credits."""
+    text = fixture_text(fixture)
+    inj = parse_snapshot(contract, text, region).injection
+    assert inj is not None and inj.month_indexed
+    assert inj.factor == pytest.approx(0.481)
+    restated = text.replace("0,0481 x Belpex - 0,6392", "0,4810 x Belpex - 0,6392", 1)
+    assert restated != text
+    dropped = parse_snapshot(contract, restated, region).injection
+    assert dropped is not None
+    assert (dropped.factor, dropped.base, dropped.formula) == (None, None, None)
+    assert dropped.month_indexed is False
+    assert dropped.current == pytest.approx(printed)
+
+
+def test_a_feed_in_register_formula_that_misses_its_printed_rate_is_refused() -> None:
+    """Until June 2025 the registers are priced apart: "Jour (compteur de jour
+    et de nuit)) = 0,0794 x Belpex - 1,5900" is the 8,64 c/kWh beside it at
+    February's 128,75. Read ten times over, the card is refused, as one
+    missing that register's formula is."""
+    text = fixture_text("luminus_maxxfix_v_2025-03.pdf")
+    inj = parse_snapshot("luminus_maxxfix", text, "flanders").injection
+    assert inj is not None and inj.bi_hourly
+    assert inj.factor_peak == pytest.approx(0.794)
+    restated = text.replace("0,0794 x Belpex - 1,5900", "0,7940 x Belpex - 1,5900")
+    assert restated != text
+    with pytest.raises(ExtractorError, match="register's formula does not give"):
+        parse_snapshot("luminus_maxxfix", restated, "flanders")
+
+
+@pytest.mark.parametrize(
+    ("index", "printed", "credit"),
+    [
+        # 0,0481 x 23,70 - 1,1377 is 0,0023 c/kWh, printed 0,00.
+        ("23,70", "0,00", 0.0),
+        # 0,0481 x 16,49 - 1,1377 is -0,3445, printed -0,34 in each dash.
+        ("16,49", "-0,34", -0.0034),
+        ("16,49", "\u20130,34", -0.0034),
+        ("16,49", "\u22120,34", -0.0034),
+    ],
+    ids=["near-zero", "below-zero-hyphen", "below-zero-en-dash", "below-zero-minus"],
+)
+def test_a_feed_in_near_or_under_zero_keeps_its_formula(
+    index: str, printed: str, credit: float
+) -> None:
+    """BasicFlex's feed-in, "0,0481 x Belpex - 1,1377", is printed at the
+    Belpex its block names, and a month of low prices brings it near zero or
+    under it, where its rounding is more than any share of it. The card,
+    printing the credit with its sign, keeps its formula. A factor read ten
+    times over on it is still dropped, and so is the formula where a credit
+    under zero is printed as a positive figure."""
+    text = fixture_text("luminus_basicflex_w_oct.pdf")
+    low = text.replace("Belpex  =  156,41 €/MWh", f"Belpex  =  {index} €/MWh").replace(
+        "(c€/kWh)2 6,38 6,38 6,38 -", f"(c€/kWh)2 {printed} {printed} {printed} -"
+    )
+    assert low != text
+    inj = parse_snapshot("luminus_basicflex", low, "wallonia").injection
+    assert inj is not None and inj.month_indexed
+    assert inj.factor == pytest.approx(0.481)
+    assert inj.base == pytest.approx(-0.011377)
+    assert inj.current == pytest.approx(credit)
+    slipped = low.replace("0,0481 x Belpex - 1,1377", "0,4810 x Belpex - 1,1377", 1)
+    unsigned = low.replace(printed, printed[-4:])
+    for card in (slipped, unsigned) if credit < 0 else (slipped,):
+        dropped = parse_snapshot("luminus_basicflex", card, "wallonia").injection
+        assert dropped is not None
+        assert (dropped.factor, dropped.month_indexed) == (None, False)
+
+
+@pytest.mark.parametrize(
+    ("expected", "printed"),
+    [
+        # 0,1019 x 12,50 - 1,2737 is 0,00005 c/kWh, printed 0,00.
+        ("12,50", "0,00"),
+        # 0,1019 x 8,00 - 1,2737 is -0,4585, printed -0,46.
+        ("8,00", "\u22120,46"),
+    ],
+    ids=["near-zero", "below-zero"],
+)
+def test_a_dynamic_feed_in_estimate_near_or_under_zero_keeps_its_formula(
+    expected: str, printed: str
+) -> None:
+    """Dynamic's feed-in estimate is its formula at the Belpex H the card
+    expects for the year ahead. One near zero or under it, printed with its
+    sign, keeps the formula; a factor read ten times over on it is still
+    dropped, which leaves the card no credit to bill."""
+    text = fixture_text("luminus_dynamic_w.pdf")
+    low = text.replace("(104,50 €/MWh)", f"({expected} €/MWh)").replace(
+        "(c€/kWh)2 9,37", f"(c€/kWh)2 {printed}"
+    )
+    assert low != text
+    inj = parse_snapshot("luminus_dynamic", low, "wallonia").injection
+    assert inj is not None
+    assert inj.factor == pytest.approx(1.019)
+    assert inj.base == pytest.approx(-0.012737)
+    slipped = low.replace("0,1019 x Belpex H - 1,2737", "1,0190 x Belpex H - 1,2737")
+    with pytest.raises(ExtractorError, match="injection rate"):
+        parse_snapshot("luminus_dynamic", slipped, "wallonia")
+
+
+@pytest.mark.parametrize("dash", ["-", "–", "−"], ids=["hyphen", "en-dash", "minus"])
+def test_a_feed_in_row_with_no_footnote_marker_keeps_its_sign(dash: str) -> None:
+    """The feed-in row's label is skipped up to the first digit or sign. Every
+    card on file prints a footnote marker after it, "(c€/kWh)2 6,38", which
+    stops the skip whatever follows, but SmartFlex prints its transitional
+    section's row with none, "(c€/kWh) 3,81 3,81 3,81". A credit under zero
+    printed that way keeps its sign in every dash, and its formula with it:
+    a skip stopping only at a hyphen ran past the other two and read the
+    credit as a positive one."""
+    text = fixture_text("luminus_basicflex_w_oct.pdf")
+    low = text.replace("Belpex  =  156,41 €/MWh", "Belpex  =  16,49 €/MWh").replace(
+        "(c€/kWh)2 6,38 6,38 6,38 -",
+        f"(c€/kWh) {dash}0,34 {dash}0,34 {dash}0,34 -",
+    )
+    assert low != text
+    inj = parse_snapshot("luminus_basicflex", low, "wallonia").injection
+    assert inj is not None and inj.month_indexed
+    assert inj.factor == pytest.approx(0.481)
+    assert inj.current == pytest.approx(-0.0034)
+
+
+def _restated(text: str, edits: tuple[tuple[str, str], ...]) -> str:
+    """``text`` with every ``old`` of ``edits`` replaced, each one there."""
+    for old, new in edits:
+        assert old in text, old
+        text = text.replace(old, new)
+    return text
+
+
+# The November 2026 MaxxFlex card's legs restated in EUR/MWh whole: the
+# formulas, the printed figures and the unit beside them.
+_FEED_IN_IN_MWH = (
+    ("injectée (c€/kWh)3 6,88 6,88 6,88 -", "injectée (€/MWh)3 68,8 68,8 68,8 -"),
+    ("0,0481 x Belpex - 0,6392", "0,481 x Belpex - 6,392"),
+    ("0,0481 x Belpex - \n0,6392", "0,481 x Belpex - \n6,392"),
+)
+_ENERGY_IN_MWH = (
+    ("Prix de l’énergie (c€/kWh)2\nÉnergie", "Prix de l’énergie (€/MWh)2\nÉnergie"),
+    ("25,20 28,84 22,30 22,30", "252,0 288,4 223,0 223,0"),
+    ("0,1097  x  Belpex  +  6,6115", "1,097  x  Belpex  +  66,115"),
+    ("0,1291  x  Belpex  +  7,0137", "1,291  x  Belpex  +  70,137"),
+    ("0,0941  x  Belpex  +  6,3153", "0,941  x  Belpex  +  63,153"),
+)
+
+
+@pytest.mark.parametrize(
+    ("edits", "row"),
+    [(_FEED_IN_IN_MWH, "feed-in row"), (_ENERGY_IN_MWH, "energy row")],
+    ids=["feed-in", "energy"],
+)
+def test_a_leg_restated_with_its_printed_price_is_refused(
+    edits: tuple[tuple[str, str], ...], row: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A leg restated whole gives its printed price back, so the formula
+    check passes it, and ten times the credit or the energy cost would bill.
+    Only the unit its row states tells it apart, and the card is refused."""
+    from custom_components.be_electricity_prices.providers import _luminus_formulas
+
+    text = fixture_text("luminus_maxxflex_w_nov.pdf")
+    snap = parse_snapshot("luminus_maxxflex", text, "wallonia")
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.formula_factor == pytest.approx(1.16282)
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(0.0688)
+    assert snap.injection.factor == pytest.approx(0.481)
+    restated = _restated(text, edits)
+    with pytest.raises(ExtractorError, match=f"the {row} is stated in €/MWh"):
+        parse_snapshot("luminus_maxxflex", restated, "wallonia")
+    monkeypatch.setattr(_luminus_formulas, "stated_unit", lambda *_, **__: "c€/kWh")
+    passed = parse_snapshot("luminus_maxxflex", restated, "wallonia")
+    assert isinstance(passed.energy, VariableRates)
+    assert passed.injection is not None
+    if row == "energy row":
+        assert passed.energy.formula_factor == pytest.approx(11.6282)
+    else:
+        assert passed.injection.factor == pytest.approx(4.81)
+
+
+@pytest.mark.parametrize(
+    ("contract", "fixture", "region", "old", "new", "row"),
+    [
+        # The energy row's unit in its label, until October 2026.
+        (
+            "luminus_maxxfix",
+            "luminus_maxxfix_v_oct.pdf",
+            "flanders",
+            "Énergie fournie  (c€/kWh) 22,12",
+            "Énergie fournie  (€/MWh) 22,12",
+            "energy row is stated in €/MWh",
+        ),
+        # In the heading above it on the cards reissued on 29 October 2026,
+        # here an indexed card's.
+        (
+            "luminus_maxxflex",
+            "luminus_maxxflex_w_nov.pdf",
+            "wallonia",
+            "Prix de l’énergie (c€/kWh)2\nÉnergie",
+            "Prix de l’énergie (EUR/kWh)2\nÉnergie",
+            "energy row is stated in EUR/kWh",
+        ),
+        # The feed-in row's, and a row no longer stating one.
+        (
+            "luminus_maxxfix",
+            "luminus_maxxfix_v_oct.pdf",
+            "flanders",
+            "injectée (c€/kWh)2 6,88",
+            "injectée (€/kWh)2 6,88",
+            "feed-in row is stated in €/kWh",
+        ),
+        (
+            "luminus_maxxfix",
+            "luminus_maxxfix_v_oct.pdf",
+            "flanders",
+            "injectée (c€/kWh)2 6,88",
+            "injectée 2 6,88",
+            "feed-in row is stated in no unit",
+        ),
+    ],
+    ids=["energy-label", "energy-heading", "feed-in", "feed-in-none"],
+)
+def test_a_price_row_stated_in_another_unit_is_refused(
+    contract: str, fixture: str, region: str, old: str, new: str, row: str
+) -> None:
+    """A fixed card bills the figures it prints and has no formula to check
+    them against, so the unit its row states is all that says their scale:
+    "(c€/kWh)" on every card on file. Stated otherwise, a card is
+    refused."""
+    text = fixture_text(fixture)
+    snap = parse_snapshot(contract, text, region)
+    assert isinstance(snap.energy, (FixedRates, VariableRates))
+    assert snap.injection is not None
+    restated = _restated(text, ((old, new),))
+    with pytest.raises(ExtractorError, match=row):
+        parse_snapshot(contract, restated, region)

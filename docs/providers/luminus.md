@@ -260,6 +260,8 @@ Fields pulled and their helpers:
 | Yearly fixed fee | `_extract_yearly_fee` | `_luminus_cards.py` |
 | Exclusive-night fee | `_extract_excl_night_fee` | `_luminus_cards.py` |
 | VAT multiplier | `_vat_multiplier` | `_luminus_cards.py` |
+| Signing campaign (`welcome_credit_*`) | `_extract_promo` | `_luminus_promo.py` |
+| Formula and unit checks | `_gives_printed`, `_require_unit` | `_luminus_formulas.py` |
 | `valid_until` | `parse_valid_until` (shared) | `_validity.py` |
 
 ### Numeric token
@@ -279,6 +281,49 @@ EUR/kWh (`_luminus_cards.py`). Prices are 6% VAT inclusive as printed
 (`luminus.py`) meaning "already VAT-incl" per the `TaxOverlay` convention
 (`base.py`). The one exception is the Dynamic formula, printed `hors TVA`
 (ex-VAT), handled below.
+
+Every card on file, January 2024 to November 2026, states `c€/kWh` for its price
+rows and no other unit, and a card stating another, or none, is refused
+(`_require_unit`, `_luminus_formulas.py`). The energy row states it in its label,
+`Énergie fournie (c€/kWh)`, until October 2026, and in the heading above it,
+`Prix de l’énergie (c€/kWh)2`, on the cards reissued on 29 October 2026 and after,
+26 to 76 characters ahead of the first figure (`_require_energy_unit`). The
+feed-in row states it in its label, `Tarif de l'énergie injectée (c€/kWh)2`
+(`Compensation pour` until December 2025), 38 to 48 characters ahead of its figure
+(`_INJECTION_UNIT_RE`, `_luminus_cards.py`). A leg restated in another unit
+together with its formula still passes the formula check below, and a fixed card
+has no formula to check, so this is what refuses either. The annual estimates
+(`_ANNUAL_ESTIMATE_RE`, `_INJECTION_ESTIMATE_RE`) and the indices (`€/MWh`) are
+read only in the unit the cards print.
+
+### Formula check
+
+No formula block states the unit of its result, only `(HTVA)`, so a formula
+restated on another scale would read clean. What each card prints is the price
+its formula gives at an index it names, and a formula is kept only where it gives
+that price back within 2 %, or within 0,01 c/kWh where that is wider
+(`_gives_printed`, `_luminus_formulas.py`):
+
+| Formula | Price it must give | At the index |
+| --- | --- | --- |
+| Dynamic energy | the `Estimation annuelle` figure, VAT included like the grossed formula | `valeur attendue de Belpex H pour l'année à venir (173,23 €/MWh)`, the sentence after the block (`_expected_index`) |
+| Dynamic feed-in | `Estimation annuelle du tarif de l'énergie injectée` (`de la compensation de` until December 2025), VAT-exempt | the same sentence after the feed-in block |
+| MaxxFlex, SmartFlex slots, BasicFlex and ComfyFlex rows | each band's printed rate, VAT included like the grossed formula | `Index (HTVA) : Belpex = 174,19 €/MWh`, `Belpex RLP M` on BasicFlex until October 2026 and the quarter's on ComfyFlex (`published_indices`) |
+| Indexed feed-in, and each register's until June 2025 | each register's printed figure, VAT-exempt | the feed-in block's `Index (HTVA): Belpex`, of the month or the quarter its cadence names |
+
+On every archived card the energy formulas give their price back within 0,1 % and
+the feed-in ones within 0,5 %, the farthest a feed-in printed at 0,99 c/kWh; a
+factor read ten times off misses by 40 % or more. A feed-in crossing zero in a
+month of low prices is printed too close to it for any share, hence the floor,
+the hundredth the cards print to: they round the coefficients and the index they
+print as well, and near zero the four roundings come to 0,0072 c/kWh at most. The
+feed-in figures are read with any sign printed ahead of them, so a credit under
+zero is compared, and credited, as negative; the feed-in row's label is skipped
+up to the first digit or sign. A card no longer printing the price or the index
+is refused as well. A refusal does what a formula that does not read does: the
+Dynamic energy formula and a register's feed-in formula raise, and any other
+formula is dropped, so the printed rate bills (and Dynamic, which prints no
+feed-in rate in force, raises).
 
 ### Publication label
 
@@ -762,7 +807,7 @@ print a single value and offer no exclusive-night), so the standard fee applies.
   region names are taken whole and its values sit on their own lines, and the
   blanks around an optional line break are one run. Tried from every place of
   a long run of blanks, line breaks or labels, each read the rest of it again.
-  The new-customer campaign (`_extract_promo`) finds the anchor before each
+  The new-customer campaign (`_extract_promo`, `_luminus_promo.py`) finds the anchor before each
   gate by bisection, reads a span only up to `_PROMO_SPAN_MAX` (2,000)
   characters, where no campaign sentence on file runs past 290, and skips a
   span that ends where the one before it ended, a tail of it: a card of
@@ -822,6 +867,8 @@ fixtures above.
 | Energy rates wrong / missing | `_extract_energy` (`_luminus_cards.py`) | four-column vs three-column row, unit /100, TOU lookahead |
 | Dynamic factor/base off by ~1.06 or ~10 | dynamic branch (`_luminus_cards.py`) | VAT multiplier + mWh->kWh + c->EUR conversion |
 | Injection wrong or raising | `_extract_injection` (`_luminus_cards.py`) | applicable-vs-estimate `Tarif` capitalisation, VAT-exempt scaling |
+| A formula dropped, or the card refused, as missing its printed price | `_gives_printed` (`_luminus_formulas.py`) | a formula restated on another scale, or a card no longer naming the index its prices are worked out at |
+| Card refused as stated in another unit | `_require_unit` (`_luminus_formulas.py`) | the energy or feed-in row's `(c€/kWh)` respelled, moved past its reach, or gone |
 | A DSO row missing | `_FLANDERS_LABELS` / `_WALLONIA_LABELS` + row regexes (`_luminus_overlays.py`) | printed label renamed, or column count changed |
 | Dynamic data-management fee wrong (Flanders) | table column (`_extract_flanders_dsos`, `_luminus_overlays.py`) | four-column row width; Fluvius splitting the regimes again |
 | Tax value zeroed / block too short | `_tax_block_values` + `_extract_per_kwh_taxes` (`_luminus_overlays.py`) | colon anchor, value-run boundary, BTNR/BTR ordering |
