@@ -107,9 +107,16 @@ from ..const import (
     FLUVIUS_KEYS,
     REGION_FLANDERS,
 )
-from ._energyknights_overlays import _H, _NUM, _extract_dsos, _extract_taxes
+from ._energyknights_formulas import (
+    _FEED_IN_UNITS,
+    _INJECTION_RE,
+    _OFFTAKE_UNITS,
+    _ROW_CARD_LABELS,
+    _ROW_RES,
+    _misstated_unit,
+)
+from ._energyknights_overlays import _NUM, _extract_dsos, _extract_taxes
 from ._parse import (
-    SIGN_CHARS,
     parse_sign,
     require_every_area,
     running_month_short_of_an_area,
@@ -434,50 +441,6 @@ _FEE_RE = re.compile(
     rf"Abonnement\s*\((?:(?!Abonnement\s*\()[^)])*jaar\)\s+{_NUM}", re.IGNORECASE
 )
 
-# The four consumption rows and the injection row all print as
-#   <label> (c€/kWh) <indicative> <index> * <coefficient> <sign> <offset>
-# with the injection row carrying its VAT-exemption footnote between the unit
-# and the number. Each register is anchored on its own label rather than read
-# positionally: "Verbruik nacht" and "Verbruik exclusief nacht" are distinct
-# rows carrying distinct coefficients on this supplier's variable card, and
-# every card published before December 2025 printed all four identically, so
-# a parser that read one row and fanned it out would have passed every fixture
-# it was likely to be given.
-# (snapshot register, the card's own wording, the row anchor). The wording is
-# carried so a failure names the row a maintainer has to go and look at rather
-# than this module's internal register key.
-_ROW_LABELS: tuple[tuple[str, str, str], ...] = (
-    ("single", "enkelvoudig", r"Verbruik\s+enkelvoudig"),
-    ("peak", "dag", r"Verbruik\s+dag"),
-    ("offpeak", "nacht", r"Verbruik\s+nacht"),
-    ("exclusive_night", "exclusief nacht", r"Verbruik\s+exclusief\s+nacht"),
-)
-_FORMULA_TAIL = (
-    rf"\){_H}*(?:\(\d\){_H}*)?{_NUM}{_H}+"
-    rf"(Belpex[A-Za-z_0-9]*){_H}*\*{_H}*{_NUM}{_H}*([{SIGN_CHARS}]){_H}*{_NUM}"
-)
-
-
-def _formula_row(head: str) -> re.Pattern[str]:
-    """The row ``head`` opens, ``head`` running up to the opening bracket of
-    the row's unit, which is read as the green row's: up to the next ``head``
-    at most."""
-    return re.compile(rf"{head}(?:(?!{head})[^)])*{_FORMULA_TAIL}", re.IGNORECASE)
-
-
-_ROW_RES: dict[str, re.Pattern[str]] = {
-    slot: _formula_row(rf"{anchor}{_H}*\(c") for slot, _wording, anchor in _ROW_LABELS
-}
-_ROW_CARD_LABELS: dict[str, str] = {
-    slot: wording for slot, wording, _anchor in _ROW_LABELS
-}
-# 'optie "solar" (c€/kWh) (1) 5,85 Belpex_15 * 1 - 12'. The quotes are
-# straight on every card seen, but a renderer that curls them would otherwise
-# take the whole injection leg offline. Each quote and the blanks beside it
-# are one optional piece: spelt as runs of blanks either side of an optional
-# quote, a run of blanks was split between the two in every way.
-_INJECTION_RE = _formula_row(rf"optie\s*(?:[\"“”]\s*)?solar\s*(?:[\"“”]{_H}*)?\(c")
-
 
 # ---- public entry points -----------------------------------------------------
 
@@ -709,6 +672,7 @@ def _extract_rows(
     """
     out: dict[str, tuple[float, float, float]] = {}
     missing: list[str] = []
+    misstated: dict[str, str] = {}
     for slot, pattern in _ROW_RES.items():
         m = pattern.search(text)
         if m is None:
@@ -721,6 +685,12 @@ def _extract_rows(
                 f"{_ROW_CARD_LABELS[slot]} row is indexed on {index!r}, "
                 f"expected {contract.index!r}"
             )
+        # Left out like a row that does not read, so refused below only
+        # where the row is mandatory.
+        wrong = _misstated_unit(text, m, _OFFTAKE_UNITS)
+        if wrong is not None:
+            misstated[_ROW_CARD_LABELS[slot]] = wrong
+            continue
         out[slot] = (
             to_float(m.group(1)) / 100.0,
             to_float(m.group(3)),
@@ -747,6 +717,12 @@ def _extract_rows(
             f"Energy Knights {contract.contract_id}: could not parse the "
             f"{', '.join(absent)} consumption row(s)"
         )
+    for label in required:
+        if label in misstated:
+            raise ExtractorError(
+                f"Energy Knights {contract.contract_id}: the {label} "
+                f"formula's {misstated[label]}"
+            )
     return out
 
 
@@ -871,6 +847,11 @@ def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates:
         raise ExtractorError(
             f"Energy Knights {contract.contract_id}: injection is indexed on "
             f"{index!r}, expected {contract.credit_index!r}"
+        )
+    wrong = _misstated_unit(text, m, _FEED_IN_UNITS)
+    if wrong is not None:
+        raise ExtractorError(
+            f"Energy Knights {contract.contract_id}: the solar formula's {wrong}"
         )
     coefficient = to_float(m.group(3))
     offset = parse_sign(m.group(4)) * to_float(m.group(5))

@@ -555,6 +555,83 @@ def test_a_row_cannot_take_another_row_formula() -> None:
         parse_snapshot(_AGILIOR, text, "test://ek-split")
 
 
+def test_consumption_formulas_in_another_unit_are_refused() -> None:
+    """Every card since January 2025 states "(*)Tariefformule in EUR/MWh excl
+    BTW" beside the formula column and works its indicatives out at a VREG
+    price in €/MWh. Restated in c€/kWh the formulas would parse clean with
+    every offset ten times too small, as OCTA+'s did in November 2026, so a
+    card stating anything else, or nothing, is refused."""
+    energy = _essentia().energy
+    assert isinstance(energy, SpotMonthlyRates)
+    assert energy.factor == pytest.approx(1.03 * _VAT)
+    assert energy.base == pytest.approx(7 / 1000 * _VAT)
+    for statement, restated, refusal in (
+        ("in EUR/MWh excl", "in c€/kWh excl", "unit is 'c€/kWh', expected 'EUR/MWh'"),
+        ("in EUR/MWh excl", "in EUR/kWh excl", "unit is 'EUR/kWh'"),
+        ("(*)Tariefformule in EUR/MWh excl BTW. ", "", "unit is None"),
+        (
+            "127,50\n€/MWh)",
+            "12,750\nc€/kWh)",
+            "index unit is 'c€/kWh', expected '€/MWh'",
+        ),
+    ):
+        text = _essentia_text().replace(statement, restated)
+        assert text != _essentia_text()
+        with pytest.raises(ExtractorError, match=f"enkelvoudig formula's {refusal}"):
+            parse_snapshot(_ESSENTIA, text, "test://ek-restated")
+    # A dynamic card reads its mono formula under the same statement.
+    text = _agilior_text().replace("in EUR/MWh excl", "in c€/kWh excl")
+    with pytest.raises(ExtractorError, match="enkelvoudig formula's unit is 'c€/kWh'"):
+        parse_snapshot(_AGILIOR, text, "test://ek-restated")
+
+
+def test_a_misstated_row_goes_the_way_of_one_that_does_not_read() -> None:
+    """Refused where the row is billed, left out where it is not: a second
+    statement under the mono row's own is the one the three rows below it
+    read, and only Essentia bills them."""
+    from custom_components.be_electricity_prices.providers.energyknights import (
+        _CONTRACTS_BY_ID,
+        _extract_rows,
+    )
+
+    assert set(_extract_rows(_agilior_text(), _CONTRACTS_BY_ID[_AGILIOR])) == {
+        "single",
+        "peak",
+        "offpeak",
+        "exclusive_night",
+    }
+    restated = "excl BTW. Prijs\nTariefformule in c€/kWh"
+    agilior = _agilior_text().replace("excl BTW. Prijs", restated)
+    assert set(_extract_rows(agilior, _CONTRACTS_BY_ID[_AGILIOR])) == {"single"}
+    essentia = _essentia_text().replace("excl BTW. Prijs", restated)
+    with pytest.raises(ExtractorError, match="dag formula's unit is 'c€/kWh'"):
+        _extract_rows(essentia, _CONTRACTS_BY_ID[_ESSENTIA])
+
+
+def test_a_solar_formula_in_another_unit_is_refused() -> None:
+    """The solar row reads the last column statement above it and the VREG
+    feed-in price under it, "(2026-08 = 70,54 €/MWh)"; a card stating either
+    in another unit is refused rather than credited ten times out."""
+    injection = _agilior().injection
+    assert injection is not None
+    assert injection.factor == pytest.approx(1.0)
+    assert injection.base == pytest.approx(-12 / 1000)
+    row = 'optie "solar" (c€/kWh)'
+    for statement, restated, refusal in (
+        (
+            row,
+            f"Tariefformule in c€/kWh\n{row}",
+            "unit is 'c€/kWh', expected 'EUR/MWh'",
+        ),
+        ("70,54 €/MWh)", "7,054 c€/kWh)", "index unit is 'c€/kWh', expected '€/MWh'"),
+        ("70,54 €/MWh)", "70,54)", "index unit is None"),
+    ):
+        text = _agilior_text().replace(statement, restated)
+        assert text != _agilior_text()
+        with pytest.raises(ExtractorError, match=f"solar formula's {refusal}"):
+            parse_snapshot(_AGILIOR, text, "test://ek-restated")
+
+
 def test_the_standing_charge_is_not_the_coin_rebate() -> None:
     """Both rows print in EUR/jaar, and on the August card both read 25,00.
 
@@ -1177,6 +1254,14 @@ def _ek() -> Any:
     return energyknights
 
 
+def _formulas() -> Any:
+    from custom_components.be_electricity_prices.providers import (
+        _energyknights_formulas,
+    )
+
+    return _energyknights_formulas
+
+
 def _overlays() -> Any:
     from custom_components.be_electricity_prices.providers import (
         _energyknights_overlays,
@@ -1191,7 +1276,9 @@ def _overlays() -> Any:
 # product after it, tax headers with no row under them, and network labels
 # with no figures. About 100,000 characters each, a million for the labels
 # that each cost less, and 50,000 for the line of "Met", where each still
-# reads up to the longest name the pattern allows.
+# reads up to the longest name the pattern allows. A VREG price whose figure
+# runs on with no unit after it was split between the figure and the unit in
+# every way.
 @pytest.mark.parametrize(
     "read",
     [
@@ -1222,6 +1309,12 @@ def _overlays() -> Any:
         pytest.param(
             lambda: _ek()._INJECTION_RE.search("optie solar (c" * 70_000),
             id="injection labels",
+        ),
+        pytest.param(
+            lambda: _formulas()._OFFTAKE_INDEX_RE.search(
+                "voor afname (2026-11 = " + "1" * 100_000
+            ),
+            id="index price figure",
         ),
         pytest.param(
             lambda: _overlays()._CONTRIB_RE.search("Energiebijdrage (c)" * 50_000),

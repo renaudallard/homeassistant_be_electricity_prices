@@ -2,7 +2,8 @@
 
 This document is the maintenance reference for the Energy Knights extractor
 (`providers/energyknights.py`, with its DSO and tax readers in
-`providers/_energyknights_overlays.py`). It explains how the extractor addresses Energy
+`providers/_energyknights_overlays.py` and its formula rows and their units in
+`providers/_energyknights_formulas.py`). It explains how the extractor addresses Energy
 Knights' monthly tariff cards, how the energy / injection / tax / DSO fields are
 parsed for each supported product, and the land mines a future maintainer
 must know when Energy Knights changes its cards. The test module
@@ -190,6 +191,22 @@ are each one optional piece with the blanks beside them. A card of labels with n
 bracket, or a run of blanks around `solar`, costs its length: before, the first was read
 to its end again from each label and the second split between runs of blanks in every
 way (`test_a_crafted_card_is_read_in_time_linear_in_its_length`).
+
+### The units are read off the card
+
+The conversions above hold only for the units the card states, so `_extract_rows` and
+`_extract_injection` check them before taking a number (`_misstated_unit`,
+`_energyknights_formulas.py`). The unit of each formula is `(*)Tariefformule in EUR/MWh
+excl BTW`, printed once beside the energy rows. The unit of the index its coefficient
+multiplies is that of the VREG price the indicatives are worked out at: `jaarprijs voor
+afname. (2026-11 = 180,03 €/MWh)` among the consumption rows and `voor teruglevering.
+(2026-11 = 93,78 €/MWh)` under the solar one. Every card on file, January 2025 to November
+2026, spells them `EUR/MWh` and `€/MWh`, and nothing else is accepted. A formula stated in
+another unit, or in none, goes the way of a row that does not read: the card is refused,
+naming the unit found and the one expected, except that a dynamic card leaves out a dag,
+nacht or exclusief nacht row, since it bills its mono formula alone. Restated in c€/kWh,
+as OCTA+ restated its own in November 2026, the formulas would otherwise parse clean with
+every offset ten times too small.
 
 ### The double rounding
 
