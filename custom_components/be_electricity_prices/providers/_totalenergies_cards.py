@@ -32,11 +32,9 @@ figures: the formulas and the index each billed figure solves to, the
 consumption row and the indicative block, the green contribution a card
 folds into its prices, the yearly fee, the feed-in leg, the publication month
 and the Walloon connection fee. The grid and levy overlays live in
-``_totalenergies_overlays.py``; ``totalenergies.py`` keeps the registry, the
-URLs, the fetch and ``parse_snapshot``, which calls into both.
-
-No behaviour change: every function here is byte-identical to the one it
-replaced.
+``_totalenergies_overlays.py``, the units each formula is read in in
+``_totalenergies_formulas.py``; ``totalenergies.py`` keeps the registry, the
+URLs, the fetch and ``parse_snapshot``, which calls into these.
 """
 
 from __future__ import annotations
@@ -53,6 +51,12 @@ from ._rates import (
     TariffKind,
     VariableRates,
     fixed_or_variable_rates,
+)
+from ._totalenergies_formulas import (
+    consumption_refused,
+    injection_refused,
+    row_price,
+    unit_refused,
 )
 from ._totalenergies_overlays import (
     _extract_fee_and_renewables,
@@ -83,6 +87,9 @@ def _resolve_consumption_formula(text: str) -> tuple[float, float, float] | None
     the same line (``0.1034 * BELPEXH + 1.75``); Brussels splits the
     formula across two lines (``0.1034 * BELPEXH +`` then ``3.85`` after
     ``Formule tarifaire``).
+
+    Raises for a formula stated in units the cards have never used, or not
+    giving the price the card prints for it (:func:`consumption_refused`).
     """
     first_match = _FACTOR_ONLY_RE.search(text)
     if first_match is None:
@@ -95,17 +102,24 @@ def _resolve_consumption_formula(text: str) -> tuple[float, float, float] | None
     # (which would be the next column's formula). The trailing
     # ``(?=\s|$)`` blocks the regex engine from backing off ``[\d.,]+``
     # to a shorter match (e.g. capturing ``0.103`` out of ``0.1034``).
+    # Failing that, the split-line base after "Formule tarifaire".
     tail_re = re.compile(
         re.escape(first_match.group(0)) + r"\s*([\d.,]+)(?=\s|$)(?!\s*\*\s*BELPEXH)"
     )
-    tail = tail_re.search(text)
-    if tail is not None:
-        return factor, sign, to_float(tail.group(1))
-
-    after_formule = _BASE_AFTER_FORMULE_RE.search(text)
-    if after_formule is None:
+    tail = tail_re.search(text) or _BASE_AFTER_FORMULE_RE.search(text)
+    if tail is None:
         return None
-    return factor, sign, to_float(after_formule.group(1))
+    base = to_float(tail.group(1))
+
+    vat = _vat_multiplier(text)
+    refused = consumption_refused(
+        text,
+        first_match.span(1),
+        (row_price(text, first_match.start()), factor * vat, sign * base * vat),
+    )
+    if refused is not None:
+        raise ExtractorError(f"TotalEnergies dynamic {refused}")
+    return factor, sign, base
 
 
 # Impact prints its energy rate once per CWaPE band, every other card once per
@@ -167,10 +181,17 @@ def _extract_energy(
     # expose. Prefer it; fall back to the table estimate only when absent.
     pairs = _consumption_month_formula(text) if kind == "variable" else None
     if kind == "variable":
+        # A formula in another unit is read as one the card does not print.
+        at = text.find("BELPEXM_RLP")
+        refused = None if pairs is None else unit_refused(text, (at, at))
+        if refused is not None:
+            pairs = None
         if pairs is None and cev_included(text) is not None:
             # Every card stating the contribution in its footnote prints the
             # formula too, and without it no figure can be checked below.
-            raise ExtractorError("TotalEnergies: variable formula not found")
+            raise ExtractorError(
+                f"TotalEnergies: variable {refused or 'formula not found'}"
+            )
         realized = _indicative_consumption(text, pairs)
         if realized is not None:
             # The realized row is that indicative, so it is what a keyless
@@ -184,6 +205,7 @@ def _extract_energy(
                     exclusive_night=realized[3],
                     yearly_fixed_fee=yearly_fee,
                 ),
+                pairs,
                 text,
             )
 
@@ -240,7 +262,7 @@ def _extract_energy(
         exclusive_night=excl_night,
         yearly_fixed_fee=yearly_fee,
     )
-    return _with_month_formula(rates, text)
+    return _with_month_formula(rates, pairs, text)
 
 
 # The variable cards index on BELPEXM_RLP over the DELIVERY month and print,
@@ -312,12 +334,16 @@ def _consumption_month_formula(text: str) -> list[tuple[float, float]] | None:
     return None
 
 
-def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
-    """Attach the delivery-month formula to a variable leg, if the card has one.
+def _with_month_formula(
+    rates: EnergyRates, pairs: list[tuple[float, float]] | None, text: str
+) -> EnergyRates:
+    """Attach the delivery-month formula ``pairs`` to a variable leg, if the
+    card has one.
 
     Returns ``rates`` untouched for any other shape, and for a layout
-    :func:`_consumption_month_formula` cannot read, which leaves the card
-    billing its printed row exactly as before.
+    :func:`_consumption_month_formula` cannot read or a formula refused for
+    its unit, ``pairs`` then being None, which leaves the card billing its
+    printed row exactly as before.
 
     A card printing ONE formula gets it on the single rate and nothing else.
     Impact is that card: it repeats the pair once per CWaPE band because its
@@ -327,10 +353,7 @@ def _with_month_formula(rates: EnergyRates, text: str) -> EnergyRates:
     on the September 2026 Wallonia set, so leaving it out kept one product of
     the range a month behind the rest.
     """
-    if not isinstance(rates, VariableRates):
-        return rates
-    pairs = _consumption_month_formula(text)
-    if pairs is None:
+    if not isinstance(rates, VariableRates) or pairs is None:
         return rates
     # Same conversion the dynamic branch above states, because it is the same
     # card printing the same kind of formula: the PDF yields c EUR/kWh HTVA
@@ -729,6 +752,13 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
             )
         f_pdf = to_float(match.group(1))
         b_cents = parse_sign(match.group(2)) * to_float(match.group(3))
+        refused = injection_refused(
+            text,
+            match.span(1),
+            (None if current is None else current * 100.0, f_pdf, b_cents),
+        )
+        if refused is not None:
+            raise ExtractorError(f"TotalEnergies dynamic injection {refused}")
         # Injection is VAT-exempt residential.
         factor = f_pdf * 10.0
         base = b_cents / 100.0
@@ -747,6 +777,10 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
             current = realized
         head = _INJECTION_HEADING_RE.search(text)
         match = _MONTH_FORMULA_RE.search(text, head.end()) if head else None
+        if match is not None and unit_refused(text, match.span(1)) is not None:
+            # Read as a formula the card does not print: the monthly figure
+            # stands, unindexed.
+            match = None
         if match is not None:
             # c/kWh per EUR/MWh of index, HTVA, and residential injection is
             # VAT-exempt, so neither coefficient is grossed.

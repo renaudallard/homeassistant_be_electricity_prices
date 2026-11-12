@@ -40,6 +40,9 @@ from custom_components.be_electricity_prices.providers import (
     _totalenergies_cards,
     totalenergies,
 )
+from custom_components.be_electricity_prices.providers import (
+    _totalenergies_formulas as formulas,
+)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     FixedRates,
@@ -55,6 +58,7 @@ from custom_components.be_electricity_prices.providers._totalenergies_overlays i
 )
 from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers.totalenergies import (
+    parse_injection_card,
     parse_snapshot,
 )
 from tests import fixture_text
@@ -2190,3 +2194,333 @@ def test_a_crafted_row_before_a_real_card_leaves_its_reading_alone() -> None:
     read = _totalenergies_cards._extract_energy(crafted + real, "fixed")
     assert time.perf_counter() - started < 2.0
     assert read == _totalenergies_cards._extract_energy(real, "fixed")
+
+
+def _dynamic(text: str) -> DynamicRates:
+    energy = parse_snapshot("totalenergies_mydynamic", text, "wallonia").energy
+    assert isinstance(energy, DynamicRates)
+    return energy
+
+
+@pytest.mark.parametrize(
+    ("fixture", "heading", "index", "restated", "factor"),
+    [
+        # Up to September 2026 the green contribution's own "(c€/kWh)" is
+        # printed between the heading and the formula.
+        (
+            "totalenergies_dynamic_w.pdf",
+            "fixe 0 (c€/kWh)",
+            "est de 110,75016 €/MWh",
+            "est de 11,075016 c€/kWh",
+            1.09604,
+        ),
+        # From October 2026 the fee's "(€/an)" is.
+        (
+            "totalenergies_mydynamic_w_2026-10.pdf",
+            "fixe 1 (c€/kWh)",
+            "est de 145,02 €/MWh",
+            "est de 14,502 c€/kWh",
+            1.09286,
+        ),
+    ],
+)
+def test_a_dynamic_formula_in_another_unit_is_refused(
+    fixture: str, heading: str, index: str, restated: str, factor: float
+) -> None:
+    """The row "0.1031 * BELPEXH + 5,40" is c€/kWh on a Belpex H in EUR/MWh
+    because its column is headed "Prix de l'énergie (c€/kWh)" and the
+    sentence under the table says the index "est de 145,02 €/MWh". Read on
+    that scale whatever the card says, a formula restated in EUR/MWh would
+    bill ten times its price, as OCTA+'s did in November 2026, so either unit
+    restated fails the card."""
+    text = fixture_text(fixture, layout=True)
+    assert _dynamic(text).factor == pytest.approx(factor)
+    assert text.count(heading) == 1
+    assert text.count(index) == 1
+    with pytest.raises(ExtractorError, match="formula in €/MWh, not c€/kWh"):
+        _dynamic(text.replace(heading, heading.replace("c€/kWh", "€/MWh")))
+    with pytest.raises(ExtractorError, match="index in c€/kWh, not €/MWh"):
+        _dynamic(text.replace(index, restated))
+
+
+@pytest.mark.parametrize(
+    "spaced",
+    [
+        "est de 145,02 € /MWh",
+        "est de 145,02 €/ MWh",
+        "est de 145,02€/MWh",
+        "est de € 145,02 /MWh",
+    ],
+)
+def test_the_belpex_estimate_is_read_however_it_is_spaced(spaced: str) -> None:
+    """The cards space the unit three ways, "est de 173,23 €/MWh", "est de
+    145,61€/MWh" and the Dutch "is € 173,23 /MWh", and a respacing is the same
+    unit: compared as printed, "€ /MWh" and "€/ MWh" failed a card that would
+    otherwise read."""
+    text = fixture_text("totalenergies_mydynamic_w_2026-10.pdf", layout=True)
+    kept = _dynamic(text)
+    assert text.count("est de 145,02 €/MWh") == 1
+    assert _dynamic(text.replace("est de 145,02 €/MWh", spaced)) == kept
+
+
+def test_a_dutch_feed_in_estimate_is_read_with_its_unit() -> None:
+    """The Dutch feed-in card says "bedraagt 122,20€/MWh"; stated in c€/kWh it
+    is refused like the French one."""
+    text = fixture_text(
+        "totalenergies_injection_mydynamic_v_2026-10_nl.pdf", layout=True
+    )
+    leg, _month = parse_injection_card("totalenergies_mydynamic", text, "flanders")
+    assert leg is not None
+    assert (leg.factor, leg.base) == pytest.approx((1.0, -0.013))
+    assert text.count("bedraagt 122,20€/MWh") == 1
+    with pytest.raises(ExtractorError, match="index in c€/kWh, not €/MWh"):
+        parse_injection_card(
+            "totalenergies_mydynamic",
+            text.replace("bedraagt 122,20€/MWh", "bedraagt 12,220 c€/kWh"),
+            "flanders",
+        )
+
+
+@pytest.mark.parametrize(
+    "restated",
+    [
+        # Restated in EUR/MWh with the heading left as it was.
+        "1.031 * BELPEXH + 34.1",
+        "1.031 * BELPEXH + 3.41",
+        "0.1031 * BELPEXH + 34.1",
+        "0.01031 * BELPEXH + 3.41",
+    ],
+)
+def test_a_dynamic_formula_restated_under_its_heading_is_refused(restated: str) -> None:
+    """The row prints the price the formula gives at the estimate the card
+    states: 19,37 c/kWh on the October 2026 Flemish card, (0,1031 x 145,02 +
+    3,41) x 1,06 to within 0,5%. A formula restated tenfold under its old
+    heading, which no unit check can see, misses that price by a fifth or
+    more, and fails the card."""
+    text = fixture_text("totalenergies_mydynamic_v_2026-10.pdf", layout=True)
+    energy = parse_snapshot("totalenergies_mydynamic", text, "flanders").energy
+    assert isinstance(energy, DynamicRates)
+    assert energy.factor == pytest.approx(0.1031 * 1.06 * 10)
+    assert text.count("0.1031 * BELPEXH + 3.41") == 3
+    with pytest.raises(
+        ExtractorError, match=r"formula gives .* not the 19\.37 printed"
+    ):
+        parse_snapshot(
+            "totalenergies_mydynamic",
+            text.replace("0.1031 * BELPEXH + 3.41", restated),
+            "flanders",
+        )
+
+
+def test_the_farthest_printed_price_still_reads() -> None:
+    """The October 2026 Walloon card prints 21,37 c/kWh where its formula at
+    the stated 145,02 EUR/MWh gives 21,57, 0,95% off, the widest gap of any
+    card from April to November 2026. The fixture misspells the month
+    ("ocotbre"), which leaves it unchecked; put right, as the archived copy of
+    the same card prints it, it is checked and still reads."""
+    text = fixture_text("totalenergies_mydynamic_w_2026-10.pdf", layout=True)
+    assert text.count("en ocotbre 2026") == 1
+    checked = text.replace("en ocotbre 2026", "en octobre 2026")
+    assert _dynamic(checked) == _dynamic(text)
+    with pytest.raises(ExtractorError, match="formula gives"):
+        _dynamic(checked.replace("0.1031 * BELPEXH + 5,40", "1.031 * BELPEXH + 54,0"))
+
+
+def test_an_estimate_of_another_month_checks_nothing() -> None:
+    """The Brussels card of April 2026 states March's estimate, "est de
+    79,14243 €/MWh en mars 2026", under prices worked out at April's: its
+    16,22 c/kWh is the formula at 110,75, the Walloon card's April figure. A
+    price recomputed at a month the card is not of fails a card that is right,
+    so it is not recomputed; the units are still read."""
+    text = fixture_text("totalenergies_dynamic_b.pdf", layout=True)
+    energy = parse_snapshot("totalenergies_mydynamic", text, "brussels").energy
+    assert isinstance(energy, DynamicRates)
+    assert energy.factor == pytest.approx(0.1034 * 1.06 * 10)
+    with pytest.raises(ExtractorError, match="index in c€/kWh"):
+        parse_snapshot(
+            "totalenergies_mydynamic",
+            text.replace("est de 79,14243 €/MWh", "est de 7,914243 c€/kWh"),
+            "brussels",
+        )
+
+
+def test_a_card_stating_no_estimate_reads_but_an_unreadable_one_does_not() -> None:
+    """The November 2026 card for Brussels, printed on myDrive's layout,
+    states no estimate at all, so a card without the sentence reads on its
+    heading alone. One that keeps the sentence but states the figure in a way
+    this does not read is refused rather than taken as that card."""
+    text = fixture_text("totalenergies_mydynamic_w_2026-10.pdf", layout=True)
+    kept = _dynamic(text)
+    start = text.index("La valeur estimée de l'indice Belpex H")
+    end = text.index("Toutefois", start)
+    assert _dynamic(text[:start] + text[end:]) == kept
+    with pytest.raises(ExtractorError, match="index in no stated unit"):
+        _dynamic(text.replace("est de 145,02 €/MWh", "est de 145,02 € par MWh"))
+
+
+def test_a_dynamic_feed_in_formula_in_another_unit_or_price_is_refused() -> None:
+    """The feed-in card's "0.1 * BELPEXH -1.3" is a row under "Prix de
+    l'énergie injection (c€/kWh)", on a Belpex H stated "est de 122,20€/MWh",
+    and prints 10,92 c/kWh, the formula at it. Either unit restated, or the
+    formula restated tenfold under them, fails the card as a missing formula
+    does."""
+    text = fixture_text("totalenergies_injection_mydynamic_w_2026-10.pdf", layout=True)
+    leg, _month = parse_injection_card("totalenergies_mydynamic", text, "wallonia")
+    assert leg is not None
+    assert (leg.factor, leg.base) == pytest.approx((1.0, -0.013))
+    for stated, restated, message in (
+        ("injection\n(c€/kWh)", "injection\n(€/MWh)", "formula in €/MWh"),
+        ("est de 122,20€/MWh", "est de 12,220c€/kWh", "index in c€/kWh"),
+        ("0.1 * BELPEXH -1.3", "1 * BELPEXH -13", r"formula gives 109\.20"),
+    ):
+        assert stated in text
+        with pytest.raises(ExtractorError, match=message):
+            parse_injection_card(
+                "totalenergies_mydynamic", text.replace(stated, restated), "wallonia"
+            )
+
+    # Up to September 2026 the product card printed both sentences, the
+    # feed-in one second, and only its own unit counts for the feed-in.
+    text = fixture_text("totalenergies_dynamic_w.pdf", layout=True)
+    with pytest.raises(ExtractorError, match="index in c€/kWh"):
+        _extract_injection(
+            text.replace("est de 104,4958 €/MWh", "est de 10,44958 c€/kWh"), "dynamic"
+        )
+    other = _extract_injection(
+        text.replace("est de 110,75016 €/MWh", "est de 11,075016 c€/kWh"), "dynamic"
+    )
+    assert other == _extract_injection(text, "dynamic")
+
+
+def test_a_variable_formula_in_another_unit_is_refused() -> None:
+    """The month formulas are read in c€/kWh off the same column heading. A
+    card whose footnote states the green contribution always prints them, so
+    one stated in another unit fails it the way a missing formula does, and
+    any other card bills its printed rates unindexed."""
+    text = fixture_text("totalenergies_electricite_variable_v_2026-10.pdf", layout=True)
+    energy = parse_snapshot(
+        "totalenergies_electricite_variable", text, "flanders"
+    ).energy
+    assert isinstance(energy, VariableRates)
+    assert energy.formula_factor == pytest.approx(1.16388)
+    assert text.count("fixe 1 (c€/kWh)") == 1
+    with pytest.raises(ExtractorError, match="variable formula in €/MWh, not c€/kWh"):
+        parse_snapshot(
+            "totalenergies_electricite_variable",
+            text.replace("fixe 1 (c€/kWh)", "fixe 1 (€/MWh)"),
+            "flanders",
+        )
+
+    text = fixture_text("totalenergies_mycomfort_v.pdf", layout=True)
+    kept = parse_snapshot("totalenergies_mycomfort", text, "flanders").energy
+    assert isinstance(kept, VariableRates)
+    assert kept.month_indexed
+    assert text.count("fixe 0 (c€/kWh)") == 1
+    energy = parse_snapshot(
+        "totalenergies_mycomfort",
+        text.replace("fixe 0 (c€/kWh)", "fixe 0 (€/MWh)"),
+        "flanders",
+    ).energy
+    assert isinstance(energy, VariableRates)
+    assert not energy.month_indexed
+    assert energy.formula_factor is None
+    assert energy.formula_base is None
+    assert (energy.current, energy.peak, energy.offpeak, energy.exclusive_night) == (
+        kept.current,
+        kept.peak,
+        kept.offpeak,
+        kept.exclusive_night,
+    )
+
+
+@pytest.mark.parametrize(
+    ("fixture", "heading"),
+    [
+        ("totalenergies_pro_procomfort_v_2026-11.pdf", "fixe 0 (c€/kWh)"),
+        ("totalenergies_pro_procomfort_v_2026-11_nl.pdf", "vergoeding 0 (c€/kWh)"),
+    ],
+)
+def test_a_professional_formula_in_another_unit_bills_its_printed_rates(
+    fixture: str, heading: str
+) -> None:
+    """The professional cards print the same table, "Prix de l'énergie" and
+    "Energieprijs" over "(c€/kWh)", and no footnote stating the contribution,
+    so a formula under another unit is dropped and the printed rates bill."""
+    text = fixture_text(fixture, layout=True)
+    kept = parse_snapshot("totalenergies_pro_procomfort", text, "flanders").energy
+    assert isinstance(kept, VariableRates)
+    assert kept.month_indexed
+    assert text.count(heading) == 1
+    energy = parse_snapshot(
+        "totalenergies_pro_procomfort",
+        text.replace(heading, heading.replace("c€/kWh", "€/MWh")),
+        "flanders",
+    ).energy
+    assert isinstance(energy, VariableRates)
+    assert not energy.month_indexed
+    assert energy.formula_factor is None
+    assert energy.current == kept.current
+
+
+@pytest.mark.parametrize(
+    ("fixture", "contract"),
+    [
+        ("totalenergies_injection_mycomfort_v_2026-10.pdf", "totalenergies_mycomfort"),
+        (
+            "totalenergies_injection_pro_procomfort_v_2026-11.pdf",
+            "totalenergies_pro_procomfort",
+        ),
+    ],
+)
+def test_a_monthly_feed_in_formula_in_another_unit_is_dropped(
+    fixture: str, contract: str
+) -> None:
+    """The monthly feed-in formula "0.02151 * BELPEXM -0.625" is read in
+    c€/kWh off its heading. Stated in another unit it is dropped, as a formula
+    the card does not print would be, and the month's printed figure is
+    credited as it stands."""
+    text = fixture_text(fixture, layout=True)
+    kept, _month = parse_injection_card(contract, text, "flanders")
+    assert kept is not None
+    assert kept.month_indexed
+    assert text.count("injection\n(c€/kWh)") == 1
+    leg, _month = parse_injection_card(
+        contract, text.replace("injection\n(c€/kWh)", "injection\n(€/MWh)"), "flanders"
+    )
+    assert leg is not None
+    assert leg.current == kept.current
+    assert leg.factor is None
+    assert leg.base is None
+    assert leg.formula is None
+    assert not leg.month_indexed
+
+
+# Each statement pattern on crafted text that a backtracking one would read
+# again from every position: heading words over and over, a heading and a run
+# of blanks, estimate words with digits or signs and no unit, titles with no
+# month under them.
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    "crafted",
+    [
+        "Prix de l’énergie " * 20_000,
+        "Prix de l’énergie" + " " * 100_000,
+        "énergie prélevée " * 20_000,
+        "énergie prélevée est de " + "1" * 100_000,
+        "énergie injectée est de 1 " + "€" * 100_000,
+        "énergie injectée est de 1 €/MWh en " * 10_000,
+        "TotalEnergies " * 20_000,
+        "TotalEnergies x" + " " * 100_000,
+    ],
+)
+def test_a_crafted_statement_is_read_in_time(crafted: str) -> None:
+    started = time.perf_counter()
+    for pattern in (
+        formulas._PRICE_UNIT_RE,
+        formulas._CONSUMPTION_ESTIMATE_RE,
+        formulas._INJECTION_ESTIMATE_RE,
+        formulas._CARD_MONTH_RE,
+    ):
+        pattern.search(crafted)
+    formulas.unit_refused(crafted, (len(crafted), len(crafted)))
+    assert time.perf_counter() - started < 2.0

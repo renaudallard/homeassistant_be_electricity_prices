@@ -2,7 +2,8 @@
 
 This document describes the `totalenergies` supplier extractor
 (`providers/totalenergies.py`, with the card readers in `_totalenergies_cards.py`,
-the regulated overlays in `_totalenergies_overlays.py` and the professional
+the units their formulas are read in in `_totalenergies_formulas.py`, the
+regulated overlays in `_totalenergies_overlays.py` and the professional
 cards' readers in `_totalenergies_pro.py`), the code that turns TotalEnergies
 Belgium's published residential and professional tariff cards into a
 `SupplierSnapshot`. It is written for
@@ -362,6 +363,36 @@ via `_vat_multiplier` (`_totalenergies_cards.py`), defaulting to 1.06 when absen
 The `yearly_fixed_fee` (~90 EUR/yr, illustrative) comes from
 `_extract_fee_and_renewables` (`_totalenergies_overlays.py`) and is shared across all
 kinds (`_totalenergies_cards.py`).
+
+### The units a formula is read in
+
+The scaling above holds because every formula is a row of the price table, whose
+column is headed "Prix de l'énergie (c€/kWh)", "Prix de l'énergie injection (c€/kWh)"
+on the feed-in cards, and "Energieprijs" or "Prijs voor energie-injectie" over the
+same "(c€/kWh)" on the Dutch editions and the professional cards. `unit_refused`
+(`_totalenergies_formulas.py`) reads the unit off the heading's words, since the unit
+printed nearest a formula is another column's: the fee's "(€/an)", and up to
+September 2026 the green contribution's "(c€/kWh)". Every card from April to
+November 2026 prints that spelling.
+
+myDynamic's cards also state the Belpex H their formulas multiply, "est de 173,23
+€/MWh en novembre 2026" ("is € 173,23 /MWh" on the Dutch product card, "est de
+145,61€/MWh" for the feed-in). That unit is read with the figure and the blanks
+folded out, so the three spacings read alike, and must be €/MWh. No card states its
+monthly index. Where the sentence is of the card's own month, the row's first figure
+must be the formula at that estimate, within 3% (`consumption_refused`,
+`injection_refused`): every card from April to November 2026 prints it within
+0,95%, so a formula restated tenfold under an unchanged heading is caught. The
+Brussels and Flemish cards of April 2026 state March's estimate under April's
+prices, which is why another month's sentence checks nothing. The November 2026
+Brussels card, on myDrive's layout, states no estimate; a card without the sentence
+reads on its heading alone, and one with a sentence this cannot read is refused.
+
+A formula failing any of these is refused the way a missing one is: myDynamic's
+raise, a variable card's raises where its footnote states the green contribution
+and otherwise bills its printed rates (every professional card does the latter),
+and a monthly feed-in formula is dropped, the month's printed figure being credited
+as it stands.
 
 ### The October 2026 fixed cards
 
@@ -834,7 +865,9 @@ Ordered by how likely a card change is to break them:
 4. **Dynamic formula**: `_resolve_consumption_formula` and the injection regex
    (`_totalenergies_cards.py`). A layout change to `factor * BELPEXH + base`,
    or a swap of `BELPEXH` for another spot token, breaks myDynamic. Re-check the
-   split-line Brussels path too.
+   split-line Brussels path too. A reworded price heading or Belpex H sentence, or
+   a row no longer priced at the stated estimate, refuses the formulas
+   (`_totalenergies_formulas.py`).
 5. **Fee + renewables line**: `_extract_fee_and_renewables` (`_totalenergies_overlays.py`).
    Both numbers are mandatory; a moved or reshaped `Tarif (mensuel|annuel)` anchor
    raises. On a card whose footnote 0 says its prices include the CEV, the fee comes
