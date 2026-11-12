@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import date
 from pathlib import Path
@@ -170,6 +171,152 @@ def test_a_card_is_dated_by_its_price_table() -> None:
     snap = aspiravi.parse_snapshot(_CID, text)
     assert snap.publication_label == "maart 2026"
     assert snap.valid_until == date(2026, 3, 31)
+
+
+@pytest.mark.parametrize(
+    ("row", "label"),
+    [
+        ("Enkelvoudige dagmeter 0,116 * Belpex + 2 (c€/kWh)", "mono"),
+        ("Dag 0,1335 * Belpex + 2 (c€/kWh)", "peak"),
+        ("Nacht 0,09854 * Belpex + 2 (c€/kWh)", "off-peak"),
+        ("nachtmeter  0,09588 * Belpex + 2 (c€/kWh)", "excl. night"),
+        ("Terugleververgoeding 0,07 * Belpex  - 2 (c€/kWh)", "feed-in"),
+    ],
+)
+def test_a_formula_in_another_unit_is_refused(row: str, label: str) -> None:
+    """Every row ends in the unit its formula gives, and the formulas are
+    scaled as c€/kWh on a mean in EUR/MWh. A row restated in EUR/MWh, as
+    OCTA+ restated its own the other way round in November 2026, would bill
+    ten times out on that scale, so it is refused, as is a row that no longer
+    states a unit at all. The unit spaced as the price table's heading
+    spaces it still reads."""
+    text = fixture_text(_SEPTEMBER)
+    assert text.count(row) == 1
+    restated = text.replace(row, row.replace("(c€/kWh)", "(€/MWh)"))
+    with pytest.raises(
+        ExtractorError, match=rf"{re.escape(label)} formula in €/MWh, expected c€/kWh"
+    ):
+        aspiravi.parse_snapshot(_CID, restated)
+    unstated = text.replace(row, row.replace(" (c€/kWh)", ""))
+    with pytest.raises(ExtractorError, match="formula in no stated unit"):
+        aspiravi.parse_snapshot(_CID, unstated)
+    spaced = text.replace(row, row.replace("(c€/kWh)", "(c€/ kWh)"))
+    for card in (text, spaced):
+        snap = aspiravi.parse_snapshot(_CID, card)
+        assert isinstance(snap.energy, VariableRates) and snap.injection is not None
+        assert snap.energy.formula_factor == pytest.approx(0.116 * 10.6)
+        assert snap.energy.formula_factor_exclusive_night == pytest.approx(
+            0.09588 * 10.6
+        )
+        assert snap.injection.factor == pytest.approx(0.7)
+
+
+def test_a_price_table_in_another_unit_is_refused() -> None:
+    """The table's last mean dates the card and settles the month before it,
+    read as EUR/MWh. Under a heading stating another unit, or none, the card
+    is refused rather than dated and settled on a mean ten times out, which
+    is what a heading restated in c€/kWh would give."""
+    text = fixture_text(_SEPTEMBER)
+    heading = "De gemiddelde Belpex (€/MWh)"
+    assert text.count(heading) == 1
+    with pytest.raises(ExtractorError, match="means in c€/kWh, expected €/MWh"):
+        aspiravi.parse_snapshot(
+            _CID, text.replace(heading, "De gemiddelde Belpex (c€/kWh)")
+        )
+    with pytest.raises(ExtractorError, match="means in no stated unit"):
+        aspiravi.parse_snapshot(_CID, text.replace(heading, "De gemiddelde Belpex"))
+    snap = aspiravi.parse_snapshot(_CID, text)
+    assert snap.publication_label == "september 2026"
+    assert aspiravi._last_index(text) == (date(2026, 8, 1), pytest.approx(0.12932))
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "De gemiddelde  Belpex (€/MWh)",
+        "De gemiddelde\nBelpex (€/MWh)",
+        "De gemiddelde Belpex (€/ MWh)",
+    ],
+)
+def test_the_price_table_heading_reads_however_its_cell_is_joined(
+    heading: str,
+) -> None:
+    """The heading is a two-line cell, and pypdf joins the cells of its row
+    with one or two spaces or a line break, as it prints "(c€/ kWh)" in the
+    same row. A heading joined another way states the same unit, so the
+    card still reads."""
+    text = fixture_text(_SEPTEMBER)
+    assert text.count("De gemiddelde Belpex (€/MWh)") == 1
+    rejoined = text.replace("De gemiddelde Belpex (€/MWh)", heading)
+    assert aspiravi.parse_snapshot(_CID, rejoined).publication_label == (
+        "september 2026"
+    )
+    assert aspiravi._last_index(rejoined) == (
+        date(2026, 8, 1),
+        pytest.approx(0.12932),
+    )
+
+
+def test_a_price_table_heading_far_above_its_last_row_still_reads() -> None:
+    """The heading sits 629 to 651 characters ahead of the last row's mean
+    on every archived card. Ten more rows push it some 380 characters
+    further, and the card still reads, since the heading is its only one."""
+    text = fixture_text(_SEPTEMBER)
+    row = "Sep/25 63,60 9,941 11,119 8,764 8,584 \n"
+    assert text.count(row) == 1
+    longer = text.replace(row, row * 11)
+    heading = longer.index("De gemiddelde Belpex")
+    assert longer.index("Aug/26 129,32") - heading > 1000
+    assert aspiravi._last_index(longer) == (date(2026, 8, 1), pytest.approx(0.12932))
+
+
+@pytest.mark.parametrize(
+    ("printed", "restated", "label"),
+    [
+        ("Enkelvoudige dagmeter 0,116 *", "Enkelvoudige dagmeter 11,6 *", "mono"),
+        ("Enkelvoudige dagmeter 0,116 *", "Enkelvoudige dagmeter 1,16 *", "mono"),
+        ("Dag 0,1335 * Belpex + 2 ", "Dag 0,1335 * Belpex + 0,2 ", "peak"),
+        ("Nacht 0,09854 * Belpex + 2 ", "Nacht 0,09854 * Belpex - 2 ", "off-peak"),
+        ("nachtmeter  0,09588 *", "nachtmeter  0,9588 *", "excl. night"),
+        ("Terugleververgoeding 0,07 *", "Terugleververgoeding 0,7 *", "feed-in"),
+    ],
+)
+def test_a_formula_that_misses_its_printed_rate_is_refused(
+    printed: str, restated: str, label: str
+) -> None:
+    """A row's "(c€/kWh)" states only what its formula gives, so a formula
+    moved onto another Belpex unit under it leaves it true. The front page
+    prints every row's rate at the table's last mean, and a factor or a base
+    read ten times out, or with its sign flipped, no longer gives it back."""
+    text = fixture_text(_SEPTEMBER)
+    assert text.count(printed) == 1
+    with pytest.raises(
+        ExtractorError, match=rf"{re.escape(label)} formula gives .* card prints"
+    ):
+        aspiravi.parse_snapshot(_CID, text.replace(printed, restated))
+    energy = aspiravi.parse_snapshot(_CID, text).energy
+    assert isinstance(energy, VariableRates)
+    assert energy.formula_factor == pytest.approx(0.116 * 10.6)
+
+
+@pytest.mark.parametrize(("rate", "reads"), [("18,038", True), ("18,041", False)])
+def test_a_printed_rate_is_held_to_a_thousandth(rate: str, reads: bool) -> None:
+    """The archive's rates sit within 0,02 % of their formulas, and a rate
+    is held to 0,1 % of itself: 18,021 at August's 129,32 still reads as
+    18,038, 0,09 % off, and is refused as 18,041, 0,11 % off."""
+    text = fixture_text(_SEPTEMBER)
+    row = "Energiekosten dag (c€/kWh) incl. BTW  18,021 20,417"
+    assert text.count(row) == 1
+    card = text.replace(row, row.replace("18,021", rate))
+    if reads:
+        energy = aspiravi.parse_snapshot(_CID, card).energy
+        assert isinstance(energy, VariableRates)
+        assert energy.formula_factor == pytest.approx(0.116 * 10.6)
+    else:
+        with pytest.raises(
+            ExtractorError, match=re.escape("mono formula gives 18.021")
+        ):
+            aspiravi.parse_snapshot(_CID, card)
 
 
 def test_a_dual_meter_fee_of_its_own_is_refused() -> None:

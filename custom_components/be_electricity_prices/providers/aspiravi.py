@@ -50,11 +50,13 @@ from ._links import on_page_site
 from ._markup import strip_tags
 from ._parse import (
     SIGN_CHARS,
+    formula_gives,
     numeric_row,
     parse_sign,
     regional_tax_overlay,
     require_every_area,
     running_month_short_of_an_area,
+    stated_unit,
     to_float,
 )
 from ._pdf import (
@@ -116,6 +118,15 @@ _PEAK_RE = re.compile(rf"Tweevoudige meter\s+Dag\s+{_FORMULA}")
 _OFFPEAK_RE = re.compile(rf"\bNacht\s+{_FORMULA}")
 _NIGHT_RE = re.compile(rf"Exclusief nachtmeter\s+{_FORMULA}")
 _INJECTION_RE = re.compile(rf"Terugleververgoeding\s+{_FORMULA}")
+# Every row ends in the unit its formula gives, "0,116 * Belpex + 2 (c€/kWh)",
+# its closing bracket 9 characters after the base on every archived card from
+# April 2024 on, and the next row's statement is 39 characters further at the
+# nearest. The readers scale every formula for that unit, so a row stating
+# another one, or none, is refused rather than billed ten or a hundred times
+# out. The unit is compared with its whitespace folded: the same card prints
+# it "(c€/ kWh)" in its price table's heading.
+_FORMULA_UNIT_RE = re.compile(r"\(([^()]*)\)")
+_FORMULA_UNIT_REACH = 20
 # The last row of the "Energiekost van de afgelopen 12 maanden" table: the
 # month the printed rates were computed on, its Belpex mean and the four
 # rates. It is what dates the card, and its mean settles that month. The sentence naming the month the card is
@@ -132,6 +143,32 @@ _INDEX_ROW_RE = re.compile(
     rf"^([A-Za-z]{{3}})/(\d{{2}})\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s+{_NUM}\s*$",
     re.M,
 )
+# The means are in the unit their column heading states, "De gemiddelde
+# Belpex (€/MWh)" on every archived card from April 2024 on. It starts 629
+# to 651 characters ahead of the last row's mean, with the rate columns'
+# "(c€/kWh)" headings between, so it is matched by its own words. That
+# heading is a two-line cell, pypdf joins the cells of its row with one or
+# two spaces (two after "Dagtarief") and the last of them prints
+# "(c€/ kWh)", so the words take any whitespace and the unit is compared
+# with its whitespace folded. The heading is the card's only one, so the
+# reach is wide: 2000 characters leave room for some 35 more rows of about 38
+# characters, or a wider table, before a correct card is refused.
+_INDEX_UNIT_RE = re.compile(r"De\s+gemiddelde\s+Belpex\s*\(([^()]*)\)")
+_INDEX_UNIT_REACH = 2000
+# The front page prints every row's rate at the table's last mean, grossed
+# by the VAT for consumption and before it for the feed-in: (0,116 x 129,32
+# + 2) x 1,06 is the 18,021 printed for the single meter in September 2026. A
+# row's own unit states only what its formula gives, which a formula moved
+# onto another Belpex unit leaves true, so a formula that no longer gives its
+# printed rate is refused. Over every archived card from April 2024 on the
+# rates sit within 0,02 % of their formulas, the worst the May 2025 card's
+# dual meter day at 12,503 for 12,505, while a factor or a base read
+# ten times out, as zero or with its sign flipped misses by 7 % at the least.
+# The floor is for a feed-in rate printed near zero in a month of low prices,
+# above both the half thousandth of a cent the rates are rounded to and the
+# 0,004 the October 2026 card is off by.
+_PRINTED_FIT = 0.001
+_PRINTED_FLOOR = 0.01
 # The four printed rates on the front page, one row per register:
 # "Energiekosten dag (c€/kWh) incl. BTW  18,021 20,417" carries the single
 # meter and a dual meter's day, the two rows under it the night and the
@@ -360,7 +397,7 @@ def parse_snapshot(
     """Parse one Eco Plus Flex card."""
     if contract_id != _CONTRACT_ID:
         raise ExtractorError(f"unknown Aspiravi contract {contract_id!r}")
-    index = _index_month(text)
+    index, mean = _last_index(text)
     card_month = date(index.year + (index.month == 12), index.month % 12 + 1, 1)
     vat = vat_multiplier(text, _VAT_RE)
     taxes = regional_tax_overlay(
@@ -376,8 +413,8 @@ def parse_snapshot(
         SupplierSnapshot(
             supplier=_SUPPLIER,
             contract=contract_id,
-            energy=_extract_energy(text, _printed_rates(text), vat),
-            injection=_extract_injection(text),
+            energy=_extract_energy(text, _printed_rates(text), vat, mean),
+            injection=_extract_injection(text, mean),
             dsos=_extract_dsos(text),
             # The card prints its green power and WKK costs before VAT, unlike
             # the rest of the block.
@@ -390,22 +427,37 @@ def parse_snapshot(
     )
 
 
-def _index_month(text: str) -> date:
-    """The month the printed rates were computed on."""
-    return _last_index(text)[0]
-
-
 def _last_index(text: str) -> tuple[date, float]:
     """The month the printed rates were computed on and its Belpex mean, in
     EUR/kWh."""
-    rows = _INDEX_ROW_RE.findall(text)
+    rows = list(_INDEX_ROW_RE.finditer(text))
     if not rows:
         raise ExtractorError("Aspiravi: price table of the past 12 months not found")
-    name, year, mean, *_ = rows[-1]
+    last = rows[-1]
+    unit = _unit(text, _INDEX_UNIT_RE, last.span(3), before=_INDEX_UNIT_REACH)
+    if unit != "€/MWh":
+        raise ExtractorError(
+            f"Aspiravi: price table means in {unit or 'no stated unit'}, expected €/MWh"
+        )
+    name, year, mean = last.group(1, 2, 3)
     month = _MONTHS.get(name.lower())
     if month is None:
         raise ExtractorError(f"Aspiravi: unknown month {name!r} in the price table")
     return date(2000 + int(year), month, 1), to_float(mean) / 1000.0
+
+
+def _unit(
+    text: str,
+    pattern: re.Pattern[str],
+    figure: tuple[int, int],
+    *,
+    before: int = 0,
+    after: int = 0,
+) -> str | None:
+    """The unit :func:`stated_unit` finds for ``figure``, its whitespace
+    folded."""
+    unit = stated_unit(text, pattern, figure, before=before, after=after)
+    return None if unit is None else "".join(unit.split())
 
 
 def _printed_rates(text: str) -> list[float]:
@@ -422,19 +474,53 @@ def _printed_rates(text: str) -> list[float]:
     ]
 
 
-def _formula(pattern: re.Pattern[str], text: str, label: str) -> tuple[float, float]:
+def _formula(
+    pattern: re.Pattern[str],
+    text: str,
+    label: str,
+    printed: tuple[float, float, float],
+) -> tuple[float, float]:
     """The ``factor * Belpex + base`` of one row, as printed: c€/kWh per EUR/MWh
-    and c€/kWh, before VAT."""
+    and c€/kWh, before VAT.
+
+    ``printed`` is the rate the front page prints for the row, in c€/kWh,
+    the VAT multiplier it carries and the mean it is worked out at, in
+    EUR/kWh.
+    """
     match = pattern.search(text)
     if match is None:
         raise ExtractorError(f"Aspiravi: {label} formula not found")
-    return to_float(match.group(1)), parse_sign(match.group(2)) * to_float(
-        match.group(3)
+    unit = _unit(
+        text, _FORMULA_UNIT_RE, (match.start(1), match.end()), after=_FORMULA_UNIT_REACH
     )
+    if unit != "c€/kWh":
+        raise ExtractorError(
+            f"Aspiravi: {label} formula in {unit or 'no stated unit'}, expected c€/kWh"
+        )
+    factor = to_float(match.group(1))
+    base = parse_sign(match.group(2)) * to_float(match.group(3))
+    rate, vat, mean = printed
+    if not formula_gives(
+        rate,
+        factor * vat,
+        mean * 1000.0,
+        base * vat,
+        tolerance=_PRINTED_FIT,
+        floor=_PRINTED_FLOOR,
+    ):
+        raise ExtractorError(
+            f"Aspiravi: {label} formula gives "
+            f"{(factor * mean * 1000.0 + base) * vat:.3f} c€/kWh at the table's "
+            f"last mean, the card prints {rate:.3f}"
+        )
+    return factor, base
 
 
-def _extract_energy(text: str, printed: list[float], vat: float) -> VariableRates:
-    """The four registers' formulas and the rates printed at last month's mean.
+def _extract_energy(
+    text: str, printed: list[float], vat: float, mean: float
+) -> VariableRates:
+    """The four registers' formulas and the rates printed at last month's mean,
+    ``mean``, in EUR/kWh.
 
     Both carry the charity contribution the card leaves out of them. The
     formulas are grossed by the card's VAT onto the EUR/kWh basis the rates
@@ -445,12 +531,16 @@ def _extract_energy(text: str, printed: list[float], vat: float) -> VariableRate
         raise ExtractorError("Aspiravi: charity contribution row not found")
     charity = to_float(match.group(1)) / 100.0
     printed_formulas = {
-        label: _formula(pattern, text, label)
-        for label, pattern in (
-            ("mono", _MONO_RE),
-            ("peak", _PEAK_RE),
-            ("off-peak", _OFFPEAK_RE),
-            ("excl. night", _NIGHT_RE),
+        label: _formula(pattern, text, label, (rate, vat, mean))
+        for (label, pattern), rate in zip(
+            (
+                ("mono", _MONO_RE),
+                ("peak", _PEAK_RE),
+                ("off-peak", _OFFPEAK_RE),
+                ("excl. night", _NIGHT_RE),
+            ),
+            printed,
+            strict=True,
         )
     }
     mono, peak, offpeak, night = (
@@ -491,15 +581,17 @@ def _extract_energy(text: str, printed: list[float], vat: float) -> VariableRate
     )
 
 
-def _extract_injection(text: str) -> InjectionRates:
+def _extract_injection(text: str, mean: float) -> InjectionRates:
     """The feed-in formula on the delivery month's mean, VAT-exempt, with the
-    rate printed at last month's mean as the fallback."""
-    factor, base = _formula(_INJECTION_RE, text, "feed-in")
+    rate printed at last month's mean, ``mean`` in EUR/kWh, as the
+    fallback."""
     printed = _INJECTION_PRINTED_RE.search(text)
     if printed is None:
         raise ExtractorError("Aspiravi: printed feed-in rate not found")
+    rate = to_float(printed.group(1))
+    factor, base = _formula(_INJECTION_RE, text, "feed-in", (rate, 1.0, mean))
     return InjectionRates(
-        current=to_float(printed.group(1)) / 100.0,
+        current=rate / 100.0,
         factor=factor * 10.0,
         base=base / 100.0,
         formula=f"({factor} Belpex {base:+}) c€/kWh",

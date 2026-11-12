@@ -105,6 +105,23 @@ Belpex is in EUR/MWh and the result in c€/kWh, so a factor is multiplied by
 the card's VAT ("incl. 6% BTW") onto the VAT-inclusive basis every other figure
 is in. The formulas have not changed since April 2024.
 
+That scale is the one each row states: every archived card since April 2024
+prints "(c€/kWh)" one space after the base, and `_formula` reads it there
+(`_FORMULA_UNIT_RE`), its whitespace folded, since the same card prints
+"(c€/ kWh)" in its price table's heading. A row stating any other unit, or
+none, is refused with `ExtractorError` as an unreadable row is: read on this
+scale its figures would bill ten or a hundred times out.
+
+That unit states only what a formula gives, so a formula moved onto another
+Belpex unit under it would leave it true. Each formula is also worked out at
+the table's last mean and must give back the rate the front page prints for
+its row, to within 0,1 % of it or 0,01 c€/kWh for a feed-in rate near zero,
+the feed-in before VAT. Every archived card's rates sit within 0,02 % (the
+May 2025 card prints 12,503 for a dual meter's day where its formula gives
+12,505), while a factor or a base ten times out, zero or with its sign flipped
+misses by 7 % at the least. A formula that misses is refused with
+`ExtractorError`.
+
 The charity contribution ("bijdrage aan een goed doel", 1 EUR/MWh before VAT,
 printed as 0,106 c€/kWh with VAT) is part of the energy price by the card's own
 words, while both the formulas and the printed rates leave it out: at
@@ -118,6 +135,16 @@ computed on and dates the card: the card is for the month after it. The
 sentence naming the month ("afgesloten in september 2026") and the start of the
 period the formulas hold for were both left on the previous month on the
 September 2025 and March 2026 cards, while the table moved on every time.
+
+The row's mean is read as EUR/MWh, the unit its column heading "De gemiddelde
+Belpex (€/MWh)" states on every archived card since April 2024
+(`_INDEX_UNIT_RE`). The heading is a two-line cell that pypdf joins with one
+or two spaces or a line break, so its words take any whitespace and its unit
+is compared with whitespace folded. A heading stating another unit, or none,
+refuses the card, since that mean dates it and settles the month before. The
+heading is the card's only one and sits 629 to 651 characters ahead of the
+last row's mean, so it is looked for 2000 characters back, room for some 35
+more rows.
 
 The table repeats the four rates too, and those are not read: the copy has been
 typed wrong. The March 2026 row prints 12,558 for the single meter where the
@@ -215,3 +242,15 @@ November's card as the current one and the archive's months, and three cards:
   September card's 129,32 to the rates that card prints.
 - `aspiravi_eco_plus_flex_2026-03.pdf`: the March 2026 card, whose own sentences
   name February, dated by its price table.
+
+The September card is also restated in memory, one formula row or the table
+heading in another unit or none, to pin the refusals
+(`test_a_formula_in_another_unit_is_refused`,
+`test_a_price_table_in_another_unit_is_refused`), and with the heading
+joined another way or ten rows further up to show it still reads
+(`test_the_price_table_heading_reads_however_its_cell_is_joined`,
+`test_a_price_table_heading_far_above_its_last_row_still_reads`). A factor or a
+base restated ten times out, or with its sign flipped, under an unchanged unit
+is refused (`test_a_formula_that_misses_its_printed_rate_is_refused`), and the
+single meter's printed rate moved either side of 0,1 % pins the tolerance
+(`test_a_printed_rate_is_held_to_a_thousandth`).
