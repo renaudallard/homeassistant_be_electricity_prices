@@ -80,6 +80,7 @@ import aiohttp
 
 from ..const import DSO_FLUVIUS_INTERGEM, FLUVIUS_CARD_LABELS, REGION_FLANDERS
 from ._parse import (
+    BRACKETED_UNIT,
     SIGN_CHARS,
     numeric_row,
     parse_sign,
@@ -87,6 +88,7 @@ from ._parse import (
     require_contract,
     require_every_area,
     running_month_short_of_an_area,
+    stated_unit,
     to_float,
 )
 from ._pdf import (
@@ -237,6 +239,23 @@ _INJECTION_FORMULA_RES = tuple(
     )
     for label in ("24h", "Piek", "Dal")
 )
+# Each formula column states its unit in the heading above the formulas,
+# "Afname (c€/kWh) Injectie(2) (c€/kWh)", spelled so on every card from
+# November 2025 to November 2026. A formula is held to its own column's
+# heading rather than to the nearest unit: the feed-in heading ends 6
+# characters ahead of the first consumption factor, the consumption one 27.
+# A statement needs a "/", so the "(2)" mark of the "Injectie(2)" price rows
+# is not taken for one, and neither pattern matches anything else on any
+# card. The heading starts at most 271 characters ahead of a consumption
+# factor (Excl. nacht) and 214 ahead of a feed-in one (Dal); each reach
+# allows for about one row more.
+_UNIT = "c€/kWh"
+_ENERGY_UNIT_RE = re.compile(rf"\bAfname\s*{BRACKETED_UNIT}", re.IGNORECASE)
+_INJECTION_UNIT_RE = re.compile(
+    rf"\bInjectie(?:\(\d\))?\s*{BRACKETED_UNIT}", re.IGNORECASE
+)
+_ENERGY_UNIT_REACH = 350
+_INJECTION_UNIT_REACH = 300
 
 # The network table prints the eight Fluvius areas as the shared table spells
 # them, Midden-Vlaanderen cut short.
@@ -286,11 +305,31 @@ _LISTED_RE = re.compile(r"/Current/([^\"'<>/]+?Electricity)_Residential\.pdf")
 # c€/kWh voor injectie", or on Zeker & Vast the feed-in one alone, "Deze
 # bedroeg 10,053 c€/kWh.", since only its feed-in is indexed.
 _MONTH = "(?:" + "|".join(NL_MONTHS) + ")"
+_INDEX_LEAD = rf"namelijk\s+de\s+waarde\s+van\s+({_MONTH})\s+(20\d\d)\."
 _INDEX_RE = re.compile(
-    rf"namelijk\s+de\s+waarde\s+van\s+({_MONTH})\s+(20\d\d)\.\s*Deze\s+bedroeg\s+"
+    rf"{_INDEX_LEAD}\s*Deze\s+bedroeg\s+"
     rf"{_NUM}\s*c€/kWh(?:\s+voor\s+afname\s+en\s+{_NUM}\s*c€/kWh\s+voor\s+injectie)?",
     re.IGNORECASE,
 )
+# The same sentence states the scale of the indices the formulas multiply,
+# c€/kWh on every card from November 2025 to November 2026: EPEXDAMREK is
+# the figure "voor afname", EPEXDAMSPP the one "voor injectie" or Zeker &
+# Vast's lone one. It sits some 1900 characters past the formulas, behind
+# four other footnotes, so the units are looked for from the sentence's
+# opening. They end at most 70 characters after it, and the reach stops
+# short of the yearly estimates that follow, whose "en 9,378 c€/kWh voor
+# injectie" starts 127 or more after it. A unit never starts on a figure's
+# character, so a long figure is not shared out between the two again from
+# each of its digits, and it is bounded like the headings'.
+_INDEX_LEAD_RE = re.compile(_INDEX_LEAD, re.IGNORECASE)
+_REK_UNIT_RE = re.compile(
+    r"Deze\s+bedroeg\s+[\d.,]+\s*([^\s\d.,]\S{0,30})\s+voor\s+afname", re.IGNORECASE
+)
+_SPP_UNIT_RE = re.compile(
+    r"(?:\ben|Deze\s+bedroeg)\s+[\d.,]+\s*([^\s\d.,]\S{0,30}?)(?:\s+voor\s+injectie|\.\s)",
+    re.IGNORECASE,
+)
+_INDEX_UNIT_REACH = 110
 
 
 # ---- public entry points -----------------------------------------------------
@@ -643,14 +682,33 @@ def _fixed_energy(text: str) -> FixedRates:
     )
 
 
+def _require_unit(unit: str | None, what: str) -> None:
+    """Refuse a card stating ``what`` in another unit than c€/kWh, the only
+    one its cards have printed, or in none."""
+    if unit != _UNIT:
+        raise ExtractorError(
+            f"Elegant: {what} stated in {unit or 'no unit'}, expected {_UNIT}"
+        )
+
+
+def _index_unit(text: str, pattern: re.Pattern[str]) -> str | None:
+    """The unit footnote (5) states for the index ``pattern`` reads, or None
+    where the card no longer prints the sentence."""
+    lead = _INDEX_LEAD_RE.search(text)
+    if lead is None:
+        return None
+    return stated_unit(text, pattern, lead.span(), after=_INDEX_UNIT_REACH)
+
+
 def _variable_energy(text: str) -> VariableRates:
     """The four registers' formulas and the rates printed at last month's
     index.
 
-    The formula is in c€/kWh against an index in c€/kWh, so against a mean in
-    EUR/kWh the factor keeps its value and the base goes from cents to euros;
-    both are grossed by the multiplier the formula prints. Every register
-    carries its own pair, piek and dal apart, so each is read on its own row.
+    The formula is in c€/kWh against an index in c€/kWh, as its column
+    heading and footnote (5) state, so against a mean in EUR/kWh the factor
+    keeps its value and the base goes from cents to euros; both are grossed
+    by the multiplier the formula prints. Every register carries its own
+    pair, piek and dal apart, so each is read on its own row.
     """
     pairs: dict[str, tuple[float, float]] = {}
     formulas: list[str] = []
@@ -658,6 +716,12 @@ def _variable_energy(text: str) -> VariableRates:
         match = pattern.search(text)
         if match is None:
             raise ExtractorError(f"Elegant: {slot} consumption formula not found")
+        _require_unit(
+            stated_unit(
+                text, _ENERGY_UNIT_RE, match.span(1), before=_ENERGY_UNIT_REACH
+            ),
+            f"{slot} consumption formula",
+        )
         factor, sign, base, vat = match.groups()
         multiplier = to_float(vat)
         pairs[slot] = (
@@ -665,6 +729,7 @@ def _variable_energy(text: str) -> VariableRates:
             parse_sign(sign) * to_float(base) / 100.0 * multiplier,
         )
         formulas.append(" ".join(match.group(0).split()))
+    _require_unit(_index_unit(text, _REK_UNIT_RE), "EPEXDAMREK")
     single, peak, offpeak, night = _printed_rates(text)
     return VariableRates(
         current=single,
@@ -700,8 +765,15 @@ def _injection(text: str) -> InjectionRates:
         match = pattern.search(text)
         if match is None:
             raise ExtractorError("Elegant: feed-in formula not found")
+        _require_unit(
+            stated_unit(
+                text, _INJECTION_UNIT_RE, match.span(1), before=_INJECTION_UNIT_REACH
+            ),
+            "feed-in formula",
+        )
         factor, sign, base = match.groups()
         formulas.append((to_float(factor), parse_sign(sign) * to_float(base)))
+    _require_unit(_index_unit(text, _SPP_UNIT_RE), "EPEXDAMSPP")
     printed = _INJECTION_PRINTED_RE.search(_monthly_block(text))
     if printed is None:
         raise ExtractorError("Elegant: printed feed-in rate not found")

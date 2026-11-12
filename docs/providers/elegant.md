@@ -121,6 +121,23 @@ last month's index. The leg carries the formula, the printed figure as
 card that gives a register a formula or a figure of its own is refused. The
 base was -2,000 until March 2026, -1,000 from April and -1,500 from August.
 
+## Units
+
+Each formula column states its unit in the heading above it, "Afname (c€/kWh)
+Injectie(2) (c€/kWh)", and footnote (5) states the indices' in the sentence
+naming them ("Deze bedroeg 17,419 c€/kWh voor afname en 14,152 c€/kWh voor
+injectie", Zeker & Vast's lone figure alike). Every card from November 2025 to
+November 2026 spells them all "c€/kWh", the one spelling accepted. A formula is
+held to its own column's heading rather than to the nearest unit, since the
+feed-in heading ends nearer the first consumption factor than the consumption
+one does. An index is held to its figure in the footnote, looked for from the
+sentence's opening ("namelijk de waarde van ...") rather than from the
+formulas, some 1900 characters and four footnotes before it, and never as far
+as the yearly estimate's figures after it. A card stating another unit, or
+none, is refused (`_require_unit`): read on the old scale, a consumption
+formula restated in EUR/MWh would bill a base ten times its value, and one on
+an index restated in EUR/MWh a factor a tenth of it.
+
 ## Network and taxes
 
 The network table prints the eight Fluvius areas as `FLUVIUS_CARD_LABELS` spells
@@ -212,7 +229,9 @@ prints.
 - `elegant_flex_2026-10.pdf`, `elegant_comfortflex_2026-10.pdf` and
   `elegant_zeker_vast_2026-10.pdf`: the October 2026 cards, every field read,
   the formulas reproducing the rates the Flex card prints at September's
-  indices, and the Flex card as the running month's, left provisional.
+  indices, the Flex card as the running month's, left provisional, and the
+  Flex and Zeker & Vast cards refused once a heading or an index states
+  another unit, or none.
 - `elegant_flex_2025-11.pdf` and `elegant_zeker_vast_2025-11.pdf`: the cards
   of 8 November 2025, when the current products were launched, with the day
   after the product's name, and the launch month read on them and settled on
@@ -227,4 +246,6 @@ prints.
 
 `test_a_crafted_card_is_read_in_time_linear_in_its_length` hands the heading,
 the fee, the forfait and the two levy readers runs of blanks or labels with no
-closing bracket, about 100,000 characters each and a million for the levies.
+closing bracket, about 100,000 characters each and a million for the levies,
+and the unit readers a bracket of 100,000 slashes or a figure of 100,000
+digits.

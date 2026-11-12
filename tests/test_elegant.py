@@ -336,6 +336,104 @@ def test_a_missing_register_formula_is_refused() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("old", "new", "error"),
+    [
+        # The consumption heading alone: the feed-in one beside it ends
+        # nearer the first consumption factor and still says c€/kWh.
+        (
+            "Afname (c€/kWh) Injectie(2)",
+            "Afname (€/MWh) Injectie(2)",
+            "single consumption formula stated in €/MWh",
+        ),
+        (
+            "Afname (c€/kWh) Injectie(2)",
+            "Afname Injectie(2)",
+            "single consumption formula stated in no unit",
+        ),
+        (
+            "Injectie(2) (c€/kWh)",
+            "Injectie(2) (€/kWh)",
+            "feed-in formula stated in €/kWh",
+        ),
+        (
+            "15,641 c€/kWh voor afname",
+            "156,41 €/MWh voor afname",
+            "EPEXDAMREK stated in €/MWh",
+        ),
+        (
+            "10,053 c€/kWh voor injectie",
+            "100,53 €/MWh voor injectie",
+            "EPEXDAMSPP stated in €/MWh",
+        ),
+        # The yearly estimate's "en 7,946 c€/kWh voor injectie" further on
+        # is out of reach and no stand-in for the index's own statement.
+        (
+            "10,053 c€/kWh voor injectie",
+            "10,053 voor injectie",
+            "EPEXDAMSPP stated in no unit",
+        ),
+    ],
+    ids=[
+        "consumption heading",
+        "no consumption unit",
+        "feed-in heading",
+        "EPEXDAMREK",
+        "EPEXDAMSPP",
+        "no EPEXDAMSPP unit",
+    ],
+)
+def test_a_variable_card_stating_another_unit_is_refused(
+    old: str, new: str, error: str
+) -> None:
+    """Every card since November 2025 states its formulas and their indices
+    in c€/kWh. Read on that scale, a consumption formula restated in EUR/MWh
+    would bill a base ten times its value, and one on an index restated in
+    EUR/MWh a factor a tenth of it, so any other unit, or none, is refused."""
+    text = _card("elegant_flex_2026-10.pdf")
+    assert text.count(old) == 1
+    snap = elegant.parse_snapshot(_FLEX, text)
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.formula_factor == pytest.approx(1.08 * 1.06)
+    assert snap.energy.formula_base == pytest.approx(0.0185 * 1.06)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(0.85)
+    assert snap.injection.base == pytest.approx(-0.015)
+    with pytest.raises(ExtractorError, match=error):
+        elegant.parse_snapshot(_FLEX, text.replace(old, new))
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "error"),
+    [
+        (
+            "Injectie(2) (c€/kWh)",
+            "Injectie(2) (€/MWh)",
+            "feed-in formula stated in €/MWh",
+        ),
+        (
+            "Deze bedroeg 10,053 c€/kWh.",
+            "Deze bedroeg 100,53 €/MWh.",
+            "EPEXDAMSPP stated in €/MWh",
+        ),
+    ],
+    ids=["feed-in heading", "EPEXDAMSPP"],
+)
+def test_a_zeker_vast_card_stating_another_unit_is_refused(
+    old: str, new: str, error: str
+) -> None:
+    """Zeker & Vast indexes its credit alone, under the same heading, and
+    names the one index it is printed at."""
+    text = _card("elegant_zeker_vast_2026-10.pdf")
+    assert text.count(old) == 1
+    injection = elegant.parse_snapshot(_VAST, text).injection
+    assert injection is not None
+    assert injection.factor == pytest.approx(0.85)
+    assert injection.base == pytest.approx(-0.015)
+    with pytest.raises(ExtractorError, match=error):
+        elegant.parse_snapshot(_VAST, text.replace(old, new))
+
+
 async def test_fetch_reads_the_product_card(monkeypatch: pytest.MonkeyPatch) -> None:
     render = AsyncMock(return_value=_card("elegant_zeker_vast_2026-10.pdf"))
     monkeypatch.setattr(elegant, "fetch_pdf_text_layout", render)
@@ -873,6 +971,22 @@ def _heading_of(text: str) -> None:
                 "Bijdrage warmtekrachtkoppeling (c" * 30_000
             ),
             id="cogeneration levy labels",
+        ),
+        pytest.param(
+            lambda: elegant._ENERGY_UNIT_RE.search("Afname (" + "/" * 100_000),
+            id="consumption heading slashes",
+        ),
+        pytest.param(
+            lambda: elegant._INJECTION_UNIT_RE.search("Injectie(2) (" + "/" * 100_000),
+            id="feed-in heading slashes",
+        ),
+        pytest.param(
+            lambda: elegant._REK_UNIT_RE.search("Deze bedroeg " + "1" * 100_000),
+            id="EPEXDAMREK figure",
+        ),
+        pytest.param(
+            lambda: elegant._SPP_UNIT_RE.search("Deze bedroeg " + "1" * 100_000),
+            id="EPEXDAMSPP figure",
         ),
     ],
 )

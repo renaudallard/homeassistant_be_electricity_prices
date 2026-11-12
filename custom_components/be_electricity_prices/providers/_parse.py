@@ -294,6 +294,13 @@ def parse_sign(char: str) -> float:
     return -1.0 if char in _NEGATIVE_SIGNS else 1.0
 
 
+# A unit a card states in brackets, "(c€/kWh)" or "(€cent/kWh)", as its first
+# group. It needs a "/", so a footnote mark such as "(2)" is no statement, and
+# both runs are bounded, the first stopping at the first "/", so a bracket full
+# of slashes is read once and an error quotes no more than a unit's worth.
+BRACKETED_UNIT = r"\(([^()\n/]{0,30}/[^()\n]{0,30})\)"
+
+
 def stated_unit(
     text: str,
     pattern: re.Pattern[str],
