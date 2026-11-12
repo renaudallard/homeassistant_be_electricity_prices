@@ -767,6 +767,165 @@ def test_a_card_that_does_not_name_its_index_month_is_asked_again() -> None:
     assert snap.injection.index_realised is None
 
 
+# The unit a card states after the figures of its formulas.
+
+
+def _restate(name: str, old: str, new: str) -> tuple[str, str]:
+    """The card as printed, and the same card with ``old`` reading ``new``."""
+    text = _text(name)
+    assert text.count(old) == 1, old
+    return text, text.replace(old, new)
+
+
+@pytest.mark.parametrize(
+    ("name", "old", "new"),
+    [
+        # The fixed price and the index of the VAST / VARIABEL cards.
+        ("ecopower_burgerstroom_jul.pdf", "× 0,17 euro\n", "× 0,17 eurocent\n"),
+        ("ecopower_burgerstroom_jul.pdf", "0,11444616 euro ", "0,11444616 euro/MWh "),
+        # The index of the bracket cards, past its footnote mark, and dropped.
+        ("ecopower_burgerstroom_may.pdf", "0,09810780 1 euro)", "0,09810780 1 c€)"),
+        ("ecopower_burgerstroom_may.pdf", "0,09810780 1 euro)", "0,09810780 1)"),
+    ],
+)
+def test_an_energy_formula_in_another_unit_bills_the_printed_rate(
+    name: str, old: str, new: str
+) -> None:
+    """Each figure of the burgerstroom formula is followed by "euro" on every
+    card. A card stating another unit, or none, is not read on the old scale:
+    the formula is left out and the rate the card prints bills, as when the
+    formula does not read at all, and no index settles a month."""
+    text, restated = _restate(name, old, new)
+    energy = _extract_energy(text)
+    assert isinstance(energy, VariableRates)
+    assert (energy.formula_factor, energy.formula_base) == pytest.approx((0.5, 0.085))
+    assert energy.month_indexed
+    assert _ecopower_cards.printed_rlp_index(text) is not None
+    kept = _extract_energy(restated)
+    assert isinstance(kept, VariableRates)
+    assert kept.current == pytest.approx(energy.current)
+    assert kept.formula_factor is None and kept.formula_base is None
+    assert not kept.month_indexed
+    assert _ecopower_cards.printed_rlp_index(restated) is None
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        # The units the card prints after the fixed and the variable values.
+        ("× 0,02 euro\n", "× 0,02 eurocent\n"),
+        ("0,04638137 euro ", "0,04638137 eurocent "),
+        # The SPP formula's base, multiplier and index, ten times out.
+        ("[EPEX SPP 2] - 0,01.", "[EPEX SPP 2] - 0,1."),
+        ("formule 0,9 ×", "formule 9 ×"),
+        ("× 0,06264597 [EPEX", "× 0,6264597 [EPEX"),
+    ],
+)
+def test_a_feed_in_formula_on_another_scale_keeps_the_printed_credit(
+    old: str, new: str
+) -> None:
+    """The July card prints "euro" after both halves' values and the variable
+    one's value is what its SPP formula gives at the index printed in it: "0,9
+    x 0,06264597 [EPEX SPP 2] - 0,01" is 0,04638137. A card breaking either
+    keeps its printed credit and no formula, as one whose formula does not
+    read."""
+    text, restated = _restate("ecopower_burgerstroom_jul.pdf", old, new)
+    inj = _extract_injection(text)
+    assert inj is not None and inj.spp_indexed
+    assert (inj.factor, inj.base) == pytest.approx((0.45, 0.005))
+    kept = _extract_injection(restated)
+    assert kept is not None
+    assert kept.current == pytest.approx(0.0332)
+    assert kept.factor is None and kept.base is None
+    assert not kept.spp_indexed
+
+
+@pytest.mark.parametrize(
+    ("value", "kept"),
+    [
+        # 0,9 x 0,06264597 - 0,01 is 0,046381373: 1,7e-8 off, then 2,7e-8.
+        ("0,04638139", True),
+        ("0,04638140", False),
+    ],
+)
+def test_the_spp_formula_is_held_to_the_rounding_of_its_figures(
+    value: str, kept: bool
+) -> None:
+    """Printed to eight decimals, the formula lands within 9e-9 of the value
+    on every card and is allowed 2e-8."""
+    text = _restate(
+        "ecopower_burgerstroom_jul.pdf", "0,04638137 euro ", f"{value} euro "
+    )[1]
+    inj = _extract_injection(text)
+    assert inj is not None
+    assert inj.spp_indexed is kept
+
+
+@pytest.mark.parametrize(
+    ("value", "index", "credit"),
+    [
+        # 0,9 x 0,01120003 - 0,01 is 0,000080027, printed to eight decimals.
+        ("0,00008003", "0,01120003", "0,0100"),
+        # 0,9 x 0,01000003 - 0,01 is -0,000999973, under zero.
+        ("-0,00099997", "0,01000003", "0,0095"),
+    ],
+)
+def test_a_variable_half_near_or_under_zero_is_held_to_its_rounding(
+    value: str, index: str, credit: str
+) -> None:
+    """Under an SPP index of 11,1 EUR/MWh the variable half of the credit goes
+    below zero. Printed to eight decimals, a value near zero is out by more
+    than any share of it, so the formula is held to that rounding and the
+    value read with its sign; a base ten times out is still refused."""
+    old = (
+        "× 0,04638137 euro deze waarde volgt de formule 0,9 × 0,06264597 "
+        "[EPEX SPP 2] - 0,01. -0,0332 euro/kWh"
+    )
+    new = (
+        f"× {value} euro deze waarde volgt de formule 0,9 × {index} "
+        f"[EPEX SPP 2] - 0,01. -{credit} euro/kWh"
+    )
+    text = _restate("ecopower_burgerstroom_jul.pdf", old, new)[1]
+    inj = _extract_injection(text)
+    assert inj is not None and inj.spp_indexed
+    assert (inj.factor, inj.base) == pytest.approx((0.45, 0.005))
+    assert inj.current == pytest.approx(float(credit.replace(",", ".")))
+    slipped = _extract_injection(text.replace("] - 0,01.", "] - 0,1."))
+    assert slipped is not None and slipped.factor is None
+
+
+@pytest.mark.parametrize(
+    "new", ["(uitgedrukt in euro/kWh)", "(uitgedrukt in c€/kWh)", "(in euro/MWh)"]
+)
+def test_a_dynamic_card_stating_epex_da_in_another_unit_is_refused(new: str) -> None:
+    """The dynamic formula leaves EPEX DA's unit to page 2, "(uitgedrukt in
+    euro/MWh)", which is what scales its factor by 1000. A card stating
+    another unit, or none, is refused, as one whose formula does not read."""
+    text, restated = _restate(
+        "ecopower_dynamische_burgerstroom_jan.pdf", "(uitgedrukt in euro/MWh)", new
+    )
+    snap = parse_dbs_snapshot(text, "t://x", "2026-01")
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.02)
+    with pytest.raises(ExtractorError, match="EPEX DA"):
+        parse_dbs_snapshot(restated, "t://x", "2026-01")
+
+
+@pytest.mark.parametrize(
+    "new", ["(uitgedrukt in euro/kWh)", "(uitgedrukt in c€/kWh)", "(in euro/MWh)"]
+)
+def test_a_dynamic_credit_with_epex_da_in_another_unit_is_left_out(new: str) -> None:
+    """The feed-in formula multiplies the same EPEX DA as the consumption one,
+    and leaves the credit out when its formula does not read."""
+    text, restated = _restate(
+        "ecopower_dynamische_burgerstroom_jan.pdf", "(uitgedrukt in euro/MWh)", new
+    )
+    inj = ecopower._extract_dbs_injection(text)
+    assert inj is not None
+    assert (inj.factor, inj.base) == pytest.approx((0.98, -0.015))
+    assert ecopower._extract_dbs_injection(restated) is None
+
+
 def test_fetch_for_month_skips_inschatting_preview() -> None:
     """The next-month preview (gbs_inschatting) is on the listing but
     is not a billable card. fetch_for_month must not return it as the
@@ -1124,6 +1283,38 @@ _FEED_IN = "Injectie Groene Burgerstroom (terugleververgoeding)"
             + " -0,02 euro/kWh\nVAST 1% x 1 euro\nVARIABEL 1% formule 1 x 1 [SPP]"
             + "\xa0" * 100_000,
             id="spp sign",
+        ),
+        pytest.param(
+            _extract_injection,
+            _FEED_IN
+            + " -0,02 euro/kWh\nVAST 1% x 1 euro\nVARIABEL 1% x 1 "
+            + "formule 1 x 1 [" * 7_000,
+            id="spp formulas on a line",
+        ),
+        pytest.param(
+            _extract_injection,
+            _FEED_IN
+            + " -0,02 euro/kWh\nVAST 1% x 1 euro\nVARIABEL 1% x 1 "
+            + "formule 1 x 1 [SPP " * 5_000,
+            id="unclosed spp brackets",
+        ),
+        pytest.param(
+            _extract_injection,
+            _FEED_IN
+            + " -0,02 euro/kWh\nVAST 1% x 1 euro\nVARIABEL 1% x "
+            + "1" * 100_000,
+            id="variable value digits",
+        ),
+        pytest.param(
+            _ecopower_cards._energy_formula,
+            "VAST 50% x 0,17 euro\nVARIABEL +50% x 0,1" + "\xa0" * 100_000 + "euro RLP",
+            id="blanks after a figure",
+        ),
+        pytest.param(
+            _quietly(ecopower._extract_dbs_energy),
+            "Dynamische burgerstroom elk kwartier 0,001 × EPEX DA +0,004 euro/kWh "
+            + "EPEX DA notering " * 6_000,
+            id="index statements",
         ),
         pytest.param(
             _ecopower_cards.printed_spp_index,

@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import re
 
-from ._parse import SIGN_CHARS, parse_sign, to_float
+from ._parse import SIGN_CHARS, formula_gives, parse_sign, stated_unit, to_float
 from ._pdf import NL_MONTHS
 from ._rates import (
     DynamicRates,
@@ -149,12 +149,40 @@ _RLP_MONTH_RE = re.compile(
     re.IGNORECASE,
 )
 
+# The unit a burgerstroom card prints straight after a figure of its formulas,
+# past the footnote mark the index carries on the bracket cards: "vast aan 0,17
+# euro +", "variabel aan 0,09810780 1 euro)", "VAST 50% × 0,17 euro", "VARIABEL
+# +50% × 0,18183624 euro deze waarde". Every card on file from February to
+# October 2026 (none of March) prints "euro" there, five or seven characters
+# on from the figure, and the formulas are read as EUR/kWh on it. The whole word is taken, so a card restated in "eurocent" or
+# "euro/MWh", or one that drops the word, is not read as euro. The pattern
+# starts nowhere inside a run of blanks: searched on from each, a run with no
+# word after it was read again from every one.
+_FIGURE_UNIT_RE = re.compile(r"(?<!\s)\s*+(?:\d\s++)?+([^\s),.;:]++)")
+_FIGURE_UNIT_REACH = 12
+_FIGURE_UNITS = frozenset({"euro"})
+
+
+def _in_euro(text: str, match: re.Match[str], *groups: int) -> bool:
+    """Whether the card prints "euro" straight after each figure ``match``
+    holds in ``groups``."""
+    return all(
+        stated_unit(text, _FIGURE_UNIT_RE, match.span(group), after=_FIGURE_UNIT_REACH)
+        in _FIGURE_UNITS
+        for group in groups
+    )
+
 
 def _energy_formula(text: str) -> tuple[float, float, float] | None:
-    """``(factor, base, printed index)`` of the card's formula, or None."""
+    """``(factor, base, printed index)`` of the card's formula, or None, also
+    when the fixed price or the index is printed in anything but euro: the
+    formula is then left out and the printed rate bills, as for a card whose
+    formula does not read at all."""
     for pattern in _ENERGY_FORMULA_RES:
         match = pattern.search(text)
         if match is not None:
+            if not _in_euro(text, match, 2, 4):
+                return None
             vast, fixed, variabel, index = match.groups()
             return (
                 to_float(variabel) / 100.0,
@@ -233,6 +261,30 @@ _DBS_ENERGY_RE = re.compile(
 
 _ABONNEMENT_RE = re.compile(r"Abonnementskost\s+([\d,]+)\s*euro/maand", re.IGNORECASE)
 
+# The unit of the EPEX DA price both dynamic formulas multiply, which their own
+# line leaves out. Page 2 states it once: "De EPEX DA notering is de dagelijks
+# bepaalde kwartierprijs voor elektriciteit in België (uitgedrukt in
+# euro/MWh)", "uurprijs" on the January 2025 card. It is "euro/MWh" on all
+# five cards from January 2025 to November 2026, closing 3175 to 3456
+# characters after a factor, and no other sentence on them says "uitgedrukt
+# in". In the text the page's other column runs into it ("kwartierprijs voor
+# Bijdrage op de energie"), so the subject may sit apart from the unit, under
+# a hundred characters on those cards. The factors scale by 1000 on that
+# statement.
+_DBS_INDEX_UNIT_RE = re.compile(
+    r"EPEX\s*DA\s+notering\b.{0,200}?\(uitgedrukt\s+in\s+([^)\s]++)\)", re.DOTALL
+)
+_DBS_INDEX_UNIT_REACH = 4500
+_DBS_INDEX_UNITS = frozenset({"euro/MWh"})
+
+
+def _dbs_index_unit(text: str, match: re.Match[str], factor: int) -> str | None:
+    """The unit the dynamic card states for the EPEX DA price the factor in
+    group ``factor`` of ``match`` multiplies, or None."""
+    return stated_unit(
+        text, _DBS_INDEX_UNIT_RE, match.span(factor), after=_DBS_INDEX_UNIT_REACH
+    )
+
 
 def _extract_dbs_energy(text: str) -> DynamicRates:
     """Parse the dynamic ``factor x spot + base`` consumption formula (HTVA).
@@ -252,6 +304,12 @@ def _extract_dbs_energy(text: str) -> DynamicRates:
     if not match:
         raise ExtractorError(
             "could not parse Ecopower 'Dynamische burgerstroom' formula"
+        )
+    unit = _dbs_index_unit(text, match, 2)
+    if unit not in _DBS_INDEX_UNITS:
+        raise ExtractorError(
+            "Ecopower 'Dynamische burgerstroom' formula: EPEX DA stated in "
+            f"{unit or 'no unit'}, expected euro/MWh"
         )
     factor = to_float(match.group(2)) * 1000.0
     base = parse_sign(match.group(3)) * to_float(match.group(4))
@@ -405,21 +463,38 @@ def _fixed_note_in_effect(text: str) -> bool:
 # and a half indexed on the delivery month's SPP-weighted EPEX DA mean.
 # Anchored on the literal VAST / VARIABEL rows: the pre-July cards, and the
 # June split card, print the same words in prose without those rows, and the
-# June one pins an actual 100%-fixed credit that must keep winning.
+# June one pins an actual 100%-fixed credit that must keep winning. The
+# groups are the fixed share and value, the variable share, the variable
+# value's sign and figure, then the SPP formula's multiplier, index, sign and
+# base. The variable value takes a sign: under an SPP index of 11,1 EUR/MWh
+# the formula gives one below zero.
 #
-# The bracket is checked for SPP ahead and then read whole, the plus sign and
-# its blanks are one optional piece, and the blanks before the base's sign
-# are taken whole: scanned on from each SPP in it, an unclosed bracket was
-# read to its end again from every one, and the blanks were split between
-# two runs in every way.
+# The bracket is checked for SPP ahead and then read whole, up to the next one
+# that opens, the plus sign and its blanks are one optional piece, and the
+# blanks before either sign are taken whole: scanned on from each SPP in it, an
+# unclosed bracket was read to its end again from every one, a line of
+# unclosed formulas was read to the end of the text from each, and the blanks
+# were split between two runs in every way. The variable value is read whole too, as a shorter one leaves the
+# same line to search for "formule".
 _INJECTION_SPP_SPLIT_RE = re.compile(
     _rest_of_line(_INJECTION_LABEL)
     + r"\s*VAST\s+(\d+)\s*%\s*[×xX*]\s*([\d,]+)\s*euro[^\n]*\n"
-    r"\s*VARIABEL\s*(?:\+\s*)?(\d+)\s*%[^\n]*?formule\s+"
-    r"([\d,]+)\s*[×xX*]\s*[\d,]+\s*\[(?=[^\]]*SPP)[^\]]*+\]\s*+"
+    r"\s*VARIABEL\s*(?:\+\s*)?(\d+)\s*%\s*[×xX*]\s*+"
+    rf"([{SIGN_CHARS}]?)\s*([\d,]++)[^\n]*?formule\s+"
+    r"([\d,]+)\s*[×xX*]\s*([\d,]+)\s*\[(?=[^\][]*SPP)[^\][]*+\]\s*+"
     rf"([{SIGN_CHARS}]?)\s*([\d,]+)",
     re.IGNORECASE,
 )
+# No unit follows the SPP formula's own figures, but the card prints, in euro,
+# the value it gives at the index printed in it: "VARIABEL +50% × 0,11736873
+# euro deze waarde volgt de formule 0,9 × 0,14152081 [EPEX SPP 2] - 0,01". So
+# the formula is worked out again. Both figures are printed to eight decimals,
+# which puts the formula up to 0,9 x 5e-9 + 5e-9 off the value whatever its
+# size, and on the four cards of July to October 2026 it lands within 9e-9 of
+# it (September). Twice that is allowed, outright rather than as a share,
+# since the rounding does not shrink with a value near zero. A figure read
+# ten times out misses by far more.
+_SPP_FORMULA_FLOOR = 2e-8
 _INJECTION_NEVER_NEGATIVE_RE = re.compile(
     r"terugleververgoeding\s+kan\s+nooit\s+negatief\s+zijn", re.IGNORECASE
 )
@@ -475,11 +550,23 @@ def _extract_injection(text: str) -> InjectionRates | None:
     split = _INJECTION_SPP_SPLIT_RE.search(text)
     if split is None:
         return InjectionRates(current=current)
+    multiplier = to_float(split.group(6))
+    var_base = parse_sign(split.group(8) or "+") * to_float(split.group(9))
+    # Both halves' values have to be in euro and the SPP formula has to give
+    # the variable one back, or the formula is on another scale than it is
+    # read on and only the printed credit is kept, as when it does not read.
+    if not _in_euro(text, split, 2, 5) or not formula_gives(
+        parse_sign(split.group(4) or "+") * to_float(split.group(5)),
+        multiplier,
+        to_float(split.group(7)),
+        var_base,
+        tolerance=0.0,
+        floor=_SPP_FORMULA_FLOOR,
+    ):
+        return InjectionRates(current=current)
     vast_share = to_float(split.group(1)) / 100.0
     vast_value = to_float(split.group(2))
     var_share = to_float(split.group(3)) / 100.0
-    multiplier = to_float(split.group(4))
-    var_base = parse_sign(split.group(5) or "+") * to_float(split.group(6))
     return InjectionRates(
         current=current,
         factor=var_share * multiplier,
@@ -551,7 +638,9 @@ def _extract_dbs_injection(text: str) -> InjectionRates | None:
     is VAT-exempt, so no scaling is applied.
     """
     match = _DBS_INJECTION_RE.search(text)
-    if not match:
+    # A card stating EPEX DA in another unit leaves the credit out, as one
+    # whose formula does not read at all.
+    if not match or _dbs_index_unit(text, match, 1) not in _DBS_INDEX_UNITS:
         return None
     factor = to_float(match.group(1)) * 1000.0
     base = parse_sign(match.group(2)) * to_float(match.group(3))

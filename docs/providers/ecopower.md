@@ -238,12 +238,25 @@ tried in this order:
 The resolved number is used (not the formula components) because there is no live Belpex feed at
 parse time, and carrying a variable cost without a live spot is what `VariableRates` is for.
 
+The formula's own unit is the word printed straight after the fixed price and after the index,
+past the index's footnote mark on the bracket cards (`vast aan 0,17 euro`, `variabel aan
+0,09810780 1 euro)`, `VAST 50% × 0,17 euro`, `VARIABEL +50% × 0,18183624 euro`). Every card on
+file from February to October 2026 (none of March) prints "euro" there, and `_energy_formula`
+(`_ecopower_cards.py`, through `_in_euro`) accepts nothing else: a card printing "eurocent",
+"euro/MWh" or no word keeps its printed rate and no formula, as when the formula does not read,
+and `printed_rlp_index` settles nothing on it.
+
 **dbs** (`_extract_dbs_energy`, `_ecopower_cards.py`): the card prints
 `Dynamische burgerstroom elk kwartier 0,00102 × EPEX DA +0,004 euro/kWh` (illustrative,
 `test_dbs_card_energy_is_dynamic_formula_htva`, `test_ecopower.py`). `_DBS_ENERGY_RE` (`_ecopower_cards.py`) captures factor, sign, base.
 
 - **Factor is scaled by 1000** because the card multiplies EPEX DA in EUR/MWh while the pricing
-  engine feeds the spot in EUR/kWh (`0,00102 × MWh = 1.02 × kWh`).
+  engine feeds the spot in EUR/kWh (`0,00102 × MWh = 1.02 × kWh`). The formula line states only
+  the base's unit; EPEX DA's is on page 2, "De EPEX DA notering is de dagelijks bepaalde
+  kwartierprijs voor elektriciteit in België (uitgedrukt in euro/MWh)", 3175 to 3456 characters
+  after the factors, `euro/MWh` on all five cards from January 2025 to November 2026.
+  `_DBS_INDEX_UNIT_RE` (`_ecopower_cards.py`) reads it, and a card stating another unit, or none,
+  is refused like one whose formula does not read.
 - The multiplication glyph is `×` (U+00D7); the regex accepts `[×xX*]` in case a re-render swaps
   it.
 - The additive base sign is parsed through `SIGN_CHARS` / `parse_sign` (`_parse.py`)
@@ -374,6 +387,16 @@ credit is half fixed and half indexed on the month's SPP-weighted EPEX mean, and
 halves are blended into one `factor`/`base` pair carrying `spp_indexed`, the printed
 figure staying the fallback. `_extract_injection` (`_ecopower_cards.py`).
 
+The card prints "euro" after both halves' values (`VAST 50% × 0,02 euro`, `VARIABEL +50% ×
+0,11736873 euro`), checked like the energy formula's, and no unit at all after the SPP
+formula's own figures. It does say the variable value is what that formula gives ("deze
+waarde volgt de formule 0,9 × 0,14152081 [EPEX SPP 2] - 0,01"), so the formula is worked out
+again at the index it prints (`formula_gives`, `_parse.py`), within `_SPP_FORMULA_FLOOR`
+(2e-8 EUR/kWh) of the value: both are printed to eight decimals, and July to October 2026 land
+within 9e-9. Under an SPP index of 11,1 EUR/MWh the variable value goes below zero, so it is
+read with its sign. A card failing either check keeps its printed credit and no formula, as
+one whose formula does not read.
+
 A definitive card is published once its month has ended, so the SPP it prints in that
 formula ("0,9 × 0,10051971 [EPEX SPP 2]") is the month's settled value, and footnote 2
 names the month. `fetch_for_month` settles the closed month on it (`_settled`,
@@ -419,9 +442,10 @@ nullable).
 **dbs** injection is a **per-quarter-hour `factor*spot+base`** shape (the card credits "elk
 kwartier"). `_extract_dbs_injection`
 (`_ecopower_cards.py`) parses `Terugleververgoeding elk kwartier 0,00098 × EPEX DA - 0,015
-euro/kWh` via `_DBS_INJECTION_RE` (`_ecopower_cards.py`). Same MWh->kWh factor scaling (`× 1000`)
-and signed base as the consumption formula. The base can be negative (the credit drops below zero
-at low spot, which the pricing engine respects). Stored unscaled (residential injection is
+euro/kWh` via `_DBS_INJECTION_RE` (`_ecopower_cards.py`). Same MWh->kWh factor scaling (`× 1000`),
+on the same page-2 statement of EPEX DA's unit, and signed base as the consumption formula; a card
+stating another unit returns `None` here, as one whose row does not read. The base can be negative
+(the credit drops below zero at low spot, which the pricing engine respects). Stored unscaled (residential injection is
 VAT-exempt). Sets `current=None`, `factor`, `base`, and a diagnostic `formula` string
 (`test_ecopower.py`).
 
@@ -564,11 +588,15 @@ Ranked by likelihood of breaking when Ecopower re-renders a card:
 1. **Energy rate moved or relabelled** -> `_ENERGY_RE` / `_ENERGY_VARIABEL_RE` /
    `_ENERGY_SPLIT_RE` (`_ecopower_cards.py`)
    for gbs, `_DBS_ENERGY_RE` (`_ecopower_cards.py`) for dbs. A `raise ExtractorError("could not
-   parse ... rate/formula")` is the symptom.
+   parse ... rate/formula")` is the symptom; "EPEX DA stated in ..., expected euro/MWh" means
+   page 2 restated the index's unit (`_DBS_INDEX_UNIT_RE`). A gbs card that keeps its rate but
+   loses `month_indexed` printed a unit other than "euro" after a formula figure (`_in_euro`).
 2. **Injection label / layout / note changed** -> `_INJECTION_RE`, `_OLD_INJECTION_RE`,
    `_INJECTION_SPLIT_RE`,
    `_INJECTION_FIXED_RE`, `_fixed_note_in_effect` (`_ecopower_cards.py`). Injection is nullable,
    so a miss shows as an unavailable injection sensor, not a hard error (watch for silent loss).
+   A July-layout credit that keeps its figure but loses `spp_indexed` printed a unit other than
+   "euro" after a half's value, or a value its SPP formula no longer gives back.
 3. **DSO table column shuffle or new sub-area label** -> `_DSO_LABELS` (`_ecopower_overlays.py`),
    the gbs row widths (`_ecopower_overlays.py`), the dbs row widths + `_DBS_WRAPPED_LABEL_RE`
    (`_ecopower_overlays.py`). Symptom: `Ecopower: DSO rows not found for [...]` on the live
