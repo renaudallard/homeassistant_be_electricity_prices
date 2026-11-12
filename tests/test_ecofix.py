@@ -50,6 +50,11 @@ from custom_components.be_electricity_prices.const import (
 )
 from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
 from custom_components.be_electricity_prices.providers import EXTRACTORS, ecofix
+from custom_components.be_electricity_prices.providers._ecofix_formulas import (
+    _MOTION_INDEX_RE,
+    _dynamic_formula_match,
+    _extract_injection,
+)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     SpotMonthlyRates,
@@ -57,10 +62,8 @@ from custom_components.be_electricity_prices.providers._rates import (
 )
 from custom_components.be_electricity_prices.providers.base import ExtractorError
 from custom_components.be_electricity_prices.providers.ecofix import (
-    _dynamic_formula_match,
     _extract_fee_and_flanders_renewables,
     _extract_flanders_dsos,
-    _extract_injection,
     _extract_publication,
     _head_probe_ids,
     parse_snapshot,
@@ -338,6 +341,147 @@ def test_flexy_missing_a_register_formula_keeps_the_printed_figures() -> None:
     assert not energy.month_indexed
     assert energy.formula_factor is None
     assert energy.current == pytest.approx(0.1181)
+
+
+_MOTION_BOX = "Energieprijs\nvergoeding Bijdrage groene energie\n(€ cent/kWh)"
+_FLEXY_HEADING = "Formules voor verbruik & injectie (€cent/kWh excl BTW)"
+
+
+@pytest.mark.parametrize(
+    ("unit", "found"),
+    [("(€/MWh)", "€/MWh"), ("(€ cent/MWh)", "€cent/MWh"), ("", "€/jaar")],
+)
+def test_a_motion_formula_in_another_unit_is_refused(unit: str, found: str) -> None:
+    """Both Motion formulas sit in the energy price box, whose "(€ cent/kWh)"
+    is the one statement of their unit; the WKK and Walloon columns' own sit
+    closer to them. A box stating another unit, or none, which reads the
+    fixed fee's "(€/jaar)" in its place, refuses the card for consumption and
+    feed-in alike, as a formula that does not read does."""
+    text = _layout(_MOTION)
+    assert text.count(_MOTION_BOX) == 1
+    restated = text.replace(_MOTION_BOX, _MOTION_BOX.replace("(€ cent/kWh)", unit))
+    with pytest.raises(
+        ExtractorError, match=f"Afname formula in {found}, expected € cent/kWh"
+    ):
+        parse_snapshot("ecofix_motion", restated, "flanders", "test://m")
+    with pytest.raises(
+        ExtractorError, match=f"Injectie formula in {found}, expected € cent/kWh"
+    ):
+        _extract_injection(restated, "dynamic")
+    snap = parse_snapshot("ecofix_motion", text, "flanders", "test://m")
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.06, rel=1e-4)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(0.884, rel=1e-4)
+
+
+@pytest.mark.parametrize(
+    "restated", ["(€/MWh excl BTW)", "(€cent/kWh incl BTW)", "(€cent/kWh)", ""]
+)
+def test_flexy_formulas_in_another_unit_are_dropped(restated: str) -> None:
+    """Flexy's formulas are read as c€/kWh before VAT, what their heading
+    states on every card. Under a heading stating another unit or VAT basis,
+    or none, the card keeps its printed figures and drops every formula,
+    consumption and feed-in, as it drops one that does not read."""
+    text = _layout(_FLEXY)
+    assert text.count(_FLEXY_HEADING) == 1
+    snap = parse_snapshot(
+        "ecofix_flexy",
+        text.replace(
+            _FLEXY_HEADING, _FLEXY_HEADING.replace("(€cent/kWh excl BTW)", restated)
+        ),
+        "flanders",
+        "test://f",
+    )
+    energy, injection = snap.energy, snap.injection
+    assert isinstance(energy, VariableRates) and injection is not None
+    assert energy.current == pytest.approx(0.1181)
+    assert not energy.month_indexed
+    assert energy.formula_factor is None and energy.formula is None
+    assert injection.current == pytest.approx(0.0432)
+    assert injection.factor is None and injection.base is None
+    assert not injection.spp_indexed and injection.formula is None
+
+
+_MOTION_INDEX = "(uitgedrukt in €/MWh)"
+
+
+@pytest.mark.parametrize(
+    ("unit", "found"), [("(uitgedrukt in c€/kWh)", "c€/kWh"), ("", "no stated unit")]
+)
+def test_a_motion_belpex_in_another_unit_is_refused(unit: str, found: str) -> None:
+    """The formulas' factor is scaled for a Belpex 15M in EUR/MWh, the unit
+    its definition states on every Motion card. A card defining it in
+    c€/kWh, with the Afname factor restated tenfold to match, would bill ten
+    times out under an unchanged box, so a definition stating another unit,
+    or none, refuses the card for consumption and feed-in alike."""
+    text = _layout(_MOTION)
+    assert text.count(_MOTION_INDEX) == 1
+    restated = text.replace(_MOTION_INDEX, unit).replace(
+        "(0,1000 x Belpex 15M)", "(1,0000 x Belpex 15M)"
+    )
+    with pytest.raises(
+        ExtractorError,
+        match=f"Afname formula on a Belpex 15M in {found}, expected €/MWh",
+    ):
+        parse_snapshot("ecofix_motion", restated, "flanders", "test://m")
+    with pytest.raises(
+        ExtractorError,
+        match=f"Injectie formula on a Belpex 15M in {found}, expected €/MWh",
+    ):
+        _extract_injection(restated, "dynamic")
+    snap = parse_snapshot("ecofix_motion", text, "flanders", "test://m")
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.06, rel=1e-4)
+
+
+def test_a_motion_box_under_longer_headings_still_reads() -> None:
+    """The headings of the boxes beside the energy price box sit between its
+    word and its unit, 36 characters on every Motion card. Grown to 106,
+    three times over, they still leave the box the card's one statement of
+    the formulas' unit, so the card reads."""
+    text = _layout(_MOTION)
+    between = "vergoeding Bijdrage groene energie\n"
+    assert text.count(_MOTION_BOX) == 1
+    longer = text.replace(_MOTION_BOX, _MOTION_BOX.replace(between, between * 3))
+    snap = parse_snapshot("ecofix_motion", longer, "flanders", "test://m")
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.06, rel=1e-4)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(0.884, rel=1e-4)
+
+
+@pytest.mark.parametrize(
+    ("contract", "statement", "spelling"),
+    [
+        ("ecofix_motion", "(€ cent/kWh)", "(€cent/kWh)"),
+        ("ecofix_flexy", "(€cent/kWh excl BTW)", "(€ cent/kWh excl BTW)"),
+        ("ecofix_flexy", "(€cent/kWh excl BTW)", "(€cent/kWh excl. BTW)"),
+    ],
+)
+def test_a_unit_in_the_other_spelling_ecofix_prints_still_reads(
+    contract: str, statement: str, spelling: str
+) -> None:
+    """Every Ecofix card prints the unit both as "€ cent/kWh" and as
+    "€cent/kWh", and Ecofix writes "excl BTW" over Flexy's formulas and
+    "excl. BTW" beside Motion's. A statement in the spelling the card uses
+    elsewhere states the same unit, so the formulas still read."""
+    name = _MOTION if contract == "ecofix_motion" else _FLEXY
+    heading = _MOTION_BOX if contract == "ecofix_motion" else _FLEXY_HEADING
+    text = _layout(name)
+    assert text.count(heading) == 1
+    respelt = text.replace(heading, heading.replace(statement, spelling))
+    snap = parse_snapshot(contract, respelt, "flanders", "test://e")
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(0.884, rel=1e-4)
+    if contract == "ecofix_motion":
+        assert isinstance(snap.energy, DynamicRates)
+        assert snap.energy.factor == pytest.approx(1.06, rel=1e-4)
+    else:
+        assert isinstance(snap.energy, VariableRates)
+        assert snap.energy.month_indexed
+        assert snap.energy.formula_factor == pytest.approx(0.1020 * 10.0 * 1.06)
+        assert snap.injection.spp_indexed
 
 
 async def test_a_month_with_no_card_bills_its_own_index(
@@ -727,7 +871,8 @@ def _quietly(read: Callable[[], object]) -> Callable[[], None]:
 # which a pattern was tried again from every place it could start: block
 # headings with no closing heading after them, a long number before the
 # Flexy renewables label, WKK headers with no unit after them, Walloon
-# headings with no levy unit, and ORES labels with no closing bracket.
+# headings with no levy unit, ORES labels with no closing bracket, and unit
+# statements whose bracket never closes after a formula.
 @pytest.mark.parametrize(
     "read",
     [
@@ -776,6 +921,29 @@ def _quietly(read: Callable[[], object]) -> Callable[[], None]:
             id="walloon renewables",
         ),
         pytest.param(lambda: ecofix._extract_ores("ORES (\n" * 14_000), id="ores rows"),
+        pytest.param(
+            _quietly(
+                lambda: _extract_injection(
+                    "Injectie (0,1 x Belpex 15M) + 1 " + "Energieprijs (" * 7_000,
+                    "dynamic",
+                )
+            ),
+            id="motion unit",
+        ),
+        pytest.param(
+            lambda: _MOTION_INDEX_RE.search("(uitgedrukt in" + " " * 40_000),
+            id="motion index unit",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: _extract_injection(
+                    "Injectie: (BELPEX-SPP-M * 0,1) + 1\nMaandprijs 1,0\n"
+                    + "Formules voor verbruik & injectie (" * 4_000,
+                    "variable",
+                )
+            ),
+            id="flexy unit",
+        ),
     ],
 )
 def test_a_crafted_card_is_read_in_time_linear_in_its_length(

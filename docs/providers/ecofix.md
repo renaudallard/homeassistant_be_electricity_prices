@@ -5,7 +5,8 @@ This document describes the Ecofix Gas & Power extractor
 electricity tariff cards into a `SupplierSnapshot`. It is a reference for the
 maintainer who has to repair the parser after Ecofix re-renders a card, adds or
 retires a product, or Fluvius/CWaPE change a column. Everything below is grounded
-in `providers/ecofix.py` and its test suite `tests/test_ecofix.py`, which pins
+in `providers/ecofix.py`, its formula readers in `providers/_ecofix_formulas.py`,
+and its test suite `tests/test_ecofix.py`, which pins
 the expected parse output against real May 2026 fixtures and is the ground truth
 for what the extractor must produce.
 
@@ -192,7 +193,7 @@ solar regime.
 
 Notes:
 
-- Both dynamic products set `quarter_hourly=True` (`ecofix.py`): the cards bill
+- Both dynamic products set `quarter_hourly=True` (`_ecofix_formulas.py`): the cards bill
   on the 15-minute Belpex spot ("Belpex 15M"), so the integration keeps the native
   quarter-hour slots rather than the hourly mean, like Engie and OCTA+ (see the
   `DynamicRates.quarter_hourly` docstring at `providers/_rates.py`). YTD billing
@@ -297,8 +298,8 @@ of narrowly-anchored helpers. The fields it pulls out:
 | Field | Helper | Source |
 | --- | --- | --- |
 | Yearly fixed fee + Flanders renewables | `_extract_fee_and_flanders_renewables` | `ecofix.py` |
-| Energy formula / rates | `_extract_energy` | `ecofix.py` |
-| Injection | `_extract_injection` | `ecofix.py` |
+| Energy formula / rates | `_extract_energy` | `_ecofix_formulas.py` |
+| Injection | `_extract_injection` | `_ecofix_formulas.py` |
 | Publication label + `valid_until` | `_extract_publication` | `ecofix.py` |
 | Federal excise + energy contribution | `_extract_federal_taxes` | `ecofix.py` |
 | Wallonia connection fee | `_extract_wallonia_connection_fee` | `ecofix.py` |
@@ -333,7 +334,7 @@ Notable parsing hurdles:
   pattern, a card without the closing heading was read to its end again from
   every opening one. The renewable above its `Verbruik` label is read from the
   start of its digits.
-- **Belpex 15M formula anchoring.** `_dynamic_formula_match` (`ecofix.py`)
+- **Belpex 15M formula anchoring.** `_dynamic_formula_match` (`_ecofix_formulas.py`)
   anchors each formula on its own label (`Afname` for consumption, `Injectie` for
   injection) instead of indexing into a document-order `findall`. The fill between
   the label and its `(factor x Belpex 15M) <sign> base` formula is tempered with a
@@ -341,12 +342,15 @@ Notable parsing hurdles:
   reworded or absent consumption formula produces a clean miss instead of binding
   the injection formula to consumption. This is pinned by
   `test_afname_anchor_does_not_reach_injection_formula` (`tests/test_ecofix.py`).
-- **Unit conversion.** PDF formulas are in c/kWh ex-VAT against Belpex in EUR/MWh.
+- **Unit conversion.** PDF formulas are in c/kWh ex-VAT against Belpex in EUR/MWh,
+  the unit the card states for them (see
+  [The units the cards state](#the-units-the-cards-state)).
   The dynamic energy branch converts `factor` (unitless, x1000/100 = x10) and
   `base` (cents to EUR, /100), then applies the VAT multiplier read from the card
-  banner (`ecofix.py`). Belgian residential VAT is currently 6% and the card
-  prints "Prijzen inclusief X% BTW"; `vat_multiplier` reads X so a future VAT change
-  needs no code edit (`ecofix.py`, helper at `_pdf.py`).
+  banner (`_ecofix_formulas.py`). Belgian residential VAT is currently 6% and the
+  card prints "Prijzen inclusief X% BTW"; `vat_multiplier` reads X in
+  `parse_snapshot` so a future VAT change needs no code edit (`ecofix.py`, helper
+  at `_pdf.py`).
 - **Sign handling.** The `<sign>` between factor and base is matched against
   `SIGN_CHARS` and resolved with `parse_sign`, which treats every hyphen/dash/minus
   variant as negative (`_parse.py`). Supplier PDFs flip between these silently on
@@ -363,7 +367,7 @@ Notable parsing hurdles:
 
 ### Dynamic (Motion, Motion Online)
 
-`_extract_energy` with `kind == "dynamic"` (`ecofix.py`) reads the `Afname`
+`_extract_energy` with `kind == "dynamic"` (`_ecofix_formulas.py`) reads the `Afname`
 Belpex 15M formula and returns a `DynamicRates`:
 
 ```
@@ -380,7 +384,7 @@ A missing `Afname` formula is fatal (`ExtractorError`).
 
 ### Variable (Flexy)
 
-`_extract_energy` with `kind == "variable"` (`ecofix.py`) reads the indicative
+`_extract_energy` with `kind == "variable"` (`_ecofix_formulas.py`) reads the indicative
 `Maandprijs:` row, which carries four columns `(mono, peak, off-peak,
 exclusive_night)` that hold the same rate for every meter type today; all four are
 surfaced into a `VariableRates`. The lookup is bounded to the `Verbruik` block,
@@ -425,6 +429,44 @@ where the archive holds one and the current card's otherwise. No next card settl
 it: Ecofix prints no index, and which month a later card's figure belongs to is
 not stated and does not follow a rule (the September card repeated June's), so
 taking it would bill most months on another month's index.
+
+### The units the cards state
+
+The formulas are read in the unit the card states for them, not one assumed
+(`_ecofix_formulas.py`):
+
+- Motion and Motion Online: the energy price box both formulas sit in,
+  "Energieprijs" over "(€ cent/kWh)" with the layout putting the neighbouring
+  boxes' headings between (`_MOTION_UNIT_RE`). The WKK column's and the Walloon
+  renewables' own "(€ cent/kWh)" sit closer to the formulas, so the box is
+  matched by its word, 159 to 316 characters ahead of them with 36 characters
+  of headings between it and its unit. As the card's only statement it is
+  looked for 600 characters back, with up to 200 between word and unit.
+- Flexy and Flexy Online: the heading over the formulas, "Formules voor
+  verbruik & injectie (€cent/kWh excl BTW)", 91 to 305 characters ahead
+  (`_FLEXY_UNIT_RE`). Its brackets are taken whole, since they state the VAT
+  basis the formulas are grossed from as well as their unit.
+
+Those are the spellings the cards of May and of August to November 2026
+print, compared with their whitespace folded and in the other spelling Ecofix
+uses for each: every card prints both "€ cent/kWh" and "€cent/kWh", and
+"excl. BTW" stands beside Motion's formulas. Nothing else is accepted. A
+Motion card stating another unit, or none, is refused with `ExtractorError`,
+consumption and feed-in alike, as a formula that does not read is; a Flexy card
+keeps its printed figures and drops every formula, the feed-in one included
+(`test_a_motion_formula_in_another_unit_is_refused`,
+`test_flexy_formulas_in_another_unit_are_dropped`,
+`test_a_unit_in_the_other_spelling_ecofix_prints_still_reads`,
+`test_a_motion_box_under_longer_headings_still_reads`).
+
+Motion states the index's unit in the definitions on a later page: Belpex 15M
+is the Nordpool quarter-hour price "(uitgedrukt in €/MWh)", the card's only
+"uitgedrukt", ending 3852 to 4867 characters past its formulas
+(`_MOTION_INDEX_RE`, read 6000 characters on). The factor is scaled for that unit, so a definition
+stating another one, or none, refuses the card the same way, consumption and
+feed-in alike (`test_a_motion_belpex_in_another_unit_is_refused`). Flexy never
+states its index's unit. Ecofix prints no index value either, so a formula
+cannot be checked against its printed figure.
 
 ## DSO overlay coverage
 
@@ -530,10 +572,10 @@ Ecofix spans two of the three injection taxonomy shapes depending on TariffKind
 (see [../pricing-model.md](../pricing-model.md) for the taxonomy):
 
 - **Dynamic (Motion, Motion Online): hourly `factor*spot+base` (spot-indexed).**
-  `_extract_injection` with `kind == "dynamic"` (`ecofix.py`) anchors on the
+  `_extract_injection` with `kind == "dynamic"` (`_ecofix_formulas.py`) anchors on the
   `Injectie` label to read the injection Belpex 15M formula, emits `factor =
   factor_pdf * 10` and `base = base_pdf_cents / 100` (no VAT, since Belgian
-  residential injection is VAT-exempt, `ecofix.py`), and surfaces the printed
+  residential injection is VAT-exempt, `_ecofix_formulas.py`), and surfaces the printed
   indicative rate (`Injectie <n>`) as `current` for consumers without a live spot.
   A missing formula is **fatal**: raising rather than returning None avoids
   silently zeroing the feed-in credit, and refusing to fall back to the indicative
@@ -596,11 +638,11 @@ test in the source.
   `tests/test_ecofix.py`).
 - **Afname anchor must not reach the Injectie formula.** The tempered lookahead in
   `_dynamic_formula_match` is the guard; without it a reworded/absent consumption
-  formula would bind the injection formula to consumption (`ecofix.py`,
+  formula would bind the injection formula to consumption (`_ecofix_formulas.py`,
   `tests/test_ecofix.py`).
 - **Injection role-swap protection.** Both dynamic formulas are anchored on their
   own label rather than by document order, so a reordered card cannot swap
-  consumption and injection (`ecofix.py`).
+  consumption and injection (`_ecofix_formulas.py`).
 - **VAT read from banner, not hardcoded.** `vat_multiplier` reads the `inclusief X%
   BTW` banner so a VAT change needs no code edit; the default is 1.06 if the banner
   is absent (`ecofix.py`, `_pdf.py`).
@@ -624,7 +666,7 @@ test in the source.
   `test_missing_wallonia_connection_fee_is_fatal`, `tests/test_ecofix.py`).
 - **Injection is never VAT-scaled.** Residential injection is VAT-exempt; the
   dynamic injection factor/base omit the VAT multiplier that the consumption side
-  applies (`ecofix.py`).
+  applies (`_ecofix_formulas.py`).
 
 ## Test fixtures
 
@@ -642,8 +684,9 @@ synthesize edge-case text inline rather than from a fixture (the July 2026 reflo
 the diverging data-management columns, the ORES drift, the version-token collision),
 so those layouts are exercised without needing a separate fixture file.
 `test_a_crafted_card_is_read_in_time_linear_in_its_length` hands the block, table,
-levy and ORES readers about 100,000 characters each of headings with no closing
-heading, a long number or ORES labels with no closing bracket.
+levy, ORES and unit readers about 100,000 characters each of headings with no
+closing heading, a long number, or ORES labels and unit statements with no
+closing bracket.
 
 ## When the card changes, look here
 
@@ -653,9 +696,10 @@ Ranked by how likely a card re-render is to break them:
    (`ecofix.py`): the Vlaanderen block is the most re-flowed part of the card
    (the July 2026 regression lived here). Watch the fee/renewable order and the
    `Verbruik` / `meter Piekuren` anchors.
-2. `_dynamic_formula_match` (`ecofix.py`) and the `_extract_energy` /
+2. `_dynamic_formula_match` (`_ecofix_formulas.py`) and the `_extract_energy` /
    `_extract_injection` dynamic branches: any change to the `Afname` / `Injectie`
-   labels, the `Belpex 15M` wording, or the sign glyph.
+   labels, the `Belpex 15M` wording, the sign glyph, or the unit box above them
+   (see [The units the cards state](#the-units-the-cards-state)).
 3. `_extract_flanders_dsos` (`ecofix.py`) and `_FLANDERS_LABELS` (`ecofix.py`):
    a Fluvius rename (labels are matched literally) or a change in the number of
    columns per row, especially if Fluvius diverges the two data-management regimes.
