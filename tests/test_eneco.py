@@ -900,6 +900,238 @@ def test_energy_anchor_does_not_reach_the_injection_page() -> None:
         parse_snapshot(text, "power_flex", "test://jun21shape", REGION_FLANDERS)
 
 
+@pytest.mark.parametrize(
+    ("fixture", "old", "new"),
+    [
+        ("eneco_flex.pdf", "VERBRUIK(*)\n(€cent/kWh)", "VERBRUIK(*)\n(€/MWh)"),
+        ("eneco_flex.pdf", "VERBRUIK(*)\n(€cent/kWh)", "VERBRUIK(*)\n"),
+        # Until June 2025 the fixed fee's "(€/jaar)" sits between this
+        # heading and the formulas, nearer them, and is no stand-in for it.
+        ("eneco_flex_jun25.pdf", "VERBRUIK (€cent/kWh)", "VERBRUIK (€/MWh)"),
+        # The footnote's Belpex-RLP-M restated alone, the factor left as it
+        # was: the heading still holds, the index no longer does.
+        (
+            "eneco_flex.pdf",
+            "Belpex-RLP-M (03/2026: €96,8502/MWh)",
+            "Belpex-RLP-M (03/2026: 9,68502 c€/kWh)",
+        ),
+        (
+            "eneco_flex.pdf",
+            "Belpex-RLP-M (03/2026: €96,8502/MWh)",
+            "Belpex-RLP-M (03/2026: 0,0968502 €/kWh)",
+        ),
+    ],
+    ids=["restated", "no unit", "June 2025 layout", "index c€/kWh", "index €/kWh"],
+)
+def test_a_flex_formula_under_another_unit_is_dropped(
+    fixture: str, old: str, new: str
+) -> None:
+    """Every issue since November 2023 heads the consumption column
+    "(€cent/kWh)" and footnotes Belpex-RLP-M in €/MWh, the scale the formula
+    is read on. Under any other unit, or none, the formula is dropped like
+    one that does not match: the printed Maandprijs bills and the month is no
+    longer indexed."""
+    text = fixture_text(fixture)
+    assert text.count(old) == 1
+    energy = parse_snapshot(text, "power_flex", "test://", REGION_FLANDERS).energy
+    assert isinstance(energy, VariableRates)
+    assert energy.formula_factor == pytest.approx(1.0812)
+    assert energy.month_indexed
+    restated = parse_snapshot(
+        text.replace(old, new), "power_flex", "test://", REGION_FLANDERS
+    ).energy
+    assert isinstance(restated, VariableRates)
+    assert restated.formula is None
+    assert restated.formula_factor is None and restated.formula_base is None
+    assert not restated.month_indexed and not restated.rlp_indexed
+    assert restated.current == energy.current
+
+
+def test_a_flex_formula_whose_index_is_not_footnoted_is_dropped() -> None:
+    """Both of the footnote's Belpex-RLP-M figures gone, the card no longer
+    says what scale the index is on."""
+    text = fixture_text("eneco_flex.pdf")
+    for old in ("(03/2026: €96,8502/MWh)", "(€115,6468/MWh)"):
+        assert text.count(f"Belpex-RLP-M {old}") == 1
+        text = text.replace(f"Belpex-RLP-M {old}", "Belpex-RLP-M")
+    energy = parse_snapshot(text, "power_flex", "test://", REGION_FLANDERS).energy
+    assert isinstance(energy, VariableRates)
+    assert energy.formula_factor is None and not energy.month_indexed
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "error"),
+    [
+        (
+            "VERBRUIK \n(€cent/kWh)",
+            "VERBRUIK \n(€/MWh)",
+            "dynamic formula stated in €/MWh",
+        ),
+        ("VERBRUIK \n(€cent/kWh)", "VERBRUIK \n", "dynamic formula stated in no unit"),
+        (
+            "Belpex-H (€115,6468/MWh)",
+            "Belpex-H (11,56468 c€/kWh)",
+            "dynamic index stated in 11,56468 c€/kWh",
+        ),
+        # The feed-in's own Belpex-H further on is out of reach and no
+        # stand-in for the consumption one.
+        ("Belpex-H (€115,6468/MWh)", "Belpex-H", "dynamic index stated in no unit"),
+    ],
+    ids=["restated", "no unit", "index restated", "no index unit"],
+)
+def test_a_dynamic_formula_under_another_unit_is_refused(
+    old: str, new: str, error: str
+) -> None:
+    """The dynamic reader refuses a card whose formula it cannot read, so it
+    refuses one whose formula or index is stated in another unit, or in
+    none."""
+    text = fixture_text("eneco_dyn.pdf")
+    assert text.count(old) == 1
+    energy = parse_snapshot(text, "power_dynamic", "test://", REGION_FLANDERS).energy
+    assert isinstance(energy, DynamicRates)
+    assert energy.factor == pytest.approx(1.0812)
+    assert energy.base == pytest.approx(0.0106)
+    with pytest.raises(eneco_mod.ExtractorError, match=re.escape(error)):
+        parse_snapshot(
+            text.replace(old, new), "power_dynamic", "test://", REGION_FLANDERS
+        )
+
+
+@pytest.mark.parametrize(
+    ("fixture", "contract", "old", "new", "factor", "base"),
+    [
+        (
+            "eneco_flex.pdf",
+            "power_flex",
+            "INJECTIE \n(€cent/kWh)",
+            "INJECTIE \n(€/MWh)",
+            0.8,
+            -0.0265,
+        ),
+        (
+            "eneco_fix.pdf",
+            "power_fix",
+            "INJECTIE\n(€cent/kWh)",
+            "INJECTIE\n(€/MWh)",
+            0.8,
+            -0.0265,
+        ),
+        (
+            "eneco_dyn.pdf",
+            "power_dynamic",
+            "INJECTIE \n(€cent/kWh)",
+            "INJECTIE \n(€/MWh)",
+            1.0,
+            -0.01188,
+        ),
+        (
+            "eneco_dyn.pdf",
+            "power_dynamic",
+            "Belpex-H (€71,0575/MWh)",
+            "Belpex-H (7,10575 c€/kWh)",
+            1.0,
+            -0.01188,
+        ),
+    ],
+    ids=["flex", "fix", "dynamic", "dynamic index"],
+)
+def test_a_feed_in_formula_under_another_unit_is_dropped(
+    fixture: str, contract: str, old: str, new: str, factor: float, base: float
+) -> None:
+    """The feed-in column is headed "(€cent/kWh)" on every card and its index
+    footnoted in €/MWh. Under another unit its formula is dropped like one
+    that does not match, and the printed credit stands."""
+    text = fixture_text(fixture)
+    assert text.count(old) == 1
+    injection = parse_snapshot(text, contract, "test://", REGION_FLANDERS).injection
+    assert injection is not None
+    assert injection.factor == pytest.approx(factor)
+    assert injection.base == pytest.approx(base)
+    restated = parse_snapshot(
+        text.replace(old, new), contract, "test://", REGION_FLANDERS
+    ).injection
+    assert restated is not None
+    assert restated.formula is None
+    assert restated.factor is None and restated.base is None
+    assert not restated.month_indexed
+    assert restated.current == injection.current
+
+
+@pytest.mark.parametrize(
+    ("fixture", "contract", "formula", "restated", "footnotes"),
+    [
+        (
+            "eneco_flex.pdf",
+            "power_flex",
+            "0,08 X BELPEX -2,65",
+            "0,8 X BELPEX -2,65",
+            {
+                "(03/2026: €92,6114/MWh)": "(03/2026: 9,26114 c€/kWh)",
+                "(€104,4958/MWh)": "(10,44958 c€/kWh)",
+            },
+        ),
+        (
+            "eneco_fix.pdf",
+            "power_fix",
+            "0,08 X BELPEX -2,65",
+            "0,8 X BELPEX -2,65",
+            {
+                "(03/2026: €92,6114/MWh)": "(03/2026: 9,26114 c€/kWh)",
+                "(€104,4958/MWh)": "(10,44958 c€/kWh)",
+            },
+        ),
+        (
+            "eneco_flex_one.pdf",
+            "power_flex_one",
+            "0,084 X BELPEX -3",
+            "0,84 X BELPEX -3",
+            {
+                "(08/2026: €129,3186/MWh)": "(08/2026: 12,93186 c€/kWh)",
+                "(€109,4583/MWh)": "(10,94583 c€/kWh)",
+            },
+        ),
+        (
+            "eneco_fix_one.pdf",
+            "power_fix_one",
+            "0,077 X BELPEX -3",
+            "0,77 X BELPEX -3",
+            {
+                "(09/2026: €156,4069/MWh)": "(09/2026: 15,64069 c€/kWh)",
+                "(€122,1988/MWh)": "(12,21988 c€/kWh)",
+            },
+        ),
+    ],
+    ids=["flex", "fix", "flex one", "fix one"],
+)
+def test_a_feed_in_index_restated_in_cents_is_not_read_at_ten_times_the_credit(
+    fixture: str,
+    contract: str,
+    formula: str,
+    restated: str,
+    footnotes: dict[str, str],
+) -> None:
+    """Belpex-injectie restated in c€/kWh, as OCTA+ restated its feed-in on
+    5 November 2026, moves the factor a decimal place and leaves the
+    heading's "(€cent/kWh)" true: "0,8 X BELPEX" still reads as a factor
+    below one, and on the old scale it credited ten times what the card
+    prints. The footnote now says the index is no longer in €/MWh, so the
+    formula is dropped and the printed credit stands."""
+    text = fixture_text(fixture)
+    own = parse_snapshot(text, contract, "test://", REGION_FLANDERS).injection
+    assert own is not None and own.month_indexed
+    assert text.count(formula) == 3
+    text = text.replace(formula, restated)
+    for old, new in footnotes.items():
+        assert text.count(f"Belpex-injectie {old}") == 1
+        text = text.replace(f"Belpex-injectie {old}", f"Belpex-injectie {new}")
+    injection = parse_snapshot(text, contract, "test://", REGION_FLANDERS).injection
+    assert injection is not None
+    assert injection.formula is None
+    assert injection.factor is None and injection.base is None
+    assert not injection.month_indexed
+    assert injection.current == own.current
+
+
 def test_published_index_is_the_index_the_printed_price_was_computed_at() -> None:
     """Every Flex card footnotes the Belpex-RLP-M its Maandprijs was computed
     on: "laatst gekende waarde van Belpex-RLP-M (08/2026: €133,4366/MWh)". The
@@ -1328,6 +1560,21 @@ def _discover_on(listing: str) -> None:
             _quietly(lambda text: eneco_mod._extract_taxes(text, REGION_FLANDERS)),
             "Alle verbruik 1\n" + "Bijdrage groene stroom en WKK x" * 10_000,
             id="levy labels",
+        ),
+        pytest.param(
+            eneco_mod._ENERGY_UNIT_RE.search,
+            "VERBRUIK (" + "/" * 100_000,
+            id="consumption heading slashes",
+        ),
+        pytest.param(
+            eneco_mod._INJECTION_UNIT_RE.search,
+            "INJECTIE (" + "/" * 100_000,
+            id="feed-in heading slashes",
+        ),
+        pytest.param(
+            eneco_mod._INJECTION_UNITS.footnote.search,
+            "Belpex-injectie (" * 10_000,
+            id="index statements",
         ),
     ],
 )

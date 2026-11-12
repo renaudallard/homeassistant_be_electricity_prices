@@ -560,6 +560,33 @@ There is no supplier-side prosumer / PV forfait on Eneco cards: the prosumer ter
 lives only on the Wallonia DSO overlay (`prosumer_eur_per_kva_year`), and
 `SupplierSnapshot.supplier_prosumer_eur_per_kva_year` is left `None`.
 
+### Units
+
+Every formula is read as c€/kWh on an index in €/MWh, and the card states
+both. The column heading over it states the unit it gives: `VERBRUIK(*)` or
+`VERBRUIK` over `(€cent/kWh)` on the first page, on one line as `VASTE
+VERGOEDING + VERBRUIK (€cent/kWh)` until June 2025, and `INJECTIE` over
+`(€cent/kWh)` on the feed-in page. The footnote naming the index states its
+unit with its figure: `Belpex-RLP-M (10/2026: €181,2137/MWh)` for Flex and
+Flex One, `Belpex-H (€180,0312/MWh)` for Dynamic, and `Belpex-injectie` (plain
+`Belpex` on the Fix and Flex cards until March 2024) or Dynamic's second
+`Belpex-H` for the feed-in. Every issue from November 2023 to November 2026
+spells them `€cent/kWh` and `€<figure>/MWh`, the only spellings accepted
+(`_unit_mismatch`, `eneco.py`). The heading alone is not enough: an index
+restated in c€/kWh leaves it true, and a feed-in formula such as `0,76 X
+BELPEX -3` on it would be read at ten times the credit.
+
+A formula is checked against its own heading rather than the nearest unit,
+since until June 2025 the fixed fee's `(€/jaar)` sits between the consumption
+heading and the formulas, and against the first footnote naming its index
+after it, which for Dynamic's consumption formula never reaches the feed-in's
+`Belpex-H`. Under any other unit, or none, the reader does what it does with
+a formula that does not match: Flex and Flex One drop the formula and bill the
+printed Maandprijs unindexed, Dynamic refuses the card, and every feed-in leg
+drops its formula and keeps the printed credit. The footnoted indices a closed
+month settles on already require `/MWh` after the figure
+(`_INDEX_FOOTNOTE_RE`, `_INJECTION_FOOTNOTE_RE`, `eneco.py`).
+
 ## Quirks and historical bugs
 
 - **VAT-inclusive cards**: all prices are 6 % VAT-incl, so `vat_rate = 0.0` and the
@@ -693,5 +720,6 @@ Fixtures live under `tests/fixtures/` and are loaded via `fixture_text(...)`.
 | a mono Walloon entry on Tarif Impact billed the single rate in every band | `_IMPACT_PAIR_RE` (the Impact footnote reworded) | `eneco.py` |
 | tax value wrong or fatal error | `_extract_taxes` anchors (tier label, `(€cent/kWh)`, `Aansluitingsvergoeding`) | `_eneco_overlays.py` |
 | injection credit zeroed | `_extract_injection` heading anchor / section cutoff | `eneco.py` |
+| a Flex month no longer indexed, a feed-in credit left at its printed figure, or Dynamic refused for its unit | a column heading no longer reads `(€cent/kWh)`, or an index footnote no longer `€<figure>/MWh` (`_unit_mismatch`) | `eneco.py` |
 | four-digit fee truncated | `_NUM` token | `_eneco_overlays.py` |
 | historical month mis-billed | `fetch_for_month` volume walk or `archive_validity_check` | `eneco.py` |

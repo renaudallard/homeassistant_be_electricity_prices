@@ -43,6 +43,7 @@ from __future__ import annotations
 import re
 from dataclasses import replace
 from datetime import date
+from typing import NamedTuple
 
 import aiohttp
 from homeassistant.util import dt as dt_util
@@ -54,11 +55,13 @@ from ..const import (
 from ._eneco_overlays import _AREAS, _NUM, _WS, _extract_dsos, _extract_taxes
 from ._links import on_hosts
 from ._parse import (
+    BRACKETED_UNIT,
     LINE_BREAK,
     SIGN_CHARS,
     parse_sign,
     require_every_area,
     running_month_short_of_an_area,
+    stated_unit,
     to_float,
 )
 from ._pdf import (
@@ -455,6 +458,76 @@ _VAT_RE = re.compile(r"inclusief\s*(\d+)\s*%\s*btw", re.IGNORECASE)
 # overeenkomen met de nachturen": see FixedRates.day_night_under_impact.
 _IMPACT_PAIR_RE = re.compile(r"ECO\W+uren\s+overeenkomen\s+met\s+de\s+nachturen")
 
+# Every formula's column heading states the unit it gives: "VERBRUIK(*)" or
+# "VERBRUIK" over "(€cent/kWh)" for consumption, on one line as "VASTE
+# VERGOEDING + VERBRUIK (€cent/kWh)" until June 2025, and "INJECTIE" over
+# "(€cent/kWh)" on the feed-in page. Every issue from November 2023 to
+# November 2026 spells it so. A formula is held to its own heading rather
+# than to the nearest unit: until June 2025 the fixed fee's "(€/jaar)" sits
+# between the consumption heading and the formulas. The heading starts at
+# most 191 characters ahead of a Flex factor, 85 ahead of a Dynamic one and
+# 312 ahead of a feed-in one, each reach allowing some 70 to 90 more, and
+# neither pattern matches anything else on any card.
+_UNIT = "€cent/kWh"
+_ENERGY_UNIT_RE = re.compile(rf"VERBRUIK(?:\(\*\))?\s*{BRACKETED_UNIT}")
+_INJECTION_UNIT_RE = re.compile(rf"INJECTIE\s*{BRACKETED_UNIT}")
+# That heading stays true when only the index is restated: a feed-in
+# formula on Belpex in c€/kWh, "0,76 X BELPEX -3", gives c€/kWh too and
+# would be read at ten times the credit. The footnote naming the index
+# states its unit with the figure, "Belpex-RLP-M (10/2026: €181,2137/MWh)",
+# "Belpex-injectie (...)" for the feed-in, plain "Belpex (...)" on the Fix and
+# Flex cards until March 2024, and "Belpex-H (€180,0312/MWh)" on Dynamic,
+# spelled "€<figure>/MWh" on every issue. It follows the formula: the
+# consumption one ends at most 3730 characters after a Flex factor and 3096
+# after a Dynamic one, the feed-in one 1156 after a feed-in factor. Each reach
+# allows about a fifth more and stops short of another formula's statement:
+# Dynamic's feed-in Belpex-H starts 7334 or more after its consumption factor.
+_INDEX_UNIT = "€/MWh"
+_FIGURE_RE = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def _footnote_re(name: str) -> re.Pattern[str]:
+    """The footnote naming the index ``name``, with the bracket after it, the
+    month it was known in left out, as its first group: "€181,2137/MWh",
+    which reads "€/MWh" once its figure is taken out. The bracket is bounded,
+    so a name with no closing bracket after it costs a few characters."""
+    return re.compile(rf"{name}\s*\((?:\d{{2}}/\d{{4}}:\s*)?([^()\n]{{1,40}})\)")
+
+
+class _Statements(NamedTuple):
+    """Where a formula's card states the units it is read on."""
+
+    heading: re.Pattern[str]
+    heading_reach: int
+    footnote: re.Pattern[str]
+    footnote_reach: int
+
+
+_FLEX_UNITS = _Statements(_ENERGY_UNIT_RE, 260, _footnote_re("Belpex-RLP-M"), 4500)
+_DYNAMIC_UNITS = _Statements(_ENERGY_UNIT_RE, 260, _footnote_re("Belpex-H"), 4500)
+_INJECTION_UNITS = _Statements(
+    _INJECTION_UNIT_RE, 400, _footnote_re(r"Belpex(?:-injectie|-H)?"), 1400
+)
+
+
+def _unit_mismatch(
+    text: str, figure: tuple[int, int], statements: _Statements
+) -> str | None:
+    """None where the card states the formula whose factor sits at
+    ``figure`` in €cent/kWh and its index in €/MWh, the units every issue
+    has printed, else what it states instead, no unit included."""
+    unit = stated_unit(
+        text, statements.heading, figure, before=statements.heading_reach
+    )
+    if unit != _UNIT:
+        return f"formula stated in {unit or 'no unit'}, expected {_UNIT}"
+    index = stated_unit(
+        text, statements.footnote, figure, after=statements.footnote_reach
+    )
+    if index is None or _FIGURE_RE.sub("", index, count=1) != _INDEX_UNIT:
+        return f"index stated in {index or 'no unit'}, expected {_INDEX_UNIT}"
+    return None
+
 
 def parse_snapshot(
     text: str, contract_id: str, source_url: str, region: str
@@ -573,11 +646,14 @@ def _extract_variable(text: str) -> VariableRates:
     # silently drop the formula display string, and an integer base as
     # the dynamic and injection formulas do: the card already prints
     # "0,077 X BELPEX -3", and a missed formula here parses cleanly
-    # while dropping the month indexing.
+    # while dropping the month indexing. A formula on a unit the card no
+    # longer states is dropped the same way, and the printed Maandprijs bills.
     formula_match = re.search(
         rf"\((0,\d+)\s*X\s*BELPEX[\w\-]+\s*([{SIGN_CHARS}])\s*(\d+(?:,\d+)?)\)",
         text,
     )
+    if formula_match and _unit_mismatch(text, formula_match.span(1), _FLEX_UNITS):
+        formula_match = None
     if not yearly_fee_match or not monthly_match:
         raise ExtractorError("could not parse Eneco variable energy block")
     # Numeric coefficients, VAT-baked to EUR/kWh like the dynamic path
@@ -629,6 +705,9 @@ def _extract_dynamic(text: str) -> DynamicRates:
     )
     if not yearly_fee_match or not formula_match:
         raise ExtractorError("could not parse Eneco dynamic energy block")
+    mismatch = _unit_mismatch(text, formula_match.span(1), _DYNAMIC_UNITS)
+    if mismatch:
+        raise ExtractorError(f"Eneco dynamic {mismatch}")
     factor_pdf = to_float(formula_match.group(1))
     base_pre_vat_cents = parse_sign(formula_match.group(2)) * to_float(
         formula_match.group(3)
@@ -693,6 +772,15 @@ def _extract_injection(text: str, contract_id: str) -> InjectionRates | None:
         rf"(0,\d+)\s*X\s*BELPEX[\w\-]*\s*([{SIGN_CHARS}])\s*(\d+(?:,\d+)?)",
         section,
     )
+    # Its index is footnoted past the section's end, so the units are looked
+    # for on the whole card. Under one it no longer states, the formula is
+    # dropped like one that does not match and the printed credit stands.
+    if formula and _unit_mismatch(
+        text,
+        (anchor.end() + formula.start(1), anchor.end() + formula.end(1)),
+        _INJECTION_UNITS,
+    ):
+        formula = None
 
     def _first_num(m: re.Match[str] | None) -> float | None:
         if m is None:
