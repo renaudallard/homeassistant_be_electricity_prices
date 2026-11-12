@@ -82,9 +82,9 @@ class _Card:
     # Frank and Eneco Dynamic gross by the multiplier their formula prints
     # beside it instead.
     grossed_by_stated_rate: bool = True
-    # Engie binds each formula to the price printed beside it at the stated
-    # rate, so a card restated to 7% with its prices still at 6% drops the
-    # formula, as it should: only the rate read is checked there.
+    # Engie and Cociter bind each formula to the price printed beside it at
+    # the stated rate, so a card restated to 7% with its prices still at 6%
+    # drops the formula, as it should: only the rate read is checked there.
     cross_checked: bool = False
 
 
@@ -94,6 +94,7 @@ _PRINTING = {
         fixture_text,
         lambda t: cociter.parse_snapshot(t, "cociter_variable", "t://", "2026-04"),
         (cociter._VAT_RE,),
+        cross_checked=True,
     ),
     "dots": _Card(
         "dots_dynamic_2026-11.pdf",

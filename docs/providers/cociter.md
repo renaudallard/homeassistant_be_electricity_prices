@@ -224,13 +224,17 @@ the next copy of the label, which finds the same figure. A row's figures are
 read from the start of their digits. So a card costs its length: open to the
 end of the line, a line of labels was read to its end again from each, and a
 long number again from every digit. `_cociter_rows.py` holds the per-meter
-readers `cociter.py` calls (`_belix_band_coefficients`, `_price_ceilings`).
+readers `cociter.py` calls (`_indicative`, `_optional_indicative`,
+`_coefficients`, `_belix_band_coefficients`, `_price_ceilings`).
 
-Only the mono rate is mandatory (`cociter.py`); the others are `None`
-when absent so pricing falls back to `current`. The BELIX indexation formula is
-parsed for the diagnostic `formula` string only (`cociter.py`); it
-accepts any `SIGN_CHARS` sign between BELIX and the base and captures the VAT
-percentage the card prints. The variable test pins the four rates as
+Only the mono rate is mandatory (`_indicative`); the others are `None`
+when absent so pricing falls back to `current`. Each rate is the figure the
+row prints after its BELIX, the first two figures on the row with only blanks
+between (`_PRICE_TAIL`), whatever the formula before them says. Each row's
+BELIX formula is read into the coefficients a month is billed on
+(`_coefficients`), and the mono one into the diagnostic `formula` string; the
+pattern accepts any `SIGN_CHARS` sign between BELIX and the base and captures
+the VAT percentage the card prints. The variable test pins the four rates as
 illustrative TVAC values (`test_cociter.py`).
 
 For `cociter_variable_impact` the energy leg is `ImpactRates`, built by
@@ -284,6 +288,51 @@ result literally: from `(0.103 x BELPEX + 3) x 1.06`, `factor == 1.0918` and
 at a spot of 100 EUR/MWh so a unit-conversion swap cannot cancel out. The
 `quarter_hourly=True` flag (`cociter.py`) keeps the native 15-minute slots
 (see `DynamicRates`, `_rates.py`).
+
+### The units the cards state
+
+Those scales are the ones the cards state, and each is read off the card
+rather than assumed (`_cociter_rows.py`, `_cociter_settle.py`):
+
+- The formulas give c€/kWh, from the box the formula table hangs under,
+  "Coût de l’énergie proportionnel à la consommation (en c€/kWh)", whose
+  first word starts 461 to 819 characters ahead of a formula on every card
+  since September 2024 (`_FORMULA_UNIT_RE`). The renewables contribution's
+  own c€/kWh sits between, so the box is matched by its words.
+- Each variable and trihoraire row prints its rate at the BELIX in c€/kWh,
+  one space after the figure (`_PRICE_UNIT_RE`).
+- The BELIX is in €/MWh, as the footnote under the table says: "Il est
+  exprimé en €/MWh." (`belix_in_eur_per_mwh`). It is compared with its
+  whitespace folded, since the notes print "€/ MWh" too. Its figure must
+  also be the size of one in €/MWh, 30 or more (`belix_sized`): the cards
+  have printed 61,07 to 174,19, and a BELIX restated in c€/kWh on every row
+  along with every factor gives each printed rate back.
+- The BELPEX the dynamic and feed-in formulas multiply is in €/MWh, as the
+  notes near the end of the card say: "Les cotations journalières BEL PEX
+  sont exprimées en €/MWh." on the variable and trihoraire cards, "Les
+  cotations quart-horaire QUARTER HOURL Y BELPEX sont exprimées en €/MWh." on
+  the dynamic one (`_BELPEX_UNIT_RE`, `cociter.py`). It is the only such
+  sentence on a card, 5639 to 12069 characters past the formulas.
+
+Those spellings are the only ones accepted. A variable or trihoraire formula
+under a statement in another unit, or with one gone, is dropped as an
+unreadable one is and its printed rate bills; the dynamic formula, which has
+no printed rate, is refused with `ExtractorError`. A rate in another unit
+refuses the card on the mono row and on every trihoraire band, and is left out
+with its formula on the other variable rows. It used to be read as the first
+figure in c€/kWh on the row, which passed a restated rate over for the "Prix
+maximum" column and billed the cap. A next card whose footnote no longer says
+€/MWh, or whose BELIX is too small for one, settles nothing. A BELPEX in
+another unit, or no longer stated, refuses the card, dynamic or variable,
+since the feed-in formula is read on it too.
+
+A formula restated with those statements left as they were still has to give
+back the rate its row prints at the BELIX beside it (`formula_gives`,
+`_parse.py`), or it is dropped the same way. Over every archived row the
+formula gives the printed rate within 4,7e-6 of it, the rate being rounded to
+four decimals, and `_PRICE_TOLERANCE` keeps four times that, with
+`_PRICE_FLOOR` for a rate near zero. A formula ten times out misses by far
+more.
 
 ### DSO overlay: `_extract_dsos`
 
@@ -512,6 +561,14 @@ to work against a EUR/kWh spot, and the base (c€/kWh) is divided by 100
 `test_cociter.py`). The variable and dynamic cards carry the same
 injection coefficients.
 
+Only half of that scale is read. Since the January 2025 card the feed-in
+formula is printed with neither a unit nor a rate beside it, the September to
+December 2024 cards being the last to print one ("2,9797 c€/kWh"), so the unit
+it gives is assumed. The unit of its BELPEX is the injection note's "Les
+cotations journalières BELPEX sont exprimées en €/MWh", among the notes at the
+end of the card, and a card stating another, or none, is refused (see [The
+units the cards state](#the-units-the-cards-state)).
+
 Two parsing subtleties:
 
 - The dynamic SMR3 card carries two formulas (consumption first, injection
@@ -561,7 +618,8 @@ comment:
 - **BELPEX unit + VAT conversion.** Dynamic factor is `factor_pdf * vat_mult *
   10` and base is `base_c * vat_mult / 100` (`cociter.py`). The VAT
   percentage is captured from the card's trailing `+ N% TVA`, not hardcoded, so
-  a VAT change tracks automatically.
+  a VAT change tracks automatically. The units behind that scale are read off
+  the card too (see [The units the cards state](#the-units-the-cards-state)).
 - **quarter_hourly=True.** Cociter Dynamique bills on the 15-minute Belpex grid;
   keep native quarter-hour slots, not the hourly mean (`cociter.py`,
   `_rates.py`). YTD statistics still aggregate to hourly.
@@ -602,7 +660,22 @@ The `_LISTING_HTML` fixture is inline in the test module
 hands every reader above about 100,000 characters of the text a pattern used
 to read again from each place it could start: lines of labels with no figure,
 long numbers, runs of blanks, lead-ins with no formula, `x BELIX` with no
-bracket and a listing of family prefixes.
+bracket, unit statements that never close and a listing of family prefixes.
+
+The September variable and trihoraire cards and the April dynamic card are
+also restated in memory to pin the unit and recompute checks: the box or the
+BELIX footnote in another unit or gone
+(`test_a_formula_in_units_the_card_no_longer_states_is_not_read`,
+`test_a_dynamic_formula_in_units_the_card_no_longer_states_is_refused`), a
+rate in another unit (`test_a_rate_printed_in_another_unit_is_not_billed_as_the_cap`),
+a formula ten times out under the same box
+(`test_a_formula_restated_under_the_same_box_is_not_read`), a rate nudged
+across the tolerance (`test_a_rate_is_given_back_within_its_rounding`), the
+BELIX restated with every factor
+(`test_a_belix_restated_with_its_factors_is_not_read`) and the BELPEX note in
+another unit or gone, alone or with the dynamic factor
+(`test_a_belpex_the_notes_no_longer_state_in_eur_per_mwh_is_refused`,
+`test_a_dynamic_formula_restated_with_its_belpex_is_refused`).
 
 ## When the card changes, look here
 
@@ -615,7 +688,9 @@ Ordered by likelihood of breaking when Cociter re-renders its cards:
 2. **Energy row labels or formula wording** -> `_extract_energy`
    (`cociter.py`): the `Compteur monohoraire` / `Heures pleines` /
    `Heures creuses` / `Compteur exclusif nuit` anchors and the
-   `QUARTER HOURLY BELPEX ... + N% TVA` dynamic regex.
+   `QUARTER HOURLY BELPEX ... + N% TVA` dynamic regex. A reworded unit box,
+   rate unit, BELIX footnote or BELPEX note drops the formulas, or refuses
+   the card (see [The units the cards state](#the-units-the-cards-state)).
 3. **DSO table layout / column order / new column** -> `_extract_dsos`
    (`cociter.py`) and the `"Tarif prosumer"` header discriminator
    (`cociter.py`). A new DSO also needs `_DSO_KEY` and

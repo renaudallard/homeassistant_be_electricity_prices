@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 import time
 from collections.abc import Callable
 from datetime import date, datetime
@@ -46,6 +47,7 @@ from custom_components.be_electricity_prices.pricing import (
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import cociter as cociter_mod
 from custom_components.be_electricity_prices.providers._cociter_settle import (
+    belix_in_eur_per_mwh,
     published_belix,
 )
 from custom_components.be_electricity_prices.providers._rates import (
@@ -480,13 +482,17 @@ def test_fetch_for_month_unknown_contract_returns_none() -> None:
 
 
 def _august_from(september: str) -> str:
-    """A September card relabelled as August's, printing July's BELIX."""
+    """A September card relabelled as August's, printing July's BELIX and the
+    rates its formulas give at it, as the July card does: a formula that no
+    longer gives its row's rate is not read."""
     return (
         september.replace("août 2026", "juillet 2026")
         .replace("septembre 2026", "août 2026")
         .replace("30/09/26", "31/08/26")
         .replace("129,32", "109,25")
         .replace("15,5809", "13,9854")
+        .replace("16,9517", "15,1434")
+        .replace("14,2101", "12,8273")
     )
 
 
@@ -558,7 +564,12 @@ def test_a_trihoraire_month_settles_each_band_on_the_next_card() -> None:
     )
 
     september = fixture_text("cociter_vai_2609.pdf")
-    august = _august_from(september).replace("19,0079", "16,8805")
+    august = (
+        _august_from(september)
+        .replace("19,0079", "16,8805")
+        .replace("16,2663", "14,5644")
+        .replace("13,5248", "12,2483")
+    )
     snap = _settle(
         "cociter_variable_impact",
         "RCVaI_YMR",
@@ -626,6 +637,7 @@ def test_injection_formula_survives_a_meter_label_rewording() -> None:
         "Type de compteur FORMULE DE PRIX\n"
         "Compteur pouvant effectuer des mesures par quart d'heure "
         "(0,097 x QUARTER HOURL Y BELPEX – 2,1)\n"
+        "Les cotations journalières BEL PEX sont exprimées en €/MWh.\n"
     )
     inj = _extract_injection(august)
     assert inj is not None
@@ -1073,6 +1085,235 @@ def test_trihoraire_with_a_band_formula_unreadable_keeps_its_printed_bands() -> 
     assert _month_indexed_leg(snap, entry) is None  # type: ignore[arg-type]
 
 
+_BOX = "(en c€/kWh)"
+_FOOTNOTE = "Il est exprimé en €/MWh."
+
+
+def _variable(text: str) -> VariableRates:
+    energy = parse_snapshot(text, "cociter_variable", "test://var", "2026-09").energy
+    assert isinstance(energy, VariableRates)
+    return energy
+
+
+def _formulas(energy: VariableRates) -> list[float | None]:
+    return [
+        energy.formula_factor,
+        energy.formula_factor_peak,
+        energy.formula_factor_offpeak,
+        energy.formula_factor_exclusive_night,
+    ]
+
+
+def _printed(energy: VariableRates) -> list[float | None]:
+    return [energy.current, energy.peak, energy.offpeak, energy.exclusive_night]
+
+
+@pytest.mark.parametrize(
+    ("statement", "restated"),
+    [
+        (_BOX, "(en €/MWh)"),
+        (_BOX, ""),
+        (_FOOTNOTE, "Il est exprimé en c€/kWh."),
+        (_FOOTNOTE, ""),
+    ],
+)
+def test_a_formula_in_units_the_card_no_longer_states_is_not_read(
+    statement: str, restated: str
+) -> None:
+    """The formulas are scaled as c€/kWh on a BELIX in €/MWh, the units the
+    box above the table and the footnote under it state. A card restating
+    either, or no longer stating it, keeps its printed rates and drops every
+    formula, as a card whose formulas do not read does, and its BELIX settles
+    nothing."""
+    text = fixture_text("cociter_var_2609.pdf")
+    assert text.count(statement) == 1
+    card = _variable(text)
+    assert _formulas(card) == pytest.approx([0.795, 0.901, 0.689, 0.689])
+    assert card.month_indexed
+    assert published_belix(text) == (date(2026, 8, 1), pytest.approx(0.12932))
+    changed = text.replace(statement, restated)
+    energy = _variable(changed)
+    assert _formulas(energy) == [None] * 4
+    assert energy.formula is None
+    assert not energy.month_indexed
+    assert _printed(energy) == pytest.approx(_printed(card))
+    if statement == _FOOTNOTE:
+        assert not belix_in_eur_per_mwh(changed)
+        assert published_belix(changed) is None
+
+
+def test_a_dynamic_formula_in_units_the_card_no_longer_states_is_refused() -> None:
+    """The dynamic card prints no price for its formula, so the box is the
+    only statement of its unit, and a card restating it, or no longer
+    stating it, is refused as one whose formula does not read is."""
+    text = fixture_text("cociter_dyn_2604.pdf")
+    assert text.count(_BOX) == 1
+    snap = parse_snapshot(text, "cociter_dynamic", "test://dyn", "2026-04")
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.0918)
+    with pytest.raises(ExtractorError, match="dynamic formula in €/MWh, expected"):
+        parse_snapshot(
+            text.replace(_BOX, "(en €/MWh)"), "cociter_dynamic", "test://dyn", "2026-04"
+        )
+    with pytest.raises(ExtractorError, match="dynamic formula in no stated unit"):
+        parse_snapshot(
+            text.replace(_BOX, ""), "cociter_dynamic", "test://dyn", "2026-04"
+        )
+
+
+@pytest.mark.parametrize("restated", ["c€/kWh.", ""])
+def test_a_belpex_the_notes_no_longer_state_in_eur_per_mwh_is_refused(
+    restated: str,
+) -> None:
+    """The dynamic and feed-in formulas multiply a BELPEX in €/MWh, which
+    only the notes state, "Les cotations ... BELPEX sont exprimées en
+    €/MWh." A card restating it, or no longer stating it, is refused, as one
+    whose formula does not read is. A card moving its BELPEX to c€/kWh with
+    the factor to match leaves the box above the formula true, and the
+    factor would bill ten times out."""
+    dynamic = fixture_text("cociter_dyn_2604.pdf")
+    note = "BELPEX sont exprimées en €/MWh."
+    assert dynamic.count(note) == 1
+    snap = parse_snapshot(dynamic, "cociter_dynamic", "test://dyn", "2026-04")
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.0918)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(0.97)
+    shown = restated.rstrip(".") or "no stated unit"
+    changed = dynamic.replace(note, f"BELPEX sont exprimées en {restated}")
+    with pytest.raises(ExtractorError, match=f"dynamic formula on a BELPEX in {shown}"):
+        parse_snapshot(changed, "cociter_dynamic", "test://dyn", "2026-04")
+    variable = fixture_text("cociter_var_2609.pdf")
+    note = "BEL PEX sont exprimées en €/MWh."
+    assert variable.count(note) == 1
+    assert cociter_mod._extract_injection(variable).factor == pytest.approx(0.97)
+    changed = variable.replace(note, f"BEL PEX sont exprimées en {restated}")
+    with pytest.raises(
+        ExtractorError, match=f"injection formula on a BELPEX in {shown}"
+    ):
+        cociter_mod._extract_injection(changed)
+
+
+def test_a_dynamic_formula_restated_with_its_belpex_is_refused() -> None:
+    """The dynamic factor moved to a BELPEX in c€/kWh, and the notes with it,
+    under the same box: refused rather than billed ten times out."""
+    text = fixture_text("cociter_dyn_2604.pdf")
+    formula = "(0,103 x QUARTER HOURL Y BELPEX + 3)"
+    assert text.count(formula) == 1
+    changed = text.replace(formula, "(1,03 x QUARTER HOURL Y BELPEX + 3)").replace(
+        "exprimées en €/MWh", "exprimées en c€/kWh"
+    )
+    with pytest.raises(ExtractorError, match="dynamic formula on a BELPEX in c€/kWh"):
+        parse_snapshot(changed, "cociter_dynamic", "test://dyn", "2026-04")
+
+
+def test_a_belix_restated_with_its_factors_is_not_read() -> None:
+    """Every row prints its rate at the BELIX beside it, which the footnote
+    states in €/MWh. Restated in c€/kWh on every row along with every factor,
+    the footnote left as it was, each rate still comes out of its formula, so
+    a BELIX that is not the size of one in €/MWh drops the formulas and
+    settles nothing, as a footnote in another unit does."""
+    text = fixture_text("cociter_var_2609.pdf")
+    card = _variable(text)
+    changed, rows = re.subn(
+        r"\(0,0(\d+) x BELIX \+ 5\) \+ 6% TVA 129,32 ",
+        r"(0,\1 x BELIX + 5) + 6% TVA 12,932 ",
+        text,
+    )
+    assert rows == 4
+    assert "(0,75 x BELIX + 5) + 6% TVA 12,932 15,5809 c€/kWh" in changed
+    energy = _variable(changed)
+    assert _formulas(energy) == [None] * 4
+    assert not energy.month_indexed
+    assert _printed(energy) == pytest.approx(_printed(card))
+    assert published_belix(changed) is None
+
+
+def test_a_rate_printed_in_another_unit_is_not_billed_as_the_cap() -> None:
+    """A row's rate is the figure after its BELIX, in the c€/kWh printed one
+    space after it. Read as the row's first figure in c€/kWh, a rate restated
+    in another unit was passed over for the "Prix maximum" column, and the
+    cap billed. A mono or trihoraire rate in another unit now refuses the
+    card, and another variable row is left out with its formula."""
+    text = fixture_text("cociter_var_2609.pdf")
+    mono = "15,5809 c€/kWh"
+    peak = "16,9517 c€/kWh"
+    assert text.count(mono) == 1 and text.count(peak) == 1
+    with pytest.raises(ExtractorError, match="monohoraire indicative rate in €/MWh"):
+        _variable(text.replace(mono, "15,5809 €/MWh"))
+    energy = _variable(text.replace(peak, "16,9517 €/MWh"))
+    assert energy.peak is None
+    assert energy.formula_factor_peak is None
+    assert energy.current == pytest.approx(0.155809)
+    assert energy.formula_factor == pytest.approx(0.795)
+    trihoraire = fixture_text("cociter_vai_2609.pdf")
+    medium = "16,2663 c€/kWh"
+    assert trihoraire.count(medium) == 1
+    with pytest.raises(ExtractorError, match="trihoraire medium indicative rate in"):
+        parse_snapshot(
+            trihoraire.replace(medium, "162,663 €/MWh"),
+            "cociter_variable_impact",
+            "test://vai",
+            "2026-09",
+        )
+
+
+@pytest.mark.parametrize(
+    ("printed", "restated"),
+    [
+        ("(0,075 x BELIX + 5)", "(0,75 x BELIX + 50)"),
+        ("(0,075 x BELIX + 5)", "(0,75 x BELIX + 5)"),
+        ("(0,075 x BELIX + 5)", "(0,075 x BELIX + 50)"),
+    ],
+)
+def test_a_formula_restated_under_the_same_box_is_not_read(
+    printed: str, restated: str
+) -> None:
+    """Restated with the box left as it was, a formula still states c€/kWh,
+    and read on that scale (0,75 x BELIX + 50) would bill 1,56 EUR/kWh where
+    the row prints 0,16. Every row prints the BELIX and the rate the formula
+    gives at it, so a formula that does not give it back is dropped as an
+    unreadable one is, and the printed rate bills."""
+    text = fixture_text("cociter_var_2609.pdf")
+    assert text.count(printed) == 1
+    energy = _variable(text.replace(printed, restated))
+    assert energy.formula_factor is None
+    assert energy.formula is None
+    assert not energy.month_indexed
+    assert energy.current == pytest.approx(0.155809)
+    assert energy.formula_factor_peak == pytest.approx(0.901)
+    trihoraire = fixture_text("cociter_vai_2609.pdf")
+    pic = "(0,1 x BELIX + 5)"
+    assert trihoraire.count(pic) == 1
+    snap = parse_snapshot(
+        trihoraire.replace(pic, "(1 x BELIX + 50)"),
+        "cociter_variable_impact",
+        "test://vai",
+        "2026-09",
+    )
+    assert isinstance(snap.energy, ImpactRates)
+    assert snap.energy.pic_factor is None
+    assert snap.energy.pic == pytest.approx(0.190079)
+    assert not snap.energy.month_indexed
+
+
+@pytest.mark.parametrize(
+    ("rate", "read"), [("15,5809", True), ("15,5810", True), ("15,5814", False)]
+)
+def test_a_rate_is_given_back_within_its_rounding(rate: str, read: bool) -> None:
+    """The rates are the formulas at the BELIX, rounded to four decimals:
+    (0,075 x 129,32 + 5) x 1,06 is 15,58094. Every archived row is within
+    4,7e-6 of its price and the formula is kept within 2e-5, 3,1e-4 c€/kWh
+    here: a rate one in its last decimal further than printed still reads,
+    one five further does not."""
+    text = fixture_text("cociter_var_2609.pdf")
+    printed = "15,5809 c€/kWh"
+    assert text.count(printed) == 1
+    energy = _variable(text.replace(printed, f"{rate} c€/kWh"))
+    assert (energy.formula_factor is not None) is read
+    assert energy.current == pytest.approx(float(rate.replace(",", ".")) / 100)
+
+
 def _quietly(read: Callable[[], object]) -> Callable[[], None]:
     """``read``, whatever it makes of a card it cannot parse."""
 
@@ -1171,6 +1412,40 @@ def _quietly(read: Callable[[], object]) -> Callable[[], None]:
             lambda: published_belix("x BELIX" + " " * 100_000), id="belix blanks"
         ),
         pytest.param(lambda: published_belix("x BELIX " * 25_000), id="belix names"),
+        pytest.param(
+            lambda: belix_in_eur_per_mwh(
+                "x BELIX) + 6% TVA 1 " + "Il est exprimé en " * 6_000
+            ),
+            id="belix unit",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: cociter_mod._extract_energy(
+                    "1,00 €/an TVAC\nCompteur SMR3 (0,1 x 15 MIN BELPEX + 3) + 6% TVA "
+                    + "Coût de l’énergie proportionnel à la consommation (en " * 3_000,
+                    "cociter_dynamic",
+                )
+            ),
+            id="formula unit",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: cociter_mod._extract_energy(
+                    "1,00 €/an TVAC\nCompteur monohoraire 1 1" + "0" * 100_000,
+                    "cociter_variable",
+                )
+            ),
+            id="rate unit",
+        ),
+        pytest.param(
+            _quietly(
+                lambda: cociter_mod._extract_injection(
+                    "Compteur (0,1 x BELPEX - 1) "
+                    + "BEL PEX sont exprimées en " * 4_000
+                )
+            ),
+            id="belpex unit",
+        ),
         pytest.param(
             lambda: asyncio.run(cociter_mod.discover(make_text_session("RC" * 50_000))),
             id="listing",

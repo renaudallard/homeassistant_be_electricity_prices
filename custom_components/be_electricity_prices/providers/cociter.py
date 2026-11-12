@@ -59,9 +59,13 @@ from ..const import (
 )
 from ._cociter_rows import (
     _BELIX_ROW_TAIL,
-    _INDICATIVE_TAIL,
+    _CENTS,
     _VARIABLE_CEILING_ROWS,
     _belix_band_coefficients,
+    _coefficients,
+    _formula_unit,
+    _indicative,
+    _optional_indicative,
     _price_ceilings,
     _row,
 )
@@ -73,6 +77,7 @@ from ._parse import (
     parse_sign,
     require_every_area,
     running_month_short_of_an_area,
+    stated_unit,
     to_float,
 )
 from ._pdf import (
@@ -437,6 +442,36 @@ _INJECTION_FORMULA = (
 )
 
 
+# The unit of the Belpex the dynamic and feed-in formulas multiply, from the
+# notes near the end of the card: "Les cotations journalières BEL PEX sont
+# exprimées en €/MWh." on every variable and trihoraire card (BELPEX in one
+# word on the November 2026 variable one), "Les cotations quart-horaire
+# QUARTER HOURL Y BELPEX sont exprimées en €/MWh." on every dynamic one,
+# always in €/MWh.
+# It is the only such sentence on a card (note (7)'s is the BELIX's), and it
+# ends 5639 to 8919 characters past the feed-in formula and 11441 to 12069
+# past the dynamic one.
+_BELPEX_UNIT_RE = re.compile(r"BEL\s*PEX\s+sont\s+exprimées\s+en\s+([^.\n]{1,20})\.")
+_BELPEX_UNIT_REACH = 15000
+_BELPEX_UNIT = "€/MWh"
+
+
+def _require_belpex_unit(text: str, formula: re.Match[str], reader: str) -> None:
+    """Refuse the Belpex formula ``formula`` holds from group 1 on where the
+    notes no longer state its Belpex in €/MWh, the scale it is read on."""
+    unit = stated_unit(
+        text,
+        _BELPEX_UNIT_RE,
+        (formula.start(1), formula.end()),
+        after=_BELPEX_UNIT_REACH,
+    )
+    if unit != _BELPEX_UNIT:
+        raise ExtractorError(
+            f"Cociter {reader} formula on a BELPEX in {unit or 'no stated unit'}, "
+            f"expected {_BELPEX_UNIT}"
+        )
+
+
 def _extract_injection(text: str) -> InjectionRates:
     """Parse Cociter's injection formula.
 
@@ -472,6 +507,7 @@ def _extract_injection(text: str) -> InjectionRates:
         formula = re.search(_INJECTION_FORMULA, text)
     if not formula:
         raise ExtractorError("could not parse Cociter injection formula")
+    _require_belpex_unit(text, formula, "injection")
     factor_pdf = to_float(formula.group(1))
     base_pdf_cents = parse_sign(formula.group(2)) * to_float(formula.group(3))
     return InjectionRates(
@@ -506,9 +542,9 @@ def _impact_energy(text: str, yearly_fee: float) -> ImpactRates:
 
     Each row is the variable card's mono row three times over: "Heures PIC
     (0,1 x BELIX + 5) + 6% TVA 129,32 19,0079 c€/kWh", so the conversion is
-    the same: the coefficients print c€/kWh against a BELIX in EUR/MWh, giving
-    the factor a x10 and the base a /100, with the VAT printed outside the
-    parens landing on both.
+    the same (``_coefficients``): the coefficients print c€/kWh against a
+    BELIX in EUR/MWh, giving the factor a x10 and the base a /100, with the
+    VAT printed outside the parens landing on both.
 
     Every band is mandatory. Defaulting one to another's rate would bill a
     third of the day wrong, and a card selling a three-band product with a
@@ -525,22 +561,14 @@ def _impact_energy(text: str, yearly_fee: float) -> ImpactRates:
     coefficients: dict[str, float | None] = {}
     formulas: list[str] = []
     for band, label in _IMPACT_BANDS:
-        indicative = re.search(_row(label, _INDICATIVE_TAIL), text)
-        if indicative is None:
-            raise ExtractorError(
-                f"could not parse Cociter trihoraire {band} indicative rate"
-            )
-        rates[band] = to_float(indicative.group(1)) / 100.0
+        rates[band] = _indicative(text, label, f"trihoraire {band}")
         row = re.search(_row(label, _BELIX_ROW_TAIL), text)
-        if row is None:
+        pair = None if row is None else _coefficients(text, row)
+        if row is None or pair is None:
             coefficients[f"{band}_factor"] = None
             coefficients[f"{band}_base"] = None
             continue
-        vat_mult = 1.0 + to_float(row.group(4)) / 100.0
-        coefficients[f"{band}_factor"] = to_float(row.group(1)) * vat_mult * 10.0
-        coefficients[f"{band}_base"] = (
-            parse_sign(row.group(2)) * to_float(row.group(3)) * vat_mult / 100.0
-        )
+        coefficients[f"{band}_factor"], coefficients[f"{band}_base"] = pair
         formulas.append(
             f"{band}: ({row.group(1)} x BELIX {row.group(2)} {row.group(3)}) "
             f"c€/kWh + {row.group(4)}% VAT"
@@ -584,14 +612,7 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
         return _impact_energy(text, yearly_fee)
 
     if contract_id == "cociter_variable":
-        mono = re.search(_row("Compteur monohoraire", _INDICATIVE_TAIL), text)
-        peak = re.search(_row("Heures pleines", _INDICATIVE_TAIL), text)
-        offpeak = re.search(_row("Heures creuses", _INDICATIVE_TAIL), text)
-        excl = re.search(_row("Compteur exclusif nuit", _INDICATIVE_TAIL), text)
-        if not mono:
-            raise ExtractorError(
-                "could not parse Cociter variable monohoraire indicative rate"
-            )
+        current = _indicative(text, "Compteur monohoraire", "variable monohoraire")
         # Accept any sign between BELIX and the base, mirroring the
         # dynamic path, so a card flipping to a Unicode minus or a
         # negative base still renders the diagnostic formula string.
@@ -609,15 +630,9 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
         # exact.
         formula_factor: float | None = None
         formula_base: float | None = None
-        if formula:
-            vat_mult = 1.0 + to_float(formula.group(4)) / 100.0
-            formula_factor = to_float(formula.group(1)) * vat_mult * 10.0
-            formula_base = (
-                parse_sign(formula.group(2))
-                * to_float(formula.group(3))
-                * vat_mult
-                / 100.0
-            )
+        coefficients = None if formula is None else _coefficients(text, formula)
+        if coefficients is not None:
+            formula_factor, formula_base = coefficients
         # The card prints FOUR formulas, one per meter, and only the mono row
         # was read. A bi-hourly or exclusive-night cohort was therefore
         # re-priced on the mono pair: at April's BELIX that is 6,7% low at
@@ -626,15 +641,15 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
         bands = _belix_band_coefficients(text)
         ceilings = _price_ceilings(text, _VARIABLE_CEILING_ROWS)
         return VariableRates(
-            current=to_float(mono.group(1)) / 100.0,
-            peak=to_float(peak.group(1)) / 100.0 if peak else None,
-            offpeak=to_float(offpeak.group(1)) / 100.0 if offpeak else None,
-            exclusive_night=to_float(excl.group(1)) / 100.0 if excl else None,
+            current=current,
+            peak=_optional_indicative(text, "Heures pleines"),
+            offpeak=_optional_indicative(text, "Heures creuses"),
+            exclusive_night=_optional_indicative(text, "Compteur exclusif nuit"),
             yearly_fixed_fee=yearly_fee,
             formula=(
                 f"({formula.group(1)} x BELIX {formula.group(2)} "
                 f"{formula.group(3)}) c€/kWh + {formula.group(4)}% VAT"
-                if formula
+                if formula is not None and coefficients is not None
                 else None
             ),
             # Note (7) indexes the contract on the delivery month's own BELIX
@@ -679,6 +694,16 @@ def _extract_energy(text: str, contract_id: str) -> EnergyRates:
     )
     if not formula:
         raise ExtractorError("could not parse Cociter dynamic formula")
+    # The card prints no price for its formula, so the box above it is the
+    # only statement of the unit it gives, and the notes the only one of its
+    # BELPEX's. Either in any other unit, or gone, is refused as an
+    # unreadable formula is.
+    unit = _formula_unit(text, formula)
+    if unit != _CENTS:
+        raise ExtractorError(
+            f"Cociter dynamic formula in {unit or 'no stated unit'}, expected {_CENTS}"
+        )
+    _require_belpex_unit(text, formula, "dynamic")
     factor_pdf = to_float(formula.group(1))
     base_pre_vat_cents = parse_sign(formula.group(2)) * to_float(formula.group(3))
     vat_multiplier = 1.0 + to_float(formula.group(4)) / 100.0
