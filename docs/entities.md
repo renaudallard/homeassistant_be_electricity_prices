@@ -438,6 +438,18 @@ unknown, where the cost falls back on the typed yearly volume or the household
 default: neither is a meter reading. `volume_basis` gives the days measured,
 or what is missing.
 
+An outage is measured once (`meter_outages.py`). Home Assistant resumes a
+`total_increasing` sensor's sum from the last five-minute row it compiled, so
+the first day back holds the energy of the days without rows as well as its
+own, and scaled across those days that energy counted twice. `_measured_kwh`
+shares the first day back out evenly over them and itself (`_daily_kwh` in
+`meter_daily.py`), for each sensor before a pair is matched. An outage longer
+than `purge_keep_days` has lost its last row: the sum starts over, the first
+day back's negative change is dropped (`_read_deltas` notes the day), and its
+days stay missing and are scaled across as before. Another meter is read as
+recorded, as a `total` starting a new cycle or an imported statistic, and so
+is today, a live reading. The bills read the days as recorded.
+
 `projected_year_cost` is shown as *Rolling year cost* for the same reason:
 its volume is this rolling year, not the calendar year the `projected_year_*`
 kWh sensors and `current_year_cost` cover. Only the display name changed; the

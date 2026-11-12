@@ -111,6 +111,7 @@ relative to that package directory.
 | `meter_warm.py` | The one hourly read per meter a tick answers every window from, and the rows kept between ticks so an ordinary tick reads only the days from the day before yesterday again. |
 | `meter_hourly.py` | The hourly kWh series an hourly-billed contract is walked on, with once-a-day meters spread over their hours and the running day topped up live. |
 | `meter_daily.py` | Per-day kWh for the static bill, and the measured volume over a window with how much of it the meters cover. |
+| `meter_outages.py` | Shares a meter outage's energy out over the days it has no statistics for, for the measured volume, unless the recorder started the meter's sum over. |
 | `spot_stats.py` | Spot aggregates: the current billing slot's spot, monthly means, the SPP-weighted variants, and the per-hour grouping of a quarter-hourly curve. |
 | `pricing.py` | Pure pricing engine. `compute_breakdown` fuses a `SupplierSnapshot`, the chosen `DsoOverlay`, the taxes, meter type, DSO tariff mode, and (for dynamic) the slot spot into a `PriceBreakdown`. Also the slot-grid helpers (`slot_start`, `slot_delta`, `slots_per_hour`) and `tou_slot`. No I/O, no HA imports where avoidable, so it is trivially unit-testable. |
 | `day_night.py` | The classic two-register (day / night) schedule: `is_offpeak` per region, the household's Flemish day hours (`day_start_for`, `CONF_DAY_HOURS`) and the federal holidays (`is_belgian_holiday`) it and `tou_slot` read. Pure functions, split out of `pricing.py`. |

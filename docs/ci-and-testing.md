@@ -135,6 +135,7 @@ machinery.
 | `tests/test_diagnostics.py` | Diagnostics dump |
 | `tests/test_markdown_text.py` | Text from a supplier's server reaches the Repairs cards, the fix flow, the compare page and the ranking escaped (`escape_markdown`, `markdown_text.py`): every ASCII punctuation character backslash-escaped, so no link or image forms |
 | `tests/test_meter_log_names.py` | Every log line about a meter, warning or debug, names the setting holding it (`meter_setting`, `meter_settings`, `energy_meters.py`), never the household's own entity id, which diagnostics redact |
+| `tests/test_meter_outages.py` | A meter outage's energy shared out over its days, never across a sum the recorder started over, and a restart read off last year landing on the day read ahead (`meter_outages.py`, `_recorder_deltas`) |
 | `tests/test_icons.py` | `icons.json` names only real entities and services, and gives every entity without a device class an icon |
 | `tests/test_repairs.py` | The stale-card Repairs fix flow (`repairs.py`) |
 | `tests/test_discover.py` | Every supplier's `discover()` against a frozen listing snippet |
@@ -242,7 +243,9 @@ local leaves the rest of the suite byte-identical.
 Almost every backfill test mocks the recorder (`tests/test_backfill.py` patches
 `recorder.get_instance`), which is right when the assertion is about *what we write*. Use
 `tests/recorder/` only when the assertion is about *how HA compiles what we wrote* — currently
-just the backfill→live `sum` seam, which is invisible to a mock.
+just the backfill→live `sum` seam, which is invisible to a mock, and how a meter outage compiles
+(`tests/recorder/test_meter_outage.py`: a short one lands on the first day back, a purged one starts
+the sum over).
 
 ### mypy test-stub convention
 

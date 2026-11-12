@@ -109,6 +109,32 @@ async def test_a_few_missing_days_are_scaled_across(
     assert got == pytest.approx(4135.0)
 
 
+@pytest.mark.parametrize(
+    ("state_class", "ytd"),
+    [("total_increasing", 2680.0), ("total", 2680.0 * 268 / 263)],
+)
+async def test_an_outage_s_energy_counts_once(
+    hass: HomeAssistant, freezer: Any, state_class: str, ytd: float
+) -> None:
+    """No buckets from 1 to 5 March and their energy on the 6th, as the
+    recorder resumes a total_increasing sum: shared out over those days it
+    counts once. Another meter may have lost it and is scaled as before."""
+    freezer.move_to("2026-09-26 12:00:00+02:00")
+    hass.states.async_set("sensor.cons", "1234", {"state_class": state_class})
+
+    def per_day(_e: str, day: date) -> float | None:
+        if date(2026, 3, 1) <= day <= date(2026, 3, 5):
+            return None
+        if day == date(2026, 3, 6):
+            return 60.0
+        return 10.0 if day.year == 2026 else 15.0
+
+    got, diag = await _project(hass, _entry(), per_day)
+    assert diag["ytd_kwh"] == pytest.approx(ytd)
+    assert diag["remaining_kwh"] == pytest.approx(1455.0)
+    assert got == pytest.approx(ytd + 1455.0)
+
+
 async def test_a_meter_wired_mid_year_is_not_projected(
     hass: HomeAssistant, freezer: Any
 ) -> None:

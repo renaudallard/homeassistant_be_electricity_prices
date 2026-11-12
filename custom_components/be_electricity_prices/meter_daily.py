@@ -77,6 +77,7 @@ from .meter_faults import (
     _without_today,
 )
 from .meter_hourly import _metered_hourly_kwh
+from .meter_outages import carries_outages, noting_restarts, spread_outages
 from .pricing import MeterType
 
 
@@ -451,6 +452,26 @@ class MeasuredKwh:
     covered: bool = False
 
 
+async def _daily_kwh(
+    hass: HomeAssistant, entity_id: str, start: date, end: date
+) -> dict[date, float]:
+    """``entity_id``'s days as ``_recorder_daily_kwh`` reads them, with the
+    energy of each outage shared out over its days where the meter carries
+    it (:mod:`meter_outages`), so a measured window counts it once.
+
+    Today is a live reading, never the day an outage's energy landed on,
+    and is left as read.
+    """
+    with noting_restarts() as restarts:
+        days = await energy_meters._recorder_daily_kwh(hass, entity_id, start, end)
+    if not carries_outages(hass, entity_id):
+        return days
+    past = _without_today(days, end)
+    out = spread_outages(past, restarts)
+    out.update({day: kwh for day, kwh in days.items() if day not in past})
+    return out
+
+
 async def _measured_kwh(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -493,8 +514,8 @@ async def _measured_kwh(
     day_id, night_id, total_id = _kwh_sensor_ids(entry, side)
     if day_id and night_id:
         d, n, (day_today, night_today) = _split_today(
-            await energy_meters._recorder_daily_kwh(hass, day_id, start, end),
-            await energy_meters._recorder_daily_kwh(hass, night_id, start, end),
+            await _daily_kwh(hass, day_id, start, end),
+            await _daily_kwh(hass, night_id, start, end),
             end,
         )
         stopped = _stopped(((day_id, d), (night_id, n)))
@@ -507,11 +528,7 @@ async def _measured_kwh(
         # A wired totals sensor measures what the pair cannot, on the rule
         # every billing path follows, and the broken registers are still
         # named, so the Repairs card gets them fixed.
-        total = (
-            await energy_meters._recorder_daily_kwh(hass, total_id, start, end)
-            if total_id
-            else {}
-        )
+        total = await _daily_kwh(hass, total_id, start, end) if total_id else {}
         past_total = _without_today(total, end)
         use_total = bool(total_id) and _total_stands_in(past_total, d, n)
         if warn and days is None:
@@ -593,7 +610,7 @@ async def _measured_total(
 ) -> MeasuredKwh:
     """A totals sensor's kWh over ``[start, end]`` and the days it covers,
     naming it when it has only today's live reading (:func:`_live_only`)."""
-    d = await energy_meters._recorder_daily_kwh(hass, total_id, start, end)
+    d = await _daily_kwh(hass, total_id, start, end)
     return MeasuredKwh(
         sum(d.values()),
         len(d),

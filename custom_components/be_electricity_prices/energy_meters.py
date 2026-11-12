@@ -74,6 +74,7 @@ from .const import (
     METER_SENSOR_KEYS,
     SOLAR_REGIME_NONE,
 )
+from .meter_outages import note_restart, noting_restarts
 from .year_ahead import YEAR_AHEAD, YearAhead, last_year
 
 _LOGGER = logging.getLogger(__name__)
@@ -153,13 +154,20 @@ async def _recorder_deltas(
         by_day.setdefault(last_year(day), []).append(day)
         day += timedelta(days=1)
     moved: dict[datetime, float] = {}
-    for when, delta in await _read_deltas(
-        hass, entity_id, last_year(first), last_year(end), period
-    ):
+    with noting_restarts() as restarts:
+        deltas = await _read_deltas(
+            hass, entity_id, last_year(first), last_year(end), period
+        )
+    for when, delta in deltas:
         local = dt_util.as_local(when)
         for target in by_day.get(local.date(), ()):
             slot = datetime.combine(target, local.timetz()).astimezone(UTC)
             moved[slot] = moved.get(slot, 0.0) + delta
+    # A sum started over on last year's day starts it over on the day read
+    # off it.
+    for day in restarts:
+        for target in by_day.get(day, ()):
+            note_restart(target)
     return rows + sorted(moved.items())
 
 
@@ -231,6 +239,10 @@ async def _read_deltas(
             continue
         value = float(delta)
         if value < 0.0:
+            if period == "day":
+                note_restart(
+                    dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC)).date()
+                )
             # A consumption or injection meter cannot run backwards over a
             # bucket, so this is an artefact rather than a measurement. Home
             # Assistant restarts its cumulative sum chain when the short-term
