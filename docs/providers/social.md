@@ -169,6 +169,16 @@ where the entry has an ENTSO-E key, and the printed rates stand in until it is
 known. The card limits its feed-in to a
 digital or bidirectional meter.
 
+The arithmetic does not catch factors moved onto an index quoted in c€/kWh, which
+still fit the rates, so `_engie_units_hold` reads the units the card states as well:
+"Les cotations journalières EPEXDAM sont exprimées en €/MWh" ahead of the formulas on
+every card ("EPEX DAM" up to January 2024), and from October 2025 "Le résultat de ces
+formules est un montant exprimé en c€/kWh" under them, the sentence Engie's own cards
+print (`_result_holds`, `_engie_cards.py`). The cards before it print none and read as
+they did. A card naming another unit, a card for October 2025 on without the sentence,
+or one no longer naming the index's unit, is credited its printed rates, as one
+printing no formula is.
+
 The Walloon card's feed-in row sits under the same "Bihoraire / IMPACT" head as
 its prices since April 2026 ("Injection 9,935 11,687 4,836" in October 2026),
 so the leg carries `day_night_under_impact` too. `resolve_impact_feed_in`

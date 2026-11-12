@@ -63,8 +63,8 @@ from ..const import (
     WALLONIA_DSO_KEYS,
 )
 from ..excise_law import protected_excise
-from ._engie_cards import _IMPACT_PAIR_RE
-from ._parse import to_float
+from ._engie_cards import _IMPACT_PAIR_RE, _result_holds, _result_unit
+from ._parse import UNIT_WORD, stated_unit, to_float
 from ._pdf import FR_MONTHS, fetch_pdf_text, fetch_text, is_transient_fetch_error
 from ._rates import Contract, InjectionRates, VariableRates
 from ._validity import end_of_month, text_mentions_month
@@ -229,6 +229,17 @@ _ENGIE_FORMULAS = (
     re.compile(rf"heures creuses\s*{_ENGIE_FORMULA}"),
 )
 _ENGIE_FEE_RE = re.compile(rf"Redevance raccordement\s*\(\d+\)\s+{_NUM}")
+# The card says what the feed-in formulas are worked on, "Les cotations
+# journalières EPEXDAM sont exprimées en €/MWh" ("EPEX DAM" up to January
+# 2024), its only sentence of the kind, starting 357 to 376 characters ahead
+# of the first of them on the September 2023 card and on every one archived
+# since November 2023. What they give it says from October 2025 on, in the
+# sentence under the last, as Engie's own cards do (``_result_holds``): a
+# card from that month on without it is credited its printed rates, and the
+# cards before it print none, and read as they always did.
+_ENGIE_INDEX_UNIT_RE = re.compile(rf"EPEX\s?DAM\s+sont\s+exprimées\s+en\s+{UNIT_WORD}")
+_ENGIE_INDEX_UNIT = "€/MWh"
+_ENGIE_INDEX_REACH = 500
 
 # Luminus serves its social card through the price-list archive, the current
 # month included, by product id for a month and a region.
@@ -280,7 +291,8 @@ def parse_engie(text: str, card: CregCard) -> tuple[InjectionRates, float | None
     one, last month's EPEXDAM put through a formula on the delivery month's.
     The index itself is left out of this card, so the formulas are bound by
     arithmetic: all three printed rates have to imply one index. A card with
-    no formula at all is credited as printed.
+    no formula at all is credited as printed, and so is one stating its
+    formulas in other units than its cards have (``_engie_units_hold``).
     """
     consumption = _ENGIE_CONSUMPTION_RE.search(text)
     if consumption is None or not _matches_creg(
@@ -292,6 +304,7 @@ def parse_engie(text: str, card: CregCard) -> tuple[InjectionRates, float | None
         raise ExtractorError("Engie social card: no feed-in row")
     printed = [to_float(v) for v in injection.groups()]
     fee = _ENGIE_FEE_RE.search(text)
+    connection_fee = None if fee is None else to_float(fee.group(1)) / 100.0
     rates = InjectionRates(
         current=printed[0] / 100.0,
         peak=printed[1] / 100.0,
@@ -307,6 +320,8 @@ def parse_engie(text: str, card: CregCard) -> tuple[InjectionRates, float | None
         implied = [(p - b) / f for p, (b, f) in zip(printed, formulas, strict=True)]
         if max(implied) - min(implied) > 0.5:
             raise ExtractorError("Engie social card: the formulas do not fit the rates")
+        if not _engie_units_hold(text, found):
+            return rates, connection_fee
         # c/kWh per EUR/MWh onto a EUR/kWh spot: x10 the factor, /100 the
         # base. Injection is exempt from VAT. One pair per register, so a
         # two-register meter is credited on the delivery month's mean too.
@@ -322,7 +337,23 @@ def parse_engie(text: str, card: CregCard) -> tuple[InjectionRates, float | None
             formula=f"{base:.4f} + ({factor:.4f} x EPEXDAM) c€/kWh",
             month_indexed=True,
         )
-    return rates, None if fee is None else to_float(fee.group(1)) / 100.0
+    return rates, connection_fee
+
+
+def _engie_units_hold(text: str, formulas: list[re.Match[str]]) -> bool:
+    """Whether Engie's social card states its feed-in ``formulas`` in the
+    units they are read in: c€/kWh, where it says, on EPEXDAM in €/MWh.
+
+    The arithmetic above binds the formulas to the printed rates, but factors
+    moved onto an index in c€/kWh still fit them, and would credit ten times
+    out.
+    """
+    start = min(match.start() for match in formulas)
+    end = max(match.end() for match in formulas)
+    index = stated_unit(
+        text, _ENGIE_INDEX_UNIT_RE, (start, end), before=_ENGIE_INDEX_REACH
+    )
+    return index == _ENGIE_INDEX_UNIT and _result_holds(text, _result_unit(text, end))
 
 
 def parse_luminus(text: str, card: CregCard) -> tuple[InjectionRates, float | None]:

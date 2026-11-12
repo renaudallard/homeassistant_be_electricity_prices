@@ -745,6 +745,60 @@ def test_engie_s_2023_card_spells_its_formula_without_parentheses() -> None:
     assert fee == pytest.approx(0.00075)
 
 
+@pytest.mark.parametrize(
+    ("statement", "restated"),
+    [
+        ("EPEXDAM sont exprimées en\n€/MWh", "EPEXDAM sont exprimées en\nc€/kWh"),
+        ("Les cotations journalières EPEXDAM sont exprimées en\n€/MWh.", ""),
+        ("montant exprimé en c€/kWh", "montant exprimé en €/MWh"),
+        ("\nLe résultat de ces formules est un montant exprimé en c€/kWh.", ""),
+    ],
+    ids=["index", "index-dropped", "result", "result-dropped"],
+)
+def test_engie_s_feed_in_formulas_in_another_unit_are_not_credited(
+    statement: str, restated: str
+) -> None:
+    """Engie's social card says its formulas are worked on EPEXDAM "exprimées
+    en €/MWh" and, since October 2025, that they give "un montant exprimé en
+    c€/kWh". A card saying otherwise, no longer naming the index's unit, or
+    for October 2026 no longer saying what they give, is credited its
+    printed rates, as one printing no formula is."""
+    card = _card("creg_social_2026_q4.pdf")
+    text = fixture_text("engie_social_w_2026-10.pdf")
+    injection, _ = social.parse_engie(text, card)
+    assert injection.month_indexed
+    assert (injection.factor, injection.base) == pytest.approx((0.632, 0.0005))
+    assert text.count(statement) == 1
+    injection, fee = social.parse_engie(text.replace(statement, restated), card)
+    assert not injection.month_indexed
+    assert (injection.factor, injection.base, injection.formula) == (None, None, None)
+    assert (injection.factor_peak, injection.factor_offpeak) == (None, None)
+    assert (injection.current, injection.peak, injection.offpeak) == pytest.approx(
+        (0.09935, 0.11687, 0.04836)
+    )
+    assert fee == pytest.approx(0.00075)
+
+
+def test_engie_s_2023_card_is_held_to_its_own_spelling_of_the_index() -> None:
+    """The 2023 cards write "EPEX DAM sont exprimées en €/MWh", with a space,
+    and print no sentence under the formulas: they keep their formulas, and
+    one restating the index's unit is credited as printed."""
+    card = _card("creg_social_2023_q3.pdf")
+    text = fixture_text("engie_social_w_2023-09.pdf")
+    statement = "EPEX DAM sont\nexprimées en €/MWh"
+    assert text.count(statement) == 1
+    assert "montant exprimé en" not in text
+    injection, _ = social.parse_engie(text, card)
+    assert injection.month_indexed
+    restated = text.replace(statement, "EPEX DAM sont\nexprimées en c€/kWh")
+    injection, _ = social.parse_engie(restated, card)
+    assert not injection.month_indexed
+    assert (injection.factor, injection.base, injection.formula) == (None, None, None)
+    assert (injection.current, injection.peak, injection.offpeak) == pytest.approx(
+        (0.05862, 0.06892, 0.02864)
+    )
+
+
 def test_luminus_s_card_of_a_change_of_rate_bills_its_own_month() -> None:
     """The June 2025 card prints the feed-in "jusqu'au 30/6/2025" and the
     one "à partir du 1/7/2025"; June is billed on the first."""
