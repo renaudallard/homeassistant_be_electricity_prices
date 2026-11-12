@@ -63,12 +63,17 @@ from ..const import (
     DSO_FLUVIUS_ZENNE_DIJLE,
     REGION_FLANDERS,
 )
+from ._ebem_cards import (
+    _PREV_INDEX_RE,
+    _PREV_SPP_RE,
+    _VAT_PATTERNS,
+    _extract_energy,
+    _extract_injection,
+)
 from ._parse import (
-    SIGN_CHARS,
     excise_tier_bands,
     numeric_row,
     parse_prosumer_column,
-    parse_sign,
     require_every_area,
     running_month_short_of_an_area,
     to_float,
@@ -79,14 +84,11 @@ from ._pdf import (
     fetch_text,
     is_transient_fetch_error,
     printed_vat_rate,
-    vat_multiplier,
 )
 from ._rates import (
     Contract,
-    DynamicRates,
     EnergyRates,
     InjectionRates,
-    RlpBlend,
     TariffKind,
     VariableRates,
     vat_basis,
@@ -102,26 +104,6 @@ from .base import (
     SupplierExtractor,
     SupplierSnapshot,
     TaxOverlay,
-)
-
-# The index the card's printed rates were computed on, in EUR/MWh. EBEM says
-# the delivery month's own value is not known yet and gives the month just
-# closed: "Voor de huidige maand is deze index nog niet gekend, vorige maand
-# bedroeg deze index 135,84." Unlike Eneco's footnote it names no month, so
-# the card's own month is the anchor: whatever this card is for, the figure
-# belongs to the month before it.
-# One decimal group, not a run of digits and separators: the sentence ends in a
-# full stop some months ("... deze index 98,25.") and a greedy class took it
-# into the number. Either separator, since a re-render can flip the decimal.
-_PREV_INDEX_RE = re.compile(
-    r"vorige maand bedroeg deze index\s*(\d+(?:[.,]\d+)?)", re.IGNORECASE
-)
-# The feed-in sibling of the line above, on the same card: "De SPP0 vorige
-# maand bedroeg 79,11 In de simulator van Ebem ...". Bounded the same way,
-# because the sentence that follows it runs straight on and a greedy
-# ``[\d.,]+`` swallows the separator.
-_PREV_SPP_RE = re.compile(
-    r"SPP0 vorige maand bedroeg\s*(\d+(?:[.,]\d+)?)", re.IGNORECASE
 )
 
 _LISTING_URL = "https://www.ebem.be/tarieven/"
@@ -473,8 +455,8 @@ def parse_snapshot(
     contract = _CONTRACTS_BY_ID.get(contract_id)
     if contract is None:
         raise ExtractorError(f"unknown EBEM contract {contract_id!r}")
-    energy = _extract_energy(text, contract)
-    injection = _extract_injection(text, contract)
+    energy = _extract_energy(text, contract_id)
+    injection = _extract_injection(text, contract_id)
     federal_excise, excise_bands, energy_contribution = _extract_federal_taxes(text)
     flanders_renewables = _extract_flanders_renewables(text)
     card_vat, assumed_vat = vat_basis(printed_vat_rate(text, *_VAT_PATTERNS), energy)
@@ -520,302 +502,6 @@ def _extract_validity(text: str) -> date | None:
     # None here silently skips the past-month CDN-substitution cross-check
     # in fetch_for_month.
     return scan_month_end(text, _DUTCH_MONTHS, limit=600)
-
-
-# ---- energy + injection -----------------------------------------------------
-
-
-# Belgian residential VAT applied to the ex-VAT formula factors so the
-# stored snapshot value matches the registry's VAT-incl convention. Identical
-# to ``cociter.py``'s dynamic conversion: factor * vat * 10 (cents/kWh per
-# €/MWh -> EUR/kWh per EUR/kWh), base * vat / 100. Read from the card so
-# a future regulator-driven rate change propagates without a code change.
-# "INCL. BTW 6%" over the price columns, else "BTW 6%".
-_VAT_PATTERNS = (
-    re.compile(r"INCL\.?\s*BTW\s*(\d+)\s*%", re.IGNORECASE),
-    re.compile(r"BTW\s*(\d+)\s*%", re.IGNORECASE),
-)
-
-
-def _vat_multiplier(text: str) -> float:
-    return vat_multiplier(text, *_VAT_PATTERNS)
-
-
-def _formula_to_dynamic(
-    factor_pdf: float, base_pdf_cents: float, vat: float
-) -> tuple[float, float]:
-    return factor_pdf * vat * 10.0, base_pdf_cents * vat / 100.0
-
-
-def _extract_energy(text: str, contract: _ContractDef) -> EnergyRates:
-    if contract.contract_id == "ebem_dynamic":
-        # The dynamic card prints "alle uren 0,108 Belpex15' + 1,625" for
-        # consumption and "injectie alle uren 0,0925 Belpex15' - 1,10" for
-        # injection. Anchor on a line that starts with "alle uren" but is
-        # NOT preceded by "injectie" so the regex doesn't pick the
-        # injection row by accident. Accept any sign char between the
-        # factor and the base so a future re-render that flips to a
-        # Unicode minus or a negative offset doesn't dead-end the parser.
-        # The quote after "15" and the blanks after it are one optional
-        # piece: as runs of blanks either side of an optional quote, a run of
-        # blanks was split between the two in every way.
-        match = re.search(
-            rf"(?<!injectie\s)\balle uren\s+([\d,.]+)\s+Belpex\s*15\s*(?:[’']\s*)?"
-            rf"([{SIGN_CHARS}])\s*([\d,.]+)",
-            text,
-            re.IGNORECASE,
-        )
-        if not match:
-            raise ExtractorError("EBEM Dyn@mic: consumption formula not found")
-        factor_pdf = to_float(match.group(1))
-        base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
-        factor, base = _formula_to_dynamic(
-            factor_pdf, base_pdf_cents, _vat_multiplier(text)
-        )
-        yearly_fee = _extract_yearly_fee_abonnement(text)
-        # Groen Dyn@mic bills on the 15-minute Belpex spot (the card's
-        # "Belpex 15" formula, SMR3 only), so keep the native 15-minute
-        # slots like Engie rather than the hourly mean.
-        return DynamicRates(
-            factor=factor,
-            base=base,
-            yearly_fixed_fee=yearly_fee,
-            quarter_hourly=True,
-        )
-
-    if contract.contract_id == "ebem_basic_plus":
-        match = re.search(
-            rf"Verbruik alle uren\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
-            text,
-        )
-        if not match:
-            raise ExtractorError("EBEM B@sic+: 'Verbruik alle uren' formula not found")
-        factor_pdf = to_float(match.group(1))
-        base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
-        # B@sic+ has one energy rate for all hours (no peak / off-peak /
-        # excl-night energy split), but an exclusive-night meter still bills
-        # the shared card's dedicated night fixed fee, not the standard
-        # abonnement, so surface it like the Variabel sibling does.
-        # Numeric coefficients for signing-cohort re-pricing, in the same
-        # VAT-baked EUR/kWh basis as the dynamic path (snapshot vat_rate is 0).
-        # The index is the RLP-weighted Belpex; the coordinator applies these
-        # against the month's mean weighted by Synergrid's Flemish profile
-        # (rlp_blend below), and against the plain arithmetic mean only while
-        # that profile is not loaded.
-        f_factor, f_base = _formula_to_dynamic(
-            factor_pdf, base_pdf_cents, _vat_multiplier(text)
-        )
-        return VariableRates(
-            current=_indicative_from_row(text, "Verbruik alle uren"),
-            yearly_fixed_fee=_extract_yearly_fee_abonnement(text),
-            yearly_fixed_fee_exclusive_night=_extract_excl_night_fee_variable(text),
-            formula=f"({factor_pdf} BelpexRLP0 + {base_pdf_cents}) c€/kWh ex-VAT",
-            formula_factor=f_factor,
-            formula_base=f_base,
-            month_indexed=True,
-            rlp_indexed=True,
-            rlp_blend=_RLP_BLEND,
-        )
-
-    # ebem_variable: parse all four meter-type rows. Mirror the dynamic +
-    # injection regexes by accepting any sign char between factor and
-    # base; today every row prints '+', but a re-render to a Unicode
-    # minus or to a negative offset would otherwise raise.
-    rows = {
-        "mono": rf"Enkelvoudige teller\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
-        "peak": rf"Dubbele teller piek\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
-        "offpeak": rf"Dubbele teller dal\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
-        "excl_night": rf"Exclusief nacht\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)",
-    }
-    parsed: dict[str, tuple[float, float]] = {}
-    for label, pattern in rows.items():
-        m = re.search(pattern, text)
-        if not m:
-            raise ExtractorError(
-                f"EBEM Groen Variabel: '{label}' formula row not found"
-            )
-        parsed[label] = (
-            to_float(m.group(1)),
-            parse_sign(m.group(2)) * to_float(m.group(3)),
-        )
-    yearly_fee = _extract_yearly_fee_variable(text)
-    # Signing-cohort coefficients, VAT-baked to the EUR/kWh basis (as the
-    # dynamic path does; snapshot vat_rate is 0). They resolve against the
-    # RLP-weighted monthly mean, the plain one only while no profile is loaded.
-    #
-    # All four rows are converted, not just the mono one. They were parsed and
-    # then dropped, so a bi-hourly cohort was billed the mono pair around the
-    # clock: at the card's own May index that is 7,0% low at peak and 8,9% high
-    # off-peak, and the SAME entry with no start date already billed both bands
-    # correctly off the printed columns - so setting a start date, the feature
-    # meant to price a cohort more accurately, destroyed the split.
-    vat = _vat_multiplier(text)
-    f_factor, f_base = _formula_to_dynamic(*parsed["mono"], vat)
-    peak_pair = _formula_to_dynamic(*parsed["peak"], vat)
-    offpeak_pair = _formula_to_dynamic(*parsed["offpeak"], vat)
-    night_pair = _formula_to_dynamic(*parsed["excl_night"], vat)
-    return VariableRates(
-        current=_indicative_from_row(text, "Enkelvoudige teller"),
-        peak=_indicative_from_row(text, "Dubbele teller piek"),
-        offpeak=_indicative_from_row(text, "Dubbele teller dal"),
-        exclusive_night=_indicative_from_row(text, "Exclusief nacht"),
-        yearly_fixed_fee=yearly_fee,
-        yearly_fixed_fee_exclusive_night=_extract_excl_night_fee_variable(text),
-        formula=(
-            f"mono ({parsed['mono'][0]} BelpexRLP0 + {parsed['mono'][1]}) "
-            f"· peak ({parsed['peak'][0]} + {parsed['peak'][1]}) "
-            f"· off-peak ({parsed['offpeak'][0]} + {parsed['offpeak'][1]}) "
-            f"c€/kWh ex-VAT"
-        ),
-        formula_factor=f_factor,
-        formula_base=f_base,
-        formula_factor_peak=peak_pair[0],
-        formula_base_peak=peak_pair[1],
-        formula_factor_offpeak=offpeak_pair[0],
-        formula_base_offpeak=offpeak_pair[1],
-        # A separate night circuit is its own row on this card, not the
-        # off-peak one; they coincide numerically and are distinct contracts.
-        month_indexed=True,
-        rlp_indexed=True,
-        rlp_blend=_RLP_BLEND,
-        formula_factor_exclusive_night=night_pair[0],
-        formula_base_exclusive_night=night_pair[1],
-    )
-
-
-def _indicative_from_row(text: str, label: str) -> float:
-    """Parse the printed ``INCL. BTW 6% (c€/kWh)`` indicative rate.
-
-    EBEM's variable cards print four numeric columns per row after the
-    formula expression: ``EXCL.BTW``, ``INCL.BTW 6%``, ``GESCHATTE
-    JAARPRIJS EXCL.BTW``, ``GESCHATTE JAARPRIJS INCL.BTW 6%``. Columns
-    1 + 2 are the per-kWh indicative at last-month's Belpex; columns 3 +
-    4 use the VNR yearly-forecast Belpex. We surface column 2 (incl-VAT
-    per-kWh at last-month's Belpex) as the snapshot's ``current``: it
-    matches the value EBEM customers see on their bill more faithfully
-    than recomputing against a placeholder spot.
-    """
-    # The row reads "<label> 0,110 Belpex + 2,2 11,6380 12,3363 13,2781
-    # 14,0748": the formula's coefficient and offset, then the four
-    # columns. Reading it by figure count rather than by a literal pattern
-    # sidesteps the sign EBEM prints between Belpex and the offset, which
-    # has been a U+2212 minus in some months, and keeps a short row from
-    # borrowing a column off the row below.
-    row = numeric_row(text, label, 6)
-    if not row:
-        raise ExtractorError(
-            f"EBEM Groen Variabel: indicative incl-VAT row for {label!r} not found"
-        )
-    return to_float(row[3]) / 100.0
-
-
-def _extract_yearly_fee_variable(text: str) -> float:
-    """``Vaste vergoeding (jaarlijkse vaste bijdrage) 80,19 €/jaar 85,00 €/jaar``.
-
-    The card prints both ex-VAT and incl-VAT columns; the registry's
-    convention is to store the incl-VAT value (the second number).
-    """
-    row = numeric_row(text, "Vaste vergoeding (jaarlijkse vaste bijdrage)", 2)
-    if not row:
-        raise ExtractorError("EBEM Groen Variabel: 'Vaste vergoeding' row not found")
-    return to_float(row[1])
-
-
-def _extract_excl_night_fee_variable(text: str) -> float | None:
-    """``Vaste vergoeding exclusief nacht 33,06 €/jaar 35,04 €/jaar``.
-
-    A dedicated yearly fixed fee for an exclusive-night meter circuit,
-    billed instead of the standard 'Vaste vergoeding' on an
-    exclusive-night config entry. Stores the incl-VAT (second) column.
-    Returns None when the card doesn't print it, so the standard fee
-    applies.
-    """
-    row = numeric_row(text, "Vaste vergoeding exclusief nacht", 2)
-    return to_float(row[1]) if row else None
-
-
-def _extract_yearly_fee_abonnement(text: str) -> float:
-    """``Abonnement 66,04 €/jaar 70 €/jaar``: B@sic+ and Dyn@mic share the label."""
-    row = numeric_row(text, "Abonnement", 2)
-    if not row:
-        raise ExtractorError("EBEM: 'Abonnement' yearly fee row not found")
-    return to_float(row[1])
-
-
-def _extract_injection(text: str, contract: _ContractDef) -> InjectionRates | None:
-    """Parse the injection formula. Belgian residential injection is VAT-exempt."""
-    if contract.contract_id == "ebem_dynamic":
-        # Belpex 15' is a true hourly-spot formula priced from the
-        # live/historical spot via the energy path; surface factor/base.
-        match = re.search(
-            rf"injectie alle uren\s+([\d,.]+)\s+Belpex\s*15\s*(?:[’']\s*)?"
-            rf"([{SIGN_CHARS}])\s*([\d,.]+)",
-            text,
-            re.IGNORECASE,
-        )
-        if not match:
-            # The injection row is on every EBEM card; a miss (e.g. a
-            # capitalization re-render) would silently zero a prosumer's
-            # feed-in credit. Fail loud rather than return None.
-            raise ExtractorError(
-                "EBEM dynamic injection: 'injectie alle uren' row not found"
-            )
-        factor_pdf = to_float(match.group(1))
-        base_pdf_cents = parse_sign(match.group(2)) * to_float(match.group(3))
-        return InjectionRates(
-            current=None,
-            factor=factor_pdf * 10.0,
-            base=base_pdf_cents / 100.0,
-            formula=(
-                f"({factor_pdf} Belpex15' {match.group(2)} {match.group(3)}) "
-                "c€/kWh ex-VAT"
-            ),
-        )
-
-    # Both 'Variabel' and 'B@sic+' settle injection at a MONTHLY rate: the
-    # factor/base weight the monthly Belpex-SPP0 average, not the hourly
-    # spot. The card prints the realized monthly indicative right after the
-    # formula (e.g. "... Belpex - 1,25 1,3354 4,3252", where 1,3354 =
-    # factor*last_month_SPP0 + base and 4,3252 is the VNR yearly forecast).
-    # Both are kept: the coefficients carry spp_indexed (below), which
-    # resolves them against the month's SPP-weighted mean and never against
-    # the hourly spot, and the printed indicative is the fallback.
-    match = re.search(
-        rf"Injectie alle uren\s+([\d,.]+)\s+Belpex\s*([{SIGN_CHARS}])\s*([\d,.]+)"
-        rf"(?:\s+([\d,.]+))?",
-        text,
-        re.IGNORECASE,
-    )
-    if not match:
-        # Every variable/B@sic+ card prints this row; a miss is a layout
-        # drift, not a fee-free contract. Fail loud rather than silently
-        # zeroing the feed-in credit.
-        raise ExtractorError(
-            "EBEM variable injection: 'Injectie alle uren' row not found"
-        )
-    if not match.group(4):
-        # The printed indicative is the fallback when the Synergrid profile is
-        # unavailable, so a card that stops printing it is a layout drift, not
-        # a fee-free contract. Fail loud rather than leave the credit resting
-        # on a formula that cannot always be resolved.
-        raise ExtractorError("EBEM variable injection: monthly indicative missing")
-    # The card indexes the credit on BelpexSPP0, the SOLAR-weighted monthly
-    # mean, and prints a figure computed from LAST month's value of it ("de
-    # SPP0 vorige maand bedroeg 27,95"). Surfacing the coefficients with
-    # spp_indexed lets the engine resolve the DELIVERY month's own SPP-weighted
-    # mean instead, and keeps the printed figure as the fallback for an entry
-    # with no Synergrid profile. The formula yields c/kWh from SPP0 in EUR/MWh,
-    # so the factor scales by 10 to meet a spot in EUR/kWh and the base by 100.
-    return InjectionRates(
-        current=to_float(match.group(4)) / 100.0,
-        factor=to_float(match.group(1)) * 10.0,
-        base=parse_sign(match.group(2)) * to_float(match.group(3)) / 100.0,
-        spp_indexed=True,
-        formula=(
-            f"({to_float(match.group(1))} BelpexSPP0 {match.group(2)} "
-            f"{match.group(3)}) c€/kWh ex-VAT"
-        ),
-    )
 
 
 # ---- taxes ------------------------------------------------------------------
@@ -960,21 +646,6 @@ _MONTH_INDEXED_INJECTION = frozenset({"ebem_variable", "ebem_basic_plus"})
 # index is not known while the month runs, prints "GESCHATTE" columns computed
 # from the month before, and the following card names what the month closed at.
 _MONTH_INDEXED_ENERGY = _MONTH_INDEXED_INJECTION
-# Which blend the running month is estimated on, and the one value on this card
-# that is a FIT rather than a settlement. EBEM weights "het gemiddelde van de
-# RLP's in Vlaanderen van Synergrid", and none of the three blends reproduces
-# the index it publishes: measured against the eight settled months of 2026,
-# the mean absolute error is 2,40 EUR/MWh on the distinct curve, 1,80 on the
-# columns one and 1,61 here, every blend under-stating in every month, and
-# weighting at quarter-hour resolution rather than hourly moves it by a tenth
-# of that. So this is the closest of the three, not EBEM's own construction.
-#
-# It is still worth having: the printed figure this replaces is the PREVIOUS
-# month's index, 15,62 EUR/MWh from the delivered one on average, so the live
-# rate goes from about 64 EUR/year out at 3.500 kWh to about 7. A closed month
-# never uses it, because the following card publishes what the month actually
-# settled at and that overrides everything.
-_RLP_BLEND: RlpBlend = "flanders"
 
 
 EXTRACTOR = SupplierExtractor(

@@ -40,6 +40,10 @@ import pytest
 from custom_components.be_electricity_prices.const import FLUVIUS_KEYS
 from custom_components.be_electricity_prices.providers import EXTRACTORS
 from custom_components.be_electricity_prices.providers import ebem as ebem_mod
+from custom_components.be_electricity_prices.providers._ebem_cards import (
+    _extract_energy,
+    _extract_injection,
+)
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
     VariableRates,
@@ -236,28 +240,18 @@ def test_variable_injection_missing_indicative_raises() -> None:
     """When the monthly indicative is absent the SPP0 coefficients can't
     be priced (they weight the monthly average, not the hourly spot), so
     fail loud instead of emitting a spot-shaped credit."""
-    from custom_components.be_electricity_prices.providers.ebem import (
-        _CONTRACTS_BY_ID,
-        _extract_injection,
-    )
-
     text = "Injectie alle uren 0,0925 Belpex - 1,25\n"
     with pytest.raises(ExtractorError, match="indicative"):
-        _extract_injection(text, _CONTRACTS_BY_ID["ebem_variable"])
+        _extract_injection(text, "ebem_variable")
 
 
 def test_missing_injection_row_is_fatal() -> None:
     # A fully-absent injection row (e.g. a capitalization re-render) must
     # raise rather than return None and silently zero the feed-in credit.
-    from custom_components.be_electricity_prices.providers.ebem import (
-        _CONTRACTS_BY_ID,
-        _extract_injection,
-    )
-
-    with pytest.raises(ExtractorError, match="not found"):
-        _extract_injection("no injection here", _CONTRACTS_BY_ID["ebem_variable"])
-    with pytest.raises(ExtractorError, match="not found"):
-        _extract_injection("no injection here", _CONTRACTS_BY_ID["ebem_dynamic"])
+    with pytest.raises(ExtractorError, match=r"variable injection: .* not found"):
+        _extract_injection("no injection here", "ebem_variable")
+    with pytest.raises(ExtractorError, match=r"dynamic injection: .* not found"):
+        _extract_injection("no injection here", "ebem_dynamic")
 
 
 # ---- Groen B@sic+ -----------------------------------------------------------
@@ -334,6 +328,353 @@ def test_dynamic_has_no_prosumer_column() -> None:
     assert iveka.prosumer_eur_per_kva_year is None
     # Distribution rates still parse: that's the digital-meter row.
     assert iveka.distribution_single == pytest.approx(0.0634)
+
+
+# The price each formula gives at the index its card prints.
+
+
+def _edited(name: str, *edits: tuple[str, str]) -> str:
+    """The card with each ``(old, new)`` of ``edits`` applied, every ``old``
+    on it."""
+    text = _layout(name)
+    for old, new in edits:
+        assert old in text, old
+        text = text.replace(old, new)
+    return text
+
+
+def _restated(name: str, old: str, new: str) -> tuple[str, str]:
+    """The card as printed, and the same card with every ``old`` reading ``new``."""
+    return _layout(name), _edited(name, (old, new))
+
+
+@pytest.mark.parametrize(
+    ("contract", "old", "new", "refusal"),
+    [
+        # A factor or a base of each consumption row, ten times out.
+        ("ebem_variable", "teller 0,110 Belpex", "teller 1,10 Belpex", "gives"),
+        (
+            "ebem_variable",
+            "piek 0,120 Belpex + 2,2 ",
+            "piek 0,120 Belpex + 22 ",
+            "gives",
+        ),
+        ("ebem_variable", "dal 0,099 Belpex", "dal 0,99 Belpex", "gives"),
+        (
+            "ebem_variable",
+            "nacht 0,099 Belpex + 2,2 ",
+            "nacht 0,099 Belpex + 0,22 ",
+            "gives",
+        ),
+        ("ebem_basic_plus", "uren 0,110 Belpex", "uren 1,10 Belpex", "gives"),
+        # The feed-in row both contracts read.
+        ("ebem_variable", "Belpex - 1,25 ", "Belpex - 12,5 ", "gives"),
+        ("ebem_basic_plus", "uren 0,0925 Belpex", "uren 0,925 Belpex", "gives"),
+        # Either index stated ten times smaller, as in c€/kWh, or not at all.
+        ("ebem_variable", "deze index 85,80", "deze index 8,580", "gives"),
+        ("ebem_basic_plus", "deze index 85,80", "deze index 8,580", "gives"),
+        ("ebem_variable", "bedroeg 27,95", "bedroeg 2,795", "gives"),
+        ("ebem_variable", "maand bedroeg deze", "maand was deze", "not printed"),
+        # The prices headed in another unit, a formula restated with them.
+        (
+            "ebem_variable",
+            "(type verbruik) (c€/kWh) (c€/kWh)",
+            "(type verbruik) (€/MWh) (€/MWh)",
+            "headed",
+        ),
+        (
+            "ebem_basic_plus",
+            "TARIEFFORMULE (c€/kWh) (c€/kWh)",
+            "TARIEFFORMULE (€/MWh) (€/MWh)",
+            "headed",
+        ),
+    ],
+)
+def test_a_variable_formula_that_misses_its_printed_price_is_refused(
+    contract: str, old: str, new: str, refusal: str
+) -> None:
+    """No unit is printed for EBEM's formulas or for the index they multiply,
+    but each row prints the price its formula gives at the index the card says
+    last month closed at, under a "(c€/kWh)" heading: 0,110 x 85,80 + 2,2 is
+    the 11,6380 excluding VAT beside the mono formula, 0,0925 x 27,95 - 1,25
+    the 1,3354 beside the feed-in one. A formula, an index or a heading on
+    another scale is refused as a row that does not read."""
+    text, restated = _restated(_VARIABLE, old, new)
+    snap = parse_snapshot(contract, text, "test://v", "2026-05")
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.formula_factor is not None
+    assert snap.injection is not None and snap.injection.factor == pytest.approx(0.925)
+    with pytest.raises(ExtractorError, match=refusal):
+        parse_snapshot(contract, restated, "test://v", "2026-05")
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "kept"),
+    [
+        # 0,08 EUR/MWh off, as April 2025's card was, then either side of 0,25.
+        ("deze index 85,80", "deze index 85,88", True),
+        ("deze index 85,80", "deze index 86,04", True),
+        ("deze index 85,80", "deze index 86,06", False),
+        ("bedroeg 27,95", "bedroeg 28,19", True),
+        ("bedroeg 27,95", "bedroeg 28,21", False),
+    ],
+)
+def test_a_variable_price_may_be_worked_out_a_quarter_euro_off_its_index(
+    old: str, new: str, kept: bool
+) -> None:
+    """April 2025's card named 94,61 and worked its prices out at 94,69. A
+    price is held to its formula at an index within 0,25 EUR/MWh of the one
+    printed, on every row alike."""
+    text = _edited(_VARIABLE, (old, new))
+    if kept:
+        snap = parse_snapshot("ebem_variable", text, "test://v", "2026-05")
+        assert snap.injection is not None and snap.injection.spp_indexed
+    else:
+        with pytest.raises(ExtractorError, match="gives"):
+            parse_snapshot("ebem_variable", text, "test://v", "2026-05")
+
+
+@pytest.mark.parametrize(
+    ("spp0", "price", "credit"),
+    [
+        # 0,0925 x 13,55 - 1,25 is 0,003375, printed to four decimals.
+        ("13,55", "0,0034", 0.000034),
+        # 0,0925 x 13,47 - 1,25 is -0,004025, under zero.
+        ("13,47", "-0,0040", -0.00004),
+        # Exact ties at the fourth decimal, printed either way.
+        ("13,38", "-0,0123", -0.000123),
+        ("13,38", "-0,0124", -0.000124),
+        ("13,38", "−0,0124", -0.000124),
+        ("13,66", "0,0136", 0.000136),
+        ("13,54", "0,0025", 0.000025),
+        # Worked out 0,08 EUR/MWh off a low SPP0: 0,0925 x 30,08 - 1,25.
+        ("30,00", "1,5324", 0.015324),
+    ],
+)
+def test_a_feed_in_price_near_or_under_zero_is_held_to_its_index(
+    spp0: str, price: str, credit: float
+) -> None:
+    """In a month of low solar prices the feed-in formula comes out near zero
+    or under it: 0,0925 x SPP0 - 1,25 is zero at 13,5 EUR/MWh, and May 2025
+    closed at 15,08. Printed to four decimals, such a price is out by more
+    than any share of it and lands on rounding ties, so it is held to its
+    index rather than to a share of it, and read with its sign. A base ten
+    times out is still refused."""
+    text = _edited(
+        _VARIABLE,
+        ("bedroeg 27,95", f"bedroeg {spp0}"),
+        ("Belpex - 1,25 1,3354 ", f"Belpex - 1,25 {price} "),
+    )
+    for contract in ("ebem_variable", "ebem_basic_plus"):
+        snap = parse_snapshot(contract, text, "test://v", "2026-05")
+        assert snap.injection is not None
+        assert snap.injection.current == pytest.approx(credit)
+        assert snap.injection.factor == pytest.approx(0.925)
+    slipped = text.replace("Belpex - 1,25 ", "Belpex - 12,5 ")
+    with pytest.raises(ExtractorError, match="gives"):
+        parse_snapshot("ebem_variable", slipped, "test://v", "2026-05")
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "refusal"),
+    [
+        ("uren 0,108 Belpex15’", "uren 1,08 Belpex15’", "gives"),
+        ("Belpex15’ + 1,625 ", "Belpex15’ + 16,25 ", "gives"),
+        ("uren 0,0925 Belpex15’", "uren 0,925 Belpex15’", "gives"),
+        ("Belpex15’ - 1,10 ", "Belpex15’ - 11,0 ", "gives"),
+        # Either base flipped, dropped or a tenth of itself.
+        ("Belpex15’ + 1,625 ", "Belpex15’ - 1,625 ", "gives"),
+        ("Belpex15’ + 1,625 ", "Belpex15’ + 0 ", "gives"),
+        ("Belpex15’ + 1,625 ", "Belpex15’ + 0,1625 ", "gives"),
+        ("Belpex15’ + 1,625 ", "Belpex15’ + 0,01625 ", "gives"),
+        ("Belpex15’ - 1,10 ", "Belpex15’ + 1,10 ", "gives"),
+        ("Belpex15’ - 1,10 ", "Belpex15’ - 0 ", "gives"),
+        ("Belpex15’ - 1,10 ", "Belpex15’ - 0,110 ", "gives"),
+        ("Belpex15’ - 1,10 ", "Belpex15’ - 0,0110 ", "gives"),
+        # The regulator's means the prices are worked out at, ten times smaller.
+        ("gemiddeldes: 96,48305", "gemiddeldes: 9,648305", "gives"),
+        ("en 89,87334 voor", "en 8,987334 voor", "gives"),
+        ("voor de afname en", "voor afname en", "not printed"),
+        # Prices headed in another unit.
+        ("TARIEFFORMULE (c€/kWh) (c€/kWh)", "TARIEFFORMULE (€/MWh) (€/MWh)", "headed"),
+        # One leg's prices left stale while the other moved on.
+        ("Belpex15’ - 1,10 7,2133", "Belpex15’ - 1,10 8,5659", "gives"),
+    ],
+)
+def test_a_dynamic_formula_that_misses_its_printed_price_is_refused(
+    old: str, new: str, refusal: str
+) -> None:
+    """The dynamic card prints its prices at the regulator's monthly means it
+    names: 0,108 x 96,48305 + 1,625 is the 12,0452 excluding VAT beside the
+    consumption formula, 0,0925 x 89,87334 - 1,10 the 7,2133 beside the feed-in
+    one. Both come back within their rounding on every card but one left
+    stale, so a slip in one formula or one mean is refused, a base as much as
+    a factor."""
+    text, restated = _restated(_DYNAMIC, old, new)
+    snap = parse_snapshot("ebem_dynamic", text, "test://d", "2026-05")
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.1448)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(0.925)
+    with pytest.raises(ExtractorError, match=refusal):
+        parse_snapshot("ebem_dynamic", restated, "test://d", "2026-05")
+
+
+@pytest.mark.parametrize(
+    ("edits", "kept"),
+    [
+        # April's prices beside May's means, as February 2026 kept January's.
+        (
+            (("12,0452 12,7679", "13,5860 14,4012"), ("1,10 7,2133", "1,10 8,5659")),
+            True,
+        ),
+        # April's means beside March's prices, a move of 1,43 times.
+        (
+            (
+                ("gemiddeldes: 96,48305", "gemiddeldes: 110,75016"),
+                ("en 89,87334 voor", "en 104,4958 voor"),
+                ("12,0452 12,7679", "10,1724 10,7827"),
+                ("1,10 7,2133", "1,10 5,6430"),
+            ),
+            True,
+        ),
+        # May's prices beside means just under twice theirs, then just over.
+        (
+            (
+                ("gemiddeldes: 96,48305", "gemiddeldes: 192,96"),
+                ("en 89,87334 voor", "en 179,74 voor"),
+            ),
+            True,
+        ),
+        (
+            (
+                ("gemiddeldes: 96,48305", "gemiddeldes: 192,98"),
+                ("en 89,87334 voor", "en 179,76 voor"),
+            ),
+            False,
+        ),
+        # And means just over half theirs, then just under.
+        (
+            (
+                ("gemiddeldes: 96,48305", "gemiddeldes: 48,25"),
+                ("en 89,87334 voor", "en 44,94 voor"),
+            ),
+            True,
+        ),
+        (
+            (
+                ("gemiddeldes: 96,48305", "gemiddeldes: 48,24"),
+                ("en 89,87334 voor", "en 44,93 voor"),
+            ),
+            False,
+        ),
+        # Both means restated ten times smaller.
+        (
+            (
+                ("gemiddeldes: 96,48305", "gemiddeldes: 9,648305"),
+                ("en 89,87334 voor", "en 8,987334 voor"),
+            ),
+            False,
+        ),
+    ],
+)
+def test_a_dynamic_card_left_with_another_months_prices_stands(
+    edits: tuple[tuple[str, str], ...], kept: bool
+) -> None:
+    """February 2026's card kept January's prices beside February's means, and
+    both legs missed by about a tenth. A card missing on both legs stands
+    while each price is its formula at an index within twice or half the
+    printed mean; the means moved by 1,43 times at most between two months on
+    file, and a unit restated misses by ten."""
+    text = _edited(_DYNAMIC, *edits)
+    if kept:
+        snap = parse_snapshot("ebem_dynamic", text, "test://d", "2026-05")
+        assert isinstance(snap.energy, DynamicRates)
+        assert snap.energy.factor == pytest.approx(1.1448)
+        assert snap.injection is not None
+        assert (snap.injection.factor, snap.injection.base) == pytest.approx(
+            (0.925, -0.011)
+        )
+    else:
+        with pytest.raises(ExtractorError, match="gives"):
+            parse_snapshot("ebem_dynamic", text, "test://d", "2026-05")
+
+
+# April's prices beside May's means, the card left stale.
+_DYNAMIC_STALE = (
+    ("12,0452 12,7679", "13,5860 14,4012"),
+    ("1,10 7,2133", "1,10 8,5659"),
+)
+
+
+@pytest.mark.parametrize(
+    ("edits", "kept"),
+    [
+        (_DYNAMIC_STALE, True),
+        # Both bases a tenth of themselves, a hundredth, dropped or flipped.
+        ((("+ 1,625 ", "+ 0,1625 "), ("- 1,10 ", "- 0,110 ")), False),
+        ((("+ 1,625 ", "+ 0,01625 "), ("- 1,10 ", "- 0,0110 ")), False),
+        ((("+ 1,625 ", "+ 0 "), ("- 1,10 ", "- 0 ")), False),
+        ((("+ 1,625 ", "- 1,625 "), ("- 1,10 ", "+ 1,10 ")), False),
+        # The stale consumption price moved until the two legs sit 11,9
+        # EUR/MWh apart off their means, then 12,1.
+        (
+            (("12,0452 12,7679", "12,3392 13,0796"), _DYNAMIC_STALE[1]),
+            True,
+        ),
+        (
+            (("12,0452 12,7679", "12,3176 13,0567"), _DYNAMIC_STALE[1]),
+            False,
+        ),
+    ],
+)
+def test_a_dynamic_card_missing_on_both_legs_must_miss_alike(
+    edits: tuple[tuple[str, str], ...], kept: bool
+) -> None:
+    """A card left stale prices both legs at one earlier month's means, which
+    moved at most 5,48 EUR/MWh apart between two months on file, so both legs
+    are worked out off their printed means by about the same amount. Both
+    bases read wrong move the consumption leg one way and the feed-in leg the
+    other, 24 EUR/MWh apart or more, and the card is refused although each leg
+    stays within twice or half its mean."""
+    text = _edited(_DYNAMIC, *edits)
+    if kept:
+        snap = parse_snapshot("ebem_dynamic", text, "test://d", "2026-05")
+        assert isinstance(snap.energy, DynamicRates)
+        assert snap.energy.factor == pytest.approx(1.1448)
+    else:
+        with pytest.raises(ExtractorError, match="off the printed means"):
+            parse_snapshot("ebem_dynamic", text, "test://d", "2026-05")
+
+
+@pytest.mark.parametrize(
+    ("mean", "price"),
+    [
+        # 0,0925 x 11,892 - 1,10 is 0,00001, printed as zero.
+        ("11,892", "0,0000"),
+        # 0,0925 x 11,80 - 1,10 is -0,0085.
+        ("11,80", "-0,0085"),
+    ],
+)
+def test_a_dynamic_feed_in_price_near_or_under_zero_is_held_to_its_index(
+    mean: str, price: str
+) -> None:
+    """The dynamic feed-in formula is zero at a monthly mean of 11,9 EUR/MWh.
+    A price printed as zero, or under it, still reads, and a base ten times
+    out is still refused."""
+    text = _edited(
+        _DYNAMIC,
+        ("en 89,87334 voor", f"en {mean} voor"),
+        ("Belpex15’ - 1,10 7,2133", f"Belpex15’ - 1,10 {price}"),
+    )
+    snap = parse_snapshot("ebem_dynamic", text, "test://d", "2026-05")
+    assert snap.injection is not None
+    assert (snap.injection.factor, snap.injection.base) == pytest.approx(
+        (0.925, -0.011)
+    )
+    slipped = text.replace("Belpex15’ - 1,10 ", "Belpex15’ - 11,0 ")
+    with pytest.raises(ExtractorError, match="gives"):
+        parse_snapshot("ebem_dynamic", slipped, "test://d", "2026-05")
 
 
 # ---- error handling ---------------------------------------------------------
@@ -783,7 +1124,6 @@ async def test_probe_keys_on_the_card_the_fetcher_resolves() -> None:
     assert await probe(session, "unknown", "flanders") is None
 
 
-_DYNAMIC_CONTRACT = ebem_mod._CONTRACTS_BY_ID["ebem_dynamic"]
 _VARIABLE_CONTRACT = ebem_mod._CONTRACTS_BY_ID["ebem_variable"]
 
 
@@ -807,17 +1147,17 @@ def _quietly(read: Callable[[], object]) -> Callable[[], None]:
     [
         pytest.param(
             _quietly(
-                lambda: ebem_mod._extract_energy(
-                    "alle uren 1,0 Belpex15 " + "\xa0" * 100_000, _DYNAMIC_CONTRACT
+                lambda: _extract_energy(
+                    "alle uren 1,0 Belpex15 " + "\xa0" * 100_000, "ebem_dynamic"
                 )
             ),
             id="energy formula",
         ),
         pytest.param(
             _quietly(
-                lambda: ebem_mod._extract_injection(
+                lambda: _extract_injection(
                     "injectie alle uren 1,0 Belpex15" + "\n" * 100_000,
-                    _DYNAMIC_CONTRACT,
+                    "ebem_dynamic",
                 )
             ),
             id="injection formula",

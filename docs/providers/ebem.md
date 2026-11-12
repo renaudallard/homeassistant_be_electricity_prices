@@ -1,7 +1,8 @@
 # Provider: ebem
 
 This document is the maintainer reference for the EBEM tariff-card extractor
-(`providers/ebem.py`). EBEM (Ebem bvba, Merksplas) is a small Flemish supplier
+(`providers/ebem.py`, with the readers of its energy and feed-in legs in
+`providers/_ebem_cards.py`). EBEM (Ebem bvba, Merksplas) is a small Flemish supplier
 serving the Mol / Geel area. It publishes monthly PDF tariff cards behind
 opaque Umbraco CMS media URLs, keeps a public archive of past months on the
 same listing page, and sells three residential electricity products across two
@@ -76,9 +77,9 @@ leg never fetches; only the dynamic product leaves it `False`.
   living in the *same* `elek` PDF as Groen Variabel. One energy rate for all
   hours (no peak / off-peak / excl-night energy split), but an exclusive-night
   meter still bills the shared card's dedicated night fixed fee
-  (`ebem.py`).
+  (`_ebem_cards.py`).
 - **Groen Dyn@mic**: 15-minute Belpex spot dynamic, SMR3 (smart meter) only,
-  with its own `dynamic` card. `quarter_hourly=True` (`ebem.py`) keeps the
+  with its own `dynamic` card. `quarter_hourly=True` (`_ebem_cards.py`) keeps the
   native 15-minute slots like Engie / Cociter rather than aggregating to hourly;
   see the `DynamicRates.quarter_hourly` docstring (`providers/_rates.py`).
 
@@ -103,7 +104,7 @@ If EBEM revives one, its PDF kind (e.g. `fix`) surfaces verbatim from
 
 Two of the three contracts (`ebem_variable`, `ebem_basic_plus`) share the same
 `elek` PDF; the parser branches on `contract_id` when extracting the energy
-block (`ebem.py`).
+block (`_ebem_cards.py`).
 
 ### `probe` (`ebem.py`)
 
@@ -163,12 +164,12 @@ Returns the contract ids visible on the listing:
 `parse_snapshot` (`ebem.py`) assembles a `SupplierSnapshot` from six
 sub-parsers over the layout text. All rates are read from the card, never
 hardcoded; the VAT multiplier is read from the card header too so a
-regulator-driven rate change propagates without a code change (`ebem.py`).
+regulator-driven rate change propagates without a code change (`_ebem_cards.py`).
 
 | Field | Parser | Notes |
 | --- | --- | --- |
-| `energy` | `_extract_energy` (`ebem.py`) | branches on `contract_id` |
-| `injection` | `_extract_injection` (`ebem.py`) | branches dynamic vs variable |
+| `energy` | `_extract_energy` (`_ebem_cards.py`) | branches on `contract_id` |
+| `injection` | `_extract_injection` (`_ebem_cards.py`) | branches dynamic vs variable |
 | `dsos` | `_extract_dsos` (`ebem.py`) | digital-meter table, optional analog prosumer |
 | `taxes.federal_excise` + `energy_contribution` | `_extract_federal_taxes` (`ebem.py`) | |
 | `taxes.flanders_renewables` | `_extract_flanders_renewables` (`ebem.py`) | |
@@ -196,11 +197,11 @@ The registry convention is that stored snapshot values are VAT-inclusive
 (`TaxOverlay.vat_rate=0.0` means "already VAT-incl"; `providers/base.py`).
 EBEM cards print both ex-VAT and incl-VAT columns:
 
-- `_vat_multiplier` (`ebem.py`) reads the percentage from the card header
+- `_vat_multiplier` (`_ebem_cards.py`) reads the percentage from the card header
   (`INCL. BTW N%` or `BTW N%`) via the shared `vat_multiplier` helper
   (`_pdf.py`), defaulting to 1.06.
 - Dynamic energy factor / base are converted from the ex-VAT formula:
-  `_formula_to_dynamic` (`ebem.py`) does `factor * vat * 10` and
+  `_formula_to_dynamic` (`_ebem_cards.py`) does `factor * vat * 10` and
   `base_cents * vat / 100`, identical to `cociter.py`'s dynamic conversion.
 - Variable indicative rates, yearly fees, and the Flanders renewables total are
   read from the *incl-VAT* column directly so VAT is not double-applied.
@@ -209,7 +210,7 @@ EBEM cards print both ex-VAT and incl-VAT columns:
 
 ## Energy formula per TariffKind
 
-### Groen Dyn@mic (`DynamicRates`, `ebem.py`)
+### Groen Dyn@mic (`DynamicRates`, `_ebem_cards.py`)
 
 The dynamic card prints, for consumption:
 
@@ -217,7 +218,7 @@ The dynamic card prints, for consumption:
 alle uren 0,108 Belpex15' + 1,625
 ```
 
-(offset illustrative, from the card / test at `ebem.py`,
+(offset illustrative, from the card / test at `_ebem_cards.py`,
 `tests/test_ebem.py`). The regex anchors on a line starting with
 `alle uren` that is NOT preceded by `injectie` (`(?<!injectie\s)`) so it does
 not pick the injection row, and accepts any `SIGN_CHARS` between factor and base
@@ -229,22 +230,22 @@ Factor / base go through `_formula_to_dynamic` with the card VAT.
 `quarter_hourly=True`. Illustrative from the test: `0.108 * 1.06 * 10 = 1.1448`
 and `1.625 * 1.06 / 100 = 0.017225` (`tests/test_ebem.py`).
 
-Yearly fee: `_extract_yearly_fee_abonnement` (`ebem.py`), the
+Yearly fee: `_extract_yearly_fee_abonnement` (`_ebem_cards.py`), the
 `Abonnement ... €/jaar ... €/jaar` row (incl-VAT second column). Illustrative
 `70` (`tests/test_ebem.py`).
 
-### Groen B@sic+ (`VariableRates`, `ebem.py`)
+### Groen B@sic+ (`VariableRates`, `_ebem_cards.py`)
 
 Single rate for all hours. The formula row is
-`Verbruik alle uren <factor> Belpex <sign> <base>` (`ebem.py`). The stored
+`Verbruik alle uren <factor> Belpex <sign> <base>` (`_ebem_cards.py`). The stored
 `current` is the printed indicative from `_indicative_from_row`, not a
 recomputed value. `yearly_fixed_fee` is the `Abonnement` row (illustrative `70`,
 `tests/test_ebem.py`); `yearly_fixed_fee_exclusive_night` still comes from
 the shared card's dedicated night fee (illustrative `35.04`) because an
 exclusive-night meter bills that even though the energy is single-rate
-(`ebem.py`). `peak` / `offpeak` / `exclusive_night` energy are left `None`.
+(`_ebem_cards.py`). `peak` / `offpeak` / `exclusive_night` energy are left `None`.
 
-### Groen Variabel (`VariableRates`, `ebem.py`)
+### Groen Variabel (`VariableRates`, `_ebem_cards.py`)
 
 Parses four meter-type formula rows into `parsed` (only used to build the
 diagnostic `formula` string):
@@ -257,13 +258,13 @@ diagnostic `formula` string):
 | exclusive night | `Exclusief nacht` |
 
 Each row is `<label> <factor> Belpex <sign> <base>`. A missing row raises
-`ExtractorError` per label (`ebem.py`). The stored rates (`current`, `peak`,
+`ExtractorError` per label (`_ebem_cards.py`). The stored rates (`current`, `peak`,
 `offpeak`, `exclusive_night`) are each the printed incl-VAT indicative from
 `_indicative_from_row`, not recomputed. `yearly_fixed_fee` is the
 `Vaste vergoeding (jaarlijkse ...)` row; `yearly_fixed_fee_exclusive_night` is
 the `Vaste vergoeding exclusief nacht` row.
 
-### `_indicative_from_row` (`ebem.py`)
+### `_indicative_from_row` (`_ebem_cards.py`)
 
 EBEM variable cards print four numeric columns per row after the formula:
 `EXCL.BTW`, `INCL.BTW 6%`, `GESCHATTE JAARPRIJS EXCL.BTW`, and
@@ -299,11 +300,58 @@ The row is found by
 counting figures rather than by spelling the formula out, so the sign between
 `Belpex` and the offset never enters into it: some months EBEM prints a U+2212
 minus / negative offset, which a literal `+` missed and failed the whole
-snapshot on an otherwise valid card (`ebem.py`).
+snapshot on an otherwise valid card (`_ebem_cards.py`).
 
 Illustrative indicatives from the test (`tests/test_ebem.py`): mono
 `0.123363`, peak `0.132458`, off-peak / excl-night `0.113359` EUR/kWh; B@sic+
 `0.121243`.
+
+### The price each formula gives (`_ebem_cards.py`)
+
+No EBEM card states the unit of its formulas or of the index they multiply.
+The formula column is headed "TARIEFFORMULE (variabel tarief)" alone, and
+"vorige maand bedroeg deze index 182,45" and "De SPP0 vorige maand bedroeg
+141,52" carry none, on every card from January 2025 (the dynamic one from
+October 2025) to November 2026. The readers take the formulas as c€/kWh
+excluding VAT on an index in EUR/MWh.
+
+What each card does print, beside every formula, is the price it gives at that
+index excluding VAT: 0,110 x 182,45 + 2,2 is the 22,2695 of the November 2026
+mono row, 0,0925 x 141,52 - 1,25 the 11,8406 of its feed-in. So each formula is
+worked out again at the index the card names (`formula_gives`, `_parse.py`):
+the four Groen Variabel rows, the B@sic+ row and the feed-in row at last
+month's indices, and the dynamic card's two formulas at the regulator's monthly
+means it prints instead ("maandrekenkundig gemiddeldes: 173,23014 voor de
+afname en 145,61121 voor de injectie"), against the prices printed after each
+formula on its line or alone on the line above it. A price has to be its
+formula at an index within `_INDEX_SLACK` (0,25 EUR/MWh) of the one printed:
+every price on file comes back within its rounding to four decimals but April
+2025's, worked out at 94,69 where the card names 94,61. Held on the index, that
+slip passes a feed-in price near or under zero as it passes a large one, which
+is why the feed-in price is read with its sign: 0,0925 x SPP0 - 1,25 is zero at
+13,5 EUR/MWh. A base read ten times out, as zero or flipped, moves the index by
+10 EUR/MWh or more.
+
+February 2026's dynamic card kept January's prices beside February's means,
+about a tenth off on both legs. A dynamic card missing on both legs therefore
+stands while each price is its formula at an index within `_STALE_RATIO` (twice
+or half) of the printed mean, the means having moved by 1,43 times at most
+between two months on file, and while both legs are worked out off their means
+by the same amount, within `_STALE_SPREAD` (12 EUR/MWh): prices kept from one
+earlier month sit 7,90 and 7,75 under February's means, and the consumption
+and injection means moved 5,48 EUR/MWh apart at most between two months on
+file. Both bases read wrong move the two legs opposite ways, 24 EUR/MWh apart
+or more when read ten times out, as zero or flipped, and are refused. One leg
+missing alone is a slip in that formula or that mean, and is refused too.
+
+The only unit printed near the formulas is the `(c€/kWh)` heading over the
+price columns, 9 to 349 characters ahead of the rows, the same on every card.
+`_require_price_unit` reads it through `stated_unit` (`_parse.py`), so a card
+restating a formula together with its prices, which would still give them
+back, is refused when its heading moves with them. A card failing any of these
+is refused with an `ExtractorError`, like one whose formula row does not read,
+and so is a card that no longer prints the index. What no check can see is a
+formula restated with its prices under the old heading.
 
 ## DSO overlay: `_extract_dsos` (`ebem.py`)
 
@@ -399,12 +447,12 @@ The remaining `TaxOverlay` fields are zeroed because EBEM is Flanders-only:
 `tests/test_ebem.py`). The residential energy-fund tariff is EUR 0; the
 non-residential EUR 10.07/month tier is not modelled (`tests/test_ebem.py`).
 
-## Injection: `_extract_injection` (`ebem.py`)
+## Injection: `_extract_injection` (`_ebem_cards.py`)
 
 EBEM spans two of the three injection shapes in the taxonomy (see
 [../pricing-model.md](../pricing-model.md)):
 
-### Dynamic: hourly factor*spot+base (`ebem.py`)
+### Dynamic: hourly factor*spot+base (`_ebem_cards.py`)
 
 `Belpex 15'` is a true hourly-spot formula. The row is
 `injectie alle uren <factor> Belpex15' <sign> <base>`. It emits an
@@ -414,7 +462,7 @@ the test: `0,0925 Belpex15' - 1,10` gives `factor 0.925`, `base -0.011`
 (`tests/test_ebem.py`). Negative base is expected: a low spot can make a
 producer pay to inject, and the pricing engine respects that.
 
-### Variable / B@sic+: month-indexed on Belpex-SPP0 (`ebem.py`)
+### Variable / B@sic+: month-indexed on Belpex-SPP0 (`_ebem_cards.py`)
 
 Both `Variabel` and `B@sic+` settle injection at a MONTHLY rate: the factor and
 base weight the monthly Belpex-SPP0 average, not the hourly spot. The card
@@ -430,7 +478,7 @@ The extractor surfaces the coefficients WITH `spp_indexed=True`
 them against the delivery month's own solar-weighted mean, and
 `_injection_is_spot_formula` never hands month coefficients an hourly spot.
 `current` stays as the fallback for an entry without the Synergrid profile, so
-a missing indicative is still fatal (`ebem.py`, `tests/test_ebem.py`).
+a missing indicative is still fatal (`_ebem_cards.py`, `tests/test_ebem.py`).
 
 There is no supplier-side PV forfait: `SupplierSnapshot.supplier_prosumer_eur_per_kva_year`
 is left at its `None` default. The only prosumer figure is the DSO-side analog
@@ -439,7 +487,7 @@ rate on the variable card.
 Every card carries an injection row, so a fully-absent row (e.g. a
 capitalization re-render) raises `ExtractorError` for both the dynamic and the
 variable branch rather than returning `None` and silently zeroing a prosumer's
-feed-in credit (`ebem.py`, `tests/test_ebem.py`).
+feed-in credit (`_ebem_cards.py`, `tests/test_ebem.py`).
 
 ## Quirks and historical bugs
 
@@ -461,10 +509,10 @@ feed-in credit (`ebem.py`, `tests/test_ebem.py`).
   (plus, hyphen, figure/en/em dash, U+2212) because supplier PDFs flip silently
   between them on re-render (`_parse.py`). `_indicative_from_row` does not
   read the sign at all any more: it counts the row's figures, after a literal
-  `+` there failed valid cards that printed a negative offset (`ebem.py`).
+  `+` there failed valid cards that printed a negative offset (`_ebem_cards.py`).
 - **Exclusive-night yearly fee**: both variable products surface a dedicated
   `yearly_fixed_fee_exclusive_night` billed instead of the standard fee on an
-  exclusive-night meter, even B@sic+ which has no energy split (`ebem.py`).
+  exclusive-night meter, even B@sic+ which has no energy split (`_ebem_cards.py`).
 - **Fixed contracts retired**: EBEM stopped selling fixed contracts; a revived
   `fix` PDF kind would surface from `discover()` for a tracking issue
   (`ebem.py`).
@@ -498,13 +546,16 @@ could start.
 | --- | --- | --- |
 | Wrong / missing month, or archive proxy silently used | `_extract_validity` (`ebem.py`) | title format or a new colliding `word + year` token |
 | Every fetch 404s or picks wrong month | `_PDF_RE` (`ebem.py`) / `_find_latest` (`ebem.py`) | filename pattern, separator, or kind token changed |
-| Dynamic energy / injection missing | `_extract_energy` dynamic branch (`ebem.py`) / `_extract_injection` dynamic (`ebem.py`) | `alle uren` / `Belpex15'` label or spacing drift |
-| Variable rate / indicative wrong | `_indicative_from_row` (`ebem.py`) | column order / count or sign changed |
-| Variable formula row not found | row regexes (`ebem.py`) | meter-type label wording changed |
-| Yearly fees wrong | `_extract_yearly_fee_variable` / `_extract_excl_night_fee_variable` / `_extract_yearly_fee_abonnement` (`ebem.py`) | `Vaste vergoeding` / `Abonnement` label changed |
+| Dynamic energy / injection missing | `_extract_energy` dynamic branch (`_ebem_cards.py`) / `_extract_injection` dynamic (`_ebem_cards.py`) | `alle uren` / `Belpex15'` label or spacing drift |
+| Variable rate / indicative wrong | `_indicative_from_row` (`_ebem_cards.py`) | column order / count or sign changed |
+| Variable formula row not found | row regexes (`_ebem_cards.py`) | meter-type label wording changed |
+| Yearly fees wrong | `_extract_yearly_fee_variable` / `_extract_excl_night_fee_variable` / `_extract_yearly_fee_abonnement` (`_ebem_cards.py`) | `Vaste vergoeding` / `Abonnement` label changed |
 | A DSO drops out or a rate shifts | `_extract_dsos` (`ebem.py`) / `_FLANDERS_LABELS` (`ebem.py`) | Fluvius label rename, table heading, or column order |
 | Taxes zeroed or wrong | `_extract_federal_taxes` (`ebem.py`) / `_extract_flanders_renewables` (`ebem.py`) | `0-3 MWH` casing, `Beschermende klanten`, or `Totale bijdrage` row drift |
-| Monthly injection indicative missing (fatal) | `_extract_injection` variable branch (`ebem.py`) | card stopped printing the realized indicative column |
+| Monthly injection indicative missing (fatal) | `_extract_injection` variable branch (`_ebem_cards.py`) | card stopped printing the realized indicative column |
+| "the ... formula gives X at the printed index Y, the card prints Z" (fatal) | `_require_price` / `_require_dynamic_prices` (`_ebem_cards.py`) | a formula, an index or a price restated on another scale, or one leg's prices left stale |
+| "its prices are worked out X and Y EUR/MWh off the printed means, not at one month's" (fatal) | `_require_one_month` (`_ebem_cards.py`) | both dynamic bases restated or read wrong |
+| "prices headed in ..., expected c€/kWh" (fatal) | `_require_price_unit` (`_ebem_cards.py`) | the price columns restated in another unit |
 
 Regenerate the fixtures from the current card before adjusting a regex, and keep
 the test-encoded illustrative values in sync with the new card.
