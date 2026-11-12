@@ -285,6 +285,17 @@ def test_a_crafted_card_is_read_in_time_linear_in_its_length(tail: str) -> None:
     assert time.perf_counter() - started < 2.0
 
 
+def test_a_meter_row_ending_in_a_run_of_blanks_is_read_in_linear_time() -> None:
+    """The figures of the meter row are found once each, however many blanks
+    follow the last of them."""
+    from custom_components.be_electricity_prices.providers import trevion
+
+    started = time.perf_counter()
+    _, figures = trevion._meter_row("Tweevoudig 21,03" + " " * 100_000 + "x")
+    assert figures == [21.03]
+    assert time.perf_counter() - started < 2.0
+
+
 # A monthly card the same way, and its SPP index's heading with no value after
 # it (200,000 characters, since each heading costs less).
 @pytest.mark.parametrize(
@@ -763,6 +774,183 @@ def test_the_formula_reproduces_the_price_the_card_prints(
     got = (snap.energy.factor * spot + snap.energy.base) * 100.0
     # A centime: the card rounds its own printed figure to two decimals.
     assert got == pytest.approx(want, abs=0.01)
+
+
+@pytest.mark.parametrize(
+    ("contract_id", "fixture", "old", "new", "feed_in", "message"),
+    [
+        # A monthly card's energy formula, "(0,107* Belpex_RLP_VL+1,5) *1,06",
+        # the printed 17,00 c€/kWh at August's 135,84 EUR/MWh.
+        (
+            "groene_stroom_flex",
+            "trevion_flex_2026-09.pdf",
+            "(0,107* Belpex_RLP_VL",
+            "(1,07* Belpex_RLP_VL",
+            0.95,
+            "monthly energy formula",
+        ),
+        # Its feed-in, "0,095 * Belpex_SPP_BE - 2,5", 5,02 at 79,11.
+        (
+            "groene_stroom_flex",
+            "trevion_flex_2026-09.pdf",
+            "0,095 * Belpex_SPP_BE",
+            "0,95 * Belpex_SPP_BE",
+            0.95,
+            "monthly injection formula",
+        ),
+        # A dynamic card's, "(0,107* Belpex 15 MTU+1,3) *1,06", 15,96 at the
+        # 128,55 it quotes, and "0,086 x Belpex 15 MTU - 0,5", 8,91 at 109,46.
+        (
+            "groene_energie_dynamisch",
+            "trevion_dynamic_2026-09.pdf",
+            "(0,107* Belpex 15 MTU",
+            "(1,07* Belpex 15 MTU",
+            0.86,
+            "dynamic energy formula",
+        ),
+        (
+            "groene_energie_dynamisch",
+            "trevion_dynamic_2026-09.pdf",
+            "0,086 x Belpex 15 MTU",
+            "0,86 x Belpex 15 MTU",
+            0.86,
+            "dynamic injection formula",
+        ),
+    ],
+    ids=["monthly-energy", "monthly-feed-in", "dynamic-energy", "dynamic-feed-in"],
+)
+def test_a_formula_that_misses_its_printed_price_is_refused(
+    contract_id: str, fixture: str, old: str, new: str, feed_in: float, message: str
+) -> None:
+    """The formulas state no unit of their own, so one restated on another
+    scale would read clean. Each must give back the price the meter row prints
+    for it at the index the sentence before it quotes; read ten times over,
+    the card is refused, as one whose formula does not read is."""
+    text = _layout(fixture)
+    snap = parse_snapshot(contract_id, text)
+    assert isinstance(snap.energy, (DynamicRates, SpotMonthlyRates))
+    assert snap.energy.factor == pytest.approx(1.1342)
+    assert snap.injection is not None
+    assert snap.injection.factor == pytest.approx(feed_in)
+    restated = text.replace(old, new)
+    assert restated != text
+    with pytest.raises(ExtractorError, match=f"{message}.*does not give"):
+        parse_snapshot(contract_id, restated)
+
+
+@pytest.mark.parametrize(
+    ("spp", "printed", "credit"),
+    [
+        # 0,095 x 27,00 - 2,5 is 0,065 c€/kWh exactly, printed 0,07.
+        ("27,00", "0,07", 0.00065),
+        # 0,095 x 16,49 - 2,5 is -0,93345, printed -0,93 in each dash.
+        ("16,49", "-0,93", -0.0093345),
+        ("16,49", "–0,93", -0.0093345),
+        ("16,49", "−0,93", -0.0093345),
+    ],
+    ids=["near-zero", "below-zero-hyphen", "below-zero-en-dash", "below-zero-minus"],
+)
+def test_a_feed_in_near_or_under_zero_reads_and_a_slip_on_it_is_refused(
+    spp: str, printed: str, credit: float
+) -> None:
+    """Flex credits "0,095 * Belpex_SPP_BE - 2,5" at the SPP its sentence
+    quotes, which crosses zero at 26,3 EUR/MWh: the May 2026 card printed 0,27
+    at April's 29,17. A month of low solar prices prints the figure near zero
+    or under it, with its sign, and the card reads, crediting the formula at
+    that SPP. A factor read ten times over on it is still refused, and so is a
+    figure under zero printed as a positive one."""
+    text = _layout("trevion_flex_2026-09.pdf")
+    low = text.replace("(79,11 €/MWh)", f"({spp} €/MWh)").replace(
+        "Tweevoudig 17,00 5,02", f"Tweevoudig 17,00 {printed}"
+    )
+    assert low != text
+    inj = parse_snapshot("groene_stroom_flex", low).injection
+    assert inj is not None
+    assert inj.factor == pytest.approx(0.95)
+    assert inj.current == pytest.approx(credit)
+    slipped = low.replace("0,095 * Belpex_SPP_BE", "0,95 * Belpex_SPP_BE")
+    unsigned = low.replace(f"17,00 {printed}", f"17,00 {printed[-4:]}")
+    for card in (slipped, unsigned) if credit < 0 else (slipped,):
+        with pytest.raises(
+            ExtractorError, match=r"monthly injection formula.*does not give"
+        ):
+            parse_snapshot("groene_stroom_flex", card)
+
+
+@pytest.mark.parametrize(
+    ("contract_id", "fixture", "layout", "edits"),
+    [
+        # The September 2026 Flex card's feed-in restated in EUR/MWh, formula,
+        # printed price and heading alike: the formula gives the price back,
+        # and only the heading says the scale moved.
+        (
+            "groene_stroom_flex",
+            "trevion_flex_2026-09.pdf",
+            True,
+            (
+                ("Tweevoudig 17,00 5,02", "Tweevoudig 17,00 50,2"),
+                ("0,095 * Belpex_SPP_BE – 2,5", "0,95 * Belpex_SPP_BE – 25"),
+                ("Injectie (c€/kWh)", "Injectie (€/MWh)"),
+            ),
+        ),
+        # The energy leg of a dynamic card the same way.
+        (
+            "groene_energie_dynamisch",
+            "trevion_dynamic_2026-09.pdf",
+            True,
+            (
+                ("SMR3 15,96", "SMR3 159,6"),
+                ("(0,107* Belpex 15 MTU+1,3)", "(1,07* Belpex 15 MTU+13)"),
+                ("Afname (c€/kWh)", "Afname (€/MWh)"),
+            ),
+        ),
+        # Vast prints its prices and no formula, in both text orders.
+        (
+            "groene_energie_vast",
+            _VAST,
+            True,
+            (("Afname (c€/kWh)", "Afname (€/MWh)"),),
+        ),
+        (
+            "groene_energie_vast",
+            _VAST,
+            False,
+            (("Injectie (c€/kWh)", "Injectie (EUR/kWh)"),),
+        ),
+        # A heading that no longer states its unit.
+        (
+            "groene_energie_vast",
+            _VAST,
+            True,
+            (("Injectie (c€/kWh)", "Injectie"),),
+        ),
+    ],
+    ids=["flex-feed-in", "dynamic-energy", "vast-energy", "vast-plain", "vast-none"],
+)
+def test_a_price_column_headed_in_another_unit_is_refused(
+    contract_id: str,
+    fixture: str,
+    layout: bool,
+    edits: tuple[tuple[str, str], ...],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The meter table heads its price columns "Afname (c€/kWh) Injectie
+    (c€/kWh)" on every card on file. A leg restated in another unit together
+    with its printed price passes the formula check, and Vast has no formula
+    to check, so a card heading either column otherwise is refused."""
+    text = fixture_text(fixture, layout=layout)
+    assert parse_snapshot(contract_id, text).injection is not None
+    restated = text
+    for old, new in edits:
+        assert old in restated, old
+        restated = restated.replace(old, new)
+    with pytest.raises(ExtractorError, match=r"column is stated in .*not c€/kWh"):
+        parse_snapshot(contract_id, restated)
+    if len(edits) > 1:
+        # The leg restated whole gives its printed price back: only the
+        # heading tells it apart.
+        monkeypatch.setattr(trevion_mod, "_require_column_units", lambda *_: None)
+        parse_snapshot(contract_id, restated)
 
 
 def _flex_listing(*stamps: str) -> str:

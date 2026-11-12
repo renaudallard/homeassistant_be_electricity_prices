@@ -48,8 +48,11 @@ from ._links import on_page_site
 from ._parse import (
     SIGN_CHARS,
     excise_tier_bands,
+    formula_gives,
+    parse_sign,
     require_every_area,
     running_month_short_of_an_area,
+    stated_unit,
     to_float,
 )
 from ._pdf import (
@@ -88,11 +91,13 @@ _MONTH_NUMBERS = {name: index for index, name in enumerate(NL_MONTHS, 1)}
 # that sentence twice in the same words, once per parameter, so each reader
 # anchors on its own marker and the gap to it is bounded. Unanchored, the
 # feed-in reader takes the consumption sentence, which is a different index
-# entirely: 135,84 against 79,11 for August 2026.
-_PUBLISHED_INDEX_TAIL = (
-    r".{0,40}?laatst\s+gekende\s+waarde\s+is\s+deze\s+van\s+"
+# entirely: 135,84 against 79,11 for August 2026. The sentence alone is also
+# what each formula's printed price is worked out at (``_QUOTED_INDEX_RE``).
+_KNOWN_VALUE = (
+    r"laatst\s+gekende\s+waarde\s+is\s+deze\s+van\s+"
     rf"({_MONTH})\s+(20\d{{2}})\s*\(\s*(\d+(?:[.,]\d+)?)\s*\u20ac/MWh"
 )
+_PUBLISHED_INDEX_TAIL = r".{0,40}?" + _KNOWN_VALUE
 
 # The card spells its eight Fluvius areas exactly the way the shared table
 # does, so it uses the shared table. Six other providers alias it the same
@@ -469,15 +474,42 @@ def published_spp_index(text: str) -> tuple[date, float] | None:
     return _published_index(text, "Belpex_SPP_BE")
 
 
+# A figure of the meter row with any sign printed ahead of it. No card on file
+# prints a negative one, but a feed-in formula under zero in a month of low
+# solar prices gives one, and the figure is compared with the formula as the
+# negative it is (``_require_printed``). It is never credited: the monthly
+# credit is the formula at the SPP the card quotes, and a dynamic card's is
+# the formula at each quarter hour.
+# The sign and the blanks after it are one optional group, so a match starts
+# only at a sign or a digit: a sign and blanks matched apart would let every
+# blank of a long run start a scan of the rest of it.
+_ROW_FIGURE_RE = re.compile(rf"(?:([{SIGN_CHARS}])\s*+)?({_NUM})")
+_METER_ROW_RE = re.compile(
+    r"^(?:Tweevoudig|SMR3)\s+(.+)$", re.IGNORECASE | re.MULTILINE
+)
+
+
+def _meter_row(text: str) -> tuple[int, list[float]]:
+    """Where the figures of the meter table's row start, and each figure with
+    its sign: the energy and feed-in prices, then the green, CHP and
+    yearly-fee columns, which Vast prints alone. ``(-1, [])`` where the card
+    prints no such row."""
+    row = _METER_ROW_RE.search(text)
+    if row is None:
+        return -1, []
+    return row.start(1), [
+        parse_sign(sign) * _number(figure)
+        for sign, figure in _ROW_FIGURE_RE.findall(row.group(1))
+    ]
+
+
 def _meter_shared_values(text: str) -> tuple[float, float, float]:
     """Return the green, CHP, and yearly-fee columns from the meter table."""
-    row = re.search(r"^(?:Tweevoudig|SMR3)\s+(.+)$", text, re.IGNORECASE | re.MULTILINE)
-    if row:
-        values = [_number(value) for value in re.findall(_NUM, row.group(1))]
-        if len(values) >= 5:
-            return values[2], values[3], values[4]
-        if len(values) == 3:
-            return values[0], values[1], values[2]
+    _at, values = _meter_row(text)
+    if len(values) >= 5:
+        return values[2], values[3], values[4]
+    if len(values) == 3:
+        return values[0], values[1], values[2]
 
     table = re.sub(r"\s+", " ", text)
     reordered = re.search(
@@ -495,6 +527,34 @@ def _fee(text: str) -> float:
     return _meter_shared_values(text)[2]
 
 
+# The unit of the meter table's price columns, in the headings above them:
+# "Afname (c€/kWh) Injectie (c€/kWh)" on every card on file, February to
+# November 2026, in both text orders, and nowhere else on the card. They end
+# 109 to 166 characters ahead of the first figure under them, the Vast
+# card's "Enkelvoudig" row or the meter row of the others, and start 181 at
+# most, where the card has barely begun. A card heading either column in
+# another unit, or no longer heading it, prints figures this reads ten or a
+# hundred times out, formula and printed price alike, and is refused.
+_COLUMN_UNIT_RES = {
+    column: re.compile(rf"{column}\s*\(([^()]{{0,20}})\)")
+    for column in ("Afname", "Injectie")
+}
+_COLUMN_UNIT = "c€/kWh"
+_COLUMN_UNIT_REACH = 300
+
+
+def _require_column_units(text: str, at: int) -> None:
+    """Refuse a meter table whose price columns, read from ``at``, are not
+    headed in c€/kWh."""
+    for column, pattern in _COLUMN_UNIT_RES.items():
+        unit = stated_unit(text, pattern, (at, at), before=_COLUMN_UNIT_REACH)
+        if unit != _COLUMN_UNIT:
+            raise ExtractorError(
+                f"Trevion: the {column} column is stated in {unit or 'no unit'}, "
+                f"not {_COLUMN_UNIT}"
+            )
+
+
 def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:
     table = re.sub(r"\s+", " ", text)
     single = re.search(rf"Enkelvoudig\s+({_NUM})\s+({_NUM})", table, re.IGNORECASE)
@@ -503,6 +563,7 @@ def _extract_fixed(text: str) -> tuple[FixedRates, InjectionRates]:
     night = re.search(rf"Exclusief\s+Nacht\s+({_NUM})", table, re.IGNORECASE)
     if not single or not peak or not offpeak or not night:
         raise ExtractorError("Trevion: fixed energy table not found")
+    _require_column_units(table, single.start(1))
     return (
         FixedRates(
             single=_number(single.group(1)) / 100.0,
@@ -534,9 +595,68 @@ _FIXED_FOR_TERM = re.compile(
 # The card's title line: "september 2026 – Incl. 6% BTW".
 _VAT_RE = re.compile(r"Incl\.\s*(\d+)\s*%\s*BTW", re.IGNORECASE)
 
+# The formulas state no unit of their own, so one restated on another scale
+# would read clean. Each must give back the price the meter row prints for
+# it, energy then feed-in ("Tweevoudig 22,28 10,94" on the monthly cards,
+# "SMR3 21,03 12,02" on the dynamic ones), at the index quoted in the sentence
+# before it: "De laatst gekende waarde is deze van oktober 2026 (182,447
+# €/MWh). De tariefformule elektriciteit is (0,107* Belpex_RLP_VL+1,5) *1,06."
+# On every archived card, February to November 2026, that sentence starts 92
+# to 104 characters ahead of its formula, and the energy's ends 391 or more
+# ahead of the feed-in formula, out of reach. The worst gap on them is 0,43 %,
+# a feed-in printed at 0,27 c€/kWh; the energy's is 0,04 %. Read ten times
+# off, a factor misses by 77 % or more. That 0,27 is April 2026's SPP of 29,17
+# EUR/MWh, and 0,095 x SPP - 2,5 crosses zero at 26,3: a feed-in printed that
+# close to zero is out by more than any share of it, so a gap of 0,01 c€/kWh,
+# the hundredth the row prints to, is allowed outright. Every archived figure
+# lies within 0,0052 c€/kWh of its formula, half that hundredth from the
+# row's rounding and a little from the index's, and the other half of the
+# floor keeps an exact tie, 0,065 printed 0,07 at an SPP of 27,00, from
+# failing on floating point.
+_QUOTED_INDEX_RE = re.compile(_KNOWN_VALUE, re.IGNORECASE)
+_QUOTED_INDEX_REACH = 200
+_FORMULA_TOLERANCE = 0.02
+_FORMULA_FLOOR = 0.0001
 
-def _extract_formula(text: str, marker: str) -> tuple[float, float]:
-    """The formula's factor and base, grossed by the multiplier it prints.
+
+def _require_printed(
+    text: str,
+    kind: str,
+    energy: tuple[float, float, int],
+    feed_in: tuple[float, float, int],
+) -> None:
+    """Refuse a ``kind`` card whose energy or feed-in formula, each a
+    ``(factor, base, offset)`` in EUR/kWh on an index in EUR/kWh, does not
+    give back the price the meter row prints for it at the index the
+    sentence before the formula quotes. A card printing no such price or
+    quoting no index is refused too: every card on file does both."""
+    row_at, row = _meter_row(text)
+    if len(row) < 5:
+        raise ExtractorError(
+            f"Trevion: the {kind} card prints no price for its formulas"
+        )
+    _require_column_units(text, row_at)
+    for column, (name, (factor, base, at)) in enumerate(
+        (("energy", energy), ("injection", feed_in))
+    ):
+        quoted = _QUOTED_INDEX_RE.search(text, max(0, at - _QUOTED_INDEX_REACH), at)
+        if quoted is None or not formula_gives(
+            row[column] / 100.0,
+            factor,
+            _number(quoted.group(3)) / 1000.0,
+            base,
+            tolerance=_FORMULA_TOLERANCE,
+            floor=_FORMULA_FLOOR,
+        ):
+            raise ExtractorError(
+                f"Trevion: the {kind} {name} formula does not give the price "
+                "its card prints"
+            )
+
+
+def _extract_formula(text: str, marker: str) -> tuple[float, float, int]:
+    """The formula's factor and base, grossed by the multiplier it prints,
+    and where it starts.
 
     "(0,107* Belpex 15 MTU+1,3) *1,06": the card applies its VAT inside the
     formula, so that multiplier is read rather than assumed, and a card
@@ -563,12 +683,12 @@ def _extract_formula(text: str, marker: str) -> tuple[float, float]:
         / 100.0
         * vat
     )
-    return factor, base
+    return factor, base, match.start()
 
 
-def _after(text: str, first: str, then: str) -> str | None:
-    """The text past the first ``then`` after the first ``first``, both read
-    regardless of case, or ``None`` where either is missing.
+def _after(text: str, first: str, then: str) -> int | None:
+    """Where the text past the first ``then`` after the first ``first``
+    starts, both read regardless of case, or ``None`` where either is missing.
 
     The gap between the two stops at the next ``first``, which finds the
     same ``then``. Left open, a card with nothing after them was read to its
@@ -577,7 +697,7 @@ def _after(text: str, first: str, then: str) -> str | None:
     head = re.search(
         rf"{first}(?:(?!{first}).)*?{then}", text, re.IGNORECASE | re.DOTALL
     )
-    return None if head is None else text[head.end() :]
+    return None if head is None else head.end()
 
 
 def _injection_formula(text: str, index: str) -> re.Match[str] | None:
@@ -591,16 +711,15 @@ def _injection_formula(text: str, index: str) -> re.Match[str] | None:
     tail = _after(text, "teruglevering", "formule")
     if tail is None:
         return None
-    return re.search(
+    return re.compile(
         rf"(?<![\d.,])({_NUM})\s*[*x×]\s*{index}\s*([{SIGN_CHARS}])\s*({_NUM})",
-        tail,
         re.IGNORECASE,
-    )
+    ).search(text, tail)
 
 
 def _extract_monthly(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
     marker = "Belpex_RLP_VL"
-    factor, base = _extract_formula(text, marker)
+    factor, base, at = _extract_formula(text, marker)
     injection = _injection_formula(text, "Belpex_SPP_BE")
     if not injection:
         raise ExtractorError("Trevion: monthly injection formula not found")
@@ -608,7 +727,7 @@ def _extract_monthly(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
     known_index = (
         None
         if tail is None
-        else re.search(rf"\(({_NUM})\s*€/MWh\)", tail, re.IGNORECASE)
+        else re.compile(rf"\(({_NUM})\s*€/MWh\)", re.IGNORECASE).search(text, tail)
     )
     if not known_index:
         raise ExtractorError("Trevion: latest SPP index not found")
@@ -619,6 +738,9 @@ def _extract_monthly(text: str) -> tuple[SpotMonthlyRates, InjectionRates]:
         else -_number(injection.group(3))
     ) / 100.0
     current = inj_factor * (_number(known_index.group(1)) / 1000.0) + inj_base
+    _require_printed(
+        text, "monthly", (factor, base, at), (inj_factor, inj_base, injection.start(1))
+    )
     return SpotMonthlyRates(
         factor=factor,
         base=base,
@@ -638,7 +760,7 @@ _QUARTER_HOUR_INDEX = r"(?:Belpex 15 MTU|EPEX Spot)"
 
 
 def _extract_dynamic(text: str) -> tuple[DynamicRates, InjectionRates]:
-    factor, base = _extract_formula(text, _QUARTER_HOUR_INDEX)
+    factor, base, at = _extract_formula(text, _QUARTER_HOUR_INDEX)
     injection = _injection_formula(text, _QUARTER_HOUR_INDEX)
     if not injection:
         raise ExtractorError("Trevion: dynamic injection formula not found")
@@ -648,6 +770,9 @@ def _extract_dynamic(text: str) -> tuple[DynamicRates, InjectionRates]:
         if injection.group(2) == "+"
         else -_number(injection.group(3))
     ) / 100.0
+    _require_printed(
+        text, "dynamic", (factor, base, at), (inj_factor, inj_base, injection.start(1))
+    )
     return DynamicRates(
         factor=factor, base=base, quarter_hourly=True, yearly_fixed_fee=_fee(text)
     ), InjectionRates(factor=inj_factor, base=inj_base)

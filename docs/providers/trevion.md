@@ -182,6 +182,39 @@ with no formula or index after them costs its length
 (`test_a_crafted_card_is_read_in_time_linear_in_its_length`,
 `test_a_crafted_monthly_card_is_read_in_time_linear_in_its_length`).
 
+### Units and formula check
+
+The meter table heads its price columns `Afname (c€/kWh) Injectie (c€/kWh)` on
+every card on file, February to November 2026, in both text orders, ending 109 to
+166 characters ahead of the first figure under them. Each heading must state
+`c€/kWh` within 300 characters of the `Enkelvoudig` row on Vast and of the meter
+row on the others (`_require_column_units`); a card heading either column in
+another unit, or no longer stating one, raises.
+
+The formulas state no unit of their own, so one restated on another scale would
+read clean. Each must give back, within 2 % (`_require_printed`), the price the
+meter row prints for it at the index quoted in the sentence before it: "De laatst
+gekende waarde is deze van oktober 2026 (182,447 €/MWh). De tariefformule
+elektriciteit is (0,107* Belpex_RLP_VL+1,5) *1,06." gives the 22,28 of
+`Tweevoudig 22,28 10,94`, VAT included on both sides, and the feed-in formula at
+the SPP value its own sentence quotes gives the 10,94, VAT-exempt. The dynamic
+cards quote the VREG's estimate for the year ahead the same way and print the
+result in the `SMR3` row. On every archived card the energy formulas do within
+0,04 % and the feed-in ones within 0,43 %, the farthest a feed-in printed at 0,27
+c€/kWh; a factor read ten times off misses by 77 % or more. A formula that does
+not, or a card quoting no index or printing no price for it, raises as a formula
+that does not read does. The Flex feed-in crosses zero at an SPP of 26,3 EUR/MWh
+(the May 2026 card printed 0,27 at April's 29,17), and a figure printed that
+close to it is out by more than any share, so a gap of 0,01 c€/kWh is allowed
+outright (`_FORMULA_FLOOR`): about half of it is the printed rounding, and the
+other half keeps an exact tie from failing on floating point. The meter row is
+read with any sign printed ahead of each figure (`_meter_row`), so a figure under
+zero is compared as negative. It is only compared: the monthly credit is the
+formula at the quoted SPP and the dynamic one the formula at each quarter hour.
+
+A leg restated whole, formula and printed price together, still gives its price
+back, and only the column heading tells it apart.
+
 ### Shared meter columns
 
 The PDF readers serialize the commodity table in two observed orders:
@@ -192,10 +225,12 @@ Tweevoudig|SMR3 <energy> <injection> <green> <WKK> <fee>
 ```
 
 The plain pypdf extraction can instead place the three shared values after the
-`Enkelvoudig` row and before `Tweevoudig`. `_meter_shared_values` handles all
-three shapes and is the single source for the green certificate cost, WKK
-cost, and yearly subscription. This prevents one parser path from interpreting
-the commodity and feed-in columns as regulated levies.
+`Enkelvoudig` row and before `Tweevoudig`. `_meter_row` reads the row, and
+`_meter_shared_values` handles all three shapes and is the single source for
+the green certificate cost, WKK cost, and yearly subscription; the energy and
+feed-in figures ahead of them are what the formula check compares. This
+prevents one parser path from interpreting the commodity and feed-in columns
+as regulated levies.
 
 ## Network and taxes
 
