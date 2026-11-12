@@ -1344,7 +1344,13 @@ successful refresh:
   withdrawn-product notice says so.
 - **`extractor_failed_<entry>`** — the supplier extractor could not parse
   the tariff card (typically a layout drift on the supplier's PDF/HTML).
-  Raised on the first failure, since a parse error will not self-heal,
+  A card that states a formula in a unit its cards never used, or whose
+  formula no longer gives back the price it prints beside it, fails the same
+  way: read on the old scale it would bill ten times off, as OCTA+'s November
+  2026 cards briefly did. Where the card can do without that formula, as with
+  a feed-in credit or a variable card that also prints its monthly rate, the
+  formula is dropped instead and the printed rate bills, as when it cannot be
+  read at all. Raised on the first failure, since a parse error will not self-heal,
   except from the 1st to the 5th of a month while a card still prices the
   entry (see *Suppliers are often late*); cached prices keep serving,
   including a card stored by an earlier version

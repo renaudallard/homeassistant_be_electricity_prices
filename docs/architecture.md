@@ -177,21 +177,27 @@ In addition, twenty-two supplier modules that read a published card live under `
 `luminus.py`, `mega.py`, `octaplus.py`, `social.py`, `totalenergies.py` and `trevion.py`. Each has its own page under
 [providers/](providers/).
 
-Nine of them carry their card readers in sibling modules, named
+Eleven of them carry their card readers in sibling modules, named
 `_<supplier>_cards.py` for the product legs the supplier prices and
-`_<supplier>_overlays.py` for the regulated ones it only reprints. EnergyVision
-also has `_energyvision_wallonia.py`, because its Walloon card is a different
-document in a different language rather than a variant of the Dutch one, and
+`_<supplier>_overlays.py` for the regulated ones it only reprints: Bolt, EBEM,
+Ecopower, Eneco, Energy Knights, EnergyVision, Engie, Luminus, Mega, OCTA+ and
+TotalEnergies. Some keep a further piece apart. EnergyVision has
+`_energyvision_wallonia.py`, because its Walloon card is a different document in
+a different language rather than a variant of the Dutch one, and
 `_energyvision_contracts.py`, which holds its contract registry, as Mega's
-`_mega_contracts.py` does, and Cociter
-has `_cociter_settle.py`, which reads the BELIX its next card prints for a
-closed month (`_settle.py` settles the month on it), and `_cociter_rows.py`, the
+`_mega_contracts.py` does. Bolt, Ecofix, Energy Knights, OCTA+ and
+TotalEnergies keep their formulas, and the units their cards state them in, in
+`_<supplier>_formulas.py`, and Luminus keeps there the check that a formula
+still gives the price its card prints. Luminus also keeps its signing campaign
+in `_luminus_promo.py`, Frank its variable cards in `_frank_variable.py` and
+TotalEnergies its professional cards in `_totalenergies_pro.py`. Cociter has
+`_cociter_settle.py`, which reads the BELIX its next card prints for a closed
+month (`_settle.py` settles the month on it), and `_cociter_rows.py`, the
 per-meter rows its card readers call: the indicative rate, the BELIX formula and
 the price ceiling. Belvus has `_belvus_older.py`, which reads its cards of
 January to August 2026 in the older layout into the shapes `belvus.py` reads
-its later ones into. The
-supplier module keeps the urls, the archive and `parse_snapshot`, which calls
-into them.
+its later ones into. The supplier module keeps the urls, the archive and
+`parse_snapshot`, which calls into them.
 
 A twentieth module, `custom.py`, is the expert escape hatch: it is not scraped (its `fetch` is a
 stub) and the
