@@ -3474,6 +3474,45 @@ def test_the_unit_a_card_states_is_the_nearest_statement_of_it() -> None:
     assert stated_unit(text, unit, figure) is None
 
 
+def test_a_statement_across_the_edge_of_its_reach_is_not_read() -> None:
+    """A statement counts only where it lies wholly within its reach: one
+    running across the edge of it is none there, never a unit cut short."""
+    import re
+
+    from custom_components.be_electricity_prices.providers._parse import (
+        stated_unit,
+    )
+
+    unit = re.compile(r"exprimé en\s+([^\s.]+)")
+    text = "0,1001 x TTF + 0,52 Le résultat est un montant exprimé en c€/kWh."
+    figure = 0, text.index(" Le")
+    reach = text.index("c€/kWh") + len("c€/kWh") - figure[1]
+    assert stated_unit(text, unit, figure, after=reach) == "c€/kWh"
+    for cut in range(1, 6):
+        assert stated_unit(text, unit, figure, after=reach - cut) is None
+    inside = text.index("kWh")
+    assert stated_unit(text, unit, (inside, inside + 3), before=60) is None
+
+
+def test_a_unit_statement_is_looked_for_within_its_reach_only() -> None:
+    """A call costs its reach, not the rest of the card: a pattern that may
+    start on any blank, after a figure followed by a long run of them, would
+    otherwise be tried again from every blank of the run."""
+    import re
+    import time
+
+    from custom_components.be_electricity_prices.providers._parse import (
+        stated_unit,
+    )
+
+    unit = re.compile(r"[^\S\n]*(\S+)")
+    text = "0,1" + " " * 100_000 + "\n0,1"
+    started = time.perf_counter()
+    assert stated_unit(text, unit, (0, 3), after=12) is None
+    assert stated_unit(text, unit, (len(text) - 3, len(text)), before=12) is None
+    assert time.perf_counter() - started < 2.0
+
+
 def test_a_formula_gives_back_the_price_its_card_prints() -> None:
     from custom_components.be_electricity_prices.providers._parse import (
         formula_gives,

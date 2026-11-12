@@ -307,22 +307,36 @@ def stated_unit(
 
     ``pattern`` matches one statement of the unit as the card prints it (a
     column heading, the words after a formula), with the unit as its first
-    group. The last statement lying within ``before`` characters ahead of the
-    figure is taken, else the first within ``after`` characters behind it. A
+    group, and should start on a word of the statement, so that its tail is
+    no statement. The last statement starting within ``before`` characters
+    ahead of the figure and ending before it is taken, else the first
+    starting and ending within ``after`` characters behind it. A
     reader compares the answer with the spellings its cards have printed and
     refuses any other, None included: a figure read on a scale its card no
     longer states parses clean ten or a hundred times out, as OCTA+'s formulas
     did in November 2026 (``_octaplus_formulas.py``).
     """
     start, end = figure
+    # Each reach bounds the search, so a call costs its reach rather than the
+    # rest of the card. A search stopped at the edge of a reach reads it as
+    # the end of the text, so each statement found is matched again from
+    # where it starts with the whole text in view: one running across the
+    # edge, "c€/kW" where the reach ends and the card prints "c€/kWh", is no
+    # statement there rather than one cut short.
     if before:
-        stated = list(pattern.finditer(text, max(0, start - before), start))
-        if stated:
-            return stated[-1].group(1)
+        stated = None
+        for found in pattern.finditer(text, max(0, start - before), start):
+            whole = pattern.match(text, found.start())
+            if whole is not None and whole.end() <= start:
+                stated = whole
+        if stated is not None:
+            return stated.group(1)
     if after:
-        match = pattern.search(text, end, end + after)
-        if match:
-            return match.group(1)
+        first = pattern.search(text, end, end + after)
+        if first is not None:
+            whole = pattern.match(text, first.start())
+            if whole is not None and whole.end() <= end + after:
+                return whole.group(1)
     return None
 
 
