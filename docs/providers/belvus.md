@@ -87,10 +87,11 @@ Each block prints, beside its formula, the price it gives at the month
 before's Belpex RLP-M (energy) or SPP-M (feed-in), with a "**", and names
 that value in its footnote: "Belpex RLP-M oktober 2026 van 181,836 EUR/MWh"
 on Dynamisch's card, "laatst gekende waarde van Belpex RLP-M 10/2026:
-€181,836/MWh" on the others. Every formula is held to that price within half
-a cent (`_leg`), which pins the unit and the scale; a formula on another
-index than the product's, or another formula for the energy anywhere outside
-the feed-in block (the third page restates it), is refused.
+€181,836/MWh" on the others. Every formula is held to that price within
+0.006 c€/kWh (`held_to_price`), a little over half the hundredth of a cent
+most cards round it to, which pins the unit and the scale; a formula on
+another index than the product's, or another formula for the energy anywhere
+outside the feed-in block (the third page restates it), is refused.
 
 Dynamisch bills each quarter hour on its own day-ahead price
 (`quarter_hourly`), the feed-in too, so its printed prices are no rate.

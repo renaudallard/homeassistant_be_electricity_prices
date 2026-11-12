@@ -118,8 +118,9 @@ def named_index(block: str, name: str) -> tuple[date, float] | None:
 
 def held_to_price(leg: Leg, at: float, what: str) -> None:
     """Refuse a formula that does not give back, at the index in EUR/MWh its
-    block names, the price the card prints beside it to the cent: that pins
-    the unit and the scale."""
+    block names, the price the card prints beside it within 0.006 c€/kWh, a
+    little over half the hundredth of a cent most cards round it to: that
+    pins the unit and the scale."""
     if abs((leg.factor * at + leg.base) / 10.0 - leg.price) > 0.006:
         raise ExtractorError(
             f"{_LABEL}: {what} formula does not give the price printed"
