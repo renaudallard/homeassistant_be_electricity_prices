@@ -37,7 +37,14 @@ from dataclasses import replace
 from datetime import date
 from typing import Any
 
-from ._parse import LINE_BREAK, SIGN_CHARS, parse_sign, to_float
+from ._parse import (
+    LINE_BREAK,
+    SIGN_CHARS,
+    UNIT_WORD,
+    parse_sign,
+    stated_unit,
+    to_float,
+)
 from ._pdf import _MONTH_NAMES, vat_multiplier
 from ._rates import (
     DynamicRates,
@@ -48,6 +55,7 @@ from ._rates import (
     VariableRates,
     fixed_or_variable_rates,
 )
+from ._validity import label_month_end
 from .base import ExtractorError
 
 
@@ -64,7 +72,9 @@ def _index_formulas(
     reproduces the price this leg actually prints. That is self-verifying, it
     survives a reordering, and it fails closed - no match means the caller
     keeps the printed value rather than billing a formula bound to the wrong
-    leg.
+    leg. A block whose card says its formulas give another unit than c€/kWh,
+    or says nothing on a card that should (``_result_holds``), is refused the
+    same way.
 
     ``vat`` is the multiplier this leg is printed on: 1.06 for a residential
     consumption row, 1.0 for injection, which is VAT-exempt.
@@ -77,25 +87,33 @@ def _index_formulas(
     # leg's block - which is exactly what a flat scan did, pairing this leg's
     # Normal with the other leg's Heures pleines.
     blocks: list[dict[str, tuple[float, float]]] = []
-    for label, sign, base_s, factor_s in _INDEX_FORMULA_RES[index].findall(text):
+    # Where each block's last row ends, which its result sentence follows.
+    ends: list[int] = []
+    for row in _INDEX_FORMULA_RES[index].finditer(text):
+        label, sign, base_s, factor_s = row.groups()
         # The card states c/kWh per EUR/MWh of index, so onto a EUR/kWh spot
         # the factor carries a x10 and the base a /100.
         factor = to_float(factor_s) * 10.0 * vat
         base = parse_sign(sign or "+") * to_float(base_s) / 100.0 * vat
         slot = " ".join((label or "").split()).lower()
         key = _EPEXDAM_BAND.get(slot)
+        if key == "single" or (key is not None and not blocks):
+            blocks.append({})
+            ends.append(row.end())
+        elif blocks:
+            # A row of the open block, read or not: the sentence comes after
+            # the last of them.
+            ends[-1] = row.end()
         if key is None:
             # A label this card generation invented.
             continue
-        if key == "single" or not blocks:
-            blocks.append({})
         blocks[-1].setdefault(key, (factor, base))
-    for block in blocks:
+    for block, end in zip(blocks, ends, strict=True):
         single = block.get("single")
         if single is None:
             continue
         if abs((single[0] * value / 1000.0 + single[1]) - printed) <= 1e-4:
-            return block
+            return block if _result_holds(text, _result_unit(text, end)) else {}
     # No block reproduces this leg's printed price: the caller keeps that
     # price rather than billing a formula bound to the wrong leg.
     return {}
@@ -160,10 +178,12 @@ def _extract_energy(
         match = _FORMULA_RE.search(text)
         if not match:
             raise ExtractorError("could not parse Engie dynamic consumption formula")
+        problem = _dynamic_unit_problem(text, match)
+        if problem is not None:
+            raise ExtractorError(f"Engie: dynamic consumption formula {problem}")
         # Groups: (base_sign, base_magnitude, factor_sign, factor_magnitude,
         # quarter-hour suffix).
-        base_pre_vat_cents = parse_sign(match.group(1)) * to_float(match.group(2))
-        factor_pdf = parse_sign(match.group(3)) * to_float(match.group(4))
+        base_pre_vat_cents, factor_pdf = _signed_pair(match)
         vat = _vat_multiplier(text, professional=professional)
         # PDF formula yields c€/kWh hors TVA from BELPEX in EUR/MWh; spot
         # is EUR/kWh = EUR/MWh / 1000:
@@ -354,16 +374,17 @@ def _extract_injection(
     # Only Dynamic cards carry a spot injection formula (the second
     # BELPEX formula on the card). Gate on kind so a future indexed or
     # variable card that happens to print a price formula can't flip the
-    # injection taxonomy to a spot factor/base shape.
-    if kind == "dynamic" and len(formulas) >= 2:
+    # injection taxonomy to a spot factor/base shape. A formula its card
+    # states in another unit is left out as a missing one is, and the
+    # printed Injection(3) figure credited.
+    if (
+        kind == "dynamic"
+        and len(formulas) >= 2
+        and _dynamic_unit_problem(text, formulas[1]) is None
+    ):
         injection_match = formulas[1]
         # Groups: (base_sign, base_magnitude, factor_sign, factor_magnitude).
-        base_pdf_cents = parse_sign(injection_match.group(1)) * to_float(
-            injection_match.group(2)
-        )
-        factor_pdf = parse_sign(injection_match.group(3)) * to_float(
-            injection_match.group(4)
-        )
+        base_pdf_cents, factor_pdf = _signed_pair(injection_match)
         # Both sides are printed on the card's own VAT basis: residential
         # injection is VAT-exempt, professional injection is grossed later
         # by apply_vat off vat_applies.
@@ -435,6 +456,75 @@ def _extract_injection(
     )
 
 
+def _signed_pair(formula: re.Match[str]) -> tuple[float, float]:
+    """The base and the factor of an eSpot formula, signed, as printed."""
+    return (
+        parse_sign(formula.group(1) or "+") * to_float(formula.group(2)),
+        parse_sign(formula.group(3) or "+") * to_float(formula.group(4)),
+    )
+
+
+def _dynamic_unit_problem(text: str, formula: re.Match[str]) -> str | None:
+    """How the units the Dynamic card states for its table formula
+    ``formula`` differ from the ones its cards have printed, or None.
+
+    The readers take the formula in c€/kWh on eSpot in €/MWh, which the
+    formula itself does not say. Three statements do: the heading of the
+    column it is printed in, the sentence under the footnote restating it,
+    and the footnote's unit for eSpot.
+    """
+    header = stated_unit(text, _PRICE_HEADER_RE, formula.span(), before=_HEADER_REACH)
+    if header not in _PRICE_HEADERS:
+        expected = " or ".join(sorted(_PRICE_HEADERS))
+        return f"priced in {header or 'no stated unit'}, expected {expected}"
+    pair = _signed_pair(formula)
+    copy = next(
+        (
+            restated
+            for restated in _ESPOT_FORMULA_RE.finditer(text, formula.end())
+            if _signed_pair(restated) == pair
+        ),
+        None,
+    )
+    result = None if copy is None else _result_unit(text, copy.end())
+    if not _result_holds(text, result):
+        return f"stated to give {result or 'no stated unit'}, expected {_RESULT_UNIT}"
+    index = stated_unit(text, _ESPOT_UNIT_RE, formula.span(), after=_ESPOT_REACH)
+    if index != _ESPOT_UNIT:
+        return f"on eSpot in {index or 'no stated unit'}, expected {_ESPOT_UNIT}"
+    return None
+
+
+def _result_unit(text: str, end: int) -> str | None:
+    """The unit the sentence under a formula, or a block of them, ending at
+    ``end`` says they give, or None where the card prints none."""
+    return stated_unit(text, _RESULT_UNIT_RE, (end, end), after=_RESULT_REACH)
+
+
+def _result_holds(text: str, unit: str | None) -> bool:
+    """Whether ``unit``, what the sentence under a formula says it gives
+    (:func:`_result_unit`), is the unit the formula is read in: c€/kWh, or no
+    sentence at all on a card for a month before the cards printed one.
+
+    A card from October 2025 on, or one naming no month, has to print it: the
+    heading over the formulas states the unit of the printed prices, which a
+    formula restated in €/MWh with its sentence dropped would leave true.
+    """
+    if unit is not None:
+        return unit == _RESULT_UNIT
+    month = label_month_end(_extract_publication_month(text))
+    return month is not None and month < _RESULT_SINCE
+
+
+def _extract_publication_month(text: str) -> str:
+    """The month the card is for, "contrats conclus en Novembre 2026"."""
+    match = re.search(
+        r"contrats conclus en\s+([A-Za-zéûÉÛ]+\s+\d{4})",
+        text,
+    )
+    return match.group(1) if match else ""
+
+
 # Engie's formula prints either "Formule de prix hors TVA -1,3135 + (0,1095 x
 # eSpot_15)" (consumption: positive base usually, negative for injection),
 # but a future re-render could flip either side to a Unicode minus or any
@@ -451,6 +541,45 @@ _FORMULA_RE = re.compile(
     rf"Formule de prix\s+hors\s+TVA\s++([{SIGN_CHARS}]?)\s*([\d,.]+)\s*\+\s*"
     rf"\(([{SIGN_CHARS}]?)\s*([\d,.]+)\s*x\s*eSpot(_15)?\)"
 )
+# The footnote under the table restates each formula without the lead
+# ("0,7134 + (0,1039 x eSpot_15)"), in the same groups. A copy starts at its
+# sign or at the first of its digits, the sign taking the blanks after it:
+# found from inside a run of digits or blanks, each place of a long run was a
+# start of its own and read the rest of the run again.
+_ESPOT_FORMULA_RE = re.compile(
+    rf"(?:([{SIGN_CHARS}])\s*+)?(?<![\d,.])([\d,.]++)\s*\+\s*"
+    rf"\(([{SIGN_CHARS}]?)\s*([\d,.]+)\s*x\s*eSpot(_15)?\)"
+)
+# The Dynamic card heads the column its two formulas are printed in "Prix par
+# kWh (€cent/kWh)" up to December 2025 and "Prix par kWh (c€/kWh)" from
+# January 2026, its only heading of the kind, which ends 143 to 309
+# characters ahead of the formulas on every archived card.
+_PRICE_HEADER_RE = re.compile(r"Prix\s+par\s+kWh\s*\(([^)\n]{0,30})\)")
+_PRICE_HEADERS = frozenset({"€cent/kWh", "c€/kWh"})
+_HEADER_REACH = 450
+# The footnote under the table quotes the index "Les cotations eSpot_15 sont
+# exprimées en €/MWh" ("eSpot" up to September 2025), the card's only sentence
+# of the kind, which ends 1811 to 3658 characters after the formulas.
+_ESPOT_UNIT_RE = re.compile(rf"eSpot(?:_15)?\s+sont\s+exprimées\s+en\s+{UNIT_WORD}")
+_ESPOT_UNIT = "€/MWh"
+_ESPOT_REACH = 4500
+# What a formula gives, in the sentence under it: "Le résultat de cette
+# formule est un montant exprimé en c€/kWh", or "de ces formules" under a
+# block of them. Every archived card for October 2025 on prints it under
+# every formula and block, ending 61 or 62 characters past the formula or the
+# block's last row, and none for an earlier month does, so a formula with
+# nothing under it reads as it always did on those cards only. The reach
+# leaves a few lines of room, now that a sentence beyond it refuses the
+# formula, and stays well short of the next block's sentence, 1306
+# characters on at the nearest, which says the same and would stand in for
+# one dropped.
+_RESULT_UNIT_RE = re.compile(
+    r"Le\s+résultat\s+de\s+(?:cette\s+formule|ces\s+formules)\s+est\s+un\s+"
+    rf"montant\s+exprimé\s+en\s+{UNIT_WORD}"
+)
+_RESULT_UNIT = "c€/kWh"
+_RESULT_REACH = 300
+_RESULT_SINCE = date(2025, 10, 1)
 # Empower Variable / Empty House index BOTH legs on the monthly EPEXDAM and say
 # so: "Le prix de l'electricite est indexe mensuellement. Le parametre
 # d'indexation est la moyenne arithmetique des cotations journalieres Day Ahead

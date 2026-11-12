@@ -478,6 +478,217 @@ def test_dynamic_extracts_injection_formula() -> None:
     assert inj.current == pytest.approx(0.09136)
 
 
+def _restate(text: str, old: str, new: str, nth: int = 0) -> str:
+    """``text`` with the ``nth`` place it prints ``old``, counted from 0,
+    printing ``new`` instead."""
+    at = -1
+    for _ in range(nth + 1):
+        at = text.index(old, at + 1)
+    return f"{text[:at]}{new}{text[at + len(old) :]}"
+
+
+@pytest.mark.parametrize(
+    ("statement", "restated", "message"),
+    [
+        (
+            "Prix par kWh (c€/kWh)",
+            "Prix par kWh (€/MWh)",
+            "priced in €/MWh, expected c€/kWh or €cent/kWh",
+        ),
+        (
+            "Prix par kWh (c€/kWh)",
+            "Prix par kWh",
+            "priced in no stated unit, expected c€/kWh or €cent/kWh",
+        ),
+        (
+            "montant exprimé en c€/kWh",
+            "montant exprimé en €/MWh",
+            "stated to give €/MWh, expected c€/kWh",
+        ),
+        (
+            "\nLe résultat de cette formule est un montant exprimé en c€/kWh.",
+            "",
+            "stated to give no stated unit, expected c€/kWh",
+        ),
+        (
+            "Le résultat de cette formule est un montant exprimé en",
+            "Le résultat de cette formule s'exprime en",
+            "stated to give no stated unit, expected c€/kWh",
+        ),
+        (
+            "sont exprimées en €/MWh",
+            "sont exprimées en c€/kWh",
+            "on eSpot in c€/kWh, expected €/MWh",
+        ),
+    ],
+    ids=[
+        "heading",
+        "heading-dropped",
+        "result",
+        "result-dropped",
+        "result-reworded",
+        "index",
+    ],
+)
+def test_dynamic_formula_in_another_unit_is_refused(
+    statement: str, restated: str, message: str
+) -> None:
+    """The Dynamic formula is read in c€/kWh on eSpot in €/MWh, and the card
+    says so three times: its column is headed "Prix par kWh (c€/kWh)", the
+    footnote restating it ends "Le résultat de cette formule est un montant
+    exprimé en c€/kWh", and "Les cotations eSpot_15 sont exprimées en €/MWh".
+    A card stating another unit in any of them, no longer heading the column
+    with one, or for April 2026 printing no result sentence, is refused
+    rather than billed ten times out."""
+    text = fixture_text("engie_dynamic_v.pdf")
+    assert text.count(statement) >= 1
+    snap = parse_snapshot("engie_dynamic", {REGION_FLANDERS: text})
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.10134)
+    with pytest.raises(ExtractorError, match=f"consumption formula {message}"):
+        parse_snapshot(
+            "engie_dynamic", {REGION_FLANDERS: _restate(text, statement, restated)}
+        )
+
+
+@pytest.mark.parametrize(
+    ("statement", "restated"),
+    [
+        ("montant exprimé en c€/kWh", "montant exprimé en €/MWh"),
+        ("\nLe résultat de cette formule est un montant exprimé en c€/kWh.", ""),
+    ],
+    ids=["result", "result-dropped"],
+)
+def test_dynamic_injection_formula_in_another_unit_is_dropped(
+    statement: str, restated: str
+) -> None:
+    """The feed-in formula is held to the same statements, the sentence under
+    its own footnote's copy of it included. One it fails, or whose sentence
+    is gone, is left out, as a missing one is, and the printed Injection(3)
+    rate credited; the consumption formula, whose own sentence still says
+    c€/kWh, stands."""
+    text = fixture_text("engie_dynamic_v.pdf")
+    inj = parse_snapshot("engie_dynamic", {REGION_FLANDERS: text}).injection
+    assert inj is not None
+    assert (inj.factor, inj.base) == pytest.approx((1.0, -0.013135))
+    assert text.count(statement) == 2
+    restated = _restate(text, statement, restated, nth=1)
+    snap = parse_snapshot("engie_dynamic", {REGION_FLANDERS: restated})
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.10134)
+    inj = snap.injection
+    assert inj is not None
+    assert (inj.factor, inj.base, inj.formula) == (None, None, None)
+    assert inj.current == pytest.approx(0.09136)
+
+
+def test_dynamic_formula_restated_tenfold_without_its_sentence_is_refused() -> None:
+    """The column heading gives the printed prices' unit, which stays true of
+    a formula restated in €/MWh, table and footnote alike: with its result
+    sentence dropped as well, only the card's month tells the sentence is
+    missing, and the card is refused rather than billed ten times out."""
+    text = fixture_text("engie_dynamic_v.pdf")
+    formula, tenfold = "0,8702 + (0,1039 x eSpot_15)", "8,702 + (1,039 x eSpot_15)"
+    assert text.count(formula) == 2
+    restated = _restate(
+        text.replace(formula, tenfold),
+        "\nLe résultat de cette formule est un montant exprimé en c€/kWh.",
+        "",
+    )
+    with pytest.raises(
+        ExtractorError, match="stated to give no stated unit, expected c€/kWh"
+    ):
+        parse_snapshot("engie_dynamic", {REGION_FLANDERS: restated})
+
+
+def test_dynamic_card_before_october_2025_needs_no_result_sentence() -> None:
+    """The cards for months before October 2025 print no result sentence and
+    read as they always did. One naming no month at all is held to the
+    sentence, as the current cards are."""
+    text = fixture_text("engie_dynamic_v_2025-09.pdf")
+    assert "Le résultat" not in text
+    snap = parse_snapshot("engie_dynamic", {REGION_FLANDERS: text})
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(1.08014)
+    unnamed = text.replace("contrats conclus en Septembre 2025", "contrats conclus")
+    with pytest.raises(
+        ExtractorError, match="stated to give no stated unit, expected c€/kWh"
+    ):
+        parse_snapshot("engie_dynamic", {REGION_FLANDERS: unnamed})
+
+
+@pytest.mark.parametrize("leg", ["energy", "injection"])
+@pytest.mark.parametrize(
+    ("statement", "restated"),
+    [
+        ("montant exprimé en c€/kWh", "montant exprimé en €/MWh"),
+        ("\nLe résultat de ces formules est un montant exprimé en c€/kWh.", ""),
+    ],
+    ids=["result", "result-dropped"],
+)
+def test_epexdam_formulas_in_another_unit_are_not_bound(
+    leg: str, statement: str, restated: str
+) -> None:
+    """Under each block of EPEXDAM formulas the card says what they give,
+    "Le résultat de ces formules est un montant exprimé en c€/kWh", the
+    consumption block first. A block whose sentence names another unit, or is
+    gone from this April 2026 card, is not bound, as one that does not
+    reproduce its printed price is not: that leg keeps the figure its card
+    prints, and the other leg its formula."""
+    text = fixture_text("engie_empower_variable_v.pdf")
+    snap = parse_snapshot("engie_empower_variable", {REGION_FLANDERS: text})
+    assert isinstance(snap.energy, VariableRates)
+    assert snap.energy.month_indexed
+    assert snap.energy.formula_factor == pytest.approx(0.1171 * 10.0 * 1.06)
+    assert snap.injection is not None
+    assert snap.injection.month_indexed
+    assert snap.injection.factor == pytest.approx(0.0528 * 10.0)
+    assert text.count(statement) == 2
+    restated = _restate(text, statement, restated, nth=0 if leg == "energy" else 1)
+    snap = parse_snapshot("engie_empower_variable", {REGION_FLANDERS: restated})
+    energy, inj = snap.energy, snap.injection
+    assert isinstance(energy, VariableRates)
+    assert inj is not None
+    assert energy.current == pytest.approx(0.13775)
+    assert inj.current == pytest.approx(0.04918)
+    assert energy.month_indexed is (leg != "energy")
+    assert (energy.formula_factor is None) is (leg == "energy")
+    assert inj.month_indexed is (leg != "injection")
+    assert (inj.factor is None) is (leg == "injection")
+
+
+@pytest.mark.parametrize("leg", ["energy", "injection"])
+def test_endex101_formulas_in_another_unit_are_not_bound(leg: str) -> None:
+    """Easy Variable's ENDEX101 blocks end in the same sentence and are held
+    to it the same way: the block restated is not bound and its leg keeps
+    the printed price, while the other leg keeps its formula."""
+    text = fixture_text("engie_easy_indexed_v.pdf")
+    snap = parse_snapshot("engie_easy_variable", {REGION_FLANDERS: text})
+    energy, inj = snap.energy, snap.injection
+    assert isinstance(energy, VariableRates)
+    assert inj is not None
+    assert energy.forward_indexed and inj.forward_indexed
+    assert energy.formula_factor == pytest.approx(0.1169 * 10.0 * 1.06)
+    assert inj.factor is not None
+    assert text.count("montant exprimé en c€/kWh") == 2
+    restated = _restate(
+        text,
+        "montant exprimé en c€/kWh",
+        "montant exprimé en €/MWh",
+        nth=0 if leg == "energy" else 1,
+    )
+    snap = parse_snapshot("engie_easy_variable", {REGION_FLANDERS: restated})
+    re_energy, re_inj = snap.energy, snap.injection
+    assert isinstance(re_energy, VariableRates)
+    assert re_inj is not None
+    assert re_energy.current == pytest.approx(energy.current)
+    assert re_inj.current == pytest.approx(inj.current)
+    assert re_energy.forward_indexed is (leg != "energy")
+    assert (re_energy.formula_factor is None) is (leg == "energy")
+    assert re_inj.forward_indexed is (leg != "injection")
+    assert (re_inj.factor is None) is (leg == "injection")
+
+
 def test_dynamic_merges_dsos_from_every_region() -> None:
     snap = parse_snapshot("engie_dynamic", _dynamic_three_regions())
     keys = set(snap.dsos)

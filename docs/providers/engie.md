@@ -262,7 +262,7 @@ Fields pulled from the card:
 | --- | --- | --- |
 | Energy rates | `_extract_energy` (`_engie_cards.py`) | Branches on `TariffKind`; returns Fixed/Variable/Dynamic/TOU rates. |
 | Injection | `_extract_injection` (`_engie_cards.py`) | See taxonomy below. |
-| Publication month label | `_extract_publication_month` (`engie.py`) | Anchored on `contrats conclus en <Month> <Year>`. |
+| Publication month label | `_extract_publication_month` (`_engie_cards.py`) | Anchored on `contrats conclus en <Month> <Year>`. |
 | Federal excise | `_extract_federal_excise` (`_engie_overlays.py`) | Flat "Toutes consommations" row when present, else the whole tier table, returned as `federal_excise_bands` beside the 0-3000 kWh rate and blended over the household's volume (a single tier row is one rate); a professional card's three bands are always read whole. The federal scheme folded the energy contribution into the special excise and flattened it on 2026-08-01, so the August card dropped the four-tier table. The energy contribution row went with it and now defaults to 0 rather than raising. |
 | Energy contribution | `_extract_energy_contribution` (`_engie_overlays.py`) | Comma-stripped digits reconstructed. |
 | Regional renewables | `_extract_consumption_renewables` (`_engie_overlays.py`) | Trailing column of the Consommation row. |
@@ -339,6 +339,32 @@ result (illustrative, April 2026 card printing `0,8702 + (0,1039 x eSpot_15)` at
 6% VAT): `factor == 1.10134`, `base == 0.00922412`, `yearly_fixed_fee == 100.7`.
 The pinned literal deliberately guards a `1.06` vs `10` unit-swap bug that would
 otherwise cancel out (`0.1039 * 10.6 == 0.1039 * 1.06 * 10`).
+
+### Stated units
+
+The conversions hold only on a formula in c€/kWh over an index in €/MWh, which the
+formula itself does not say, so the readers check what the card states around it
+(`stated_unit`, `_parse.py`) against the spellings the archived cards print:
+
+- Dynamic, both formulas (`_dynamic_unit_problem`): the heading of the column they are
+  printed in, "Prix par kWh (€cent/kWh)" up to December 2025 and "(c€/kWh)" from
+  January 2026; the sentence under the footnote's copy of each, "Le résultat de cette
+  formule est un montant exprimé en c€/kWh"; and "Les cotations eSpot_15 sont exprimées
+  en €/MWh" ("eSpot" before October 2025). Another unit, or no heading or index
+  sentence, fails the fetch on the consumption formula and leaves the feed-in one out,
+  crediting the printed Injection(3) rate.
+- EPEXDAM and ENDEX101 formulas (`_index_formulas`): the sentence under each block,
+  "Le résultat de ces formules est un montant exprimé en c€/kWh". A block naming
+  another unit is not bound, and its leg keeps the printed price, as when no block
+  reproduces it. The index needs no sentence of its own: its value is only read with
+  "€/MWh" after it (`_INDEX_VALUE_RES`).
+
+The result sentence is the only statement of the formula's own unit: the heading gives
+the printed prices' unit, which a formula restated in €/MWh would leave true. Every card
+for October 2025 on prints it under each formula and block, and none for an earlier
+month does, so a missing one is taken only on a card whose month (`contrats conclus en
+<mois> <année>`) is before October 2025 (`_result_holds`). On a later card, or one
+naming no month, a missing sentence counts as another unit.
 
 ### Tax-block parse hurdles
 
@@ -682,7 +708,10 @@ likely-to-break order:
    `_IMPACT_PAIR_RE` no longer reads the pair's head.
 2. `_FORMULA_RE` and `_vat_multiplier` (`_engie_cards.py`): dynamic
    formula punctuation (sign chars, `eSpot_15` / `eSpot` token) and the mandatory VAT
-   phrase.
+   phrase. "dynamic consumption formula priced in", "stated to give" or "on eSpot in"
+   comes from `_dynamic_unit_problem`: the card restated a unit or reworded one of the
+   statements in [Stated units](#stated-units). The same change leaves a Dynamic
+   feed-in, or an EPEXDAM or ENDEX101 leg, on its printed rate.
 3. `_extract_injection` (`_engie_cards.py`): the `Injection(3)` row column order and
    the second-formula gate for dynamic.
 4. DSO row parsers (`_extract_flanders_dsos` `_engie_overlays.py`,

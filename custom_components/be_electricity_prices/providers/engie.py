@@ -68,6 +68,7 @@ from ._engie_cards import (
     _VAT_RE,
     _extract_energy,
     _extract_injection,
+    _extract_publication_month,
     published_index,
 )
 from ._engie_overlays import (
@@ -682,14 +683,6 @@ def parse_snapshot(
 
 
 # ---- energy + tax block -------------------------------------------------------
-
-
-def _extract_publication_month(text: str) -> str:
-    match = re.search(
-        r"contrats conclus en\s+([A-Za-zéûÉÛ]+\s+\d{4})",
-        text,
-    )
-    return match.group(1) if match else ""
 
 
 def _extract_connection_fee(text: str) -> float:
