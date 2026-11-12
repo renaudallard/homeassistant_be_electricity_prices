@@ -32,6 +32,7 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from custom_components.be_electricity_prices import energy_meters
 from custom_components.be_electricity_prices.meter_outages import (
@@ -64,6 +65,26 @@ async def test_only_a_total_increasing_meter_carries_an_outage(
     assert carries_outages(hass, "sensor.a")
     assert not carries_outages(hass, "sensor.b")
     assert not carries_outages(hass, "sensor.c")
+
+
+async def test_a_meter_not_loaded_yet_is_judged_on_its_registry_entry(
+    hass: HomeAssistant,
+) -> None:
+    """At startup the meter's integration may not have written a state yet:
+    the class its registry entry kept says whether it carries an outage."""
+    registry = er.async_get(hass)
+    carrying = registry.async_get_or_create(
+        "sensor", "p1", "import", capabilities={"state_class": "total_increasing"}
+    )
+    cycling = registry.async_get_or_create(
+        "sensor", "p1", "cycle", capabilities={"state_class": "total"}
+    )
+    assert hass.states.get(carrying.entity_id) is None
+    assert carries_outages(hass, carrying.entity_id)
+    assert not carries_outages(hass, cycling.entity_id)
+    # A state, once written, is what the meter says now.
+    hass.states.async_set(carrying.entity_id, "1", {"state_class": "total"})
+    assert not carries_outages(hass, carrying.entity_id)
 
 
 async def test_a_restart_read_off_last_year_lands_on_the_day_read(

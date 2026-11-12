@@ -44,6 +44,7 @@ from itertools import pairwise
 
 from homeassistant.components.sensor import ATTR_STATE_CLASS, SensorStateClass
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 # The local days a daily read dropped for a negative change, inside a
 # noting_restarts block.
@@ -71,12 +72,19 @@ def note_restart(day: date) -> None:
 def carries_outages(hass: HomeAssistant, entity_id: str) -> bool:
     """Whether the meter's statistics carry its count across an outage: a
     total_increasing sensor's do. Another meter may have lost it, as a total
-    starting a new cycle, or a statistic some integration imports."""
+    starting a new cycle, or a statistic some integration imports. Until the
+    meter's own integration has loaded there is no state yet, and the class
+    is read from what the entity registry kept of it."""
     state = hass.states.get(entity_id)
-    return (
-        state is not None
-        and state.attributes.get(ATTR_STATE_CLASS) == SensorStateClass.TOTAL_INCREASING
-    )
+    if state is not None:
+        state_class = state.attributes.get(ATTR_STATE_CLASS)
+    else:
+        entry = er.async_get(hass).async_get(entity_id)
+        capabilities = None if entry is None else entry.capabilities
+        state_class = (
+            None if capabilities is None else capabilities.get(ATTR_STATE_CLASS)
+        )
+    return state_class == SensorStateClass.TOTAL_INCREASING
 
 
 def spread_outages(
