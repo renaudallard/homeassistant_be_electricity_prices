@@ -3474,6 +3474,22 @@ def test_the_unit_a_card_states_is_the_nearest_statement_of_it() -> None:
     assert stated_unit(text, unit, figure) is None
 
 
+def test_of_several_statements_the_nearest_is_taken() -> None:
+    """Of several statements within a reach, the last one ahead of the figure
+    is taken, or the first one behind it."""
+    import re
+
+    from custom_components.be_electricity_prices.providers._parse import (
+        stated_unit,
+    )
+
+    unit = re.compile(r"\((c€/kWh|€/MWh)\)")
+    text = "(€/MWh) (c€/kWh) 0,1001 (€/MWh) (c€/kWh)"
+    figure = text.index("0,1001"), text.index("0,1001") + 6
+    assert stated_unit(text, unit, figure, before=30) == "c€/kWh"
+    assert stated_unit(text, unit, figure, after=30) == "€/MWh"
+
+
 def test_a_statement_across_the_edge_of_its_reach_is_not_read() -> None:
     """A statement counts only where it lies wholly within its reach: one
     running across the edge of it is none there, never a unit cut short."""
