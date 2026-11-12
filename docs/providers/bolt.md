@@ -598,6 +598,36 @@ quarter's figures, as the card prints them, key or not
 (`test_the_variable_settlement_credits_the_spp_figures_per_register`,
 `test_a_walloon_meter_is_credited_the_single_spp_figure`, `tests/test_bolt.py`).
 
+### Formula units
+
+The card states the unit of its formulas once, in the heading of the column they print in:
+`Formule tarifaire (€/MWh, HTVA)` from April 2026 and `(€/MWh - HTVA)` on the cards before it (back
+to January 2025, the first month on file), with `(€/MWh, HTVA)` again over the Tarif Impact block's
+formula column, whose index column is headed `(€/MWh)`. Each row prints its index between the
+heading and the formula (`Simple 139,36 €/MWh Belpex * 1,168 + 16,90`), so the readers look for the
+heading itself, never the nearest unit: `_formula_in_mwh` for the consumption, feed-in and Impact
+formulas and `_impact_rows` for the Impact indices (`_bolt_formulas.py`), each through
+`stated_unit` (`_parse.py`) within a reach sized on every card on file. Those spellings are the
+only ones accepted. A card stating another unit, or none, is read as one printing no formula or
+index there, and what goes depends on which heading moved:
+
+- **The table's heading.** The consumption and feed-in formulas both print under it, so the printed
+  rates bill, the quarter-hourly settlement goes inert, and the feed-in leg keeps the figure the
+  card prints, with no figures per register or band worked out from the formula. The Impact energy
+  bands, priced on the block's own column, are still read.
+- **The block's formula heading.** Only the Impact energy bands go. The feed-in bands are the leg's
+  formula at the block's indices, and those indices are the settlement's, so both stay.
+- **The block's index heading.** Every band goes: the energy bands, the feed-in bands, and the band
+  indices a quarter's months settle at. The meter rows of the table still read.
+
+The live check reports a lost consumption or feed-in formula, not a lost band.
+
+OCTA+ restated its formulas in c€/kWh in November 2026, which keeps the factor and prints a base a
+tenth the size. Restated that way, the November 2026 Bolt Variable card passed `check_quarter_table`
+and every live-check bound, and its feed-in figures, worked out from the slipped formula, came out
+1,02 c/kWh high, the single register's 7,23 against the 6,21 it prints. Each heading has a test that
+restates it on a real card (`tests/test_bolt.py`).
+
 ### Tax block (`_extract_taxes`)
 
 Taxes print as 3-column rows (Flandres / Wallonie / Bruxelles) after the U+2028 normalization

@@ -619,6 +619,8 @@ def test_the_injection_formula_is_the_row_below_one() -> None:
     text = (
         "Injection\n"
         "Prix mensuel 3,40 -0,43 Compteur\n"
+        # The heading every card states its formulas' unit in.
+        "Type de compteur Formule tarifaire (€/MWh, HTVA)\n"
         "Simple Belpex * 1,10 + 13,94\n"
         "Jour Belpex * 1,12 + 13,94\n"
         "Nuit Belpex * 1,11 + 13,94\n"
@@ -3489,3 +3491,166 @@ async def test_the_backfill_waits_for_a_stand_in_s_reference_where_it_reads_it(
         spans[regime] = [(first, last, failed) for first, last, _why, failed in found]
     assert spans["injection"] == [(date(2026, 2, 1), date(2026, 2, 28), True)]
     assert spans["none"] == []
+
+
+def _restated(text: str, statement: str, restated: str, *, nth: int = 0) -> str:
+    """``text`` with the ``nth`` statement of ``statement`` it prints, counted
+    from 0, printed as ``restated`` instead. The card must print it there."""
+    at = -1
+    for _ in range(nth + 1):
+        at = text.index(statement, at + 1)
+    return text[:at] + restated + text[at + len(statement) :]
+
+
+def test_a_consumption_formula_under_another_unit_is_not_read() -> None:
+    """Bolt states the unit of its formulas once, in the heading of the formula
+    column, "Formule tarifaire (€/MWh, HTVA)", and prints each row's index
+    between the two ("139,36 €/MWh"). A formula restated in c€/kWh, as OCTA+
+    restated its own in November 2026, keeps its factor and prints a base a
+    tenth the size, which check_quarter_table and the live check's bounds let
+    through. Such a card reads as one printing no formula: the printed rates
+    bill and the quarter-hourly settlement goes inert. The feed-in formula
+    prints under the same heading and goes with it, while the Impact bands,
+    priced on the block's own formula column, are still read."""
+    text = fixture_text("bolt_online_oct_reissue.pdf", layout=True)
+    card = parse_snapshot("bolt_online", text, "wallonia")
+    assert isinstance(card.energy, VariableRates)
+    assert card.energy.formula_factor == pytest.approx(1.168 * 1.06)
+    assert card.energy.formula_base == pytest.approx(16.90 / 1000.0 * 1.06)
+    assert card.energy.quarter_indexed is True
+    heading = "Formule tarifaire (€/MWh, HTVA)"
+    restated = parse_snapshot(
+        "bolt_online",
+        _restated(text, heading, heading.replace("€/MWh", "c€/kWh")),
+        "wallonia",
+    )
+    energy = restated.energy
+    assert isinstance(energy, VariableRates)
+    assert (energy.formula, energy.formula_factor, energy.formula_base) == (
+        None,
+        None,
+        None,
+    )
+    assert energy.quarter_indexed is False
+    for field in ("current", "peak", "offpeak", "exclusive_night"):
+        assert getattr(energy, field) == getattr(card.energy, field), field
+    for field in ("impact_eco", "impact_medium", "impact_pic"):
+        assert getattr(energy, field) == getattr(card.energy, field), field
+        assert getattr(energy, field) is not None, field
+    assert card.energy.current == pytest.approx(0.1905)
+    assert restated.injection is not None and card.injection is not None
+    assert restated.injection.factor is None
+    assert restated.injection.current == pytest.approx(0.0621)
+
+
+@pytest.mark.parametrize(
+    ("fixture", "heading", "printed"),
+    [
+        pytest.param("bolt_fix.pdf", "(€/MWh, HTVA)", 0.0531, id="april 2026"),
+        pytest.param(
+            "bolt_fix_jan_legacy.pdf", "(€/MWh - HTVA)", 0.0587, id="january 2026"
+        ),
+    ],
+)
+def test_a_feed_in_formula_under_another_unit_is_not_read(
+    fixture: str, heading: str, printed: float
+) -> None:
+    """The feed-in formula sits under the same heading, spelt "(€/MWh, HTVA)"
+    since April 2026 and "(€/MWh - HTVA)" before. Under another unit it is not
+    read and the leg credits the figure the card prints. The figures its index
+    table stands for are worked out from the formula, and from one restated in
+    c€/kWh, its base a tenth, they came out 1,02 c/kWh high."""
+    text = fixture_text(fixture, layout=True)
+    card = parse_snapshot("bolt_fix", text, "flanders").injection
+    assert card is not None
+    assert card.factor == pytest.approx(0.94)
+    assert card.base == pytest.approx(-11.33 / 1000.0)
+    assert card.slot_indexed is True
+    restated = parse_snapshot(
+        "bolt_fix",
+        _restated(text, heading, heading.replace("€/MWh", "c€/kWh")),
+        "flanders",
+    ).injection
+    assert restated is not None
+    assert (restated.factor, restated.base, restated.formula) == (None, None, None)
+    assert restated.slot_indexed is False
+    assert restated.current == pytest.approx(printed)
+    assert card.current != pytest.approx(printed)
+
+
+def test_impact_formulas_under_another_unit_give_no_energy_bands() -> None:
+    """The Tarif Impact block heads its formula column "(€/MWh, HTVA)" as well,
+    beside its index column's "(€/MWh)" and its price column's "(c€/kWh)".
+    With that formula heading restated in another unit the energy bands are
+    not read, as on a card printing no block. Nothing else is priced on that
+    column: the feed-in bands are the leg's formula, under the table's heading,
+    at the block's indices, so they and the indices a quarter's months settle
+    at are still read, and so is the formula in the table above."""
+    from custom_components.be_electricity_prices.providers._bolt_cards import (
+        quarter_indices,
+        quarter_injection_indices,
+    )
+
+    text = fixture_text("bolt_online_oct_reissue.pdf", layout=True)
+    card = parse_snapshot("bolt_online", text, "wallonia")
+    assert isinstance(card.energy, VariableRates)
+    for band, index in (("eco", 102.42), ("medium", 153.31), ("pic", 180.89)):
+        assert getattr(card.energy, f"impact_{band}") == pytest.approx(
+            (1.168 * index + 16.90) / 1000.0 * 1.06
+        ), band
+    # The table's heading first, then the block's.
+    assert text.count("(€/MWh, HTVA)") == 2
+    restated_text = _restated(text, "(€/MWh, HTVA)", "(c€/kWh, HTVA)", nth=1)
+    restated = parse_snapshot("bolt_online", restated_text, "wallonia")
+    energy = restated.energy
+    assert isinstance(energy, VariableRates)
+    assert (energy.impact_eco, energy.impact_medium, energy.impact_pic) == (
+        None,
+        None,
+        None,
+    )
+    assert energy.formula_factor == card.energy.formula_factor
+    assert restated.injection == card.injection
+    assert restated.injection is not None
+    assert restated.injection.impact_eco == pytest.approx(0.0441, abs=5e-5)
+    lines = restated_text.replace("\u2028", "\n")
+    assert quarter_indices(lines) == quarter_indices(text.replace("\u2028", "\n"))
+    for table in (quarter_indices(lines), quarter_injection_indices(lines)):
+        assert table is not None
+        assert {"impact_eco", "impact_medium", "impact_pic"} <= set(table[1])
+
+
+def test_impact_indices_under_another_unit_are_not_read() -> None:
+    """Each Impact row prints its band's own quarter index under the column
+    heading "(€/MWh)", and the band is worked out at it. Read on that scale
+    after a restatement in c€/kWh, the band would be priced at a tenth of its
+    index, so no band is read off the block: not the energy bands, not the
+    feed-in figures per band, and not the indices a quarter's months settle
+    at, while the meter rows of the table above still are."""
+    from custom_components.be_electricity_prices.providers._bolt_cards import (
+        quarter_indices,
+        quarter_injection_indices,
+    )
+
+    text = fixture_text("bolt_online_oct_reissue.pdf", layout=True)
+    # The tax block's "Partage d'énergie Fluvius (€/MWh)" first, then the
+    # block's index column.
+    assert text.count("(€/MWh)") == 2
+    restated = _restated(text, "(€/MWh)", "(c€/kWh)", nth=1)
+    bands = ("impact_eco", "impact_medium", "impact_pic")
+    for card, read in ((text, True), (restated, False)):
+        snap = parse_snapshot("bolt_online", card, "wallonia")
+        assert isinstance(snap.energy, VariableRates)
+        assert snap.injection is not None
+        lines = card.replace("\u2028", "\n")
+        energy_table = quarter_indices(lines)
+        feed_in_table = quarter_injection_indices(lines)
+        assert energy_table is not None and feed_in_table is not None
+        for field in bands:
+            assert (getattr(snap.energy, field) is not None) is read, field
+            assert (getattr(snap.injection, field) is not None) is read, field
+            assert (field in energy_table[1]) is read, field
+            assert (field in feed_in_table[1]) is read, field
+        assert energy_table[1]["current"] == pytest.approx(0.13936)
+        assert feed_in_table[1]["current"] == pytest.approx(0.07809)
+        assert snap.energy.formula_factor == pytest.approx(1.168 * 1.06)

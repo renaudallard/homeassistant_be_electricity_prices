@@ -39,7 +39,14 @@ from datetime import date
 from typing import Any
 
 from ..const import REGION_FLANDERS, VAT_RATE_REDUCED, VAT_RATE_STANDARD
-from ._parse import SIGN_CHARS, parse_sign, to_float
+from ._bolt_formulas import (
+    _BELPEX_FORMULA_RE,
+    _IMPACT_INJECTION_ROW_RE,
+    _IMPACT_ROW_RE,
+    _formula_in_mwh,
+    _impact_rows,
+)
+from ._parse import parse_sign, to_float
 from ._pdf import _MONTH_NAMES, vat_multiplier
 from ._rates import EnergyRates, FixedRates, InjectionRates, TariffKind, VariableRates
 from .base import ExtractorError
@@ -72,11 +79,13 @@ def _consumption_formula(
     also drops the "N% TVA" phrase the multiplier reads, which would
     otherwise fall back to the residential 6% default and scale the formula
     twice over. That one IS an error, because a formula was found and read.
+
+    A formula whose heading states another unit than €/MWh, or none, is no
+    formula either (``_formula_in_mwh``).
     """
-    matches = _BELPEX_FORMULA_RE.findall(text)
-    if not matches:
+    match = _BELPEX_FORMULA_RE.search(text)
+    if match is None:
         return None
-    factor_s, sign, base_s = matches[0]
     if professional:
         if "HTVA" not in text:
             raise ExtractorError("Bolt: professional card is not marked HTVA")
@@ -88,6 +97,9 @@ def _consumption_formula(
         # load-bearing here, since the settlement leg and the Impact bands
         # below are grossed by it.
         vat = vat_multiplier(text, _VAT_PHRASE_RE, default=_RESIDENTIAL_VAT)
+    if not _formula_in_mwh(text, match):
+        return None
+    factor_s, sign, base_s = match.groups()
     base_eur_mwh = parse_sign(sign) * to_float(base_s)
     return to_float(factor_s) * vat, base_eur_mwh / 1000.0 * vat
 
@@ -448,8 +460,8 @@ def quarter_indices(text: str) -> tuple[str, dict[str, float]] | None:
             return None
         indices[field] = to_float(row.group(1)) / 1000.0
     bands = {
-        f"impact_{band.lower()}": to_float(index) / 1000.0
-        for band, _printed, index, *_formula in _IMPACT_ROW_RE.findall(text)
+        f"impact_{m.group(1).lower()}": to_float(m.group(3)) / 1000.0
+        for m in _impact_rows(text, _IMPACT_ROW_RE)
     }
     if len(bands) == 3:
         indices |= bands
@@ -501,8 +513,8 @@ def quarter_injection_indices(text: str) -> tuple[str, dict[str, float]] | None:
             return None
         indices[field] = to_float(row_match.group(1)) / 1000.0
     bands = {
-        f"impact_{band.lower()}": to_float(index) / 1000.0
-        for band, _printed, index in _IMPACT_INJECTION_ROW_RE.findall(table)
+        f"impact_{m.group(1).lower()}": to_float(m.group(3)) / 1000.0
+        for m in _impact_rows(table, _IMPACT_INJECTION_ROW_RE)
     }
     if len(bands) == 3:
         indices |= bands
@@ -589,8 +601,12 @@ def _impact_energy_bands(text: str, vat: float) -> dict[str, float]:
     bake a supplier typo into every Medium hour.
     """
     out: dict[str, float] = {}
-    for band, _printed, index, factor, sign, base in _IMPACT_ROW_RE.findall(text):
-        # EUR/MWh HTVA throughout, so /1000 to EUR/kWh, then the card's VAT.
+    for m in _impact_rows(text, _IMPACT_ROW_RE):
+        if not _formula_in_mwh(text, m, 4):
+            continue
+        band, _printed, index, factor, sign, base = m.groups()
+        # EUR/MWh HTVA, as both headings state, so /1000 to EUR/kWh, then the
+        # card's VAT.
         rate = (
             (to_float(factor) * to_float(index) + parse_sign(sign) * to_float(base))
             / 1000.0
@@ -624,19 +640,23 @@ def _with_slot_formula(text: str, current: float) -> InjectionRates:
     injection side and marks it up on every consumption row. ``current`` is
     kept as the fallback for an entry with no ENTSO-E key.
     """
-    matches = _BELPEX_FORMULA_RE.findall(text)
-    inj = next((m for m in matches if to_float(m[0]) < 1.0), None)
-    if inj is None:
-        # No formula on this card generation: the printed figure is all there
-        # is, and crediting it is better than crediting nothing.
+    inj = next(
+        (m for m in _BELPEX_FORMULA_RE.finditer(text) if to_float(m.group(1)) < 1.0),
+        None,
+    )
+    if inj is None or not _formula_in_mwh(text, inj):
+        # No formula on this card generation, or one in a unit no card has
+        # stated: the printed figure is all there is, and crediting it is
+        # better than crediting nothing.
         return InjectionRates(current=current, factor=None, base=None, formula=None)
+    factor, sign, base = inj.groups()
     return InjectionRates(
         current=current,
         # Feed-in is VAT-exempt for residential, so no VAT bake; base goes
         # EUR/MWh -> EUR/kWh.
-        factor=to_float(inj[0]),
-        base=parse_sign(inj[1]) * to_float(inj[2]) / 1000.0,
-        formula=f"Belpex * {inj[0]} {inj[1]} {inj[2]}",
+        factor=to_float(factor),
+        base=parse_sign(sign) * to_float(base) / 1000.0,
+        formula=f"Belpex * {factor} {sign} {base}",
         slot_indexed=True,
     )
 
@@ -695,15 +715,6 @@ def _extract_injection(text: str) -> InjectionRates | None:
     return _with_slot_formula(text, to_float(legacy.group(1)) / 100.0)
 
 
-# Bolt's variable card prints its tariff formula for both consumption and
-# injection as "Belpex * <factor> <sign> <base>" in EUR/MWh (HTVA), one row per
-# meter type. The dynamic contract applies the same coefficients to the live
-# quarter-hourly Belpex spot. The consumption formula is the first match; the
-# injection formula is the first match that differs from it (Bolt lists all
-# consumption rows, then all injection rows).
-_BELPEX_FORMULA_RE = re.compile(
-    rf"Belpex\s*\*\s*([\d.,]+)\s*([{SIGN_CHARS}])\s*([\d.,]+)"
-)
 # The variable card's index table, "Type de compteur Belpex Q3 2026 Formule
 # tarifaire". Its rows are the RLP-weighted quarter means of the Walloon
 # DSOs' curve, one per meter register and CWaPE band, which the card says is
@@ -736,21 +747,6 @@ _REGISTER_ROWS = (
 # How far the table's index through the formula may sit from the printed
 # monthly price: one step of the price's last printed digit, 0,01 c/kWh.
 _TABLE_TOLERANCE = 1e-4
-# The Walloon "Tarif Impact (Wallonie)" block, one row per CWaPE band:
-#   "Eco consommation 9,91 65,59 Belpex * 1,168 + 16,90"
-# printed price, that band's own quarterly index, then the shared formula.
-_IMPACT_ROW_RE = re.compile(
-    rf"(Eco|Medium|Pic)\s+consommation\s+([\d,]+)\s+([\d,]+)\s+"
-    rf"Belpex\s*\*\s*([\d,]+)\s*([{SIGN_CHARS}])\s*([\d,]+)",
-    re.IGNORECASE,
-)
-# The same block's feed-in rows, "Eco injection 4,41 58,97 Belpex * 0,94 -
-# 11,33": printed figure and that band's SPP-weighted index, the formula
-# beside them the leg's own.
-_IMPACT_INJECTION_ROW_RE = re.compile(
-    r"(Eco|Medium|Pic)\s+injection\s+(-?[\d,]+)\s+(-?[\d,]+)\s+Belpex\s*\*",
-    re.IGNORECASE,
-)
 _IMPACT_INJECTION_FIELDS = ("impact_eco", "impact_medium", "impact_pic")
 # The residential VAT the settlement formula and the Impact bands are grossed
 # by. Named rather than left to the helper's default: the residential cards
