@@ -888,6 +888,17 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
         "(B2C_myDrive_ELEC_FR_RBXL); the Dutch card is myDynamic's and is "
         "billed",
     ),
+    (
+        "totalenergies/totalenergies_pro_proessential/flanders: French and Dutch "
+        "cards agree",
+        "the Dutch card does not read: ExtractorError: TotalEnergies: the first "
+        "excise tranche not found",
+    ): (
+        date(2026, 12, 1),
+        "the November 2026 Dutch card leaves the figure of its first excise "
+        "tranche blank, which the French card prints (1,11); the French card is "
+        "billed",
+    ),
 }
 
 
@@ -1165,10 +1176,22 @@ def _expect_coefficient_pair(
 # assertion on the edition instead failed three live rows a day (issue #71)
 # for a card the extractor was reading right.
 #
+# TotalEnergies' professional feed-in card says "exonérée de TVA" for every
+# product of the range.
+#
 # test_pro_injection_vat_expectation_matches_the_cards holds this set against
 # what the extractor actually parses from the fixtures, so the two cannot
 # drift the way this one did.
-_PRO_INJECTION_VAT_EXEMPT: frozenset[str] = frozenset({"mega_pro_dynamic"})
+_PRO_INJECTION_VAT_EXEMPT: frozenset[str] = frozenset(
+    {
+        "mega_pro_dynamic",
+        "totalenergies_pro_procomfort",
+        "totalenergies_pro_procomfort_fixed",
+        "totalenergies_pro_prodrive",
+        "totalenergies_pro_proessential",
+        "totalenergies_pro_proessential_fixed",
+    }
+)
 
 
 def _expect_professional_basis(prefix: str, contract: object, snap: object) -> None:
@@ -2162,6 +2185,12 @@ async def _walk_totalenergies(
                 detail=f"label={snap.publication_label!r}",
             )
             _validate_snapshot(prefix, cid, snap, region=region_key)
+            _expect_professional_basis(prefix, contract, snap)
+            if contract.professional:
+                # The residential cards print the household rate on every row
+                # of the old table, the last one to more digits (4,47 and
+                # 4,4732), which the law's rate replaces.
+                _expect_excise_bands(prefix, snap.taxes)
             await _compare_totalenergies_editions(
                 session, totalenergies, contract, region_key
             )
@@ -2294,7 +2323,7 @@ async def _compare_totalenergies_editions(
     figures: list[dict[str, Any]] = []
     french_error: Exception | None = None
     for language in ("FR", "NL"):
-        url = totalenergies._document_url(contract.slug, region, language)
+        url = totalenergies._document_url(contract, region, language)
         text = None
         try:
             text = await _fetch_with_retry(
@@ -4917,6 +4946,11 @@ _INJECTION_SHAPE: dict[str, str] = {
     "totalenergies_mydrive": "month",
     "totalenergies_myessential": "month",
     "totalenergies_myessential_fixed": "month",
+    "totalenergies_pro_procomfort": "month",
+    "totalenergies_pro_procomfort_fixed": "month",
+    "totalenergies_pro_prodrive": "month",
+    "totalenergies_pro_proessential": "month",
+    "totalenergies_pro_proessential_fixed": "month",
     # Every Mega variable ("Flex") and Impact card states "le prix de
     # rachat ... est indexe mensuellement ... pondere par le SPP (publie par
     # Synergrid), sur le mois de fourniture ... : Epex SPP * 0,85 - 2,2
@@ -6546,7 +6580,10 @@ BYTES_WARN_THRESHOLD = 5_000_000
 #     regions). Allow 50 MB for headroom and a possible new product.
 #   * totalenergies: ~20 MB measured on 3 October 2026, every card in both
 #     languages for the edition comparison: 9,72 MB French and 10,24 MB
-#     Dutch over 25 cards each. Allow 25 MB.
+#     Dutch over 25 cards each. The professional range adds 15 cards in each
+#     language and their feed-in cards, 12,3 MB on the November 2026 cards
+#     (10,24 MB of cards at 0,25 to 0,39 MB, 15 feed-in cards at 0,14 MB).
+#     Allow 40 MB.
 #   * engie: ~5.4 MB (sitemap discovery + ~24 region PDFs). Allow 8 MB
 #     so we don't fire on a slow day.
 #   * ecofix: 13.2 MB (4 contracts x 2 regions, no per-PDF cache), measured
@@ -6589,7 +6626,7 @@ _BYTES_BUDGET_OVERRIDES: dict[str, int] = {
     # region PDFs, mega 33 -> ~57. Budgets doubled to match, still with
     # the same slack the residential-only figures carried.
     "bolt": 100_000_000,
-    "totalenergies": 25_000_000,
+    "totalenergies": 40_000_000,
     "engie": 16_000_000,
     "ecofix": 16_000_000,
     "mega": 14_000_000,
@@ -6652,8 +6689,10 @@ _LATENCY_BUDGET_OVERRIDES: dict[str, float] = {
     # range, summed 63,9 s on a loaded Pi), so their summed elapsed_s blows
     # the 90 s default on a slow day even though each fetch is small and
     # the snapshot succeeds. Budget like the other multi-fetch suppliers,
-    # well under _SUPPLIER_HARD_TIMEOUT_S.
-    "totalenergies": 150.0,
+    # well under _SUPPLIER_HARD_TIMEOUT_S. TotalEnergies' professional range
+    # took it to 40 (contract, region) pairs in November 2026, and its 150 s
+    # to 240.
+    "totalenergies": 240.0,
     "octaplus": 130.0,
 }
 

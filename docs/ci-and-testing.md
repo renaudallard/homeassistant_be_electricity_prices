@@ -99,6 +99,7 @@ machinery.
 | `tests/test_octaplus.py` | OCTA+ extractor |
 | `tests/test_social.py` | Social tariff extractor: the CREG quarterly card, the protected customer's excise, the feed-in on Engie's and Luminus's social cards |
 | `tests/test_totalenergies.py` | TotalEnergies extractor |
+| `tests/test_totalenergies_pro.py` | TotalEnergies' professional cards |
 | `tests/test_trevion.py` | Trevion extractor |
 | `tests/test_pricing.py` | `pricing.compute_breakdown` and its helpers (energy, network, taxes, TOU/offpeak, holidays, impact bands, meter fixed fee) |
 | `tests/test_coordinator_runtime.py` | `BePricesCoordinator` force-refresh, stale-snapshot Repairs issue, shared caches |
@@ -974,7 +975,9 @@ contracts let a B2B card vouch for a product that had left the residential listi
 dropped Zen Fixed from the listing for the August 2026 card and put it back in September, and
 the diff stayed quiet through both because `mega_pro_zen_fixed` carried the name the whole
 time. Engie is deliberately not filtered: its surface is the public sitemap, which does not
-split by segment.
+split by segment. TotalEnergies' professional products have file names of their own
+(`PROCOMFORT`, `PRODRIVE`, ...), so its `discover` reads the professional listing beside the
+residential one and the baseline holds both.
 
 `test_catalog_baseline_ignores_editions_the_listing_never_shows`
 (`tests/test_live_check_harness.py`) pins the rule against stub contracts rather than the

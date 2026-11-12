@@ -1,9 +1,10 @@
 # Provider: totalenergies
 
 This document describes the `totalenergies` supplier extractor
-(`providers/totalenergies.py`, with the card readers in `_totalenergies_cards.py`
-and the regulated overlays in `_totalenergies_overlays.py`), the code that turns
-TotalEnergies Belgium's published residential tariff cards into a
+(`providers/totalenergies.py`, with the card readers in `_totalenergies_cards.py`,
+the regulated overlays in `_totalenergies_overlays.py` and the professional
+cards' readers in `_totalenergies_pro.py`), the code that turns TotalEnergies
+Belgium's published residential and professional tariff cards into a
 `SupplierSnapshot`. It is written for
 a contributor who has to repair the extractor after TotalEnergies changes a
 card layout. It is grounded in the module source and in `tests/test_totalenergies.py`,
@@ -102,9 +103,11 @@ horizontal text only cards that most other providers parse with pypdf
 
 ## Contracts
 
-Nine residential electricity products are registered (`_CONTRACTS`,
-`totalenergies.py`). The `test_totalenergies_is_registered` test asserts the
-count is exactly 9 (`tests/test_totalenergies.py`).
+Nine residential electricity products and five professional ones are
+registered (`_CONTRACTS`, `totalenergies.py`). The
+`test_totalenergies_is_registered` test asserts the count is exactly 14
+(`tests/test_totalenergies.py`). The professional ones are described under
+[The professional cards](#the-professional-cards).
 
 | Contract id | Label | Kind | Slug | Regions | Notes |
 |---|---|---|---|---|---|
@@ -117,6 +120,11 @@ count is exactly 9 (`tests/test_totalenergies.py`).
 | `totalenergies_mydynamic` | TotalEnergies myDynamic | dynamic | `MYDYNAMIC` | V/W/B | `factor * BELPEXH + base`, hourly billing |
 | `totalenergies_myessential` | TotalEnergies myEssential | variable | `MYESSENTIAL` | V/W/B | Monthly-indexed |
 | `totalenergies_myessential_fixed` | TotalEnergies myEssential Fixe | fixed | `MYESSENTIAL-FIXED` | V/W/B | Fixed variant of myEssential |
+| `totalenergies_pro_procomfort` | TotalEnergies proComfort | variable | `PROCOMFORT` | V/W/B | Professional, monthly-indexed |
+| `totalenergies_pro_procomfort_fixed` | TotalEnergies proComfort Fixe | fixed | `PROCOMFORT-FIXED` | V/W/B | Professional |
+| `totalenergies_pro_prodrive` | TotalEnergies proDrive | variable | `PRODRIVE` | V/W/B | Professional, monthly-indexed |
+| `totalenergies_pro_proessential` | TotalEnergies proEssential | variable | `PROESSENTIAL` | V/W/B | Professional, monthly-indexed |
+| `totalenergies_pro_proessential_fixed` | TotalEnergies proEssential Fixe | fixed | `PROESSENTIAL-FIXED` | V/W/B | Professional |
 
 Notes on the kind mapping:
 
@@ -146,7 +154,7 @@ Notes on the kind mapping:
   defaults `False` (`providers/_rates.py`) and TotalEnergies never overrides it,
   so the integration aggregates the ENTSO-E 15 minute curve to hourly for this
   contract (same grid choice as Frank/Luminus/Mega/Eneco, `providers/_rates.py`).
-- 8 of the 9 contracts set `spot_indexed_injection`, derived in
+- 13 of the 14 contracts set `spot_indexed_injection`, derived in
   `totalenergies.py` as "every kind except dynamic": their credit indexes on a
   monthly mean the energy leg never fetches, so the flow has to offer the key.
   Only MyDynamic leaves it False, its energy formula collecting one already.
@@ -208,12 +216,65 @@ not be checked because the Internet Archive was offline that day.
 ### Discovery (CI only)
 
 `discover` (`totalenergies.py`) fetches the human `cartes-tarifaires` listing
-page (`_LISTING_URL`, `totalenergies.py`) and regex-extracts every
+pages, the residential one (`_LISTING_URL`) and the professional one
+(`_PRO_LISTING_URL`), and regex-extracts every
 `tariff-card/latest/<SLUG>_ELECTRICITY_(VL|WAL|BXL)_FR` slug, dropping the
 regulated `TARIFF_SOCIAL` entry (not a residential-market product). This is used
 by `live_check` to diff the live catalogue against `{c.slug for c in _CONTRACTS}`;
 it is not on the runtime fetch path. On a listing fetch error it returns an empty
-set rather than raising.
+set rather than raising. The professional listing names the gas cards too,
+which the `_ELECTRICITY_` part of the pattern leaves out.
+
+### The professional cards
+
+The professional range sits under `b2b/` instead of `b2c/`
+(`_PRO_BASE_URL`, `_card_url`), with the same file names, and every product is
+published in all three regions, in French and Dutch. Its feed-in card is
+`INJECTION_<SLUG>`, the fixed products' included, and all five serve the same
+offer, "Injection Variable Pro".
+
+The cards are printed on the residential template, **excluding VAT** ("TVA non
+incluse", "BTW niet inbegrepen"). `parse_snapshot` checks the title and region
+as for any card and hands a professional one to
+`_totalenergies_pro.parse_pro_snapshot`. What differs, checked on the
+November 2026 cards:
+
+- **The green energy contribution is billed on top of the energy price**, in a
+  column of its own after the meter rates (1,382 c€/kWh in Flanders, 3,02 in
+  Wallonia, 2,3134 in Brussels), where a residential card folds it into its
+  prices. Both formulas solve to the same index, about 181,8 EUR/MWh, so the
+  professional one carries none of it. `supplier_row` reads the fee, the four
+  rates and the contribution under the consumption heading: a fixed card prints
+  the fee first, a variable one after the rates, Brussels with the contribution
+  on the line after the formulas.
+- **No VAT on the formulas.** `_vat_multiplier` answers 1 on a card saying
+  "TVA non incluse"; left on the residential 6%, a re-priced month billed 6%
+  above the card. `TaxOverlay.vat_rate` is 0,21, which `apply_vat` resolves
+  per entry like Engie's, Mega's and Bolt's professional cards.
+- **The excise is the professional schedule**, 1,11, 0,90 and 0,83 c€/kWh to
+  20 000, 50 000 and 1 000 000 kWh (`pro_excise`), read into
+  `federal_excise_bands`. The Flemish cards head the first tranche "entre
+  3.000 et 20.000 kWh", the Walloon and Brussels ones "entre 0 et 20.000";
+  either starts from 0. A card whose first tranche carries no figure is
+  refused: the Dutch proEssential card in Flanders of November 2026 left it
+  blank.
+- **The Flemish energy fund** is the low-voltage row, 10,07 EUR/month
+  (`pro_energy_fund`).
+- **Brussels** prints the Sibelga row as mono, day, night, exclusive night,
+  transport, metering and the capacity terms up to and above 13 kVA
+  (`pro_brussels_dsos`), and the energy contribution as the first column of
+  the excise table. The Flemish and Walloon network rows, the Walloon
+  connection fee and the Brussels public service levy read as on a
+  residential card.
+- **The feed-in is exempt from VAT** by the card's own words ("exonérée de
+  TVA", "vrijgesteld van btw"), so `vat_applies` stays False; a professional
+  feed-in card without them would be taxed. `parse_injection_card` asks a
+  professional contract for "Injection Variable Pro" ("Injectie Variabel Pro")
+  and refuses the residential offer.
+
+The variable products (proComfort, proDrive, proEssential) are month-indexed
+and settle like the residential ones; they print at the same index and join
+the range `_range_index` agrees on.
 
 ## Parsing
 
@@ -743,6 +804,17 @@ The tests exercise six real April 2026 fixture PDFs and the October 2026 cards l
 | `totalenergies_injection_electricite_fixe_v_2026-10_nl.pdf` | its Dutch edition, dated October |
 | `totalenergies_injection_mydynamic_w_2026-10.pdf` | myDynamic feed-in card, Wallonia, October 2026 ("Injection Dynamique", `0.1 * BELPEXH -1.3`) |
 | `totalenergies_injection_mydynamic_v_2026-10_nl.pdf` | myDynamic feed-in card, Flanders, October 2026, Dutch edition |
+| `totalenergies_pro_procomfort_v_2026-11.pdf` | proComfort, Flanders, November 2026 (`tests/test_totalenergies_pro.py`) |
+| `totalenergies_pro_procomfort_v_2026-11_nl.pdf` | its Dutch edition, read to the same figures |
+| `totalenergies_pro_procomfort_w_2026-11.pdf` | proComfort, Wallonia (contribution 3,02, connection fee) |
+| `totalenergies_pro_procomfort_b_2026-11_nl.pdf` | proComfort, Brussels, Dutch (Sibelga row with capacity terms, excise columns) |
+| `totalenergies_pro_procomfort_fixed_b_2026-11.pdf` | proComfort Fixe, Brussels (fee first on the row) |
+| `totalenergies_pro_procomfort_fixed_v_2026-11.pdf` | proComfort Fixe, Flanders (titled "pro Comfort Fixe") |
+| `totalenergies_pro_proessential_v_2026-11_nl.pdf` | proEssential, Flanders, Dutch (first excise tranche blank: refused) |
+| `totalenergies_pro_proessential_fixed_w_2026-11_nl.pdf` | proEssential Fixe, Wallonia, Dutch (fee 35) |
+| `totalenergies_pro_prodrive_b_2026-11.pdf` | proDrive, Brussels |
+| `totalenergies_injection_pro_procomfort_v_2026-11.pdf` | "Injection Variable Pro", Flanders (`0.04288 * BELPEXM -0.502`, exempt from VAT) |
+| `totalenergies_injection_pro_procomfort_v_2026-11_nl.pdf` | its Dutch edition |
 
 ## When the card changes, look here
 

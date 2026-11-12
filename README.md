@@ -118,7 +118,7 @@ Each of these has a section of its own further down; this is the scan.
 | **Mega** | Smart Fixed/Flex · Zen Fixed · Online Fixed/Flex · Cosy Fixed/Flex · Off-peak Impact *(Wallonia, CWaPE 3-band)* · Dynamic · *withdrawn on 2026-10-30, marked † in the picker for households still on them:* Off-peak Fixed · Off-peak Flex · the Flex and Impact cards index monthly on the RLP-weighted Belpex, the SME cards on the plain mean; most of the range grants a first-year ristourne, credited at the twelve-month anniversary (fourteen on Zen Fixed and its pro twin, and on Smart Flex and its pro twin in the months their card says so), or by the day from the first invoice on the residential cards since October 2026, its per-kWh half priced on what your first twelve months drew once they are over and your meter recorded them, and nineteen cards price it on whether the household pays by direct debit; every card that grants the ristourne adds a first-year bonus on the export, credited with the ristourne to a household on the injection regime once a year of its feed-in is measured · **pro**: SME Fixed/Flex · Smart Fixed/Flex · Online Fixed · Cosy Fixed/Flex · Dynamic · Zen Fixed · *withdrawn on 2026-11-01, marked †:* Off-peak Fixed | All three regions · [`mega.py`](./custom_components/be_electricity_prices/providers/mega.py) · [notes](./docs/providers/mega.md)
 | **OCTA+** | Boost Fix · Boost Fix Impact *(Wallonia, CWaPE 3-band)* · Eco Boost Fix · Eco Boost Fix Impact *(Wallonia)* · Boost Flex · Eco Boost Flex · Basic Online · Smart Variable · Dynamic · Eco Dynamic · *withdrawn on 2026-10-01, marked † in the picker for households still on them:* Fixed · Fixed Impact *(Wallonia)* · Eco Fixed · Flux · Eco Flux · the June to September 2026 Fixed, Fixed Impact, Flux and Dynamic cards grant a credit note after a year on the card (65 to 180 EUR), credited at the first anniversary of a contract signed on one of them | Flanders + Wallonia only · [`octaplus.py`](./custom_components/be_electricity_prices/providers/octaplus.py) · [notes](./docs/providers/octaplus.md)
 | **Social tariff (CREG)** *(protected customers only)* | Supplied by Engie *(feed-in from Engie's social card)* · Supplied by Luminus *(feed-in from Luminus's social card)* · Supplied by another supplier or the network operator *(no feed-in credit)* | All three regions · [`social.py`](./custom_components/be_electricity_prices/providers/social.py) · [notes](./docs/providers/social.md)
-| **TotalEnergies** | Electricité Fixe/Variable · Impact *(Wallonia)* · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe · since October 2026 the feed-in price is on a card of its own beside each product card (`INJECTION_<product>`), read with it: the monthly Belpex formula on every product but myDynamic, which credits the hourly one · a card served in Dutch is read like its French edition, and the Dutch card stands in when the French address serves the wrong document · a closed month settles on the rates the next cards print: the energy of a variable card, where another card of the range is printed at the same index, and the feed-in of every product but myDynamic, the fixed ones included | All three regions · [`totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) · [notes](./docs/providers/totalenergies.md)
+| **TotalEnergies** | Electricité Fixe/Variable · Impact *(Wallonia)* · myComfort · myComfort Fixe · myDrive · myDynamic · myEssential · myEssential Fixe · the **pro** contracts proComfort · proComfort Fixe · proDrive · proEssential · proEssential Fixe, whose cards bill the green energy contribution apart from the energy price and share one VAT-exempt feed-in card, "Injection Variable Pro" · since October 2026 the feed-in price is on a card of its own beside each product card (`INJECTION_<product>`), read with it: the monthly Belpex formula on every product but myDynamic, which credits the hourly one · a card served in Dutch is read like its French edition, and the Dutch card stands in when the French address serves the wrong document · a closed month settles on the rates the next cards print: the energy of a variable card, where another card of the range is printed at the same index, and the feed-in of every product but myDynamic, the fixed ones included | All three regions · [`totalenergies.py`](./custom_components/be_electricity_prices/providers/totalenergies.py) · [notes](./docs/providers/totalenergies.md)
 | **Trevion** | Groene Energie Vast · Groene Stroom Flex *(monthly Belpex_RLP_VL)* · Groene Energie Dynamisch · Groene Energie Dynamisch Plus · Energreen · FlexiO Max *(monthly Belpex_RLP_VL, for a FlexiO EMS+; the flexibility fee the EMS+ earns is not modelled)* · *withdrawn on 2026-10-01, marked † in the picker for households still on them:* LifePowr *(monthly Belpex_RLP_VL since June 2026, quarter-hourly Belpex 15 MTU before; replaced by FlexiO Max)* | Flanders only · [`trevion.py`](./custom_components/be_electricity_prices/providers/trevion.py) · [notes](./docs/providers/trevion.md)
 | **Expert: custom formula** *(no public card)* | Dynamic (`factor × spot + base`) · Monthly average (`factor × monthly-mean spot + base`) · Fixed / manual rate | All three regions; the tax step shows only the boxes your region bills: the green levy box takes GSC + WKK in Flanders and the green-energy contribution in Wallonia and Brussels, and the connection-fee box (the Walloon redevance de raccordement, VAT-exempt) appears on Walloon entries only · [`custom.py`](./custom_components/be_electricity_prices/providers/custom.py)
 
@@ -220,20 +220,22 @@ to any supplier that publishes commodity-only pricing. If you know your own
 formula and grid/tax rates, the **Expert: custom formula** supplier lets you
 enter them by hand (see below).
 
-**Professional (B2B) tariffs.** Bolt, Engie and Mega publish full professional
-tariff cards carrying the same DSO and tax tables as their residential ones,
-printed **excluding VAT**, and the integration reads them. Pick the supplier, then a *Pro* contract on the contract step, and two
+**Professional (B2B) tariffs.** Bolt, Engie, Mega and TotalEnergies publish full
+professional tariff cards carrying the same DSO and tax tables as their
+residential ones, printed **excluding VAT**, and the integration reads them. Pick the supplier, then a *Pro* contract on the contract step, and two
 extra settings appear:
 
 - **Prices include VAT** — professional electricity is taxed at 21%. Leave this
   on if your business cannot deduct VAT; turn it off if it can, and every price,
   fee and cost sensor reports the ex-VAT amount you actually bear. Injection
   follows the same choice (unlike residential injection, which is VAT-exempt
-  outright). A residential contract is always priced with its VAT, whether its
+  outright), except where the card exempts it: TotalEnergies' professional
+  feed-in card and Mega's professional dynamic card do, and their feed-in is
+  credited as printed. A residential contract is always priced with its VAT, whether its
   card prints prices with it or, like Ecopower's, without, so the setting is
   hidden for them.
-- **Estimated yearly consumption** — the Engie and Mega professional cards
-  print the federal special excise as a degressive schedule (bands at
+- **Estimated yearly consumption** — the Engie, Mega and TotalEnergies
+  professional cards print the federal special excise as a degressive schedule (bands at
   20 000, 50 000 and 1 000 000 kWh/year) billed *per tranche*, so the rate
   applied is the blend of every band your year's volume spans rather than
   the band it lands in: at 30 000 kWh that is 0.013503 EUR/kWh, not
@@ -865,7 +867,7 @@ It is optional everywhere else, but two features use it when present: an
 injection tariff that is itself index-linked — the hourly-spot shape
 (Cociter Variable and Variable Trihoraire, every Bolt fixed card, and a Bolt
 variable card billed per quarter-hour) and the monthly-mean shape (energie.be Vast on Belpex_SPP, and most
-other static cards), 83 contracts across 18 suppliers between them, and the
+other static cards), 88 contracts across 18 suppliers between them, and the
 re-price of a month-indexed contract on the delivery month's own mean, cohort
 or not, for which the flow offers the key on every solar regime (Aspiravi
 Eco Plus Flex, Belvus Flex Online and Smart Plus, Cociter Variable and
@@ -873,7 +875,8 @@ Trihoraire, Ecofix Flexy and Flexy Online, Ecopower Groene Burgerstroom,
 Elegant Flex and ComfortFlex, Engie's EPEXDAM cards, Luminus MaxxFlex, SmartFlex and BasicFlex, OCTA+ Smart Variable, Boost Flex, Eco Boost
 Flex, Basic Online and the withdrawn Flux and Eco Flux, Eneco Flex and Flex
 One, EBEM Groen Variabel and B@sic+, the withdrawn DATS 24 Groen Variabel,
-TotalEnergies Electricité Variable, Impact, myComfort, myDrive and myEssential, every Mega Flex and Off-peak Impact
+TotalEnergies Electricité Variable, Impact, myComfort, myDrive and myEssential and
+the professional proComfort, proDrive and proEssential, every Mega Flex and Off-peak Impact
 card), and of Bolt's variable cards (Variable, Plenty, Online and Plenty
 Online, residential and pro) and Luminus ComfyFlex and ComfyFlex+ on the
 delivery quarter's, which is what those cards are indexed on. Both stay off without a key or the keyless setting rather than failing the entry: a

@@ -1492,6 +1492,18 @@ def test_pro_injection_vat_expectation_matches_the_cards() -> None:
         taxed = _injection_vat_applies(fixture_text(fixture, layout=True), True)
         expected_exempt = cid in lc._PRO_INJECTION_VAT_EXEMPT
         assert taxed is not expected_exempt, cid
+    # Every TotalEnergies professional product reads the one feed-in offer.
+    te = lc._load_providers()["totalenergies"]
+    text = fixture_text(
+        "totalenergies_injection_pro_procomfort_v_2026-11.pdf", layout=True
+    )
+    for contract in te._CONTRACTS:
+        if contract.professional:
+            leg, _month = te.parse_injection_card(
+                contract.contract_id, text, "flanders"
+            )
+            expected_exempt = contract.contract_id in lc._PRO_INJECTION_VAT_EXEMPT
+            assert leg.vat_applies is not expected_exempt, contract.contract_id
 
 
 def test_the_vat_check_reads_the_contract_shape_it_is_actually_given() -> None:
@@ -4253,7 +4265,9 @@ def _editions(
         return card
 
     module = SimpleNamespace(
-        _document_url=lambda slug, region, language: f"{slug}_{region}_{language}.pdf",
+        _document_url=lambda contract, region, language: (
+            f"{contract.slug}_{region}_{language}.pdf"
+        ),
         fetch_pdf_text_layout=_text,
         parse_snapshot=_parse,
     )

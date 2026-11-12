@@ -115,13 +115,33 @@ _IMPACT_BANDS = 3
 # "TVA 6 % incluse" under the prices, and "(hors TVA 6%)" on the formulas.
 _VAT_RE = re.compile(r"TVA\s*(\d+)\s*%")
 
+# The professional cards print every figure and formula excluding VAT and say
+# so under the title, "TVA non incluse" ("BTW niet inbegrepen"), with no rate.
+_EX_VAT_RE = re.compile(r"TVA\s+non\s+incluse")
+
 
 def _vat_multiplier(text: str) -> float:
+    """What puts the card's formulas onto the basis its printed rates are on:
+    1 + the rate a residential card states, and 1 on a professional card,
+    whose rates exclude VAT like its formulas. Left at the residential 6%
+    there, every formula came out 6% above the rate printed beside it."""
+    if _EX_VAT_RE.search(text):
+        return 1.0
     return vat_multiplier(text, _VAT_RE)
 
 
-def _extract_energy(text: str, kind: TariffKind, columns: int = 4) -> EnergyRates:
-    yearly_fee = _extract_yearly_fee(text, columns)
+def _extract_energy(
+    text: str,
+    kind: TariffKind,
+    columns: int = 4,
+    *,
+    yearly_fee: float | None = None,
+) -> EnergyRates:
+    """The card's energy leg. ``yearly_fee`` is the fee where the caller has
+    read it already, as the professional cards print it on a row of their
+    own; otherwise it is read here."""
+    if yearly_fee is None:
+        yearly_fee = _extract_yearly_fee(text, columns)
     if kind == "dynamic":
         consumption = _resolve_consumption_formula(text)
         if consumption is None:
@@ -488,9 +508,11 @@ def _extract_publication_month(text: str) -> str:
     # "Total Energies" in its title. The rest of the title line is one run:
     # as a word and then the rest, a long word was split between the two in
     # every way. It stops at the next title, which reads the same next line.
+    # The November 2026 proComfort Fixe card in Flanders titles itself "pro
+    # Comfort Fixe".
     match = re.search(
-        r"Total\s?Energies\s+(?:my\w|Electricit[eé]|Impact)"
-        r"(?:(?!Total\s?Energies\s+(?:my\w|Electricit[eé]|Impact))[^\n])*\n"
+        r"Total\s?Energies\s+(?:my\w|pro\s?\w|Electricit[eé]|Impact)"
+        r"(?:(?!Total\s?Energies\s+(?:my\w|pro\s?\w|Electricit[eé]|Impact))[^\n])*\n"
         r"([a-zéûÉ]+\s+\d{4})",
         text,
     )
@@ -772,6 +794,7 @@ _DUTCH_LABELS: tuple[tuple[str, str], ...] = (
     (r"Maandelijkstarief", "Tarif mensuel"),
     (r"Jaarlijkstarief", "Tarif annuel"),
     (r"BTW\s*(\d+)\s*%\s*inbegrepen", r"TVA \1 % incluse"),
+    (r"BTW\s+niet\s+inbegrepen", "TVA non incluse"),
     (r"TotalEnergies Elektriciteit", "TotalEnergies Electricité"),
     (r"Verbruik tussen ([\d.]+) & ([\d.]+) kWh", r"Consommation entre \1 et \2 kWh"),
     (r"Bijdrage op de energie", "Cotisation sur l’énergie"),

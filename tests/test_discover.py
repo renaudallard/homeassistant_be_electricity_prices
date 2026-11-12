@@ -327,7 +327,13 @@ def test_eneco_discover_sees_an_underscored_product_slug() -> None:
 
 
 def test_totalenergies_discover_matches_registry() -> None:
-    session = _FakeSession(_read("totalenergies.html"))
+    # The residential listing and the professional one.
+    session = _UrlFakeSession(
+        {
+            "professionnels": (_read("totalenergies_pro.html"), 200),
+            "particuliers": (_read("totalenergies.html"), 200),
+        }
+    )
     discovered = _run(totalenergies_mod.discover(session))
     expected = {c.slug for c in totalenergies_mod._CONTRACTS}
     assert discovered == expected

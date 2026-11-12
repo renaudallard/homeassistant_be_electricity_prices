@@ -67,7 +67,8 @@ def test_totalenergies_is_registered() -> None:
     assert "totalenergies_mydynamic" in contract_ids
     assert "totalenergies_mycomfort" in contract_ids
     assert "totalenergies_mycomfort_fixed" in contract_ids
-    assert len(contract_ids) == 9
+    assert "totalenergies_pro_procomfort" in contract_ids
+    assert len(contract_ids) == 14
 
 
 def test_dynamic_wallonia_extracts_consumption_formula() -> None:

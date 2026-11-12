@@ -237,6 +237,8 @@ levy rather than three suppliers being stale in lockstep. Mega's professional
 cards set it to 0 from 1 November 2026 and fold it into an excise they print
 alone per tranche (1,11, 0,90 and 0,83 c/kWh ex-VAT, against October's 1,421,
 1,209 and 1,139 beside the contribution), and those are billed as printed too.
+TotalEnergies' professional cards, read from November 2026, print the same
+three rates beside a contribution of 0,00.
 The live check still
 reports every disagreement against the month's consensus, which is how a stale
 card gets noticed at all (`docs/ci-and-testing.md`).

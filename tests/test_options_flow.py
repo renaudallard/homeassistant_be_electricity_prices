@@ -7750,9 +7750,10 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # withdrew. The three read in the time its older 3-year card took,
         # well inside the supplier's 9,1 s reservation. Belvus adds Flex
         # Online and Smart Plus, two month-indexed variable cards that read
-        # in about 0,3 s each.
+        # in about 0,3 s each. TotalEnergies' five professional products add
+        # five to each region's professional static cell.
         ("flanders", "static", False): 60,
-        ("flanders", "static", True): 20,
+        ("flanders", "static", True): 25,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land
         # in the spot cell rather than the static one. Re-costed with them:
@@ -7776,7 +7777,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,
         ("wallonia", "static", False): 51,
-        ("wallonia", "static", True): 20,
+        ("wallonia", "static", True): 25,
         # 13 before EnergyVision's 1.800 kWh contract gained Wallonia, on
         # the French publication of the same card. Monthly-indexed, so the
         # spot cell. 14 before Eneco Zon & Wind Dynamisch was sold in
@@ -7789,7 +7790,7 @@ def test_sweep_candidate_counts_per_cell() -> None:
         ("wallonia", "slot", False): 6,
         ("wallonia", "slot", True): 1,
         ("brussels", "static", False): 27,
-        ("brussels", "static", True): 20,
+        ("brussels", "static", True): 25,
         # 7 before EnergyVision's 1.800 kWh contract gained Brussels, where
         # it is published as Brusol on another site, and 8 before Brusol's
         # own Groene stroom joined it. Both settle on a monthly index, so

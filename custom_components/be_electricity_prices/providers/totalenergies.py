@@ -34,6 +34,9 @@ region) at stable URLs:
 The ``/latest/`` segment auto-rolls each month so no listing scrape is
 needed. All nine residential electricity products are registered, and
 every one but Impact (Wallonia only) is published in all three regions.
+The five professional ones (proComfort, proComfort Fixe, proEssential,
+proEssential Fixe and proDrive) sit under ``b2b/`` instead of ``b2c/``, in
+all three regions, and are read by ``_totalenergies_pro``.
 
 Since October 2026 the feed-in offer is a card of its own beside each
 product's, ``INJECTION_<PRODUCT>_ELECTRICITY_<REGION>_FR.pdf``, and the
@@ -114,6 +117,7 @@ from ._totalenergies_overlays import (
     _extract_wallonia_dsos,
     cev_included,
 )
+from ._totalenergies_pro import parse_pro_snapshot
 from ._validity import card_valid_until, end_of_month, parse_valid_until
 from .base import (
     ExtractorError,
@@ -126,6 +130,9 @@ from .base import (
 _LOGGER = logging.getLogger(__name__)
 
 _BASE_URL = "https://totalenergies.be/static/marketing-documents/b2c/tariff-card/latest"
+_PRO_BASE_URL = (
+    "https://totalenergies.be/static/marketing-documents/b2b/tariff-card/latest"
+)
 
 _REGION_TO_CODE: dict[str, str] = {
     REGION_FLANDERS: "VL",
@@ -148,6 +155,8 @@ class _ContractDef:
     # listing page advertises every product in V/W/B but a few only
     # have a Wallonia PDF; the others return a 200 OK HTML 404 page.
     regions: frozenset[str] = ALL_REGIONS
+    # A product of the professional range, its cards under b2b/.
+    professional: bool = False
 
 
 _CONTRACTS: tuple[_ContractDef, ...] = (
@@ -224,6 +233,51 @@ _CONTRACTS: tuple[_ContractDef, ...] = (
         "myEssential Fixe",
         "myEssential Vast",
     ),
+    _ContractDef(
+        "totalenergies_pro_procomfort",
+        "TotalEnergies proComfort",
+        "variable",
+        "PROCOMFORT",
+        "proComfort Variable",
+        "proComfort Variabel",
+        professional=True,
+    ),
+    _ContractDef(
+        "totalenergies_pro_procomfort_fixed",
+        "TotalEnergies proComfort Fixe",
+        "fixed",
+        "PROCOMFORT-FIXED",
+        "proComfort Fixe",
+        "proComfort Vast",
+        professional=True,
+    ),
+    _ContractDef(
+        "totalenergies_pro_prodrive",
+        "TotalEnergies proDrive",
+        "variable",
+        "PRODRIVE",
+        "proDrive",
+        "proDrive",
+        professional=True,
+    ),
+    _ContractDef(
+        "totalenergies_pro_proessential",
+        "TotalEnergies proEssential",
+        "variable",
+        "PROESSENTIAL",
+        "proEssential Variable",
+        "proEssential Variabel",
+        professional=True,
+    ),
+    _ContractDef(
+        "totalenergies_pro_proessential_fixed",
+        "TotalEnergies proEssential Fixe",
+        "fixed",
+        "PROESSENTIAL-FIXED",
+        "proEssential Fixe",
+        "proEssential Vast",
+        professional=True,
+    ),
 )
 
 _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
@@ -232,16 +286,23 @@ _CONTRACTS_BY_ID = {c.contract_id: c for c in _CONTRACTS}
 _LISTING_URL = (
     "https://totalenergies.be/fr/particuliers/electricite-et-gaz/cartes-tarifaires"
 )
+_PRO_LISTING_URL = (
+    "https://totalenergies.be/fr/professionnels/electricite-et-gaz/cartes-tarifaires"
+)
 
 
-def _document_url(slug: str, region: str, language: str = "FR") -> str:
-    region_code = _REGION_TO_CODE[region]
-    return f"{_BASE_URL}/{slug}_ELECTRICITY_{region_code}_{language}.pdf"
+def _card_url(contract: _ContractDef, name: str, region: str, language: str) -> str:
+    base = _PRO_BASE_URL if contract.professional else _BASE_URL
+    return f"{base}/{name}_ELECTRICITY_{_REGION_TO_CODE[region]}_{language}.pdf"
 
 
-def _injection_url(slug: str, region: str, language: str = "FR") -> str:
+def _document_url(contract: _ContractDef, region: str, language: str = "FR") -> str:
+    return _card_url(contract, contract.slug, region, language)
+
+
+def _injection_url(contract: _ContractDef, region: str, language: str = "FR") -> str:
     """The product's feed-in card, published beside it since October 2026."""
-    return _document_url(f"INJECTION_{slug}", region, language)
+    return _card_url(contract, f"INJECTION_{contract.slug}", region, language)
 
 
 async def probe(
@@ -265,17 +326,18 @@ async def probe(
         or region not in contract.regions
     ):
         return None
-    card = await head_freshness_key(session, _document_url(contract.slug, region))
+    card = await head_freshness_key(session, _document_url(contract, region))
     if card is None:
         return None
-    feed_in = await head_freshness_key(session, _injection_url(contract.slug, region))
+    feed_in = await head_freshness_key(session, _injection_url(contract, region))
     return card if feed_in is None else f"{card} {feed_in}"
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
-    """Return every electricity-product slug from the cartes-tarifaires page.
+    """Return every electricity-product slug from the cartes-tarifaires pages,
+    the residential one and the professional one.
 
-    The listing page links each card as
+    Each listing page links each card as
     ``tariff-card/latest/<SLUG>_ELECTRICITY_<REGION>_FR.pdf`` and its
     feed-in card as ``INJECTION_<SLUG>_ELECTRICITY_<REGION>_FR.pdf``. A
     feed-in card names its product's slug, so a product the listing shows
@@ -285,19 +347,22 @@ async def discover(session: aiohttp.ClientSession) -> set[str]:
     CREG's card). live_check
     diffs the result against ``{c.slug for c in _CONTRACTS}``.
     """
-    try:
-        html = await fetch_text(session, _LISTING_URL)
-    except ExtractorError:
-        return set()
-    return {
-        slug
-        for slug in re.findall(
-            r"tariff-card/latest/(?:INJECTION_)?([A-Z0-9\-]+)"
-            r"_ELECTRICITY_(?:VL|WAL|BXL)_FR",
-            html,
-        )
-        if slug != "TARIFF_SOCIAL"
-    }
+    slugs: set[str] = set()
+    for url in (_LISTING_URL, _PRO_LISTING_URL):
+        try:
+            html = await fetch_text(session, url)
+        except ExtractorError:
+            return set()
+        slugs |= {
+            slug
+            for slug in re.findall(
+                r"tariff-card/latest/(?:INJECTION_)?([A-Z0-9\-]+)"
+                r"_ELECTRICITY_(?:VL|WAL|BXL)_FR",
+                html,
+            )
+            if slug != "TARIFF_SOCIAL"
+        }
+    return slugs
 
 
 # ---- top-level fetch + parser -------------------------------------------------
@@ -338,7 +403,7 @@ async def _fetch_card(
     """The product card, French first and Dutch when the French one is
     wrong, and the text it was read off."""
     contract_id = contract.contract_id
-    url = _document_url(contract.slug, region)
+    url = _document_url(contract, region)
     text = await fetch_pdf_text_layout(session, url)
     try:
         return parse_snapshot(contract_id, text, region, url), text
@@ -351,7 +416,7 @@ async def _fetch_card(
         # when neither does. A Dutch fetch that failed transiently is
         # reported as such instead: it says nothing about either card, and
         # the French parse error would ask for a layout report on one blip.
-        dutch = _document_url(contract.slug, region, "NL")
+        dutch = _document_url(contract, region, "NL")
         try:
             text = await fetch_pdf_text_layout(session, dutch)
             return parse_snapshot(contract_id, text, region, dutch), text
@@ -389,7 +454,7 @@ async def _fetch_injection(
     stale: tuple[InjectionRates | None, str] = (None, "")
     read = False
     for language in ("FR", "NL"):
-        url = _injection_url(contract.slug, region, language)
+        url = _injection_url(contract, region, language)
         try:
             text = await fetch_pdf_text_layout(session, url)
         except ExtractorError as err:
@@ -423,12 +488,16 @@ def parse_injection_card(
     figure, so :func:`_extract_injection` reads it unchanged. The card must
     be the offer the contract takes, for its region: the variable one for
     every product but myDynamic, the fixed products included, as their
-    cards printed it until September.
+    cards printed it until September. The professional products all read
+    "Injection Variable Pro", which is exempt from VAT like the residential
+    offer by its own words (``_PRO_FEED_IN_EXEMPT_RE``).
     """
     contract = require_contract(_CONTRACTS_BY_ID, contract_id, "TotalEnergies")
     dynamic = contract.kind == "dynamic"
     if is_dutch_card(text):
         title = "Injectie Dynamic" if dynamic else "Variabel Injectie"
+        if contract.professional:
+            title = "Injectie Variabel Pro"
         place = (
             rf"I\s?njectie\s+voor\s+elektriciteit\s+in\s+het\s+{_DUTCH_PLACES[region]}"
         )
@@ -436,6 +505,8 @@ def parse_injection_card(
         text = in_french(text)
     else:
         title = "Injection Dynamique" if dynamic else "Injection Variable"
+        if contract.professional:
+            title = "Injection Variable Pro"
         place = (
             r"Injection\s+pour\s+l.{1,2}lectricit[ée]\s+en\s+R[ée]gion\s+"
             + _FRENCH_PLACES[region]
@@ -443,7 +514,19 @@ def parse_injection_card(
         _check_card(text, title, place, region)
     words = r"\s+".join(map(re.escape, title.split()))
     dated = re.search(rf"Total\s?Energies\s+{words}{LINE_BREAK}(\w+\s+\d{{4}})", text)
-    return _extract_injection(text, contract.kind), dated.group(1) if dated else ""
+    leg = _extract_injection(text, contract.kind)
+    if leg is not None and contract.professional:
+        # Engie's and most of Mega's professional feed-in cards tax it, and
+        # this one says it is exempt. A card that stops saying so is taxed.
+        leg = replace(leg, vat_applies=_PRO_FEED_IN_EXEMPT_RE.search(text) is None)
+    return leg, dated.group(1) if dated else ""
+
+
+# "Injection pour l'électricité en Région flamande - exonérée de TVA" and
+# "Injectie voor elektriciteit in het Vlaamse Gewest - vrijgesteld van btw".
+_PRO_FEED_IN_EXEMPT_RE = re.compile(
+    r"exon[ée]r[ée]e\s+de\s+TVA|vrijgesteld\s+van\s+btw", re.IGNORECASE
+)
 
 
 # The Walloon cards' footnote saying their day/night split is not billed on
@@ -472,6 +555,8 @@ def parse_snapshot(
     else:
         place = rf"[ÉE]lectricit[ée]\s+en\s+R[ée]gion\s+{_FRENCH_PLACES[region]}"
         _check_card(text, contract.french_title, place, region)
+    if contract.professional:
+        return parse_pro_snapshot(contract_id, contract.kind, text, region, source_url)
 
     columns = _meter_columns(text, contract)
     energy = _extract_energy(text, contract.kind, columns)
@@ -568,6 +653,9 @@ def _check_card(text: str, title: str, place: str, region: str) -> None:
     and region line say what it is.
     """
     words = r"\s+".join(map(re.escape, title.split()))
+    # The professional cards spell their range apart in some titles: the
+    # Flemish proComfort Fixe card of November 2026 reads "pro Comfort Fixe".
+    words = re.sub(r"^pro(?=[A-Z])", r"pro\\s?", words)
     if not re.search(rf"Total\s?Energies\s+{words}(?!\w)", text):
         raise ExtractorError(f"TotalEnergies: the card is not {title}")
     if not re.search(place, text):
@@ -607,6 +695,9 @@ _MONTH_INDEXED_ENERGY: frozenset[str] = frozenset(
         "totalenergies_mycomfort",
         "totalenergies_mydrive",
         "totalenergies_myessential",
+        "totalenergies_pro_procomfort",
+        "totalenergies_pro_prodrive",
+        "totalenergies_pro_proessential",
     }
 )
 
@@ -855,6 +946,7 @@ EXTRACTOR = SupplierExtractor(
             label=c.label,
             kind=c.kind,
             regions=c.regions,
+            professional=c.professional,
             # Every non-dynamic card indexes its feed-in credit on the
             # monthly Belpex_M, which the fixed / variable energy leg never
             # fetches spots for. myDynamic collects the key via its own
