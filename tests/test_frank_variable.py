@@ -153,6 +153,38 @@ def test_a_card_crediting_the_feed_in_per_hour_is_read_per_hour() -> None:
     assert snap.valid_until == date(2025, 2, 28)
 
 
+@pytest.mark.parametrize(
+    ("statement", "what"),
+    [
+        ("x 1,06 in EURct/kWh", "variable energy"),
+        ("-1,150), in EURct/kWh", "variable feed-in"),
+    ],
+    ids=["energy", "feed-in"],
+)
+@pytest.mark.parametrize("unit", ["in EUR/MWh", ""], ids=["restated", "dropped"])
+def test_a_variable_formula_in_another_unit_is_refused(
+    statement: str, what: str, unit: str
+) -> None:
+    """The variable formulas end in the dynamic cards' words, "x 1,06 in
+    EURct/kWh" and "-1,150), in EURct/kWh (vrijgesteld van btw)", and are
+    scaled on that unit alone: a card stating another, or none, is refused
+    rather than priced ten or a hundred times out."""
+    text = fixture_text("frank_variable_nov.pdf", layout=True)
+    assert text.count(statement) == 1
+    snap = parse_snapshot(text, "test://", "frank_variable", "november 2026")
+    assert isinstance(snap.energy, SpotMonthlyRates)
+    assert snap.energy.factor == pytest.approx(0.1068 * 1.06 * 10.0)
+    assert snap.injection is not None
+    assert snap.injection.spp_indexed
+    assert snap.injection.base == pytest.approx(-0.0115)
+    restated = text.replace(statement, statement.replace("in EURct/kWh", unit).rstrip())
+    stated = unit.removeprefix("in ") or "no unit"
+    with pytest.raises(
+        ExtractorError, match=f"{what} formula stated in {stated}, expected EURct/kWh"
+    ):
+        parse_snapshot(restated, "test://", "frank_variable", "november 2026")
+
+
 def test_one_product_s_card_is_not_read_as_the_other_s() -> None:
     """A dynamic card priced as a variable one would bill the hour's formula
     on the month's index, and the other way round: each reader refuses the

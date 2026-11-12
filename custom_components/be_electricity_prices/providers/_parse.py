@@ -299,6 +299,10 @@ def parse_sign(char: str) -> float:
 # both runs are bounded, the first stopping at the first "/", so a bracket full
 # of slashes is read once and an error quotes no more than a unit's worth.
 BRACKETED_UNIT = r"\(([^()\n/]{0,30}/[^()\n]{0,30})\)"
+# A unit a card states as the word after another, "in EURct/kWh" or "exprimé
+# en c€/kWh.", as its first group: the run to the next blank, less a full stop
+# or a comma ending the sentence.
+UNIT_WORD = r"(\S*[^\s.,;])"
 
 
 def stated_unit(

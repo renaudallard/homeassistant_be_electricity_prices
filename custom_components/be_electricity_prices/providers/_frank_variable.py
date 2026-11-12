@@ -47,13 +47,17 @@ of that index (VREG's until 2025), which is credited while the profile is not
 held. Up to February 2025 the cards credited the feed-in per hour instead
 ("BELPEX per uur", the dynamic cards' wording), which ``frank.py`` reads with
 its dynamic reader.
+
+Every formula on either product says what it gives in the words after it,
+"in EURct/kWh", which ``require_formula_unit`` holds all four formula readers
+to.
 """
 
 from __future__ import annotations
 
 import re
 
-from ._parse import SIGN_CHARS, parse_sign, to_float
+from ._parse import SIGN_CHARS, UNIT_WORD, parse_sign, stated_unit, to_float
 from ._pdf import NUM_NO_THOUSANDS
 from ._rates import InjectionRates, SpotMonthlyRates
 from .base import ExtractorError
@@ -84,6 +88,36 @@ _ESTIMATE_RE = re.compile(
 )
 _ESTIMATE_REACH = 600
 
+# The unit a formula gives, stated right after it: "x 1,06 in EURct/kWh" after
+# the energy formula and "-1,150), in EURct/kWh (vrijgesteld van btw)" after
+# the feed-in one, on the dynamic and the variable cards alike, in those words
+# on every card held from January 2025 to November 2026 (none of March 2026
+# is). The statement ends 13 or 14 characters past the formula; the next
+# unit, the expected price's "(EURct/kWh)" on the line below, starts 58 or
+# more past it, out of reach. No card states the unit of BELPEX itself, which
+# the factors take in EUR/MWh, so there is none to hold. The unit runs to the
+# next blank, less a full stop or comma ending the sentence.
+_UNIT_RE = re.compile(rf"\bin\s++{UNIT_WORD}")
+_UNIT = "EURct/kWh"
+_UNIT_REACH = 30
+
+
+def require_formula_unit(text: str, formula: re.Match[str], what: str) -> None:
+    """Refuse the ``what`` formula ``formula`` matched unless the card states
+    it in EURct/kWh, the unit its reader scales the factor and base from.
+
+    A card restating its formulas in another unit still matches the formula
+    patterns and would bill ten or a hundred times out, as OCTA+'s November
+    2026 cards did. One that stops stating a unit is refused as well: every
+    card read so far states it.
+    """
+    unit = stated_unit(text, _UNIT_RE, formula.span(), after=_UNIT_REACH)
+    if unit != _UNIT:
+        raise ExtractorError(
+            f"Frank Energie: {what} formula stated in {unit or 'no unit'}, "
+            f"expected {_UNIT}"
+        )
+
 
 def variable_energy(text: str, yearly_fee: float) -> SpotMonthlyRates:
     """The energy leg of a variable card, VAT included by the multiplier its
@@ -92,6 +126,7 @@ def variable_energy(text: str, yearly_fee: float) -> SpotMonthlyRates:
     m = _ENERGY_RE.search(text)
     if m is None:
         raise ExtractorError("could not parse Frank Energie variable energy formula")
+    require_formula_unit(text, m, "variable energy")
     factor_pdf = to_float(m.group(1))
     base_cents = parse_sign(m.group(2)) * to_float(m.group(3))
     vat_mult = to_float(m.group(4))
@@ -115,6 +150,7 @@ def variable_injection(text: str) -> InjectionRates | None:
     m = _INJECTION_RE.search(text)
     if m is None:
         return None
+    require_formula_unit(text, m, "variable feed-in")
     estimate = _ESTIMATE_RE.search(text, m.end(), m.end() + _ESTIMATE_REACH)
     if estimate is None:
         # Every card prints one; without it a month whose profile is not

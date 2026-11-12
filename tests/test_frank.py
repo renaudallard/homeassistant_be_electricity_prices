@@ -313,6 +313,35 @@ def test_missing_injection_is_fatal() -> None:
         parse_snapshot(text, "test://frank-apr", "frank_dynamic", "april 2026")
 
 
+@pytest.mark.parametrize(
+    ("statement", "what"),
+    [("x 1,06 in EURct/kWh", "energy"), ("-1,150), in EURct/kWh", "injection")],
+    ids=["energy", "injection"],
+)
+@pytest.mark.parametrize("unit", ["in EUR/MWh", ""], ids=["restated", "dropped"])
+def test_a_formula_in_another_unit_is_refused(
+    statement: str, what: str, unit: str
+) -> None:
+    """Both formulas say what they give in the words after them, "x 1,06 in
+    EURct/kWh" and "-1,150), in EURct/kWh (vrijgesteld van btw)". The factor
+    takes ten and the base a hundredth on that unit alone, so a card stating
+    another, or none, is refused rather than billed ten or a hundred times
+    out."""
+    text = _text()
+    assert text.count(statement) == 1
+    snap = parse_snapshot(text, "test://frank-apr", "frank_dynamic", "april 2026")
+    assert isinstance(snap.energy, DynamicRates)
+    assert snap.energy.factor == pytest.approx(0.1068 * 1.06 * 10.0)
+    assert snap.injection is not None
+    assert snap.injection.base == pytest.approx(-0.0115)
+    restated = text.replace(statement, statement.replace("in EURct/kWh", unit).rstrip())
+    stated = unit.removeprefix("in ") or "no unit"
+    with pytest.raises(
+        ExtractorError, match=f"{what} formula stated in {stated}, expected EURct/kWh"
+    ):
+        parse_snapshot(restated, "test://frank-apr", "frank_dynamic", "april 2026")
+
+
 def test_taxes_flanders_renewables_gsc_plus_wkk() -> None:
     """GSC 1,166 + WKK 0,371 = 1,537 EURct/kWh."""
     snap = _snap()

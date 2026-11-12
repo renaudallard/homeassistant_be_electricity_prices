@@ -100,7 +100,7 @@ from ..const import (
     WELCOME_CREDIT_ANNIVERSARY,
     WELCOME_CREDIT_PRO_RATA,
 )
-from ._frank_variable import variable_energy, variable_injection
+from ._frank_variable import require_formula_unit, variable_energy, variable_injection
 from ._links import on_hosts
 from ._parse import (
     LINE_BREAK,
@@ -682,6 +682,7 @@ def _extract_dynamic(text: str) -> DynamicRates:
     formula = _FORMULA_RE.search(text)
     if not formula:
         raise ExtractorError("could not parse Frank Energie energy formula")
+    require_formula_unit(text, formula, "energy")
     factor_pdf = to_float(formula.group(1))
     sign = parse_sign(formula.group(2))
     base_pre_vat_cents = sign * to_float(formula.group(3))
@@ -730,6 +731,7 @@ def _extract_injection(text: str) -> InjectionRates:
         # Raise like the monthly-fee and GSC/WKK rows rather than
         # silently crediting a solar user 0 EUR/kWh.
         raise ExtractorError("Frank Energie: injection formula row not found")
+    require_formula_unit(text, m, "injection")
     factor_pdf = to_float(m.group(1))
     # The sign between BELPEX and the base is mandatory in the regex
     # (matching the energy formula), so a sign-less or reworded formula

@@ -394,6 +394,21 @@ formula on the card is stated ex-VAT and multiplied by `x 1,06`. `test_energy_fo
 (`tests/test_frank.py`) pins the standard April card at factor `0.1068 * 1.06 * 10`
 (illustrative) and `test_energy_formula_base` at `1.500 * 1.06 / 100` (illustrative).
 
+### Stated unit
+
+Every formula says what it gives in the words after it: `x 1,06 in EURct/kWh` after the
+energy formula and `-1,150), in EURct/kWh (vrijgesteld van btw)` after the feed-in one,
+on the dynamic and the variable cards alike, in those words on every card held from
+January 2025 to November 2026. The conversions hold on that unit only, so
+`require_formula_unit` (`providers/_frank_variable.py`) reads the statement after each
+of the four formulas (`_extract_dynamic`'s, `_extract_injection`'s and the variable
+cards' two) and accepts `EURct/kWh` alone. A card that states another unit, or none,
+fails the fetch with "formula stated in <unit>, expected EURct/kWh" instead of billing
+ten or a hundred times out, which is what OCTA+'s November 2026 cards did. No card
+states the unit of BELPEX itself (none in the archive prints "MWh" anywhere), so the
+factor's x10 rests on BELPEX being quoted in EUR/MWh and there is nothing to check for
+it.
+
 The monthly standing charge is parsed by `_MONTHLY_FEE_RE` matching
 `Abonnementskost (EUR/maand) <num>` (`providers/frank.py`) and multiplied by 12 to
 `yearly_fixed_fee` (`providers/frank.py`). A missing row is fatal: the comment notes
@@ -625,7 +640,8 @@ with its first card. Tests load fixtures through `fixture_text(name, layout=True
 | Every tier serves last month's card | `_card_select` (`providers/frank.py`) | Frank renamed the filenames and the GROQ predicate no longer matches the new ones, as when "Elektriciteit" was dropped in September 2026. The probe shares the selector, so it goes blind at the same moment and nothing forces a re-fetch |
 | A tier stops fetching, or a new tier is ignored | `_TIERS`, `_TIER_SUFFIX`, `_SUFFIX_ALIASES`, `_matches_suffix` (`providers/frank.py`-139) | filename token renamed or a new suffix appears; `discover` will surface `frank_dynamic_<suffix>` |
 | "could not parse Frank Energie energy formula" | `_FORMULA_RE` | BELPEX wording, sign chars, or the `x 1,06` multiplier changed on the card |
-| Wrong per-kWh price after a card update | the EURct->EUR conversion in `_extract_dynamic` | Frank switched units or dropped the VAT multiplier |
+| "formula stated in ..., expected EURct/kWh" | `require_formula_unit` (`providers/_frank_variable.py`) | the card restated a formula's unit, or reworded the "in EURct/kWh" after it; see [Stated unit](#stated-unit) |
+| Wrong per-kWh price after a card update | the EURct->EUR conversion in `_extract_dynamic` | Frank quoted BELPEX in another unit, which no card states, or dropped the VAT multiplier |
 | "monthly fixed fee row not found" | `_MONTHLY_FEE_RE` | "Abonnementskost (EUR/maand)" label reworded |
 | Solar credit wrong or "injection formula row not found" | `_INJECTION_RE` | "terugleveringsvergoeding" reworded or the sign dropped |
 | Tax under/over-billing or "tax block"/"GSC/WKK" errors | `_extract_taxes` regexes (-416) | a levy row label changed; energy fund is the only optional one |
