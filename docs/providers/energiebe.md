@@ -282,6 +282,19 @@ the card's own printed price: the shown 11,93 c€/kWh (incl. VAT) equals
 wrong would 10x the energy leg. See the conversion in `_extract_energy`
 (`providers/energiebe.py`).
 
+Both units are read off the card before a formula is taken, by `_require_cents_per_kwh`
+(`providers/energiebe.py`): the formula's own, printed right after its closing parenthesis
+(`(1,12 x Belpex_RLP + 0,80) c€/kWh.`), and the index's, printed with the index value the
+shown price is worked out at (`VNR methodologie: 15,09 c€/kWh` on the dynamic card,
+`ingeschatte index (VNR methodologie): 15,09 c€/kWh` on the other two). Every formula on
+every card from December 2025 to November 2026 states both as `c€/kWh`, whitespace aside:
+the plain reading of the November 2026 dynamic card breaks it after the slash, and some
+months print `11,56c €/kWh`. A formula stated in anything else, or in nothing, is refused
+with the unit found and the one expected, as one that does not read is; restated in
+EUR/MWh it would parse clean with its base ten times too large. The formula's unit has to
+follow the parenthesis itself, because the layout reading puts the price column's own
+`(c€/kWh)` heading on the next line.
+
 ## Energy formula
 
 `_extract_energy` (`providers/energiebe.py`) parses the formula row with `_ENERGY_RE`
@@ -667,7 +680,8 @@ contribution 0), so the pair covers both sides of that change.
 | "energie.be contracts API parse error" | `_resolve_card_url` | the endpoint stopped returning JSON (an HTML error page, a login wall) |
 | "energie.be: injection indicative row not found" | `_INJECTION_CURRENT_RE` | the variable card's "Zonnestroom" column label changed |
 | Variable price plausible but consistently off | the `spot_monthly` mean, not the parser | the month is still filling in, or the ENTSO-E cache has gaps; the rate firms up as the month completes |
-| Wrong per-kWh price after a card update | the c€/kWh conversion in `_extract_energy` | energie.be switched Belpex units (to EUR/MWh) or the VAT treatment changed |
+| "energie.be: the energy formula's unit is ..." (or "index unit", or the injection formula's) | `_FORMULA_UNIT_RE`, `_INDEX_UNIT_RE` | the card states a formula or its index in another unit, or no longer prints the unit where it did; rescale the reader before accepting a new spelling |
+| Wrong per-kWh price after a card update | the c€/kWh conversion in `_extract_energy` | energie.be changed a formula's scale without restating its unit, or the VAT treatment changed |
 | "energie.be: vaste vergoeding row not found" | `_FEE_RE` | the "Vaste vergoeding ... (€/jaar)" label reworded |
 | Solar credit wrong or "injection formula row not found" | `_INJECTION_RE` | the "Terugleveringsvergoeding" section header reworded, or the sign dropped |
 | Solar credit roughly double on the variable contract | `spp_indexed` / `_spp_weighting_enabled` | the flag was dropped, or the Synergrid profile silently stopped being fetched, so the formula resolves against the energy leg's Belpex_RLP mean instead of Belpex_SPP |

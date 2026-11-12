@@ -397,6 +397,11 @@ def _fee_of(text: str) -> None:
             "Bijdrage Energiefonds Residentieel (" * 28_000,
             id="fund labels",
         ),
+        pytest.param(
+            "_INDEX_UNIT_RE",
+            "methodologie: 1 " + "c" * 100_000,
+            id="index unit",
+        ),
     ],
 )
 def test_a_crafted_row_is_read_in_time_linear_in_its_length(
@@ -405,7 +410,8 @@ def test_a_crafted_row_is_read_in_time_linear_in_its_length(
     """Runs of blanks where a row expects its figure, and labels of a row with
     no closing bracket, about 100,000 characters each and a million for the
     labels, which each cost less: each was read again from every place a
-    match could start."""
+    match could start. A run of letters after the index value, with no slash
+    to make it a unit, was split between the unit's two words in every way."""
     from custom_components.be_electricity_prices.providers import energiebe
 
     started = time.perf_counter()
@@ -1622,3 +1628,133 @@ async def test_the_plain_text_is_fetched_for_the_november_2026_template_only(
     snap = await energiebe.fetch(None, "energiebe_dynamic", REGION_FLANDERS)  # type: ignore[arg-type]
     assert bool(asked) is plain_read
     assert snap.publication_label == ("november 2026" if plain_read else "oktober 2026")
+
+
+def _parse_restated(
+    card: str, printed: str = "", restated: str = ""
+) -> SupplierSnapshot:
+    """The fixture ``card`` with ``printed`` restated as ``restated`` in the
+    reading its formulas come off, the plain one on the November template."""
+    name = f"energiebe_{card}.pdf"
+    contract = f"energiebe_{card.split('_')[0]}"
+    layout = fixture_text(name, layout=True)
+    if not card.endswith("_nov"):
+        assert printed in _residential(layout)
+        return parse_snapshot(layout.replace(printed, restated), "t://x", contract)
+    plain = fixture_text(name)
+    assert printed in _residential(plain)
+    text = plain.replace(printed, restated)
+    return parse_snapshot(layout, "t://x", contract, plain=text)
+
+
+# What each formula reads on the untouched card, (factor, base) as stored.
+_UNTOUCHED = {
+    ("dynamic_oct", "energy"): (1.02 * 1.06, 0.0049 * 1.06),
+    ("dynamic_nov", "energy"): (1.02 * 1.06, 0.0034 * 1.06),
+    ("variable_aug", "energy"): (1.12 * 1.06, 0.008 * 1.06),
+    ("variable_nov", "energy"): (1.12 * 1.06, 0.008 * 1.06),
+    ("dynamic_oct", "injection"): (1.01, -0.0098),
+    ("dynamic_nov", "injection"): (1.01, -0.0098),
+    ("fixed_aug", "injection"): (0.60, -0.008),
+    ("fixed_nov", "injection"): (0.60, -0.008),
+}
+
+
+@pytest.mark.parametrize(
+    ("card", "leg", "printed", "restated", "refusal"),
+    [
+        # The unit after each reader's formula, on each template.
+        ("dynamic_oct", "energy", "0,49) c€/kWh", "0,49) EUR/MWh", "unit is 'EUR/MWh'"),
+        (
+            "dynamic_nov",
+            "energy",
+            "0,34) c€/\nkWh",
+            "0,34) EUR/MWh",
+            "unit is 'EUR/MWh'",
+        ),
+        (
+            "variable_aug",
+            "energy",
+            "+ 0,80) c€/kWh",
+            "+ 0,80) €/kWh",
+            "unit is '€/kWh'",
+        ),
+        (
+            "variable_nov",
+            "energy",
+            "+ \n0,80) c€/kWh",
+            "+ \n0,80) EUR/MWh",
+            "unit is 'EUR/MWh'",
+        ),
+        (
+            "dynamic_oct",
+            "injection",
+            "0,98) c€/kWh",
+            "0,98) EUR/MWh",
+            "unit is 'EUR/MWh'",
+        ),
+        (
+            "dynamic_nov",
+            "injection",
+            "0,98) \nc€/kWh",
+            "0,98) \nEUR/MWh",
+            "unit is 'EUR/MWh'",
+        ),
+        ("fixed_aug", "injection", "0,80) c€/kWh", "0,80) €/kWh", "unit is '€/kWh'"),
+        (
+            "fixed_nov",
+            "injection",
+            "0,80) c€/kWh",
+            "0,80) EUR/MWh",
+            "unit is 'EUR/MWh'",
+        ),
+        # Without its own unit, not the price column's "(c€/kWh)" heading
+        # the layout reading puts on the next line.
+        ("variable_aug", "energy", "+ 0,80) c€/kWh.", "+ 0,80).", "unit is None"),
+        # The unit of the index value each price is worked out at.
+        (
+            "dynamic_oct",
+            "energy",
+            ": 15,09 c€/kWh",
+            ": 150,9 €/MWh",
+            "index unit is '€/MWh'",
+        ),
+        (
+            "variable_nov",
+            "energy",
+            ": 18,00 c€/kWh",
+            ": 180,0 €/MWh",
+            "index unit is '€/MWh'",
+        ),
+        (
+            "dynamic_oct",
+            "injection",
+            ": 7,95 c€/kWh",
+            ": 79,5 EUR/MWh",
+            "index unit is 'EUR/MWh'",
+        ),
+        (
+            "dynamic_nov",
+            "injection",
+            ": 9,38 c€/kWh",
+            ": 93,8 EUR/MWh",
+            "index unit is 'EUR/MWh'",
+        ),
+        ("fixed_aug", "injection", "): 7,05 c€/kWh", ").", "index unit is None"),
+    ],
+)
+def test_a_formula_stated_in_another_unit_is_refused(
+    card: str, leg: str, printed: str, restated: str, refusal: str
+) -> None:
+    """Every card prints the unit of its formulas right after the closing
+    parenthesis, "c€/kWh", and gives the index value its price is worked out
+    at in c€/kWh too, the scale the readers take both on. Restated in EUR/MWh
+    a formula would parse clean with its base ten times too large, so a card
+    stating anything else, or nothing, is refused. One case per reader on
+    each template; "12,75c €/kWh" on the untouched August variable card is
+    the other spelling the cards print."""
+    snap = _parse_restated(card)
+    rates: Any = snap.energy if leg == "energy" else snap.injection
+    assert (rates.factor, rates.base) == pytest.approx(_UNTOUCHED[card, leg])
+    with pytest.raises(ExtractorError, match=f"the {leg} formula's {refusal}"):
+        _parse_restated(card, printed, restated)

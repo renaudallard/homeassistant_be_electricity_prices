@@ -78,6 +78,7 @@ from ._parse import (
     regional_tax_overlay,
     require_every_area,
     running_month_short_of_an_area,
+    stated_unit,
     to_float,
 )
 from ._pdf import (
@@ -273,6 +274,28 @@ _INJECTION_SENTENCE_RE = re.compile(
     r"volgens\s+de\s+formule\s*:\s*"
     rf"(\(\s*{_NUM}\s*x\s*Belpex(?P<spp>_SPP)?\s*([{SIGN_CHARS}])\s*{_NUM}\))",
     re.IGNORECASE,
+)
+# The unit a formula is in, printed right after its closing parenthesis:
+# "(1,12 x Belpex_RLP + 0,80) c€/kWh.". Every card from December 2025 to
+# November 2026, all three products and both templates, prints "c€/kWh"
+# there; the plain reading of the November 2026 dynamic card breaks it
+# after the slash, so whitespace inside it does not count. Restated in
+# EUR/MWh the formulas would parse clean with every base ten times too
+# large, so one stated in anything else, or in nothing, is refused. The
+# unit must follow the parenthesis itself: on the layout reading the price
+# column's own "(c€/kWh)" heading is on the next line.
+_FORMULA_UNIT_RE = re.compile(r"(?<=\))\s*+([^\s/()]++\s*+/\s*+[kM]Wh)")
+# The unit of the index the factor multiplies, given with the index value the
+# printed price is worked out at: "Weergegeven prijs gebaseerd op de VNR
+# methodologie: 15,09 c€/kWh." on the dynamic card, "op basis van de
+# ingeschatte index (VNR methodologie): 15,09 c€/kWh." on the other two. On
+# the same cards each formula's own statement ends 72 to 151 characters after
+# it, spelled "c€/kWh" or, with the c against the figure, "11,56c €/kWh",
+# and the other formula's is never nearer than 384. Each run is taken whole,
+# so a statement is read once and a figure is never cut to start the unit.
+_INDEX_UNIT_RE = re.compile(
+    r"methodologie\)?\s*:\s*(?>\d+(?:[.,]\d+)?)\s*+"
+    r"([^\s\d/]++(?:\s++[^\s\d/]++)?\s*+/\s*+[kM]Wh)"
 )
 # The fixed card prints a rate where the other two print a formula. The column
 # label is identical on all three, so the rate alone cannot say which card this
@@ -595,6 +618,22 @@ def _publication_label(text: str) -> str:
     return f"{m.group(1).lower()} {m.group(2)}" if m else ""
 
 
+def _require_cents_per_kwh(text: str, formula: tuple[int, int], leg: str) -> None:
+    """Refuse the ``leg`` formula at ``formula``, its offsets in ``text``,
+    unless the card states it and its index in c€/kWh, the scale both are
+    read on. The formula's unit ends 7 or 8 characters after the
+    parenthesis on every card."""
+    for what, pattern, after in (
+        ("unit", _FORMULA_UNIT_RE, 16),
+        ("index unit", _INDEX_UNIT_RE, 200),
+    ):
+        unit = stated_unit(text, pattern, formula, after=after)
+        if unit is None or "".join(unit.split()) != "c€/kWh":
+            raise ExtractorError(
+                f"energie.be: the {leg} formula's {what} is {unit!r}, expected 'c€/kWh'"
+            )
+
+
 def _extract_energy(text: str, fee: float) -> DynamicRates:
     m = _ENERGY_RE.search(text)
     if not m:
@@ -605,6 +644,7 @@ def _extract_energy(text: str, fee: float) -> DynamicRates:
         raise ExtractorError(
             "energie.be: dynamic contract served a Belpex_RLP (variable) card"
         )
+    _require_cents_per_kwh(text, (m.start(1), m.end()), "energy")
     factor_pdf = to_float(m.group(1))
     base_cents = parse_sign(m.group(3)) * to_float(m.group(4))
     # energie.be prints Belpex in c€/kWh (not EUR/MWh like Frank / Bolt) and
@@ -651,6 +691,7 @@ def _extract_variable_energy(text: str, fee: float) -> SpotMonthlyRates:
         raise ExtractorError(
             "energie.be: variable contract served a card without Belpex_RLP"
         )
+    _require_cents_per_kwh(text, (m.start(1), m.end()), "energy")
     factor_pdf = to_float(m.group(1))
     base_cents = parse_sign(m.group(3)) * to_float(m.group(4))
     # Same c€/kWh basis and VAT treatment as the dynamic leg (see
@@ -750,6 +791,7 @@ def _extract_monthly_injection(
         # drift, not a fee-free contract. Raise rather than silently credit
         # a solar user 0 EUR/kWh.
         raise ExtractorError("energie.be: injection indicative row not found")
+    _require_cents_per_kwh(text, formula.span(1), "injection")
     # Injection is VAT-exempt residential, so the printed c€/kWh converts
     # straight to EUR/kWh, and Belpex is in c€/kWh here too (no * 10). The
     # sign is honoured on the indicative: at a low enough Belpex_SPP this
@@ -789,6 +831,7 @@ def _extract_injection(text: str) -> InjectionRates:
     energy_m = _ENERGY_RE.search(text)
     if energy_m is not None and m.start(1) < energy_m.end():
         raise ExtractorError("energie.be: injection formula matched the energy row")
+    _require_cents_per_kwh(text, m.span(1), "injection")
     factor_pdf = to_float(m.group(2))
     base_cents = parse_sign(m.group(4)) * to_float(m.group(5))
     # Injection is VAT-exempt. Belpex is in c€/kWh here too, so
@@ -809,6 +852,7 @@ def _extract_sentence_injection(text: str) -> InjectionRates:
     m = _INJECTION_SENTENCE_RE.search(text)
     if not m:
         raise ExtractorError("energie.be: injection formula row not found")
+    _require_cents_per_kwh(text, m.span(1), "injection")
     return InjectionRates(
         factor=to_float(m.group(2)),
         base=parse_sign(m.group(4)) * to_float(m.group(5)) / 100.0,
