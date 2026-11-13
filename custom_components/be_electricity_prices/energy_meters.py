@@ -171,6 +171,11 @@ async def _recorder_deltas(
     return rows + sorted(moved.items())
 
 
+def _local_day(ts: float) -> date:
+    """The local day a recorder row starting at ``ts`` belongs to."""
+    return dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC)).date()
+
+
 async def _read_deltas(
     hass: HomeAssistant, entity_id: str, start: date, end: date, period: str
 ) -> list[tuple[datetime, float]]:
@@ -233,6 +238,9 @@ async def _read_deltas(
                     start,
                     float(change),
                 )
+                if period == "day":
+                    # Nothing of it is known of the days before it either.
+                    note_restart(_local_day(ts))
                 continue
         delta = row.get("change")
         if ts is None or delta is None:
@@ -240,9 +248,7 @@ async def _read_deltas(
         value = float(delta)
         if value < 0.0:
             if period == "day":
-                note_restart(
-                    dt_util.as_local(datetime.fromtimestamp(ts, tz=UTC)).date()
-                )
+                note_restart(_local_day(ts))
             # A consumption or injection meter cannot run backwards over a
             # bucket, so this is an artefact rather than a measurement. Home
             # Assistant restarts its cumulative sum chain when the short-term

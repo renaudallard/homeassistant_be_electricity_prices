@@ -32,6 +32,11 @@ window scaled across the days missing, that energy counted twice. An outage
 longer than purge_keep_days has lost its last row: the sum starts over, the
 first day back reads a negative change that ``_read_deltas`` drops, and that
 energy is gone, so its days stay missing.
+
+The share is counted from the day on record before the outage, so a window
+that begins inside one is read from ``LEAD_DAYS`` earlier. Read from its own
+first day, the first day back held the whole outage, the days before the
+window with it, and nothing to share it from.
 """
 
 from __future__ import annotations
@@ -46,15 +51,23 @@ from homeassistant.components.sensor import ATTR_STATE_CLASS, SensorStateClass
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-# The local days a daily read dropped for a negative change, inside a
-# noting_restarts block.
+# How many days ahead of a measured window are read with it, for the day on
+# record before an outage the window begins in. An outage carried for longer
+# is one Home Assistant sat out stopped: a meter away while it runs loses
+# its sum past purge_keep_days, ten by default.
+LEAD_DAYS = 31
+
+# The local days a daily read dropped, for a negative change or for a first
+# bucket holding what came before the read, inside a noting_restarts block.
 _RESTARTS: ContextVar[set[date] | None] = ContextVar("_RESTARTS", default=None)
 
 
 @contextmanager
 def noting_restarts() -> Iterator[set[date]]:
-    """Collect the days the daily reads inside this block dropped for a
-    negative change: a sum the recorder started over."""
+    """Collect the days the daily reads inside this block dropped: for a
+    negative change, a sum the recorder started over, or as a first bucket
+    that carried energy from before the read. Either way what the days
+    before it used is not known, and nothing is shared out over them."""
     restarts: set[date] = set()
     token = _RESTARTS.set(restarts)
     try:

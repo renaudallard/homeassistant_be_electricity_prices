@@ -97,6 +97,7 @@ from .injection import (
     _static_injection_bands,
 )
 from .law_archive import ensure_law_archive
+from .meter_outages import LEAD_DAYS
 from .meter_warm import KeptRows, warm_meter_reads
 from .network_archive import ensure_network_archive
 from .pricing import (
@@ -239,14 +240,16 @@ class _TickMixin:
         if not deferred:
             # The widest window any read below asks for: the trailing year of
             # the volume, last year's same days for the projection and the
-            # year to date, each read a day before its first.
+            # year to date, each read a day before its first, and from the
+            # days a measured volume looks ahead of its window for an outage
+            # the window begins in (meter_outages.LEAD_DAYS).
             today = dt_util.now().date()
             await warm_meter_reads(
                 self.hass,
                 self.entry,
                 min(
-                    today - timedelta(days=MEASURED_FULL_YEAR_DAYS + 3),
-                    ytd_window_start(self.entry, today) - timedelta(days=2),
+                    today - timedelta(days=MEASURED_FULL_YEAR_DAYS + 3 + LEAD_DAYS),
+                    ytd_window_start(self.entry, today) - timedelta(days=2 + LEAD_DAYS),
                 ),
                 today,
                 self._meter_rows,

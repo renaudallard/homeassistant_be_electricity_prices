@@ -443,10 +443,19 @@ An outage is measured once (`meter_outages.py`). Home Assistant resumes a
 the first day back holds the energy of the days without rows as well as its
 own, and scaled across those days that energy counted twice. `_measured_kwh`
 shares the first day back out evenly over them and itself (`_daily_kwh` in
-`meter_daily.py`), for each sensor before a pair is matched. An outage longer
+`meter_daily.py`), for each sensor before a pair is matched. The share is
+counted from the day on record before the outage, so such a meter is read
+from 31 days ahead of the window (`LEAD_DAYS`) and only the window's days
+are kept: a window that begins on the outage's first day without a row used
+to find the first day back with nothing before it, holding the days ahead of
+the window too, and counted it whole and scaled on top. What the meter's
+last day used after it went away sits in those shares, since that day's own
+row stops there. An outage longer
 than `purge_keep_days` has lost its last row: the sum starts over, the first
 day back's negative change is dropped (`_read_deltas` notes the day), and its
-days stay missing and are scaled across as before. Another meter is read as
+days stay missing and are scaled across as before. So do the days before a
+first row dropped for carrying what came before the read, which is noted the
+same way. Another meter is read as
 recorded, as a `total` starting a new cycle or an imported statistic, and so
 is today, a live reading. The bills read the days as recorded.
 

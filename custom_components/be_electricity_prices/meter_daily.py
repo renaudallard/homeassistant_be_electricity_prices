@@ -36,7 +36,7 @@ code too.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -77,7 +77,7 @@ from .meter_faults import (
     _without_today,
 )
 from .meter_hourly import _metered_hourly_kwh
-from .meter_outages import carries_outages, noting_restarts, spread_outages
+from .meter_outages import LEAD_DAYS, carries_outages, noting_restarts, spread_outages
 from .pricing import MeterType
 
 
@@ -459,17 +459,20 @@ async def _daily_kwh(
     energy of each outage shared out over its days where the meter carries
     it (:mod:`meter_outages`), so a measured window counts it once.
 
-    Today is a live reading, never the day an outage's energy landed on,
-    and is left as read.
+    Such a meter is read from ``LEAD_DAYS`` before ``start``: an outage the
+    window begins in is shared out from the day on record before it, and
+    only the window's days are returned. Today is a live reading, never the
+    day an outage's energy landed on, and is left as read.
     """
-    with noting_restarts() as restarts:
-        days = await energy_meters._recorder_daily_kwh(hass, entity_id, start, end)
     if not carries_outages(hass, entity_id):
-        return days
+        return await energy_meters._recorder_daily_kwh(hass, entity_id, start, end)
+    lead = start - timedelta(days=LEAD_DAYS)
+    with noting_restarts() as restarts:
+        days = await energy_meters._recorder_daily_kwh(hass, entity_id, lead, end)
     past = _without_today(days, end)
     out = spread_outages(past, restarts)
     out.update({day: kwh for day, kwh in days.items() if day not in past})
-    return out
+    return {day: kwh for day, kwh in out.items() if day >= start}
 
 
 async def _measured_kwh(

@@ -93,6 +93,30 @@ async def test_a_short_outage_is_measured_once(
     assert measured.days_with_data == 7
 
 
+async def test_a_window_beginning_in_an_outage_measures_it_once(
+    recorder_mock: Any, hass: HomeAssistant, freezer: Any
+) -> None:
+    """Down on 7 and 8 January: the 7th keeps a row, at 0, for the hour the
+    meter went away in, and the 8th has none. A window from the 8th read
+    from the 8th itself found the 9th's 72 kWh with no day before it to
+    share them from: 144 kWh over four days of five, scaled to 180 where
+    120 were used. Read from before the outage, the 9th is shared with the
+    8th, and the window holds five days. What the 7th used while the meter
+    was away is in those two shares, its own row reading 0."""
+    await _meter(hass, freezer, 8, range(2, 4), purge=False)
+    measured = await _measured_total(hass, METER, date(2026, 1, 8), date(2026, 1, 12))
+    assert measured.kwh == 144.0
+    assert measured.days_with_data == 5
+    # From the first day back, which a read from that day dropped whole.
+    measured = await _measured_total(hass, METER, date(2026, 1, 9), date(2026, 1, 12))
+    assert measured.kwh == 108.0
+    assert measured.days_with_data == 4
+    # A window past the outage reads its own days and nothing of the lead.
+    measured = await _measured_total(hass, METER, date(2026, 1, 10), date(2026, 1, 12))
+    assert measured.kwh == 72.0
+    assert measured.days_with_data == 3
+
+
 async def test_an_outage_past_the_purge_stays_missing(
     recorder_mock: Any, hass: HomeAssistant, freezer: Any
 ) -> None:
