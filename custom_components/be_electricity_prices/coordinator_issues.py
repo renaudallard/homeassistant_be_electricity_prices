@@ -347,17 +347,23 @@ class _IssuesMixin:
         )
 
     def _sync_excise_law_issue(self) -> bool:
-        """Flag a social tariff card still waiting for the law, and say so.
+        """Flag a card still waiting for the law, and say so.
 
-        The protected customer's excise is the law's own rate, so a card
-        whose month the law has not been read for has none to bill, and the
-        tick publishes nothing for it. Returns whether that is the case.
+        The protected customer's excise is the law's own rate, so a social
+        tariff card whose month the law has not been read for has none to
+        bill. A card that prints neither federal levy has none either. The
+        tick publishes nothing for them. Returns whether that is the case.
+        One issue id for both, the wording its own.
         """
-        unread = (
-            self._snapshot is not None and self._snapshot.taxes.protected_excise_unread
+        taxes = None if self._snapshot is None else self._snapshot.taxes
+        protected = taxes is not None and taxes.protected_excise_unread
+        household = taxes is not None and taxes.federal_levies_unread
+        self._sync_issue(
+            "excise_law_unread",
+            protected or household,
+            translation_key=None if protected else "federal_levies_unread",
         )
-        self._sync_issue("excise_law_unread", unread)
-        return unread
+        return protected or household
 
     def _sync_connection_fee_issue(self) -> None:
         """Flag a Walloon card that stopped printing the connection fee.

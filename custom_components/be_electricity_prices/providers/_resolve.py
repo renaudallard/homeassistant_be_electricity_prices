@@ -397,6 +397,8 @@ def resolve_federal_excise(
     excluding and the engine grosses it later, so writing one number into
     both would be wrong by 6% for one of them. A card that already prints the
     rate is returned unchanged, so this is identity for almost every entry.
+    A card that prints none (``federal_levies_unread``) is given it here, and
+    the flag is cleared.
 
     Left alone: a professional card, whose scheme bands the levy by annual
     volume and is a different rate entirely. The social tariff takes the
@@ -428,6 +430,7 @@ def resolve_federal_excise(
     if (
         abs(rate - taxes.federal_excise) < 5e-7
         and not taxes.protected_excise_unread
+        and not taxes.federal_levies_unread
         and not taxes.federal_excise_bands
     ):
         return snapshot
@@ -438,6 +441,7 @@ def resolve_federal_excise(
             federal_excise=rate,
             federal_excise_bands=None,
             protected_excise_unread=False,
+            federal_levies_unread=False,
         ),
     )
 

@@ -764,8 +764,9 @@ def test_readme_documents_every_repairs_issue() -> None:
 
     The three ``supplier_deprecated`` variants share one issue id and differ
     only in translation key, so only the base name is a card a user can see,
-    and ``register_pair_covered`` is the second wording of
-    ``register_pair_incomplete``.
+    ``register_pair_covered`` is the second wording of
+    ``register_pair_incomplete``, and ``federal_levies_unread`` that of
+    ``excise_law_unread``.
     """
     import json
     import re
@@ -783,6 +784,7 @@ def test_readme_documents_every_repairs_issue() -> None:
         "supplier_deprecated_ended_no_successor",
         "register_pair_covered",
         "brussels_power_term_indicative",
+        "federal_levies_unread",
     }
     raised = {key for key in strings["issues"] if key not in variants}
 

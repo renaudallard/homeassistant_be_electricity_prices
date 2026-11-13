@@ -3646,6 +3646,10 @@ def _check_federal_tax_consensus(
         supplier, _contract, region = row.parts[-4:-1]
         try:
             taxes = json.loads(row.read_text(encoding="utf-8"))["taxes"]
+            # A card printing neither levy has no block to compare: its
+            # placeholders are billed from the law.
+            if taxes.get("federal_levies_unread"):
+                continue
             basis = 1.0 + float(taxes.get("vat_rate") or 0.0)
             pair = (
                 round(float(taxes["federal_excise"]) * basis, 7),
@@ -5112,11 +5116,20 @@ def _expect_region_basics(prefix: str, region_key: str, snap: object) -> None:
             renewables > 0,
             detail=str(taxes),
         )
-    _expect(
-        f"{prefix}: federal excise > 0",
-        getattr(taxes, "federal_excise", 0) > 0,
-        detail=str(taxes),
-    )
+    if getattr(taxes, "federal_levies_unread", False):
+        # A card printing neither levy: the resolver bills the law's.
+        _expect(
+            f"{prefix}: federal levies left to the law",
+            getattr(taxes, "federal_excise", None) == 0.0
+            and getattr(taxes, "energy_contribution", None) == 0.0,
+            detail=str(taxes),
+        )
+    else:
+        _expect(
+            f"{prefix}: federal excise > 0",
+            getattr(taxes, "federal_excise", 0) > 0,
+            detail=str(taxes),
+        )
     # Ceilings sized on the unit slip they catch, not on tariff economics:
     # the Walloon certificate levy tops out near 0,06 and the residential
     # excise sits at 0,05 EUR/kWh, so a value read in c/kWh lands a factor

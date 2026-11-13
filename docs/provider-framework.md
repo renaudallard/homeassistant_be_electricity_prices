@@ -460,6 +460,7 @@ energy fund.
 | `wallonia_renewables` | `float` | `0.0` | Wallonia green-energy contribution. |
 | `brussels_renewables` | `float` | `0.0` | Brussels green-energy levy. |
 | `region_connection_fee` | `float` | `0.0` | Regional connection fee. |
+| `federal_levies_unread` | `bool` | `False` | The card prints neither federal levy, so `federal_excise` and `energy_contribution` are placeholders of 0. The resolver bills the delivery month's from the law and clears it (`_stand_in_levies` and `resolve_federal_excise`), and the coordinator publishes nothing while it is still set (`excise_law_unread`). Residential cards only. Left out of a stored row while `False`. |
 | `energy_fund_eur_per_month` | `float` | `0.0` | Monthly energy-fund charge (the one field not per-kWh). It is a Flemish levy, and `fees.py` bills 12 x it with no region check of its own (`fees.py`), so an extractor serving more than one region must return `0.0` outside Flanders. |
 | `vat_rate` | `float` | `0.0` | VAT convention. `0.0` means the snapshot's prices are already VAT-incl (the convention for both Cociter and Eneco today). An extractor that ships ex-VAT numbers must set this to the parsed rate explicitly. |
 | `card_vat_rate` | `float \| None` | `None` | The VAT rate the card states for its own customers, as a fraction (`0.06` on a residential card printing "6% TVA"), `None` where it states none. Left out of a stored row while `None`. |

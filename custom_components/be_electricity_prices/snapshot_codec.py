@@ -552,13 +552,15 @@ _INJECTION_OPTIONAL_KEYS = (
 _INJECTION_DEFAULTS = {f.name: f.default for f in fields(InjectionRates)}
 # The same rule for the tax overlay, from v73.
 # And on the tax overlay, for the same reason: only a social tariff card the
-# law was not read for carries ``protected_excise_unread``, and only a card
-# whose energy row carries the green energy cost ``renewables_in_energy``, so
-# every other row stays byte-identical to what an earlier version wrote.
+# law was not read for carries ``protected_excise_unread``, only a card
+# printing no federal levy ``federal_levies_unread``, and only a card whose
+# energy row carries the green energy cost ``renewables_in_energy``, so every
+# other row stays byte-identical to what an earlier version wrote.
 _TAXES_OPTIONAL_KEYS = (
     "card_vat_rate",
     "assumed_vat_rate",
     "protected_excise_unread",
+    "federal_levies_unread",
     "renewables_in_energy",
 )
 _TAXES_DEFAULTS = {f.name: f.default for f in fields(TaxOverlay)}

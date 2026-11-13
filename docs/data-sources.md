@@ -1447,6 +1447,14 @@ a month from August 2026 is `None` until the law is read: a social tariff card
 then carries `protected_excise_unread`, and the coordinator publishes nothing
 for it, with the `excise_law_unread` Repairs card, until it is.
 
+A residential card that prints neither federal levy carries
+`federal_levies_unread` and 0 for both. The resolver bills the delivery month's
+from the law: the archived wording's schedule and contribution for a month it
+covers (`_stand_in_levies`, `snapshot_resolve.py`), the rate of the text in
+force from August 2026 (`resolve_federal_excise`). With neither held the flag
+stays, and the coordinator publishes nothing, with the same Repairs card in
+its own wording.
+
 The parser is tested on the page as Justel served it on 2026-10-09
 (`tests/fixtures/justel_loi_programme_2004_fr.html`), which every test holds
 in place of the network, the archived copy on the one served on 2026-10-15

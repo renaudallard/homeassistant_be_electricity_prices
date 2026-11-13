@@ -158,6 +158,16 @@ def test_the_unread_excise_flag_is_written_only_when_set() -> None:
     assert _snapshot_from_dict(row).taxes == unread.taxes
 
 
+def test_the_unprinted_levies_flag_is_written_only_when_set() -> None:
+    """Only a card printing neither federal levy carries it."""
+    plain = make_snapshot()
+    assert "federal_levies_unread" not in _snapshot_to_dict(plain, NOW)["taxes"]
+    unread = replace(plain, taxes=replace(plain.taxes, federal_levies_unread=True))
+    row = _snapshot_to_dict(unread, NOW)
+    assert row["taxes"]["federal_levies_unread"] is True
+    assert _snapshot_from_dict(row).taxes == unread.taxes
+
+
 def test_the_green_cost_in_energy_flag_is_written_only_when_set() -> None:
     """Only a card whose energy row carries the green energy cost sets it, so
     every other row keeps the shape an earlier version wrote."""

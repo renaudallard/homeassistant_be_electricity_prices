@@ -249,6 +249,15 @@ class TaxOverlay:
     # the law is held, and the coordinator refuses to publish a price that
     # still carries it.
     protected_excise_unread: bool = False
+    # True on a residential card that prints neither federal levy, so
+    # ``federal_excise`` and ``energy_contribution`` are placeholders of 0.
+    # Both are set by law and owed by every household whatever the card
+    # says, so the resolver bills the delivery month's from the law and
+    # clears this: the rate of the text in force from ``resolve_federal_excise``,
+    # the archived wording's schedule and contribution before it
+    # (``_stand_in_levies``). The coordinator publishes nothing while it is
+    # still set.
+    federal_levies_unread: bool = False
     energy_fund_eur_per_month: float = 0.0
     # 0.0 means the snapshot's prices are already VAT-incl (the convention
     # for both Eneco and Cociter today). An extractor that starts shipping

@@ -1513,7 +1513,9 @@ successful refresh:
   Justel (unreachable on the very first start). Leaving the excise out or
   billing the household rate would both be wrong, so the sensors stay
   unavailable until it is read; the law is retried every six hours and the
-  card clears by itself.
+  card clears by itself. Raised under the same id, in its own wording, for an
+  entry whose card prints no federal excise at all, which every
+  household owes at the rate the law sets.
 - **`recorder_missing_<entry>`** — Home Assistant runs without its recorder,
   which keeps the meters' history every cost is priced from. The cost sensors
   stay unknown rather than show a year priced at fees alone, the price sensors

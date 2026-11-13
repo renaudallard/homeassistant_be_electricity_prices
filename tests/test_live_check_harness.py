@@ -3153,6 +3153,37 @@ def test_a_supplier_printing_last_quarters_federal_tax_block_is_caught(
     assert "0.0503288" in check.detail and "0.04876" in check.detail
 
 
+def test_a_card_printing_no_federal_levy_is_not_measured(tmp_path: Path) -> None:
+    """Its zeros are placeholders billed from the law, not a stale block."""
+    import json
+
+    lc.CHECKS.clear()
+    lc._CONTRACTS_BY_ID.clear()
+    lc._CONTRACTS_BY_ID.update(
+        {
+            name: SimpleNamespace(professional=False)
+            for name in ("a_fixed", "b_fixed", "none_fixed")
+        }
+    )
+    archive = _federal_archive(
+        tmp_path,
+        {
+            ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+            ("b", "b_fixed", "flanders"): (0.04876, 0.0),
+        },
+    )
+    row = archive / "cards" / "none" / "none_fixed" / "flanders" / "2026-09.json"
+    row.parent.mkdir(parents=True)
+    taxes = {
+        "federal_excise": 0.0,
+        "energy_contribution": 0.0,
+        "federal_levies_unread": True,
+    }
+    row.write_text(json.dumps({"taxes": taxes}), encoding="utf-8")
+    lc._check_federal_tax_consensus(archive)
+    assert lc.CHECKS == []
+
+
 def _justel(name: str) -> str:
     """A Justel page as the fixtures keep it."""
     path = Path(__file__).resolve().parent / "fixtures" / name

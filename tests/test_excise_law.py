@@ -46,6 +46,7 @@ from custom_components.be_electricity_prices.providers._resolve import (
     resolve_federal_excise,
 )
 from custom_components.be_electricity_prices.providers.base import (
+    DsoOverlay,
     ExtractorError,
     SupplierSnapshot,
     TaxOverlay,
@@ -1035,3 +1036,102 @@ async def test_a_card_standing_in_bills_the_levies_the_law_then_set(
         0.0488,
         0.002,
     )
+
+
+# A residential card printing neither federal levy.
+
+
+def _unprinted() -> SupplierSnapshot:
+    return make_snapshot(
+        supplier="dots",
+        contract="dots_dynamic",
+        dsos={"fluvius_imewo": DsoOverlay(distribution_single=0.055, transport=0.0)},
+        taxes=TaxOverlay(
+            federal_excise=0.0,
+            energy_contribution=0.0,
+            flanders_renewables=0.0146,
+            vat_rate=0.0,
+            card_vat_rate=0.06,
+            federal_levies_unread=True,
+        ),
+    )
+
+
+def _unprinted_entry(annual_kwh: float = 3500.0) -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "supplier": "dots",
+            "contract": "dots_dynamic",
+            "region": "flanders",
+            "dso": "fluvius_imewo",
+            "meter": "mono",
+            "annual_consumption_kwh": annual_kwh,
+        },
+    )
+
+
+def test_a_card_printing_no_levy_is_billed_the_law_in_force() -> None:
+    """November 2026 owes the flat rate of the law of 25 October 2026 and no
+    contribution, grossed at the 6% the card states."""
+    taxes = _resolve_snapshot(
+        _unprinted_entry(), _unprinted(), delivery_month=date(2026, 11, 1)
+    ).taxes
+    assert taxes.federal_excise == pytest.approx(0.0422 * 1.06)
+    assert taxes.energy_contribution == 0.0
+    assert not taxes.federal_levies_unread
+
+
+@pytest.mark.usefixtures("schedule_held")
+def test_a_card_printing_no_levy_is_billed_the_archived_schedule() -> None:
+    """March 2026 is before the text in force: the archived wording's schedule
+    by annual volume and the contribution beside it bill the month."""
+    taxes = _resolve_snapshot(
+        _unprinted_entry(30000.0), _unprinted(), delivery_month=date(2026, 3, 1)
+    ).taxes
+    blended = (20000.0 * 0.04748 + 10000.0 * 0.04546) / 30000.0
+    assert taxes.federal_excise == pytest.approx(blended * 1.06)
+    assert taxes.energy_contribution == pytest.approx(0.0019261 * 1.06)
+    assert not taxes.federal_levies_unread
+
+
+def test_a_card_printing_no_levy_waits_for_the_law() -> None:
+    """With neither wording held there is nothing to bill, and the flag stays
+    for the coordinator to refuse on."""
+    excise_law._HELD.clear()
+    for month in (date(2026, 3, 1), date(2026, 11, 1)):
+        taxes = _resolve_snapshot(
+            _unprinted_entry(), _unprinted(), delivery_month=month
+        ).taxes
+        assert taxes.federal_levies_unread
+        assert taxes.federal_excise == 0.0
+
+
+async def test_nothing_is_published_for_a_card_printing_no_levy_until_the_law_is_read(
+    hass: HomeAssistant,
+    excise_law_table: dict[str, tuple[tuple[date, float], ...]],
+) -> None:
+    """The tick refuses, and the Repairs card names the household excise
+    rather than the protected customer's."""
+    from homeassistant.helpers import issue_registry as ir
+    from homeassistant.helpers.update_coordinator import UpdateFailed
+
+    entry = _unprinted_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    excise_law._HELD.clear()
+    coord._set_snapshot(_unprinted())
+    coord._snapshot_fetched_at = dt_util.utcnow()
+    issue_id = f"excise_law_unread_{entry.entry_id}"
+    with (
+        patch.object(coord, "_maybe_refresh_snapshot", AsyncMock()),
+        pytest.raises(UpdateFailed, match="excise"),
+    ):
+        await coord._update_body()
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
+    assert issue is not None
+    assert issue.translation_key == "federal_levies_unread"
+    excise_law._HELD.update(excise_law_table)
+    coord._reresolve_snapshot()
+    assert coord._snapshot is not None
+    assert not coord._snapshot.taxes.federal_levies_unread

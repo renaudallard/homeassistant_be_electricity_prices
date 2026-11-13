@@ -302,13 +302,13 @@ class _TickMixin:
             await self._maybe_refresh_snapshot()
         self._reresolve_snapshot()
         # A social tariff card whose month the law has not been read for has
-        # no excise to bill. Nothing is published until it has: the excise is
-        # the protected customer's own rate, and neither leaving it out nor
-        # billing the household one would be the bill.
+        # no excise to bill, nor has a card printing no federal levy. Nothing
+        # is published until it has: the excise is the law's rate, the
+        # protected customer's own on the social tariff, and leaving it out
+        # would not be the bill.
         if self._sync_excise_law_issue():
             raise UpdateFailed(
-                "the protected customer's excise is not known yet: the law "
-                "could not be read from Justel"
+                "the excise is not known yet: the law could not be read from Justel"
             )
         await self._track_monthly_peak()
         # Only for an entry that ticked the box, which is the one thing that

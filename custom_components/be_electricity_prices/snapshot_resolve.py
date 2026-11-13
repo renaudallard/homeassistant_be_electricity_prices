@@ -785,6 +785,8 @@ def _stand_in_levies(snap: SupplierSnapshot, month: date) -> SupplierSnapshot:
     card prints another month's. Not for a protected customer, whose rates
     are its own, and not for a month's own card, which is billed as printed:
     that wording leaves out the rates a transition or a quarterly notice set.
+    A card printing neither levy (``federal_levies_unread``) has nothing of
+    its own to bill, so its month takes them here too.
     """
     schedule = household_schedule(month)
     if schedule is None or snap.supplier == SUPPLIER_SOCIAL:
@@ -797,6 +799,7 @@ def _stand_in_levies(snap: SupplierSnapshot, month: date) -> SupplierSnapshot:
         federal_excise=bands[0][1],
         federal_excise_bands=bands,
         energy_contribution=on_card_basis(snap, month, schedule.contribution),
+        federal_levies_unread=False,
     )
     return replace(snap, taxes=taxes)
 
@@ -876,6 +879,11 @@ def _resolve_snapshot(
     # keeps the professional ones it typed; its VAT rate is its own and stays
     # out of resolve_vat_rate's professional branch above.
     levies_professional = professional or _custom_professional(entry, snap)
+    # A card printing neither levy takes the month's from the law: here the
+    # archived wording's for a month it covers, before the two steps below,
+    # which bill the text in force over it for a later month.
+    if resolved.taxes.federal_levies_unread and not levies_professional:
+        resolved = _stand_in_levies(resolved, month)
     resolved = resolve_federal_contribution(
         resolved, month, professional=levies_professional
     )
