@@ -41,6 +41,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.be_electricity_prices import fluvius
 from custom_components.be_electricity_prices.const import (
     DOMAIN,
     WELCOME_CREDIT_PRO_RATA,
@@ -364,6 +365,19 @@ class FakeBody:
 
     async def iter_chunked(self, _size: int) -> AsyncIterator[bytes]:
         yield self._body
+
+
+@cache
+def fluvius_network(year: int) -> dict[str, fluvius.AreaTerms]:
+    """Each Fluvius area's network rates off its own sheet of ``year``, as
+    ``tests/fixtures/fluvius_<area>_<year>.xlsx`` keeps it."""
+    out: dict[str, fluvius.AreaTerms] = {}
+    for dso, slug in fluvius._AREA_SLUGS.items():
+        name = f"fluvius_{slug.replace('-', '_')}_{year}.xlsx"
+        terms = fluvius.parse_area_terms((FIXTURES / name).read_bytes(), year)
+        assert terms is not None, name
+        out[dso] = terms
+    return out
 
 
 def make_text_session(body: str) -> Any:

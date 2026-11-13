@@ -313,12 +313,22 @@ def cached_area_terms(year: int, dso: str) -> AreaTerms | None:
     sheets is read: the year's sheet, else the latest earlier one held, never
     a later one, the rule :func:`cached_analog_surcharge` follows.
     Synchronous for the reason :func:`cached_network_ceiling` gives."""
+    held = held_area_terms(year, dso)
+    return None if held is None else held[1]
+
+
+def held_area_terms(year: int, dso: str) -> tuple[int, AreaTerms] | None:
+    """What :func:`cached_area_terms` answers, with the year of the sheet it
+    comes off, for a card that has to say when that is an earlier year's."""
     held = {
         held_year: terms
         for (held_year, area), terms in _area_terms().items()
         if area == dso and held_year <= year
     }
-    return held[max(held)] if held else None
+    if not held:
+        return None
+    latest = max(held)
+    return latest, held[latest]
 
 
 def _sheets() -> dict[int, SheetTerms]:
@@ -471,7 +481,8 @@ async def ensure_area_terms(
     are held, and return them or ``None``, never raising.
 
     Only for a custom entry that takes its network from Fluvius rather than
-    typing it, and a withdrawn product past its last card's year. ``None``
+    typing it, a withdrawn product past its last card's year, and Wase Wind,
+    whose cards print no network table. ``None``
     for a key that is not a Fluvius area. Where the listing has no sheet for
     the year yet, the year before is read off the same listing to stand in
     (:func:`cached_area_terms`).

@@ -76,6 +76,7 @@ from .octaplus import EXTRACTOR as _OCTAPLUS
 from .social import EXTRACTOR as _SOCIAL
 from .totalenergies import EXTRACTOR as _TOTALENERGIES
 from .trevion import EXTRACTOR as _TREVION
+from .wasewind import EXTRACTOR as _WASEWIND
 
 # Elegant, Engie, EnergyVision and Luminus read a card that left its usual
 # address where their own pages list it (see _moved.py).
@@ -103,6 +104,7 @@ EXTRACTORS: dict[str, SupplierExtractor] = with_moved_fallbacks(
         _ELEGANT.id: _ELEGANT,
         _DOTS.id: _DOTS,
         _BELVUS.id: _BELVUS,
+        _WASEWIND.id: _WASEWIND,
         # Expert escape hatch, listed last so it sorts to the bottom of the
         # supplier dropdown.
         _CUSTOM.id: _CUSTOM,

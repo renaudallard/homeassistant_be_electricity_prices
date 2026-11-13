@@ -277,7 +277,8 @@ Eneco, Energy Knights (Agilis Online), Frank Energie (by default), Luminus, Mega
 and TotalEnergies price per clock hour, so the integration aggregates the
 15-minute day-ahead curve to hourly and these leave the flag `False`. Belvus
 (Dynamisch), Cociter, Dots Energy, EBEM, Ecofix, Ecopower (Dynamische Burgerstroom), energie.be, Energy Knights
-(Agilior Online, Optima Online), EnergyVision, Engie, OCTA+ and Trevion bill per quarter-hour
+(Agilior Online, Optima Online), EnergyVision, Engie, OCTA+, Trevion and Wase Wind (Vol dynamisch,
+Vast-dynamisch) bill per quarter-hour
 (their cards multiply the 15-minute Belpex / eSpot_15 / Epex 15 / EPEX DA spot)
 and set it `True`; Bolt and Frank sell one card on both settlements, and
 `resolve_settlement_grid` sets the flag from the entry's answer;

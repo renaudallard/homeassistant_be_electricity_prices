@@ -7751,8 +7751,9 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # well inside the supplier's 9,1 s reservation. Belvus adds Flex
         # Online and Smart Plus, two month-indexed variable cards that read
         # in about 0,3 s each. TotalEnergies' five professional products add
-        # five to each region's professional static cell.
-        ("flanders", "static", False): 60,
+        # five to each region's professional static cell. Wase Wind adds
+        # Vast-variabel, a month-indexed card that reads in about 0,7 s.
+        ("flanders", "static", False): 61,
         ("flanders", "static", True): 25,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land
@@ -7772,7 +7773,8 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # sold add five monthly cards at the same 28,4 s, VT's twin withdrawn
         # with it. Dots Energy adds its two dynamic cards, which read in
         # about 1,5 s each, and Belvus Dynamisch one more at about 0,5 s.
-        ("flanders", "spot", False): 45,
+        # Wase Wind adds Vol dynamisch and Vast-dynamisch at about 0,7 s.
+        ("flanders", "spot", False): 47,
         ("flanders", "spot", True): 6,
         ("flanders", "slot", False): 2,
         ("flanders", "slot", True): 1,

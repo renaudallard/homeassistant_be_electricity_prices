@@ -109,7 +109,8 @@ def _energy_is_quarter_hourly(energy: EnergyRates) -> bool:
 
     Engie, Cociter, EBEM, Ecofix, OCTA+, Ecopower (Dynamische
     Burgerstroom), Bolt (Dynamisch), energie.be, EnergyVision, Energy Knights
-    (Agilior Online), Dots Energy and Belvus (Dynamisch) dynamic contracts set
+    (Agilior Online), Dots Energy, Belvus (Dynamisch) and Wase Wind (Vol
+    dynamisch, Vast-dynamisch) dynamic contracts set
     ``quarter_hourly`` (their cards price on the 15-minute Belpex / eSpot_15 /
     Epex 15 / EPEX DA / Belpex_15M spot);
     every other contract (static, TOU, hourly-billed dynamic such as

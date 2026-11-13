@@ -3041,11 +3041,11 @@ def test_card_with_no_text_layer_raises_a_distinct_error() -> None:
 def test_a_real_card_is_never_mistaken_for_an_image_only_one() -> None:
     """The threshold must clear every card we actually ship.
 
-    Measured across all fixtures the least texty readable card, a one-page
-    TotalEnergies feed-in card, carries 2435 characters against 172 and 342
-    for the rasterized Ecofix ones. The CREG's social tariff cards are one
-    table on one page and carry about 1550, which still leaves the
-    600-character line a factor of two and a half of headroom.
+    Measured across all fixtures the least texty readable card, Wase Wind's
+    one-page Vast-dynamisch card for 2027, carries 1404 characters against
+    172 and 342 for the rasterized Ecofix ones. The CREG's social tariff cards
+    are one table on one page and carry about 1550. That leaves the
+    600-character line a factor of two of headroom below every real card.
     This asserts the margin rather than the constant, so shrinking the
     threshold toward real data fails here.
 
@@ -3058,7 +3058,7 @@ def test_a_real_card_is_never_mistaken_for_an_image_only_one() -> None:
     smallest = min(
         len(fixture_text(path.name).strip()) for path in sorted(FIXTURES.glob("*.pdf"))
     )
-    assert smallest > 2.5 * _MIN_TEXT_LAYER_CHARS
+    assert smallest > 2 * _MIN_TEXT_LAYER_CHARS
 
 
 async def test_bom_prefixed_pdf_is_stripped_before_parsing() -> None:

@@ -101,6 +101,7 @@ machinery.
 | `tests/test_totalenergies.py` | TotalEnergies extractor |
 | `tests/test_totalenergies_pro.py` | TotalEnergies' professional cards |
 | `tests/test_trevion.py` | Trevion extractor |
+| `tests/test_wasewind.py` | Wase Wind extractor |
 | `tests/test_pricing.py` | `pricing.compute_breakdown` and its helpers (energy, network, taxes, TOU/offpeak, holidays, impact bands, meter fixed fee) |
 | `tests/test_coordinator_runtime.py` | `BePricesCoordinator` force-refresh, stale-snapshot Repairs issue, shared caches |
 | `tests/test_coordinator_helpers.py` | Coordinator helper functions in isolation |
@@ -350,7 +351,8 @@ main()                       scripts/live_check.py  asyncio.run(_run()); rc=8 on
       ...                                                 bolt, octaplus, frank, energiebe,
                                                           energyvision, energyknights,
                                                           trevion, aspiravi, social,
-                                                          elegant, dots, belvus)
+                                                          elegant, dots, belvus,
+                                                          wasewind)
     _check_catalogs(...)     scripts/live_check.py   run each discover(), flag new and vanished product ids
     _check_card_freshness()  scripts/live_check.py   resolved card == newest advertised
     _fetch_with_retry(...)   scripts/live_check.py   transient-only retry with backoff

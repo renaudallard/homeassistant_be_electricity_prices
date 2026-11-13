@@ -69,6 +69,7 @@ changes, look here" reference tied to the provider's tests and fixtures.
 | Social tariff (CREG) | [providers/social.md](providers/social.md) |
 | TotalEnergies | [providers/totalenergies.md](providers/totalenergies.md) |
 | Trevion | [providers/trevion.md](providers/trevion.md) |
+| Wase Wind | [providers/wasewind.md](providers/wasewind.md) |
 
 ## Reading order
 

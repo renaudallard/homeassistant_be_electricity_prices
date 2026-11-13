@@ -38,9 +38,10 @@ from custom_components.be_electricity_prices.providers import (
     mega,
     octaplus,
     totalenergies,
+    wasewind,
 )
 from custom_components.be_electricity_prices.providers.base import SupplierSnapshot
-from tests import fixture_text
+from tests import fixture_text, fluvius_network
 
 # Lays out real cards, Bolt's among them, which ran past 60 s with no
 # text cached on a loaded Raspberry Pi 4.
@@ -103,6 +104,24 @@ _CASES: list[tuple[str, str, Callable[[], SupplierSnapshot]]] = [
         "belvus_dynamisch",
         lambda: belvus.parse_snapshot(
             "belvus_dynamisch", fixture_text("belvus_dynamisch_2026-11.pdf")
+        ),
+    ),
+    (
+        "wasewind",
+        "wasewind_vast_variabel",
+        lambda: wasewind.parse_snapshot(
+            "wasewind_vast_variabel",
+            fixture_text("wasewind_vast_variabel_2026-11.pdf", layout=True),
+            fluvius_network(2026),
+        ),
+    ),
+    (
+        "wasewind",
+        "wasewind_vol_dynamisch",
+        lambda: wasewind.parse_snapshot(
+            "wasewind_vol_dynamisch",
+            fixture_text("wasewind_vol_dynamisch_2026-11.pdf", layout=True),
+            fluvius_network(2026),
         ),
     ),
     (

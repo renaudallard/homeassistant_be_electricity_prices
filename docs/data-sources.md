@@ -1556,6 +1556,13 @@ Fluvius's 2025 table, where every other supplier's card of those months has
 it reads its area's sheet like a withdrawn product's. The backfill's hold
 does not wait for that sheet: until it is read, the card's table bills.
 
+Wase Wind's cards print no network table at all, so its reader takes every
+area's off these sheets for the card's year (`ensure_area_terms`,
+`held_area_terms`), grossed at the VAT rate the card states, and refuses the
+card while an area has none. Until Fluvius lists the year's sheets the year
+before's stand in, and the card says so through `network_year`, so a month of
+the later year takes its own sheet once it is read, as on Belvus's.
+
 ### Caching and failure
 
 `ensure_tariff_sheet` runs in the tick of a Flemish entry, before the card
@@ -1605,7 +1612,8 @@ read or lands outside 0 to 0,2 EUR/kWh; a fetch that heals on its own passes,
 as for the sheet.
 
 The parser is tested on the 2026 Zenne-Dijle sheet and the 2023 Antwerpen one
-as Fluvius served them on 2026-10-19 (`tests/fixtures/fluvius_*.xlsx`), and
+as Fluvius served them on 2026-10-19 (`tests/fixtures/fluvius_*.xlsx`), the
+other six areas' 2026 sheets as served on 2026-11-14 for Wase Wind's tests, and
 `parse_analog_surcharge` was run on every area's sheet of 2025 and 2026 and the
 2023 and 2024 sheets of all ten operators of the time.
 

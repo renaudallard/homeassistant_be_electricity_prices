@@ -1134,7 +1134,8 @@ meter type (`providers/_rates.py`).
 (`pricing.py`). The spot is the ENTSO-E BE day-ahead price for the slot.
 `DynamicRates.quarter_hourly` selects whether the contract bills on the native
 15-minute grid (Belvus Dynamisch, Cociter, Dots Energy, EBEM, Ecofix,
-Ecopower Dynamische Burgerstroom, energie.be, Energy Knights Agilior Online, EnergyVision, Engie, OCTA+, Trevion)
+Ecopower Dynamische Burgerstroom, energie.be, Energy Knights Agilior Online, EnergyVision, Engie, OCTA+, Trevion,
+Wase Wind Vol dynamisch and Vast-dynamisch)
 or the hourly-aggregated curve (Eneco, Energy Knights Agilis Online, Frank by
 default, Luminus, Mega, TotalEnergies).
 Bolt and Frank sell one card on both settlements, so their entries answer for

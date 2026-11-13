@@ -105,6 +105,7 @@ _SUPPLIERS: tuple[str, ...] = (
     "elegant",
     "dots",
     "belvus",
+    "wasewind",
 )
 
 
@@ -797,6 +798,7 @@ _STATES_VAT = frozenset(
         "mega",
         "totalenergies",
         "trevion",
+        "wasewind",
     }
 )
 # A card of one of those stating none, already looked at: it is priced on the
@@ -1656,6 +1658,12 @@ async def _check_belvus(
     await _check_flanders_supplier(session, belvus, "belvus")
 
 
+async def _check_wasewind(
+    session: aiohttp.ClientSession, wasewind: types.ModuleType
+) -> None:
+    await _check_flanders_supplier(session, wasewind, "wasewind")
+
+
 async def _check_social(
     session: aiohttp.ClientSession, social: types.ModuleType
 ) -> None:
@@ -2500,6 +2508,7 @@ _CATALOG_BASELINES: dict[str, Callable[[types.ModuleType], set[str]]] = {
     "trevion": lambda m: {c.id for c in m._CONTRACTS},
     "dots": lambda m: {p.contract_id for p in m._PRODUCTS},
     "belvus": lambda m: {p.contract_id for p in m._PRODUCTS},
+    "wasewind": lambda m: {p.contract_id for p in m._PRODUCTS},
 }
 
 
@@ -3034,6 +3043,9 @@ async def _check_keyless_source(
 # protected customer's excise and the CREG's flat network component in place
 # of each operator's tariffs, so the consensus checks on those leave it out.
 _OFF_MARKET_SUPPLIERS = frozenset({"social"})
+# Suppliers whose cards print no network table, whose rows carry the
+# regulator's sheet: a vote of theirs would be the sheet agreeing with itself.
+_SHEET_NETWORK_SUPPLIERS = frozenset({"wasewind"})
 
 
 def _check_vreg_ceiling_consensus(
@@ -4038,13 +4050,14 @@ def _network_votes(
     Each row is put on the ex-VAT basis first: a residential card stores the
     figure including VAT, at the rate it states or else the month's
     (:func:`_residential_vat`), and a professional one the regulator's ex-VAT
-    figure. The social tariff's rows and the figures a card's structure sets
-    apart (``_NETWORK_STRUCTURAL``) do not vote.
+    figure. The social tariff's rows, those of a card printing no network
+    table (``_SHEET_NETWORK_SUPPLIERS``) and the figures a card's structure
+    sets apart (``_NETWORK_STRUCTURAL``) do not vote.
     """
     rows = [
         row
         for row in sorted(archive.glob("cards/*/*/*/????-??.json"))
-        if row.parts[-4] not in _OFF_MARKET_SUPPLIERS
+        if row.parts[-4] not in _OFF_MARKET_SUPPLIERS | _SHEET_NETWORK_SUPPLIERS
     ]
     if not rows:
         return None
@@ -4851,6 +4864,11 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
 # Anything not listed is derived from contract metadata by
 # _expected_injection_shape, so a new card is covered without editing this map.
 _INJECTION_SHAPE: dict[str, str] = {
+    # Wase Wind Vast-dynamisch prices its energy per quarter hour but fixes
+    # its feed-in at 2,0 c€/kWh on every 2026 card. Its 2027 cards price the
+    # feed-in on the quarter-hourly Belpex, which is "present", as
+    # Vast-variabel's 2027 month formula is "month".
+    "wasewind_vast_dynamisch": "monthly",
     # Eneco Power Fix and Flex index their credit on Belpex-injectie, the
     # plain arithmetic monthly mean, and print the LAST KNOWN value of it as
     # an estimate. Both the coefficients and the flag have to survive: the
@@ -6247,6 +6265,7 @@ _CHECKS_BY_SUPPLIER: dict[
     "elegant": _check_elegant,
     "dots": _check_dots,
     "belvus": _check_belvus,
+    "wasewind": _check_wasewind,
 }
 assert set(_CHECKS_BY_SUPPLIER) == set(_SUPPLIERS), (
     "live check supplier list and check registry disagree: "
