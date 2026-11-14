@@ -113,6 +113,12 @@ _SUPPLIER: Final = "wasewind"
 _LABEL: Final = "Wase Wind"
 _SITE: Final = "https://www.wasewind.be"
 
+# The text-layer floor its cards are held to. The one-page 2027 Vast card
+# gives 979 characters, too few for twice the readers' default of 600, so
+# the floor is just under half of it and still above the 342 of the largest
+# image-only card seen.
+MIN_TEXT_CHARS: Final = 480
+
 
 @dataclass(frozen=True)
 class _Product:
@@ -319,7 +325,7 @@ async def _read(
     session: aiohttp.ClientSession, product: _Product, url: str, month: date
 ) -> tuple[SupplierSnapshot, str]:
     """The card at ``url``, which the listing gives for ``month``."""
-    text = await fetch_pdf_text_layout(session, url)
+    text = await fetch_pdf_text_layout(session, url, min_text_chars=MIN_TEXT_CHARS)
     year = _card_year(text)
     network, network_year = await _network(session, year)
     snap = parse_snapshot(

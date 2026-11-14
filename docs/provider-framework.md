@@ -686,7 +686,7 @@ Internals worth knowing:
   failed tick's and ENTSO-E's (`coordinator.py`, `coordinator_prices.py`), and
   `_sync_entsoe_auth_issue` the text the `entsoe_auth_failed` Repairs card
   quotes.
-- `_is_pdf_payload` (`_pdf.py`) validates by magic bytes (`%PDF`, allowing a
+- `_is_pdf_payload` (`_pdf_payload.py`) validates by magic bytes (`%PDF`, allowing a
   leading UTF-8 BOM that OCTA+ prepends and blank space after it, which some
   servers emit), not Content-Type, because some CDNs return 200 + text/html for
   a missing PDF, and Engie's API returns octet-stream for valid PDFs.
@@ -705,7 +705,7 @@ Internals worth knowing:
   goes to the debug log only: the message reaches `last_error`, the Repairs
   card and the sensors' attributes, and copying the payload's first 80 bytes
   into it put whatever the server sent there, links and images included.
-- `_storage_error_code` (`_pdf.py`) splits one case back out of that
+- `_storage_error_code` (`_pdf_payload.py`) splits one case back out of that
   catch-all. An object store refusing the read answers the proxy in front of it
   with its own XML error document, which the proxy passes through as a 200, so
   the payload is not a PDF and used to report as a permanent parse failure.

@@ -143,7 +143,7 @@ machinery.
 | `tests/test_discover.py` | Every supplier's `discover()` against a frozen listing snippet |
 | `tests/test_archive_errors.py` | Every provider's archive lookup (`fetch_for_month`) raises on a transient failure |
 | `tests/test_window_service.py` | The window search behind the `cheapest_window` and `most_expensive_window` services |
-| `tests/test_pdf_helpers.py` | Shared PDF fetching and text extraction (`providers/_pdf.py`, `providers/_pdf_render.py`) |
+| `tests/test_pdf_helpers.py` | Shared PDF fetching and text extraction (`providers/_pdf.py`, `providers/_pdf_payload.py`, `providers/_pdf_render.py`) |
 | `tests/test_redirect_hops.py` | Every redirect hop is checked before it is asked (`checked_request`, `providers/_pdf.py`), over a local TLS server and a stand-in LAN device that records every connection, and Dots's card redirect is followed on its own site and never off it |
 | `tests/test_markup.py` | The tags taken out of a fetched page (`providers/_markup.py`): every real page the suite holds reads as through the plain pattern, and a page of stray brackets costs its length |
 | `tests/test_parse.py` | The shared card readers of `providers/_parse.py` on crafted card text: the Brussels OSP table, the ORES sub-area rows and the degressive excise rows cost the length of the text, and `LINE_BREAK` reads what `\s*\n\s*` reads |
@@ -1409,7 +1409,9 @@ A card whose reader refuses it -- a supplier publishing page images, which Ecofi
 since August 2026 -- is handed to `ocr_price_cards` (`_ocr_text`, `scripts/archive_cards.py`)
 before it is given up on. That engine knows the fonts those cards are set in glyph by glyph and
 refuses a mark it cannot place; the reading is taken from `trusted_text`, which drops any line
-carrying a refused mark, and is held to the same floor a text layer is (`_MIN_TEXT_LAYER_CHARS`),
+carrying a refused mark, and is held to the floor the card's text layer was held to (its
+supplier's own `MIN_TEXT_CHARS` where it sets one, else `_MIN_TEXT_LAYER_CHARS`, carried on the
+`CardNotReadableError`),
 so a mostly-refused page is no row rather than a row of silent misses. The row it produces
 marks the SOURCE it read that way, as `"ocr"` on the `_sources` entry beside the pdf digest it
 describes, the engine and library versions that read it; every other PDF source names the text

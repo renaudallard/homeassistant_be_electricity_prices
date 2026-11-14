@@ -316,7 +316,7 @@ _KEEP_MONTHS = 36
 _ROWS = "cards"
 
 
-def _ocr_text(payload: bytes) -> str:
+def _ocr_text(payload: bytes, min_chars: int = _MIN_TEXT_LAYER_CHARS) -> str:
     """What an OCR engine reads off a card that carries no text layer.
 
     The last thing tried, and only here. Ecofix has published its cards as
@@ -349,10 +349,11 @@ def _ocr_text(payload: bytes) -> str:
         text = str(read_pdf(payload, strict=False).trusted_text)
     except Exception as err:
         raise CardNotReadableError(f"OCR could not read the card: {err}") from err
-    # A reading is held to the floor a text layer is held to, for the reason
-    # that floor exists: one that refused most of the page leaves a row full
-    # of silent misses, and no row at all is the better answer.
-    if len(text.strip()) < _MIN_TEXT_LAYER_CHARS:
+    # A reading is held to the floor the card's text layer was held to, its
+    # supplier's own where it sets one, for the reason that floor exists: one
+    # that refused most of the page leaves a row full of silent misses, and
+    # no row at all is the better answer.
+    if len(text.strip()) < min_chars:
         raise CardNotReadableError(
             f"OCR read only {len(text.strip())} characters it was sure of, "
             "which is too little of a card to price on"
@@ -429,8 +430,9 @@ class _Cards(StoredTexts):
         self.seen.append((url, digest))
         try:
             return await super().render(variant, url, payload, renderer)
-        except CardNotReadableError:
-            text = await in_daemon_thread(_ocr_text, payload)
+        except CardNotReadableError as err:
+            floor = err.min_chars or _MIN_TEXT_LAYER_CHARS
+            text = await in_daemon_thread(lambda pdf: _ocr_text(pdf, floor), payload)
         self.rendered += 1
         self.fresh[(variant, digest)] = text
         self.calls.append((variant, url, digest, text))

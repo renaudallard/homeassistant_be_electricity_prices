@@ -53,7 +53,9 @@ from ._links import on_hosts
 from ._parse import (
     to_float,
 )
+from ._pdf_payload import _is_pdf_payload, _storage_error_code, _strip_pdf_prefix
 from ._pdf_render import (
+    _MIN_TEXT_LAYER_CHARS,
     extract_pdf_text,
     extract_pdf_text_aligned,
     extract_pdf_text_layout,
@@ -398,52 +400,6 @@ async def checked_request(
         target, params = hop, None
 
 
-def _strip_pdf_prefix(payload: bytes) -> bytes:
-    """The bytes without a UTF-8 BOM, then blank space, ahead of ``%PDF``.
-
-    Some publishers prepend the BOM (\\ufeff = 3 bytes EF BB BF): OCTA+'s
-    tariff PDFs do this, and some servers a newline. Either has to come off
-    rather than merely be tolerated: pdfplumber fails such a file with "No
-    /Root object! - Is this really a PDF?", which reads like a corrupt card
-    rather than a few stray bytes. pypdf recovers on its own, so the two
-    aligned/layout variants are the ones this protects.
-    """
-    return payload.removeprefix(b"\xef\xbb\xbf").lstrip(b"\r\n\t ")
-
-
-def _is_pdf_payload(payload: bytes) -> bool:
-    """Return True if the bytes look like a PDF: ``%PDF`` once
-    :func:`_strip_pdf_prefix` has taken off what may precede it."""
-    return _strip_pdf_prefix(payload).startswith(b"%PDF")
-
-
-# An object store that refuses the read answers the proxy in front of it
-# with its own XML error document, and the proxy passes that through as a
-# 200. Azure Blob and S3 both shape it as a root <Error> carrying a <Code>.
-_STORAGE_ERROR_RE = re.compile(
-    rb"^(?:\xef\xbb\xbf)?\s*(?:<\?xml[^>]*\?>\s*)?<Error>\s*<Code>([^<]{1,64})</Code>",
-    re.IGNORECASE,
-)
-
-
-def _storage_error_code(payload: bytes) -> str | None:
-    """The error code if ``payload`` is an object-store error document.
-
-    Luminus switched anonymous access off on the storage account behind
-    ``api-next/get-pricelist`` on 2026-08-10, and every card came back as
-    a 248-byte ``PublicAccessNotPermitted`` document under a 200. Read as
-    a plain non-PDF payload that reports as a permanent parse failure, so
-    every Luminus entry raised the ``extractor_failed`` card asking the
-    user to report a layout change that had not happened. The supplier's
-    own download button was broken the same way, and nothing here could
-    fix it, which is the definition of transient in this taxonomy.
-    """
-    match = _STORAGE_ERROR_RE.match(payload)
-    if match is None:
-        return None
-    return match.group(1).decode("ascii", "replace").strip() or None
-
-
 async def _fetch_validated_pdf_bytes(
     session: aiohttp.ClientSession,
     url: str,
@@ -563,12 +519,31 @@ async def render_pdf(
     return await hook(variant, url, payload, render)
 
 
+def _floored(variant: str, min_chars: int) -> str:
+    """``variant`` with the text-layer floor in it where it is not the
+    default: the floor decides whether a text is returned at all, so two
+    callers reading one card at different floors must not share a memo
+    entry, nor a text the card archive stored."""
+    if min_chars == _MIN_TEXT_LAYER_CHARS:
+        return variant
+    return f"{variant}:min{min_chars}"
+
+
 async def fetch_pdf_text(
-    session: aiohttp.ClientSession, url: str, *, timeout: int = 30
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    timeout: int = 30,
+    min_text_chars: int = _MIN_TEXT_LAYER_CHARS,
 ) -> str:
-    """Download ``url`` and return the concatenated extracted text."""
+    """Download ``url`` and return the concatenated extracted text, held to
+    ``min_text_chars`` characters before it counts as a text layer."""
     return await _pdf_text(
-        session, url, variant="plain", timeout=timeout, render=extract_pdf_text
+        session,
+        url,
+        variant=_floored("plain", min_text_chars),
+        timeout=timeout,
+        render=lambda payload: extract_pdf_text(payload, min_text_chars),
     )
 
 
@@ -579,6 +554,7 @@ async def fetch_pdf_text_aligned(
     *,
     timeout: int = 30,
     hosts: Collection[str] | None = None,
+    min_text_chars: int = _MIN_TEXT_LAYER_CHARS,
 ) -> str:
     """Word-coordinate aligned variant of :func:`fetch_pdf_text`, every hop
     held to ``hosts`` where given (:func:`checked_request`)."""
@@ -587,15 +563,21 @@ async def fetch_pdf_text_aligned(
         url,
         # The threshold changes the output, so it belongs in the memo key: two
         # callers reading one card at different thresholds want two strings.
-        variant=f"aligned:{x_join_threshold}",
+        variant=_floored(f"aligned:{x_join_threshold}", min_text_chars),
         timeout=timeout,
-        render=lambda payload: extract_pdf_text_aligned(payload, 3, x_join_threshold),
+        render=lambda payload: extract_pdf_text_aligned(
+            payload, 3, x_join_threshold, min_text_chars
+        ),
         hosts=hosts,
     )
 
 
 async def fetch_pdf_text_layout(
-    session: aiohttp.ClientSession, url: str, *, timeout: int = 30
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    timeout: int = 30,
+    min_text_chars: int = _MIN_TEXT_LAYER_CHARS,
 ) -> str:
     """Layout-preserving variant of :func:`fetch_pdf_text`.
 
@@ -604,7 +586,11 @@ async def fetch_pdf_text_layout(
     parser never tries to read a PDF that isn't.
     """
     return await _pdf_text(
-        session, url, variant="layout", timeout=timeout, render=extract_pdf_text_layout
+        session,
+        url,
+        variant=_floored("layout", min_text_chars),
+        timeout=timeout,
+        render=lambda payload: extract_pdf_text_layout(payload, min_text_chars),
     )
 
 

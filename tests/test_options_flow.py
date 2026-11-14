@@ -9059,11 +9059,11 @@ async def test_text_memo_spares_the_second_parse_of_a_shared_card() -> None:
         fetches.append(url)
         return b"%PDF-1.4 payload"
 
-    def _layout(payload: bytes) -> str:
+    def _layout(payload: bytes, _min_chars: int) -> str:
         renders.append("layout")
         return "LAYOUT"
 
-    def _aligned(payload: bytes, _pages: int, threshold: float) -> str:
+    def _aligned(payload: bytes, _pages: int, threshold: float, _min_chars: int) -> str:
         renders.append(f"aligned:{threshold}")
         return f"ALIGNED{threshold}"
 

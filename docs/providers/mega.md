@@ -329,7 +329,7 @@ Cosy Flex rows on the estimate, April billing 15,34 c/kWh where the May card sta
 
 `fetch_for_month` returns `None` when the URL 404s, when the CDN serves its HTML
 stub for a non-archived effective day (the PDF magic-byte check in
-`_is_pdf_payload`, `_pdf.py`, rejects it) under every candidate, when the parse
+`_is_pdf_payload`, `_pdf_payload.py`, rejects it) under every candidate, when the parse
 fails, or when the requested month falls outside the archive, so the walk falls back
 to the proxy (`mega.py`).
 

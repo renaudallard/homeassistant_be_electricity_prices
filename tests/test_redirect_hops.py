@@ -310,11 +310,12 @@ async def test_a_redirect_to_the_lan_is_never_requested(
     if reader == "probe":
         assert await head_freshness_key(net.session, url) is None
     else:
-        read: Callable[[aiohttp.ClientSession, str], Awaitable[Any]] = {
+        readers: dict[str, Callable[[aiohttp.ClientSession, str], Awaitable[Any]]] = {
             "text": fetch_text,
             "pdf": fetch_pdf_text,
             "head": head_or_raise,
-        }[reader]
+        }
+        read = readers[reader]
         with pytest.raises(ExtractorError) as raised:
             await read(net.session, url)
         # The redirect's address can be a LAN device's: it stays out of

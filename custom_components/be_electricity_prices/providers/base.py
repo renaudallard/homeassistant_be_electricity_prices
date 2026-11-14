@@ -649,7 +649,14 @@ class CardNotReadableError(ExtractorError):
     otherwise until someone shipped a release to clear it. Raising on what
     the current download actually contains self-heals the moment readable
     cards return, and covers any supplier that starts doing this.
+
+    ``min_chars`` is the floor the reader held the text to, which the card
+    archive holds an OCR reading of the same card to.
     """
+
+    def __init__(self, message: str, *, min_chars: int | None = None) -> None:
+        super().__init__(message)
+        self.min_chars = min_chars
 
 
 class ShortNetworkTableError(ExtractorError):

@@ -86,8 +86,6 @@ from ._parse import (
 )
 from ._pdf import (
     FR_MONTHS,
-    _is_pdf_payload,
-    _strip_pdf_prefix,
     fetch_pdf_text_aligned,
     fetch_text,
     head_freshness_key,
@@ -96,6 +94,7 @@ from ._pdf import (
     render_pdf,
     vat_multiplier,
 )
+from ._pdf_payload import _is_pdf_payload, _strip_pdf_prefix
 from ._pdf_render import (
     extract_pdf_text,
     extract_pdf_text_aligned,

@@ -38,6 +38,7 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import aiohttp
 import pytest
@@ -58,6 +59,7 @@ from custom_components.be_electricity_prices.providers._pdf import (
     MAX_TEXT_BYTES,
     _fetch_validated_pdf_bytes,
     fetch_pdf_text,
+    fetch_pdf_text_layout,
     fetch_text,
     head_freshness_key,
     head_ok,
@@ -3037,7 +3039,58 @@ def test_card_with_no_text_layer_raises_a_distinct_error() -> None:
     assert isinstance(excinfo.value, ExtractorError)
 
 
-# Reads every fixture card; 382 s with none cached on a loaded Raspberry Pi 4.
+def test_a_reader_holds_the_text_to_the_floor_it_is_given() -> None:
+    """A supplier whose cards run short passes a lower floor of its own, and
+    the error says which floor the text missed, for the card archive to hold
+    an OCR reading of the same card to it."""
+    payload = (FIXTURES / "wasewind_vast_dynamisch_2027-00.pdf").read_bytes()
+    assert len(extract_pdf_text_layout(payload).strip()) > 1300
+    with pytest.raises(CardNotReadableError) as excinfo:
+        extract_pdf_text_layout(payload, min_chars=1500)
+    assert excinfo.value.min_chars == 1500
+    with pytest.raises(CardNotReadableError) as blank:
+        extract_pdf_text(_blank_one_page_pdf())
+    assert blank.value.min_chars == _MIN_TEXT_LAYER_CHARS
+
+
+async def test_a_floor_of_its_own_is_its_own_memo_entry() -> None:
+    """The floor decides whether a text comes back at all, so a reader at a
+    floor of its own reads under a variant of its own, and the default floor
+    keeps the variant every stored text is filed under."""
+    payload = (FIXTURES / "wasewind_vast_dynamisch_2027-00.pdf").read_bytes()
+    seen: list[str] = []
+
+    async def render(
+        variant: str, _url: str, body: bytes, renderer: Callable[[bytes], str]
+    ) -> str:
+        seen.append(variant)
+        return renderer(body)
+
+    with (
+        patch.object(
+            _pdf, "_fetch_validated_pdf_bytes", AsyncMock(return_value=payload)
+        ),
+        patch.object(_pdf, "render_pdf", render),
+    ):
+        await fetch_pdf_text_layout(object(), "https://x.test/a.pdf")  # type: ignore[arg-type]
+        await fetch_pdf_text_layout(
+            object(),  # type: ignore[arg-type]
+            "https://x.test/a.pdf",
+            min_text_chars=400,
+        )
+        with pytest.raises(CardNotReadableError):
+            await fetch_pdf_text_layout(
+                object(),  # type: ignore[arg-type]
+                "https://x.test/a.pdf",
+                min_text_chars=1500,
+            )
+    assert seen == ["layout", "layout:min400", "layout:min1500"]
+
+
+# The largest image-only card seen, Ecofix's August 2026 one: a supplier's
+# own floor must stay above it, or such a card would be read as text.
+_LARGEST_IMAGE_ONLY_CARD = 342
+
 _READER_MODES = {
     "fetch_pdf_text": "plain",
     "extract_pdf_text": "plain",
@@ -3051,16 +3104,35 @@ _READER_MODES = {
 _CARD_MODULES = {"creg": "providers/social.py"}
 
 
-def _reader_modes(prefix: str) -> set[str]:
-    """The readers the module behind the ``prefix`` fixtures uses, off its
-    syntax tree, so a comment naming one does not count and a reader handed
-    over as a render function does."""
+def _card_module(prefix: str) -> Path:
+    """The module that reads the ``prefix`` fixtures."""
     from tests import PACKAGE
 
     path = PACKAGE / _CARD_MODULES.get(prefix, f"providers/{prefix}.py")
     if not path.exists():
         path = PACKAGE / f"{prefix}.py"
     assert path.exists(), f"no module reads the {prefix} fixtures"
+    return path
+
+
+def _text_floor(prefix: str) -> int:
+    """The text-layer floor the module behind the ``prefix`` fixtures holds
+    its cards to: its own ``MIN_TEXT_CHARS``, else the readers' default."""
+    import importlib
+
+    from tests import PACKAGE
+
+    path = _card_module(prefix)
+    name = ".".join(path.relative_to(PACKAGE.parent.parent).with_suffix("").parts)
+    floor = getattr(importlib.import_module(name), "MIN_TEXT_CHARS", None)
+    return _MIN_TEXT_LAYER_CHARS if floor is None else int(floor)
+
+
+def _reader_modes(prefix: str) -> set[str]:
+    """The readers the module behind the ``prefix`` fixtures uses, off its
+    syntax tree, so a comment naming one does not count and a reader handed
+    over as a render function does."""
+    path = _card_module(prefix)
     tree = ast.parse(path.read_text(encoding="utf-8"))
     modes = {
         _READER_MODES[name]
@@ -3102,8 +3174,14 @@ def test_a_real_card_is_never_mistaken_for_an_image_only_one() -> None:
         for path in sorted(FIXTURES.glob("*.pdf"))
         for mode in sorted(_reader_modes(path.name.split("_", 1)[0]))
     }
-    smallest = min(sizes, key=sizes.__getitem__)
-    assert sizes[smallest] > 2 * _MIN_TEXT_LAYER_CHARS, smallest
+    short = [
+        (name, mode, size, floor)
+        for (name, mode), size in sizes.items()
+        if size <= 2 * (floor := _text_floor(name.split("_", 1)[0]))
+    ]
+    assert not short
+    floors = {_text_floor(name.split("_", 1)[0]) for name, _mode in sizes}
+    assert min(floors) > _LARGEST_IMAGE_ONLY_CARD
 
 
 async def test_bom_prefixed_pdf_is_stripped_before_parsing() -> None:

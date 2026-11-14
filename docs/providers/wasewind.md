@@ -22,6 +22,7 @@ alongside the framework and pricing references:
 | Label | `Wase Wind` | `wasewind.py` |
 | Region(s) served | Flanders only | `EXTRACTOR`, `wasewind.py` |
 | Publication form | One PDF card per product and month, read layout-preserving | `fetch` |
+| Text-layer floor | 480 characters, its own (`MIN_TEXT_CHARS`): the one-page 2027 Vast card gives 979, under twice the readers' default of 600 | `_read` |
 | Listing | `https://www.wasewind.be/tariefkaarten-<year>-incl.-btw-<product>`, one page per product and year | `_listing_url` |
 | Archive | Every card of the year the listing links | `fetch_for_month` |
 | Probe | The address of the card `fetch` reads | `probe` |

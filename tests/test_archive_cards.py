@@ -2589,11 +2589,14 @@ def _ocr_engine(read_pdf: object) -> Iterator[None]:
         del sys.modules["ocr_price_cards"]
 
 
-def _page_image_fetch(session: _PdfSession) -> Fetch:
-    """A supplier whose card carries no text layer, the way Ecofix's does."""
+def _page_image_fetch(session: _PdfSession, min_chars: int | None = None) -> Fetch:
+    """A supplier whose card carries no text layer, the way Ecofix's does,
+    held to ``min_chars`` where its reader sets a floor of its own."""
 
     def render(_payload: bytes) -> str:
-        raise CardNotReadableError("card has no text layer: 172 characters")
+        raise CardNotReadableError(
+            "card has no text layer: 172 characters", min_chars=min_chars
+        )
 
     async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
         # The canned session while it holds the card; once the test empties
@@ -2641,6 +2644,27 @@ async def test_a_page_image_card_is_read_by_ocr_and_the_row_says_so(
     assert row["energy"]["single"] == 0.2
     # Nothing is left owing an explanation: the card parsed.
     assert not (out / "unparsed.json").exists()
+
+
+@pytest.mark.parametrize(("floor", "stored"), [(None, 0), (300, 1)])
+async def test_an_ocr_reading_is_held_to_the_floor_the_card_missed(
+    tmp_path: Path, floor: int | None, stored: int
+) -> None:
+    """A reading of 396 characters is too little of a card under the
+    readers' default floor, and enough for a supplier whose reader holds
+    its cards to 300: the reading is held to the floor the card missed."""
+    out = tmp_path / "out"
+    session = _PdfSession({PDF_URL: b"%PDF page images"})
+    read = "Maandprijs: 11,81 11,81 11,81 11,81\n" * 11
+    assert 300 < len(read.strip()) < 600
+    with _ocr_engine(lambda payload, strict: SimpleNamespace(trusted_text=read)):
+        summary = await ac.archive(
+            out,
+            extractors=[_extractor(_page_image_fetch(session, floor))],
+            now=NOW,
+            sleep=_no_sleep,
+        )
+    assert summary.stored == stored
 
 
 async def test_the_ocr_mark_survives_a_text_served_from_the_archive(

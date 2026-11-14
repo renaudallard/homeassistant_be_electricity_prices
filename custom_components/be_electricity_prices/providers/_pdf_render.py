@@ -56,20 +56,22 @@ _LOGGER = logging.getLogger(__name__)
 # 600 sits 1,75 times above the rasterized ones and 2,1 times below the
 # smallest real one. Raising here only changes
 # WHICH error the user is shown: a card with no text layer was already going
-# to fail its parse.
+# to fail its parse. A supplier whose cards run shorter passes a lower floor
+# of its own to the reader (``min_chars``), held to half its smallest card.
 _MIN_TEXT_LAYER_CHARS = 600
 
 
-def _require_text_layer(text: str, pages: int) -> None:
+def _require_text_layer(text: str, pages: int, min_chars: int) -> None:
     """Raise :class:`CardNotReadableError` for an image-only PDF."""
-    if pages and len(text.strip()) < _MIN_TEXT_LAYER_CHARS:
+    if pages and len(text.strip()) < min_chars:
         raise CardNotReadableError(
             f"card has no text layer: {len(text.strip())} characters across "
-            f"{pages} page(s), so it is published as page images"
+            f"{pages} page(s), so it is published as page images",
+            min_chars=min_chars,
         )
 
 
-def extract_pdf_text(payload: bytes) -> str:
+def extract_pdf_text(payload: bytes, min_chars: int = _MIN_TEXT_LAYER_CHARS) -> str:
     try:
         chunks: list[str] = []
         failures = 0
@@ -91,7 +93,7 @@ def extract_pdf_text(payload: bytes) -> str:
         if pages and failures == len(pages):
             raise ExtractorError("PDF parse error: every page failed to decode")
         text = "\n".join(chunks)
-        _require_text_layer(text, len(pages))
+        _require_text_layer(text, len(pages), min_chars)
         return text
     except ExtractorError:
         raise
@@ -99,7 +101,9 @@ def extract_pdf_text(payload: bytes) -> str:
         raise ExtractorError(f"PDF parse error: {err}") from err
 
 
-def _pdfplumber_text(payload: bytes, kind: str, render: Callable[[Any], str]) -> str:
+def _pdfplumber_text(
+    payload: bytes, kind: str, render: Callable[[Any], str], min_chars: int
+) -> str:
     """Open ``payload`` with pdfplumber, reconstruct text via ``render``,
     and rewrap failures uniformly.
 
@@ -120,7 +124,7 @@ def _pdfplumber_text(payload: bytes, kind: str, render: Callable[[Any], str]) ->
             # which extractor a supplier happens to use. This subsumes the
             # older "pages present but no text decoded" check: zero decoded
             # characters is the same condition, just its extreme.
-            _require_text_layer(text, len(pdf.pages))
+            _require_text_layer(text, len(pdf.pages), min_chars)
             return text
     except ExtractorError:
         raise
@@ -136,7 +140,9 @@ def _each_page(pdf: Any) -> Iterator[Any]:
         page.close()
 
 
-def extract_pdf_text_layout(payload: bytes) -> str:
+def extract_pdf_text_layout(
+    payload: bytes, min_chars: int = _MIN_TEXT_LAYER_CHARS
+) -> str:
     """Extract PDF text via pdfplumber, preserving table layout.
 
     Used by suppliers (e.g. TotalEnergies) whose tariff cards include
@@ -157,6 +163,7 @@ def extract_pdf_text_layout(payload: bytes) -> str:
         lambda pdf: "\n".join(
             (page.dedupe_chars().extract_text() or "") for page in _each_page(pdf)
         ),
+        min_chars,
     )
 
 
@@ -164,6 +171,7 @@ def extract_pdf_text_aligned(
     payload: bytes,
     y_tolerance: int = 3,
     x_join_threshold: float = 0.0,
+    min_chars: int = _MIN_TEXT_LAYER_CHARS,
 ) -> str:
     """Extract PDF text by re-grouping words by their visual row.
 
@@ -209,4 +217,4 @@ def extract_pdf_text_aligned(
             out.append("\n".join(lines))
         return "\f".join(out)
 
-    return _pdfplumber_text(payload, "aligned", render)
+    return _pdfplumber_text(payload, "aligned", render, min_chars)
