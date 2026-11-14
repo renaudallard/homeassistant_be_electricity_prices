@@ -44,12 +44,16 @@ published before it starts (``2700`` in November 2026).
   6,10`` on an exclusive-night one, on the delivery month's mean of the
   day-ahead prices. January 2026's card printed 0,138 for the first. The
   feed-in is a fixed 2,0 c€/kWh.
+- Vast (``V``), sold from 2027, any meter: fixed prices for the single, day
+  and night registers and for an exclusive-night one, and a fixed feed-in.
+  Until its year starts, an entry on it prices on the card published ahead
+  of it.
 
 Every figure is printed in c€/kWh including the 6% VAT the card states, the
 feed-in without VAT. Each formula is held to the price the card prints for
 it at the Belpex the VNR estimated for the month. The 2027 cards drop the
-"50%", price the feed-in of the two fixed products on a formula as well and
-are read the same way.
+"50%", price the feed-in of Vast-dynamisch and Vast-variabel on a formula as
+well and are read the same way.
 
 The cards print no network table and no levy but the certificates: "Tarieven
 exclusief netkosten, heffingen en toeslagen". The network is read off
@@ -61,8 +65,8 @@ read. The federal levies are the law's (``federal_levies_unread``), and the
 Flemish energy fund is not charged to a household in 2026.
 
 Not modelled: the Energiedelen fee (136,98 € a year, only while sharing),
-and the analog-meter forfait of Vast-variabel, which is read but billed only
-under the Walloon compensation regime.
+and the analog-meter forfait of Vast-variabel and Vast, which is read but
+billed only under the Walloon compensation regime.
 """
 
 from __future__ import annotations
@@ -90,6 +94,7 @@ from ._rates import (
     Contract,
     DynamicRates,
     EnergyRates,
+    FixedRates,
     InjectionRates,
     TariffKind,
     VariableRates,
@@ -118,6 +123,8 @@ class _Product:
     # WW-<code>-HH in the card's file name.
     code: str
     kind: TariffKind
+    # The first year the product is sold.
+    since: int = 2026
 
 
 _PRODUCTS: Final = (
@@ -130,6 +137,7 @@ _PRODUCTS: Final = (
     _Product(
         "wasewind_vast_variabel", "Vast-variabel", "vast-variabel", "VV", "variable"
     ),
+    _Product("wasewind_vast", "Vast", "vast", "V", "fixed", since=2027),
 )
 _BY_ID: Final = {p.contract_id: p for p in _PRODUCTS}
 _BY_SLUG: Final = {p.slug: p.contract_id for p in _PRODUCTS}
@@ -208,6 +216,13 @@ _GSC_RE: Final = re.compile(
 )
 _WKK_RE: Final = re.compile(
     rf"^Warmtekracht certificaten[ \t]+({_NUM})[ \t]*$", re.MULTILINE
+)
+# Vast's headings, the unit its fixed prices are in.
+_FIXED_ENERGY_RE: Final = re.compile(
+    r"^Afname[ \t]+Energiekost[ \t]+in[ \t]+c€/kWh[ \t]*$", re.MULTILINE
+)
+_FIXED_FEED_IN_HEAD_RE: Final = re.compile(
+    r"Injectievergoeding[ \t]+in[ \t]+c€/kWh[ \t]*$", re.MULTILINE
 )
 _PV_RE: Final = re.compile(
     rf"^Tariefelement analoge meter[ \t]*\+[ \t]*pv[ \t]*€[ \t]*({_NUM})[ \t]*/?[ \t]*kva[ \t]*/[ \t]*jaar",
@@ -301,25 +316,41 @@ async def _network(
 
 
 async def _read(
-    session: aiohttp.ClientSession, product: _Product, url: str
+    session: aiohttp.ClientSession, product: _Product, url: str, month: date
 ) -> tuple[SupplierSnapshot, str]:
+    """The card at ``url``, which the listing gives for ``month``."""
     text = await fetch_pdf_text_layout(session, url)
     year = _card_year(text)
     network, network_year = await _network(session, year)
     snap = parse_snapshot(
-        product.contract_id, text, network, url, network_year=network_year
+        product.contract_id,
+        text,
+        network,
+        url,
+        network_year=network_year,
+        listed_month=month,
     )
     return snap, text
+
+
+def _fetched_month(product: _Product) -> date:
+    """The month ``fetch`` reads the card of: the running one, or the first
+    of the product's first year while that has not started, so an entry on a
+    product sold from next year prices on the card published ahead of it."""
+    month = dt_util.now().date().replace(day=1)
+    return max(month, date(product.since, 1, 1))
 
 
 async def fetch(
     session: aiohttp.ClientSession, contract_id: str, region: str
 ) -> SupplierSnapshot:
-    """The newest card of the running year up to the running month."""
+    """The newest card of the running year up to the running month, or the
+    first card of a product not sold yet (``_fetched_month``)."""
     product = _product(contract_id, region)
-    month = dt_util.now().date().replace(day=1)
+    month = _fetched_month(product)
     cards = await _listed(session, product, month.year)
-    snap, _text = await _read(session, product, cards[_running(cards, product, month)])
+    listed = _running(cards, product, month)
+    snap, _text = await _read(session, product, cards[listed], listed)
     return snap
 
 
@@ -331,11 +362,13 @@ async def fetch_for_month(
     if product is None or region != REGION_FLANDERS:
         return None
     month = year_month.replace(day=1)
+    if month.year < product.since:
+        return None
     try:
         url = (await _listed(session, product, month.year)).get(month)
         if url is None:
             return None
-        snap, text = await _read(session, product, url)
+        snap, text = await _read(session, product, url, month)
         return archive_validity_check(snap, text, month)
     except ExtractorError as err:
         # A timeout, a 5xx or an unread network sheet says nothing about the
@@ -355,7 +388,7 @@ async def probe(
     product = _BY_ID.get(contract_id)
     if product is None or region != REGION_FLANDERS:
         return None
-    month = dt_util.now().date().replace(day=1)
+    month = _fetched_month(product)
     try:
         cards = await _listed(session, product, month.year)
         return cards[_running(cards, product, month)]
@@ -364,24 +397,28 @@ async def probe(
 
 
 async def discover(session: aiohttp.ClientSession) -> set[str]:
-    """The products the running year's household tariffs page links, by
-    contract id where one is registered and as ``wasewind_<name>`` where
-    none is."""
+    """The products the running year's household tariffs page links, and the
+    next year's once it is up, by contract id where one is registered and as
+    ``wasewind_<name>`` where none is. Nothing when the running year's page
+    cannot be read."""
     year = dt_util.now().year
-    try:
-        page = await fetch_text(
-            session, f"{_SITE}/klant-worden/gezin/tarieven/tarieven-{year}-gezin"
-        )
-    except ExtractorError:
-        return set()
     out: set[str] = set()
-    for href in _HREF_RE.findall(page):
-        path = URL(href).path if href.startswith(_SITE) else href
-        match = _PRODUCT_PATH_RE.fullmatch(path)
-        if match is None or {int(match.group(1)), int(match.group(3))} != {year}:
+    for listed in (year, year + 1):
+        try:
+            page = await fetch_text(
+                session, f"{_SITE}/klant-worden/gezin/tarieven/tarieven-{listed}-gezin"
+            )
+        except ExtractorError:
+            if listed == year:
+                return set()
             continue
-        slug = match.group(2)
-        out.add(_BY_SLUG.get(slug, f"{_SUPPLIER}_{slug.replace('-', '_')}"))
+        for href in _HREF_RE.findall(page):
+            path = URL(href).path if href.startswith(_SITE) else href
+            match = _PRODUCT_PATH_RE.fullmatch(path)
+            if match is None or {int(match.group(1)), int(match.group(3))} != {listed}:
+                continue
+            slug = match.group(2)
+            out.add(_BY_SLUG.get(slug, f"{_SUPPLIER}_{slug.replace('-', '_')}"))
     return out
 
 
@@ -407,17 +444,25 @@ def parse_snapshot(
     source_url: str = _SITE,
     *,
     network_year: int | None = None,
+    listed_month: date | None = None,
 ) -> SupplierSnapshot:
     """Parse one card as read layout-preserving, its network the sheets'
     rates of each area, excluding VAT, ``network_year`` their year where it
-    is an earlier one than the card's."""
+    is an earlier one than the card's.
+
+    Vast's card prints no month, only the year it applies over, so it prices
+    ``listed_month``, the month the listing gives it, or January where none
+    is given."""
     product = _product(contract_id, REGION_FLANDERS)
     titles = {_title(m) for m in _TITLE_RE.findall(text)}
     if titles != {_title(product.label)}:
         raise ExtractorError(f"{_LABEL}: card is not the {product.label} card")
-    if "Vlaamse nutsregulator" not in text:
+    if product.kind == "fixed":
+        month = _fixed_card_month(text, listed_month)
+    elif "Vlaamse nutsregulator" not in text:
         raise ExtractorError(f"{_LABEL}: card is not for Flemish households")
-    month = _card_month(text)
+    else:
+        month = _card_month(text)
     rate = printed_vat_rate(text, _VAT_RE)
     if rate is None:
         raise ExtractorError(f"{_LABEL}: VAT rate not stated")
@@ -437,7 +482,7 @@ def parse_snapshot(
             supplier=_SUPPLIER,
             contract=contract_id,
             energy=energy,
-            injection=_injection(feed_in, defined),
+            injection=_injection(product, feed_in, defined),
             dsos={dso: _overlay(terms, 1.0 + rate) for dso, terms in network.items()},
             taxes=_taxes(text),
             source_url=source_url,
@@ -479,6 +524,17 @@ def _card_month(text: str) -> date:
     if int(named) == year - 1:
         return date(year, 1, 1)
     raise ExtractorError(f"{_LABEL}: card month {named} is outside its period")
+
+
+def _fixed_card_month(text: str, listed: date | None) -> date:
+    """The month a card printing only its year prices: ``listed``, which has
+    to fall in that year, or January."""
+    year = _card_year(text)
+    if listed is None:
+        return date(year, 1, 1)
+    if listed.year != year:
+        raise ExtractorError(f"{_LABEL}: card period does not cover {listed:%Y-%m}")
+    return listed
 
 
 def _blocks(text: str) -> tuple[str, str]:
@@ -530,9 +586,35 @@ def _formulas(block: str, indices: set[str]) -> dict[str, _Formula]:
     return out
 
 
+def _fixed_prices(
+    block: str, heading: re.Pattern[str], legs: tuple[str, ...]
+) -> dict[str, float]:
+    """Vast's price of each of ``legs`` in ``block``, EUR/kWh: printed once
+    each under ``heading``, with no formula beside them."""
+    if heading.search(block) is None:
+        raise ExtractorError(f"{_LABEL}: fixed prices not in c€/kWh")
+    if _FORMULA_RE.search(block) is not None:
+        raise ExtractorError(f"{_LABEL}: a formula on a card of fixed prices")
+    printed = [m.groups() for m in _PRINTED_RE.finditer(block)]
+    if sorted(leg for leg, _sign, _price in printed) != sorted(legs):
+        raise ExtractorError(f"{_LABEL}: one fixed price expected for each of {legs}")
+    return {
+        leg: parse_sign(sign) * to_float(price) / 100.0 for leg, sign, price in printed
+    }
+
+
 def _energy(
     product: _Product, block: str, fee: float, defined: set[str]
 ) -> EnergyRates:
+    if product.kind == "fixed":
+        prices = _fixed_prices(
+            block, _FIXED_ENERGY_RE, ("Enkelvoudig, piek en dal", "Uitsluitend nacht")
+        )
+        return FixedRates(
+            single=prices["Enkelvoudig, piek en dal"],
+            exclusive_night=prices["Uitsluitend nacht"],
+            yearly_fixed_fee=fee,
+        )
     if product.kind == "dynamic":
         formulas = _formulas(block, {"kwartier"} & defined)
         if len(formulas) != 1 or "Uitsluitend nacht" in formulas:
@@ -564,7 +646,10 @@ def _energy(
     )
 
 
-def _injection(block: str, defined: set[str]) -> InjectionRates:
+def _injection(product: _Product, block: str, defined: set[str]) -> InjectionRates:
+    if product.kind == "fixed":
+        prices = _fixed_prices(block, _FIXED_FEED_IN_HEAD_RE, ("Alle meetmomenten",))
+        return InjectionRates(current=prices["Alle meetmomenten"])
     fixed = _FIXED_FEED_IN_RE.search(block)
     formulas = _formulas(block, {"kwartier", "maand"} & defined)
     if fixed is not None and not formulas:
@@ -614,9 +699,9 @@ def _taxes(text: str) -> TaxOverlay:
 EXTRACTOR = SupplierExtractor(
     id=_SUPPLIER,
     label=_LABEL,
-    # 0,71 s to read the slowest of the cards, Vast-variabel's 2027 one, on a
+    # 0,79 s to read the slowest of the cards, Vast's 2027 one, on a
     # Raspberry Pi 4, plus 10%.
-    sweep_cost_s=0.8,
+    sweep_cost_s=0.9,
     contracts=tuple(
         Contract(
             id=product.contract_id,

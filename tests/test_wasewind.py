@@ -46,6 +46,7 @@ from custom_components.be_electricity_prices.fluvius import AreaTerms
 from custom_components.be_electricity_prices.providers import EXTRACTORS, wasewind
 from custom_components.be_electricity_prices.providers._rates import (
     DynamicRates,
+    FixedRates,
     VariableRates,
 )
 from custom_components.be_electricity_prices.providers.base import (
@@ -60,10 +61,12 @@ from tests import FIXTURES, fixture_text, fluvius_network
 _VOL = "wasewind_vol_dynamisch"
 _VAST_DYNAMISCH = "wasewind_vast_dynamisch"
 _VAST_VARIABEL = "wasewind_vast_variabel"
+_VAST = "wasewind_vast"
 _NAMES = {
     _VOL: "vol_dynamisch",
     _VAST_DYNAMISCH: "vast_dynamisch",
     _VAST_VARIABEL: "vast_variabel",
+    _VAST: "vast",
 }
 
 
@@ -79,7 +82,7 @@ def _snap(contract: str, month: str) -> SupplierSnapshot:
     return wasewind.parse_snapshot(contract, _card(contract, month), _network(), "t://")
 
 
-def test_wase_wind_sells_three_flemish_contracts() -> None:
+def test_wase_wind_sells_four_flemish_contracts() -> None:
     extractor = EXTRACTORS["wasewind"]
     assert extractor.label == "Wase Wind"
     by_id = {c.id: c for c in extractor.contracts}
@@ -87,8 +90,11 @@ def test_wase_wind_sells_three_flemish_contracts() -> None:
     assert by_id[_VOL].label == "Vol dynamisch"
     assert by_id[_VAST_DYNAMISCH].label == "Vast-dynamisch"
     assert by_id[_VAST_VARIABEL].label == "Vast-variabel"
+    assert by_id[_VAST].label == "Vast"
     assert by_id[_VOL].kind == by_id[_VAST_DYNAMISCH].kind == "dynamic"
     assert by_id[_VAST_VARIABEL].kind == "variable"
+    assert by_id[_VAST].kind == "fixed"
+    assert not by_id[_VAST].month_indexed_energy
     assert by_id[_VAST_VARIABEL].month_indexed_energy
     assert not by_id[_VOL].month_indexed_energy
     for contract in by_id.values():
@@ -205,6 +211,65 @@ def test_the_2027_cards_are_read_in_their_new_layout() -> None:
     assert feed_in.current == pytest.approx(0.049122)
 
 
+def test_vast() -> None:
+    """Sold from 2027: fixed prices for the single, day and night registers
+    and an exclusive-night one, and a fixed feed-in, for the whole year."""
+    snap = _snap(_VAST, "2027-00")
+    energy = snap.energy
+    assert isinstance(energy, FixedRates)
+    assert energy.single == pytest.approx(0.20)
+    assert energy.peak is None and energy.offpeak is None
+    assert energy.exclusive_night == pytest.approx(0.16)
+    assert energy.yearly_fixed_fee == 65.0
+    assert snap.injection is not None
+    assert snap.injection.current == pytest.approx(0.04)
+    assert snap.injection.factor is None and snap.injection.base is None
+    assert snap.supplier_prosumer_eur_per_kva_year == 30.0
+    assert snap.taxes.flanders_renewables == pytest.approx(0.0146)
+    assert snap.taxes.federal_levies_unread
+    assert snap.taxes.card_vat_rate == 0.06
+    # The card names no month, so it prices January unless listed for another.
+    assert snap.publication_label == "januari 2027"
+    assert snap.valid_until == date(2027, 1, 31)
+    march = wasewind.parse_snapshot(
+        _VAST, _card(_VAST, "2027-00"), _network(), listed_month=date(2027, 3, 1)
+    )
+    assert march.valid_until == date(2027, 3, 31)
+    with pytest.raises(ExtractorError, match="does not cover 2026-11"):
+        wasewind.parse_snapshot(
+            _VAST, _card(_VAST, "2027-00"), _network(), listed_month=date(2026, 11, 1)
+        )
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            (
+                "Enkelvoudig, piek en dal 20,00",
+                "Enkelvoudig, piek en dal 0,1 x Belpex maand + 2",
+            ),
+            "a formula on a card of fixed prices",
+        ),
+        (("Uitsluitend nacht 16,00", ""), "one fixed price expected"),
+        (("Alle meetmomenten 4,00", ""), "one fixed price expected"),
+        (("Energiekost in c€/kWh", "Energiekost in €/kWh"), "not in c€/kWh"),
+        (
+            ("Injectievergoeding in c€/kWh", "Injectievergoeding in €/kWh"),
+            "not in c€/kWh",
+        ),
+        (("TOT 01/01/28", "TOT 01/01/29"), "not one calendar year"),
+    ],
+)
+def test_a_vast_card_that_does_not_read_is_refused(
+    change: tuple[str, str], message: str
+) -> None:
+    text = _card(_VAST, "2027-00")
+    assert change[0] in text
+    with pytest.raises(ExtractorError, match=message):
+        wasewind.parse_snapshot(_VAST, text.replace(*change), _network())
+
+
 def test_the_network_is_fluvius_s_sheet_on_the_card_s_basis() -> None:
     snap = _snap(_VOL, "2026-11")
     assert set(snap.dsos) == FLUVIUS_KEYS
@@ -276,6 +341,10 @@ def test_a_card_that_does_not_read_is_refused(
 def test_another_product_s_card_is_refused() -> None:
     with pytest.raises(ExtractorError, match="not the Vast-dynamisch card"):
         wasewind.parse_snapshot(_VAST_DYNAMISCH, _card(_VOL, "2026-11"), _network())
+    with pytest.raises(ExtractorError, match="not the Vast card"):
+        wasewind.parse_snapshot(_VAST, _card(_VAST_DYNAMISCH, "2027-00"), _network())
+    with pytest.raises(ExtractorError, match="not the Vast-variabel card"):
+        wasewind.parse_snapshot(_VAST_VARIABEL, _card(_VAST, "2027-00"), _network())
 
 
 def test_a_network_short_of_an_area_is_refused() -> None:
@@ -285,8 +354,8 @@ def test_a_network_short_of_an_area_is_refused() -> None:
         wasewind.parse_snapshot(_VOL, _card(_VOL, "2026-11"), short)
 
 
-def _listing(year: int) -> str:
-    name = f"wasewind_tariefkaarten_{year}_vast_dynamisch.html"
+def _listing(year: int, product: str = "vast_dynamisch") -> str:
+    name = f"wasewind_tariefkaarten_{year}_{product}.html"
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
@@ -421,10 +490,79 @@ async def test_fetch_for_month() -> None:
     )
 
 
-async def test_discover_reads_the_year_s_household_tariffs(freezer: Any) -> None:
+async def test_vast_prices_on_its_first_card_before_its_year(freezer: Any) -> None:
+    """Sold from 2027, so in November 2026 an entry on it reads the card
+    published for January, and a month before 2027 has no card."""
     freezer.move_to("2026-11-14 12:00:00+01:00")
-    page = (FIXTURES / "wasewind_tarieven_2026_gezin.html").read_text(encoding="utf-8")
-    with patch.object(wasewind, "fetch_text", AsyncMock(return_value=page)):
+    _hold_network(2026)
+    listing = AsyncMock(return_value=_listing(2027, "vast"))
+    with (
+        patch.object(wasewind, "fetch_text", listing),
+        patch.object(
+            wasewind,
+            "fetch_pdf_text_layout",
+            AsyncMock(return_value=_card(_VAST, "2027-00")),
+        ) as pdf,
+        patch.object(wasewind, "ensure_area_terms", AsyncMock()),
+    ):
+        snap = await wasewind.fetch(None, _VAST, REGION_FLANDERS)  # type: ignore[arg-type]
+        probed = await wasewind.probe(None, _VAST, REGION_FLANDERS)  # type: ignore[arg-type]
+        before = await wasewind.fetch_for_month(
+            None,  # type: ignore[arg-type]
+            _VAST,
+            REGION_FLANDERS,
+            date(2026, 11, 1),
+        )
+    assert listing.call_args.args[1].endswith("/tariefkaarten-2027-incl.-btw-vast")
+    assert pdf.call_args.args[1].endswith(
+        "Tarieven%202027/Tariefkaart%20WW-V-HH-2700.pdf"
+    )
+    assert probed == pdf.call_args.args[1]
+    assert snap.publication_label == "januari 2027"
+    assert snap.network_year == 2026
+    assert before is None
+    assert listing.await_count == 2
+
+
+async def test_vast_fetch_for_month() -> None:
+    _hold_network(2026)
+    snap = await _fetch(
+        _VAST, "2027-00", _listing(2027, "vast"), year_month=date(2027, 1, 1)
+    )
+    assert snap is not None
+    assert snap.valid_until == date(2027, 1, 31)
+    assert (
+        await _fetch(
+            _VAST, "2027-00", _listing(2027, "vast"), year_month=date(2027, 2, 1)
+        )
+        is None
+    )
+
+
+def _gezin(year: int) -> str:
+    return (FIXTURES / f"wasewind_tarieven_{year}_gezin.html").read_text(
+        encoding="utf-8"
+    )
+
+
+async def test_discover_reads_the_year_s_household_tariffs(freezer: Any) -> None:
+    """The running year's page, and the next year's once it is up: in
+    November 2026 Vast is listed only on the 2027 page."""
+    freezer.move_to("2026-11-14 12:00:00+01:00")
+
+    def page(_session: object, url: str) -> str:
+        for year in (2026, 2027):
+            if url.endswith(f"/tarieven-{year}-gezin"):
+                return _gezin(year)
+        raise ExtractorError("HTTP 404")
+
+    with patch.object(wasewind, "fetch_text", AsyncMock(side_effect=page)):
+        assert await wasewind.discover(None) == set(_NAMES)  # type: ignore[arg-type]
+    # The next year's page not up yet.
+    with patch.object(wasewind, "fetch_text", AsyncMock(return_value=_gezin(2026))):
+        assert await wasewind.discover(None) == set(_NAMES) - {_VAST}  # type: ignore[arg-type]
+    freezer.move_to("2027-02-01 12:00:00+01:00")
+    with patch.object(wasewind, "fetch_text", AsyncMock(side_effect=page)):
         assert await wasewind.discover(None) == set(_NAMES)  # type: ignore[arg-type]
     with patch.object(
         wasewind, "fetch_text", AsyncMock(side_effect=ExtractorError("HTTP 500"))

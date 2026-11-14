@@ -7752,8 +7752,9 @@ def test_sweep_candidate_counts_per_cell() -> None:
         # Online and Smart Plus, two month-indexed variable cards that read
         # in about 0,3 s each. TotalEnergies' five professional products add
         # five to each region's professional static cell. Wase Wind adds
-        # Vast-variabel, a month-indexed card that reads in about 0,7 s.
-        ("flanders", "static", False): 61,
+        # Vast-variabel, a month-indexed card that reads in about 0,7 s, and
+        # Vast, a fixed card sold from 2027 that reads in about 0,8 s.
+        ("flanders", "static", False): 62,
         ("flanders", "static", True): 25,
         # 26 before EnergyVision's tiered range: GS1800V, GSVI3 and GSLP all
         # settle on a monthly index once their tranche is spent, so they land

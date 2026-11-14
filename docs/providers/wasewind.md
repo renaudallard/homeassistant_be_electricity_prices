@@ -4,7 +4,8 @@ This document is the maintainer reference for the Wase Wind tariff-card
 extractor (`providers/wasewind.py`). Wase Wind cv, of Sint-Gillis-Waas, is a
 cooperative selling the power of its wind parks to households in eighteen
 municipalities of East Flanders and Antwerp's left bank (listed on
-`/klant-worden/gezin`), with three residential products in 2026. Read this
+`/klant-worden/gezin`), with three residential products in 2026 and a fourth,
+Vast, from 2027. Read this
 alongside the framework and pricing references:
 
 - [../provider-framework.md](../provider-framework.md): the `SupplierExtractor`
@@ -24,7 +25,7 @@ alongside the framework and pricing references:
 | Listing | `https://www.wasewind.be/tariefkaarten-<year>-incl.-btw-<product>`, one page per product and year | `_listing_url` |
 | Archive | Every card of the year the listing links | `fetch_for_month` |
 | Probe | The address of the card `fetch` reads | `probe` |
-| Discovery | The product pages `/klant-worden/gezin/tarieven/tarieven-<year>-gezin` links, for the running year | `discover` |
+| Discovery | The product pages `/klant-worden/gezin/tarieven/tarieven-<year>-gezin` links, for the running year and the next one once its page is up | `discover` |
 
 The listing links each month's card as
 `/frontend/files/userfiles/files/[<folder>/...]Tariefkaart WW-<code>-HH-<YYMM>.pdf`,
@@ -34,7 +35,10 @@ number. Only a link of that shape, on the site, of the product's code and of
 the page's year is read (`listed_cards`). `fetch` takes the newest card up to
 the running month, never one published ahead of it. A card numbered `00` is the
 year's card published before the year starts (`2700` in November 2026): it
-prices January until January's own is listed.
+prices January until January's own is listed. A product not sold yet (Vast,
+`since=2027`) is fetched on its first card until its year starts
+(`_fetched_month`), so an entry on it in November 2026 prices on the January
+2027 card, and `fetch_for_month` has no card for a month before it.
 
 ## Contracts
 
@@ -43,12 +47,14 @@ prices January until January's own is listed.
 | `wasewind_vol_dynamisch` | Vol dynamisch | `DY` | `dynamic`, quarter-hourly | quarter-hourly formula |
 | `wasewind_vast_dynamisch` | Vast-dynamisch | `VD` | `dynamic`, quarter-hourly | fixed (a quarter-hourly formula from 2027) |
 | `wasewind_vast_variabel` | Vast-variabel | `VV` | `variable`, month-indexed | fixed (a month formula from 2027) |
+| `wasewind_vast` | Vast | `V` | `fixed`, from 2027 | fixed |
 
 Vol dynamisch and Vast-dynamisch are for a digital meter on meetregime 3 and
 price each quarter hour on its Belpex Day Ahead price; Vast-variabel takes any
 meter and the delivery month's mean of the day-ahead prices
-(`month_indexed`, the plain mean). A connection that shares energy is always
-on Vol dynamisch, which the other two cards say.
+(`month_indexed`, the plain mean). Vast takes an analog meter or a digital one
+on SMR1 or SMR3. A connection that shares energy is always on Vol dynamisch,
+which the other cards say.
 
 ## Energy and feed-in
 
@@ -85,14 +91,22 @@ and the feed-in of Vast-dynamisch and Vast-variabel on a formula
 (`0,05 x Belpex kwartier + 2` and `0,02 x Belpex maand + 2`). They are read
 the same way, and a month formula for the feed-in is `month_indexed`.
 
+Vast's 2027 card prints its prices and no formula: "Enkelvoudig, piek en dal
+20,00" and "Uitsluitend nacht 16,00" under "Energiekost in c€/kWh", and the
+feed-in "Alle meetmomenten 4,00" under "Injectievergoeding in c€/kWh". Each is
+read once, under that heading, and a formula on the card refuses it
+(`_fixed_prices`). It names no month, only the year it applies over ("PERIODE
+VAN 01/01/27 TOT 01/01/28"), so it prices the month the listing gives it,
+which has to fall in that year (`listed_month`).
+
 The month a card prices is the one its offtake estimate names ("in november
 2026", or "in november," with no year on Vast-variabel's), in the year of the
 period it applies to ("in de periode 01/01/2026 tot 01/01/2027", "01/01/27 TOT
 01/01/28"). An estimate of the year before is the card published ahead of its
 year, which prices January.
 
-The subscription is 65 € a year on all three, and Vast-variabel's "Tariefelement
-analoge meter + pv" of 30 € per kVA a year is read into
+The subscription is 65 € a year on all four, and the "Tariefelement analoge
+meter + pv" of 30 € per kVA a year Vast-variabel and Vast print is read into
 `supplier_prosumer_eur_per_kva_year`, which is billed only under the Walloon
 compensation regime, as Elegant's is.
 
@@ -124,7 +138,9 @@ exclusief netkosten, heffingen en toeslagen". So:
   domiciled household nothing in 2026, as every Flemish card that prints the
   row says.
 
-The live check reads all three cards daily. The rows of these cards cast no
+The live check reads all four cards daily, and expects Vast-dynamisch's and
+Vast-variabel's feed-in in the shape of the card's year
+(`_INJECTION_SHAPE_FROM_YEAR`). The rows of these cards cast no
 vote in the network consensus (`_SHEET_NETWORK_SUPPLIERS`), since they carry
 the sheet itself, and none in the federal tax consensus, whose block they do
 not print.
@@ -133,19 +149,19 @@ not print.
 
 - Energiedelen, 136,98 € a year including 21% VAT, billed pro rata only while
   the connection shares energy.
-- The 2027 product Vast, which has no 2026 card. `discover` reports it once
-  the 2027 household tariffs page is the running year's.
 
 ## Tests
 
-`tests/test_wasewind.py` reads nine cards (`tests/fixtures/wasewind_*.pdf`):
+`tests/test_wasewind.py` reads ten cards (`tests/fixtures/wasewind_*.pdf`):
 Vol dynamisch of January and November 2026, Vast-dynamisch of November 2026,
-Vast-variabel of January, June and November 2026, and the three 2027 cards. It
+Vast-variabel of January, June and November 2026, and the four 2027 cards. It
 holds every formula to the price printed, the network to the eight 2026 area
 sheets (`tests/fixtures/fluvius_*_2026.xlsx`), the levies to the law on a
 resolved card, the refusals (another product's card, a formula off its price,
 no VAT rate, no feed-in basis, an index not in EUR/MWh, no certificates or
-fee, a short network), the listing of Vast-dynamisch's 2026 and 2027 pages,
-the month `fetch` and `fetch_for_month` read, the year-before network,
-`discover` on the 2026 household tariffs page, and the time of every pattern
-on crafted text.
+fee, a short network, and on Vast a formula, a missing price, a unit other
+than c€/kWh or a period of more than a year), the listing of
+Vast-dynamisch's 2026 and 2027 pages and Vast's 2027 one, the month `fetch`
+and `fetch_for_month` read, Vast's first card read before its year, the
+year-before network, `discover` on the 2026 and 2027 household tariffs pages,
+and the time of every pattern on crafted text.
