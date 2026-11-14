@@ -1326,7 +1326,8 @@ and the energy price stays the card's. Until that sheet is out the card's own
 table keeps billing, as it does for every other month of the card's year.
 The same holds the other way round: a month of an earlier year billed on a
 later card, as the history backfill bills a month the supplier keeps no card
-of, takes that year's sheet where one is read, and the card's table
+of, or a contract you held before a recorded supplier switch, takes that
+year's sheet where one is read, and the card's table
 otherwise: Fluvius's area sheets go back to 2023 for Antwerpen, Limburg and
 West and to 2025 for the other areas, Brugel serves no final sheet for 2025,
 and the CWaPE's grids are read from 2026.

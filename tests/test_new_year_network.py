@@ -314,3 +314,43 @@ def test_card_year_reads_the_date_or_else_the_title() -> None:
     titled = replace(card, valid_until=None, publication_label="Septembre 2026")
     assert network_year.card_year(titled) == 2026
     assert network_year.card_year(replace(titled, publication_label="")) is None
+
+
+async def test_an_earlier_contract_reads_the_sheet_of_a_year_its_card_does_not_price(
+    hass: Any,
+) -> None:
+    """An earlier contract priced on a card of another year bills each month
+    off the sheet of the month's own year once read, but its card is fetched
+    only when the period is priced, after every read the tick makes, so no
+    sheet of that year was read for it and its card's table stood. The
+    period's card reads the sheet of each year it covers that the card does
+    not price, and of no other."""
+    from custom_components.be_electricity_prices import period_cards
+    from custom_components.be_electricity_prices.contract_periods import (
+        ContractPeriod,
+    )
+
+    from . import make_entry, make_snapshot
+
+    data = dict(make_entry(supplier="engie", contract="engie_easy_fixed").data)
+    raw = make_snapshot(
+        supplier="engie", contract="engie_easy_fixed", valid_until=date(2026, 11, 30)
+    )
+    period = ContractPeriod(date(2025, 6, 1), date(2026, 2, 28), data)
+    coordinator = type("Coordinator", (), {"_snapshot": None, "_snapshot_raw": None})()
+    read = AsyncMock()
+    with (
+        patch.object(
+            period_cards, "_current_card", AsyncMock(return_value=(raw, False, False))
+        ),
+        patch.object(
+            period_cards,
+            "ensure_delivery_year_sheet",
+            snapshot_resolve.ensure_delivery_year_sheet,
+        ),
+        patch.object(snapshot_resolve, "_ensure_sheet", read),
+    ):
+        await period_cards.period_card(hass, None, coordinator, period)  # type: ignore[arg-type]
+    assert [call.args[1:] for call in read.await_args_list] == [
+        ("wallonia", "ores", 2025)
+    ]

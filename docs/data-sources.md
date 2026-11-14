@@ -1572,9 +1572,10 @@ as it does for a year with no sheet to read: Fluvius's area sheets go back
 to 2023 for Antwerpen, Limburg and West and to 2025 for the other areas,
 Brugel serves no final sheet for 2025, and the CWaPE's grids are read from
 2026 (`FIRST_YEAR`, `cwape.py`). The tick
-reads the running year's sheet for such an entry only, and the backfill
-each year it walks (`ensure_delivery_year_sheet`, `snapshot_resolve.py`),
-and the sheet
+reads the running year's sheet for such an entry only, the backfill each
+year it walks, and an earlier contract's card each year of the contract it
+does not price (`_delivery_year_sheets`, `period_cards.py`), all through
+`ensure_delivery_year_sheet` (`snapshot_resolve.py`), and the sheet
 figures are in the stamp the coordinator re-resolves on (`sheet_network`),
 so a sheet read after the card reaches it on the next tick.
 

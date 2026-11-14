@@ -49,7 +49,11 @@ from .providers._resolve import without_welcome_credit
 from .providers.base import CardNotReadableError, SupplierExtractor, SupplierSnapshot
 from .providers.custom import build_snapshot as build_custom_snapshot
 from .snapshot_months import month_card, month_card_failed
-from .snapshot_resolve import _resolve_snapshot, entry_annual_kwh
+from .snapshot_resolve import (
+    _resolve_snapshot,
+    ensure_delivery_year_sheet,
+    entry_annual_kwh,
+)
 from .snapshot_stand_ins import card_for_unreadable_month
 from .snapshot_store import fetch_shared
 
@@ -158,6 +162,23 @@ async def _latest_archived_card(
     return None, failed
 
 
+async def _delivery_year_sheets(
+    session: aiohttp.ClientSession,
+    proxy: ConfigEntry,
+    raw: SupplierSnapshot | None,
+    period: ContractPeriod,
+) -> None:
+    """Read the network sheet of every year ``period`` covers that ``raw``
+    does not price, for a month of it the card stands in for: such a month
+    bills its own year's network once that sheet is read (``network_year``),
+    and the walk resolves it after this, so a sheet read later came too late
+    for it (:func:`ensure_delivery_year_sheet`)."""
+    if raw is None:
+        return
+    for year in range(period.start.year, period.end.year + 1):
+        await ensure_delivery_year_sheet(session, proxy.data, raw, year)
+
+
 async def period_card(
     hass: HomeAssistant,
     session: aiohttp.ClientSession,
@@ -210,6 +231,7 @@ async def period_card(
     extractor = get_extractor(str(period.data.get(CONF_SUPPLIER, "")))
     fallback = getattr(coordinator, "_snapshot", None)
     raw, read_by_ocr, read_failed = await _current_card(hass, session, extractor, proxy)
+    await _delivery_year_sheets(session, proxy, raw, period)
     card = (
         None
         if raw is None
@@ -223,5 +245,6 @@ async def period_card(
     if card is None:
         stand_in = None if fallback is None else without_welcome_credit(fallback)
         own_raw = getattr(coordinator, "_snapshot_raw", None)
+        await _delivery_year_sheets(session, proxy, own_raw, period)
         return proxy, extractor, stand_in, True, read_failed, False, own_raw
     return proxy, extractor, card, False, False, read_by_ocr, raw
