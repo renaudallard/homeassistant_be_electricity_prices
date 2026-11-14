@@ -144,6 +144,7 @@ machinery.
 | `tests/test_archive_errors.py` | Every provider's archive lookup (`fetch_for_month`) raises on a transient failure |
 | `tests/test_window_service.py` | The window search behind the `cheapest_window` and `most_expensive_window` services |
 | `tests/test_pdf_helpers.py` | Shared PDF fetching and text extraction (`providers/_pdf.py`, `providers/_pdf_payload.py`, `providers/_pdf_render.py`) |
+| `tests/test_fixture_text_cache.py` | A fixture text reaches the disk before it takes the card's name in the cache (`fixture_text`, `tests/__init__.py`) |
 | `tests/test_redirect_hops.py` | Every redirect hop is checked before it is asked (`checked_request`, `providers/_pdf.py`), over a local TLS server and a stand-in LAN device that records every connection, and Dots's card redirect is followed on its own site and never off it |
 | `tests/test_markup.py` | The tags taken out of a fetched page (`providers/_markup.py`): every real page the suite holds reads as through the plain pattern, and a page of stray brackets costs its length |
 | `tests/test_parse.py` | The shared card readers of `providers/_parse.py` on crafted card text: the Brussels OSP table, the ORES sub-area rows and the degressive excise rows cost the length of the text, and `LINE_BREAK` reads what `\s*\n\s*` reads |
@@ -176,7 +177,8 @@ Shared helpers live in `tests/__init__.py`:
   `providers/_pdf_render.py`, the decode bound in `providers/_pdf_bound.py` and
   `providers/_pdf_bound_pdfminer.py` and the pypdf and pdfplumber versions, and each file by the PDF's own
   digest and the mode, so a changed card, extractor or reader is read afresh rather than served
-  stale. `BE_FIXTURE_TEXT_CACHE` moves it; `scripts/gate.sh` points its throwaway worktree at the
+  stale. Each file is written aside, synced and renamed into place, so a crash mid-run never
+  leaves an empty text under a card's name. `BE_FIXTURE_TEXT_CACHE` moves it; `scripts/gate.sh` points its throwaway worktree at the
   main checkout's, and `test.yml` keeps it between runs with `actions/cache`. Within a process it
   is also `lru_cache`d, so a fixture rewritten mid-session keeps its old text until
   `fixture_text.cache_clear()` or a restart; the copy on disk needs nothing, being keyed on the

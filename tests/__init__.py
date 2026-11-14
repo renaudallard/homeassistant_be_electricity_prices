@@ -201,10 +201,15 @@ def fixture_text(name: str, *, layout: bool = False, aligned: bool = False) -> s
     else:
         text = extract_pdf_text(payload)
     # Written aside and renamed into place: the xdist workers read and write
-    # the same directory, and a reader must never see half a file.
+    # the same directory, and a reader must never see half a file. Synced
+    # before the rename: a crash after an unsynced rename left an empty file
+    # under the card's name, which every later run read as its text.
     kept.parent.mkdir(parents=True, exist_ok=True)
     partial = kept.with_name(f"{kept.name}.{os.getpid()}")
-    partial.write_bytes(text.encode("utf-8", "surrogatepass"))
+    with partial.open("wb") as out:
+        out.write(text.encode("utf-8", "surrogatepass"))
+        out.flush()
+        os.fsync(out.fileno())
     os.replace(partial, kept)
     return text
 
