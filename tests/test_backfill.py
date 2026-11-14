@@ -4715,6 +4715,32 @@ async def test_a_backfill_downloads_no_earlier_profile_nothing_reads(
     assert context.rlp_weights == held
 
 
+async def test_a_backfill_reads_each_year_s_sheet_for_the_card_standing_in(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A month no archive holds is billed on the entry's card, and one of a
+    year the card does not price takes that year's network off its sheet
+    (``network_year``), so the backfill asks for every year it walks with
+    that card, which reads only a year other than its own."""
+    freezer.move_to("2026-10-28 12:00:00+01:00")
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._snapshot = make_snapshot(energy=FixedRates(single=0.25))
+    coord._snapshot_raw = coord._snapshot
+    hours = [
+        datetime(2025, 12, 31, 12, tzinfo=UTC),
+        datetime(2026, 1, 1, 12, tzinfo=UTC),
+    ]
+    read = AsyncMock()
+    with patch.object(backfill_window, "ensure_delivery_year_sheet", read):
+        await backfill_window._build_context(hass, entry, coord, hours)
+    assert [call.args[2:] for call in read.await_args_list] == [
+        (coord._snapshot_raw, 2025),
+        (coord._snapshot_raw, 2026),
+    ]
+
+
 @pytest.mark.parametrize("signed_indexed", [True, False])
 async def test_the_backfill_decides_the_profiles_on_the_signed_leg(
     hass: HomeAssistant, signed_indexed: bool

@@ -276,6 +276,8 @@ def _fluvius_sheets_as_published() -> Iterator[None]:
         patch.object(coordinator_tick, "ensure_custom_network", AsyncMock()),
         patch.object(backfill_window, "ensure_custom_network", AsyncMock()),
         patch.object(contract_periods, "ensure_custom_network", AsyncMock()),
+        patch.object(coordinator_tick, "ensure_delivery_year_sheet", AsyncMock()),
+        patch.object(backfill_window, "ensure_delivery_year_sheet", AsyncMock()),
     ):
         yield
     _forget()

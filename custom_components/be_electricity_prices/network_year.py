@@ -23,16 +23,19 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""A card billed in a year after its own: the network of the new year.
+"""A card billed in a year other than its own: the network of that year.
 
 A card prints the network tariffs of the year it prices. Held into January, a
 December card billed the new year's months on the old table until the
 supplier's next card was out, though the operators' tariffs change on 1
-January whatever a supplier publishes. Once the regulator's sheet of the
-delivery year itself is read, such a month takes its network off it, as a
-withdrawn product's months past its last card do
+January whatever a supplier publishes. A card standing in for a month of an
+earlier year, a 2025 backfill on a 2026 card for a supplier with no archive
+that far back, billed that month on its own year's table the same way. Once
+the regulator's sheet of the delivery year itself is read, such a month takes
+its network off it, as a withdrawn product's months past its last card do
 (``snapshot_resolve.past_last_card``). Until then the card's table stands:
-the sheet of the year before would bill what the card already prints.
+the sheet of another year would bill what the card already prints, or a year
+the month was not billed in.
 """
 
 from __future__ import annotations
@@ -64,11 +67,11 @@ def card_year(snap: SupplierSnapshot) -> int | None:
     return None if end is None else end.year
 
 
-def billed_after_its_year(snap: SupplierSnapshot, month: date) -> bool:
-    """Whether ``month`` falls in a calendar year after the one ``snap``
+def billed_outside_its_year(snap: SupplierSnapshot, month: date) -> bool:
+    """Whether ``month`` falls in a calendar year other than the one ``snap``
     prices. Never for a card that cannot be dated."""
     year = card_year(snap)
-    return year is not None and month.year > year
+    return year is not None and month.year != year
 
 
 def own_year_sheet(region: str, month: date, dso: str) -> dict[str, float | None]:
@@ -108,14 +111,14 @@ def on_sheet(
     return replace(overlay, **changes)
 
 
-def new_year_network(
+def delivery_year_network(
     data: Mapping[str, Any], snap: SupplierSnapshot, month: date, region: str
 ) -> SupplierSnapshot:
     """``snap`` with the entry's own area billed on the sheet of ``month``'s
-    year, for a month past the year the card prices, once that sheet is read
-    (:func:`own_year_sheet`); ``snap`` itself otherwise. The other areas keep
-    the card's figures: only the entry's own is billed."""
-    if data.get(CONF_REGION) != region or not billed_after_its_year(snap, month):
+    year, for a month outside the year the card prices, once that sheet is
+    read (:func:`own_year_sheet`); ``snap`` itself otherwise. The other areas
+    keep the card's figures: only the entry's own is billed."""
+    if data.get(CONF_REGION) != region or not billed_outside_its_year(snap, month):
         return snap
     dso = str(data.get(CONF_DSO, ""))
     overlay = snap.dsos.get(dso)

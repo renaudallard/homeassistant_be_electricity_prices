@@ -98,6 +98,7 @@ from .snapshot_months import (
 from .snapshot_resolve import (
     analog_meter,
     ensure_custom_network,
+    ensure_delivery_year_sheet,
     entry_annual_injection_kwh,
     entry_annual_kwh,
     network_sheet_unread,
@@ -535,10 +536,19 @@ async def _build_context(
                 await ensure_analog_surcharge(
                     coordinator._session, year, str(entry.data[CONF_DSO])
                 )
+    # The card each contract's own was resolved from, so a month no archive
+    # holds bills its own levies, as the live sensor bills it.
+    raw = (
+        getattr(coordinator, "_snapshot_raw", None)
+        if snapshot is None
+        else snapshot_raw
+    )
     # An entry's network off its region's sheet, a custom one's or a
-    # withdrawn product's, for the same reason.
+    # withdrawn product's, for the same reason, and that year's sheet for a
+    # card of another year standing in for a month no archive holds.
     for year in years:
         await ensure_custom_network(coordinator._session, entry.data, year)
+        await ensure_delivery_year_sheet(coordinator._session, entry.data, raw, year)
     return _BackfillContext(
         region=region,
         day_start=day_start_for(entry.data),
@@ -556,13 +566,7 @@ async def _build_context(
             region,
             snap,
             entry,
-            # The card each contract's own was resolved from, so a month no
-            # archive holds bills its own levies, as the live sensor bills it.
-            current_raw=(
-                getattr(coordinator, "_snapshot_raw", None)
-                if snapshot is None
-                else snapshot_raw
-            ),
+            current_raw=raw,
         ),
         # Entries whose injection is SPP-weighted - a card that indexes on
         # Belpex_SPP, or a custom monthly entry that opted in - price the

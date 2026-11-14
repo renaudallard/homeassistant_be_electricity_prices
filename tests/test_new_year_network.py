@@ -1,9 +1,10 @@
-"""A card held into a year after its own: the network of the new year.
+"""A card billed in a year other than its own: the network of that year.
 
 A card prints its own year's network tariffs. Held into January while its
 supplier's next card is not out, a month of the new year takes its network
 off the regulator's sheet of that year once it is read, and keeps the card's
-table until then (``network_year``).
+table until then (``network_year``). A card standing in for a month of an
+earlier year does the same with that year's sheet.
 """
 
 from __future__ import annotations
@@ -223,23 +224,67 @@ def test_the_coordinator_stamps_the_new_year_s_sheet(freezer: Any) -> None:
     assert snapshot_resolve.sheet_network(data, today) == {}
 
 
-async def test_the_tick_reads_the_new_year_s_sheet_for_an_older_card() -> None:
-    """The sheet of the running year is read for an entry whose card prices
-    an earlier one, and not for a card of the running year, an entry with no
-    card yet, or one that reads its sheet anyway."""
-    session = object()
+async def test_a_year_s_sheet_is_read_for_a_card_of_another_year() -> None:
+    """The sheet of a year is read for an entry whose card prices another
+    one, the year after it as the tick asks or the year before as a backfill
+    does, and not for a card of that year, an entry with no card yet, or one
+    that reads its sheet anyway."""
+    session: Any = object()
     area = AsyncMock()
     data = _flex_entry().data
     snap = _flex()
     with patch.object(snapshot_resolve, "ensure_area_terms", area):
-        await snapshot_resolve.ensure_new_year_sheet(session, data, snap, 2027)  # type: ignore[arg-type]
-        area.assert_awaited_once_with(session, 2027, _ZENNE_DIJLE)
-        area.reset_mock()
-        await snapshot_resolve.ensure_new_year_sheet(session, data, snap, 2026)  # type: ignore[arg-type]
-        await snapshot_resolve.ensure_new_year_sheet(session, data, None, 2027)  # type: ignore[arg-type]
+        for year in (2027, 2025):
+            await snapshot_resolve.ensure_delivery_year_sheet(session, data, snap, year)
+            area.assert_awaited_once_with(session, year, _ZENNE_DIJLE)
+            area.reset_mock()
+        await snapshot_resolve.ensure_delivery_year_sheet(session, data, snap, 2026)
+        await snapshot_resolve.ensure_delivery_year_sheet(session, data, None, 2027)
         withdrawn = _entry("trevion", "lifepowr", "flanders", _ZENNE_DIJLE).data
-        await snapshot_resolve.ensure_new_year_sheet(session, withdrawn, snap, 2027)  # type: ignore[arg-type]
+        await snapshot_resolve.ensure_delivery_year_sheet(
+            session, withdrawn, snap, 2027
+        )
         area.assert_not_awaited()
+
+
+@pytest.mark.usefixtures("_fluvius_held")
+def test_a_card_standing_in_for_an_earlier_year_takes_that_year_s_sheet() -> None:
+    """Flex's 2026 card standing in for June 2025, as a backfill bills it for
+    a supplier with no archive that far back: Fluvius's 2026 sheet alone
+    leaves it on the card's table, and the 2025 sheet once read bills it."""
+    snap = _flex()
+    entry = _flex_entry()
+    june = date(2025, 6, 1)
+    fluvius._area[(2026, _ZENNE_DIJLE)] = _zenne_dijle(2026)
+    held = _resolve_snapshot(entry, snap, delivery_month=june)
+    assert held.dsos[_ZENNE_DIJLE].distribution_single == pytest.approx(
+        snap.dsos[_ZENNE_DIJLE].distribution_single
+    )
+    fluvius._area[(2025, _ZENNE_DIJLE)] = replace(_zenne_dijle(2026), kwh_normal=0.0577)
+    billed = _resolve_snapshot(entry, snap, delivery_month=june)
+    assert billed.dsos[_ZENNE_DIJLE].distribution_single == pytest.approx(0.0577 * 1.06)
+    assert billed.dsos["fluvius_antwerpen"] == held.dsos["fluvius_antwerpen"]
+
+
+@pytest.mark.usefixtures("_fluvius_held")
+def test_a_walk_bills_an_earlier_year_s_month_on_that_year_s_sheet(
+    freezer: Any,
+) -> None:
+    """In November 2026 the card prices its own year on its table, and a walk
+    standing it in for June 2025 bills that month on the 2025 sheet; a month
+    of 2026 keeps the card's table."""
+    freezer.move_to("2026-11-15 12:00:00+01:00")
+    fluvius._area[(2025, _ZENNE_DIJLE)] = replace(_zenne_dijle(2026), kwh_normal=0.0577)
+    raw = _flex()
+    entry = _flex_entry()
+    current = _resolve_snapshot(entry, raw)
+    assert current.dsos[_ZENNE_DIJLE].distribution_single == pytest.approx(
+        raw.dsos[_ZENNE_DIJLE].distribution_single
+    )
+    june = _proxy_for_month(entry, current, raw, date(2025, 6, 1))
+    assert june.dsos[_ZENNE_DIJLE].distribution_single == pytest.approx(0.0577 * 1.06)
+    october = _proxy_for_month(entry, current, raw, date(2026, 10, 1))
+    assert october.dsos == current.dsos
 
 
 @pytest.mark.usefixtures("_fluvius_held")

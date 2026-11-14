@@ -482,8 +482,8 @@ async def ensure_area_terms(
 
     Only for a custom entry that takes its network from Fluvius rather than
     typing it, a withdrawn product past its last card's year, Wase Wind,
-    whose cards print no network table, and an entry holding a card of an
-    earlier year into this one (``network_year``). ``None``
+    whose cards print no network table, and an entry whose card prices a
+    year other than ``year`` (``network_year``). ``None``
     for a key that is not a Fluvius area. Where the listing has no sheet for
     the year yet, the year before is read off the same listing to stand in
     (:func:`cached_area_terms`).

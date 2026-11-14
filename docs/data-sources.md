@@ -1556,18 +1556,25 @@ Fluvius's 2025 table, where every other supplier's card of those months has
 it reads its area's sheet like a withdrawn product's. The backfill's hold
 does not wait for that sheet: until it is read, the card's table bills.
 
-Any other card held into a later year takes the same overlay for a month
-of that year, once the regulator's sheet of the month's own year is read
-(`network_year.py`): a supplier's December card still pricing in January
-prints the year before's table, while the operators' tariffs change on
-1 January. The card's year is the last day it states, or else the month its
+Any other card billed in a year other than its own takes the same overlay
+for a month of that year, once the regulator's sheet of the month's own year
+is read (`network_year.py`): a supplier's December card still pricing in
+January prints the year before's table, while the operators' tariffs change
+on 1 January, and a card standing in for a month of an earlier year, as a
+backfill bills a month no archive holds, prints its own year's. The card's year is the last day it states, or else the month its
 title names (`card_year`), and a card naming neither is left alone. Only the
 delivery year's own sheet counts here: Fluvius's area sheet of that year
 (`held_area_terms`), Brugel's final sheet (`own_network_terms`), or a CWaPE
 grid that began in that year, the transport grid on its own. The sheet of
-the year before would bill what the card already prints, so until the new
-one is out the card's table stands. The tick reads that sheet for such an
-entry only (`ensure_new_year_sheet`, `snapshot_resolve.py`), and the sheet
+another year would bill what the card already prints or a year the month
+was not billed in, so until the month's own is out the card's table stands,
+as it does for a year with no sheet to read: Fluvius's area sheets go back
+to 2023 for Antwerpen, Limburg and West and to 2025 for the other areas,
+Brugel serves no final sheet for 2025, and the CWaPE's grids are read from
+2026 (`FIRST_YEAR`, `cwape.py`). The tick
+reads the running year's sheet for such an entry only, and the backfill
+each year it walks (`ensure_delivery_year_sheet`, `snapshot_resolve.py`),
+and the sheet
 figures are in the stamp the coordinator re-resolves on (`sheet_network`),
 so a sheet read after the card reaches it on the next tick.
 

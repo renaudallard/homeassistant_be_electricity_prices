@@ -97,8 +97,8 @@ from .fluvius import (
 )
 from .network_archive import fields_for as archived_network
 from .network_year import (
-    billed_after_its_year,
-    new_year_network,
+    billed_outside_its_year,
+    delivery_year_network,
     on_sheet,
     own_year_sheet,
 )
@@ -386,7 +386,7 @@ def _resolve_fluvius_network(
         takes_fluvius_network(entry.data)
         or past_last_card(entry, snap, month, REGION_FLANDERS)
     ):
-        return new_year_network(entry.data, snap, month, REGION_FLANDERS)
+        return delivery_year_network(entry.data, snap, month, REGION_FLANDERS)
     dso = str(entry.data.get(CONF_DSO, ""))
     return _with_sheet(snap, month, dso, _sheet_read(REGION_FLANDERS, month, dso))
 
@@ -420,7 +420,7 @@ def _resolve_brugel_network(
         takes_brugel_network(entry.data)
         or past_last_card(entry, snap, month, REGION_BRUSSELS)
     ):
-        return new_year_network(entry.data, snap, month, REGION_BRUSSELS)
+        return delivery_year_network(entry.data, snap, month, REGION_BRUSSELS)
     dso = str(entry.data.get(CONF_DSO, ""))
     return _with_sheet(snap, month, dso, _sheet_read(REGION_BRUSSELS, month, dso))
 
@@ -455,7 +455,7 @@ def _resolve_cwape_network(
         takes_cwape_network(entry.data)
         or past_last_card(entry, snap, month, REGION_WALLONIA)
     ):
-        return new_year_network(entry.data, snap, month, REGION_WALLONIA)
+        return delivery_year_network(entry.data, snap, month, REGION_WALLONIA)
     dso = str(entry.data.get(CONF_DSO, ""))
     return _with_sheet(snap, month, dso, _sheet_read(REGION_WALLONIA, month, dso))
 
@@ -484,15 +484,15 @@ def sheet_network(
 ) -> dict[str, float | None]:
     """What this entry's region's sheet gives its area for ``month``, with
     what the card archive kept of it beneath, or nothing for an entry that
-    reads none (:func:`_sheet_region`), unless ``snap`` is a card of an
-    earlier year, which bills its area off the sheet of ``month``'s own
-    year once read (``network_year``). The coordinator stamps it, so a sheet
+    reads none (:func:`_sheet_region`), unless ``snap`` is a card of another
+    year, which bills its area off the sheet of ``month``'s own year once
+    read (``network_year``). The coordinator stamps it, so a sheet
     read after the card was resolved reaches the card on the next tick."""
     region = _sheet_region(data)
     dso = str(data.get(CONF_DSO, ""))
     if region is None:
         region = data.get(CONF_REGION)
-        if snap is None or not billed_after_its_year(snap, month):
+        if snap is None or not billed_outside_its_year(snap, month):
             return {}
         return own_year_sheet(region, month, dso) if isinstance(region, str) else {}
     return {**archived_network(month, dso), **_sheet_read(region, month, dso)}
@@ -600,14 +600,14 @@ async def ensure_custom_network(
         await _ensure_sheet(session, region, str(data.get(CONF_DSO, "")), year)
 
 
-async def ensure_new_year_sheet(
+async def ensure_delivery_year_sheet(
     session: aiohttp.ClientSession,
     data: Mapping[str, Any],
     snap: SupplierSnapshot | None,
     year: int,
 ) -> None:
     """Read ``year``'s sheet for this entry's area when the card it holds
-    prices an earlier year, which bills its months of ``year`` off that sheet
+    prices another year, which bills its months of ``year`` off that sheet
     once read (``network_year``). Nothing for an entry that reads its sheet
     anyway (:func:`ensure_custom_network`). Never raises."""
     region = data.get(CONF_REGION)
@@ -615,7 +615,7 @@ async def ensure_new_year_sheet(
         snap is None
         or _sheet_region(data) is not None
         or not isinstance(region, str)
-        or not billed_after_its_year(snap, date(year, 1, 1))
+        or not billed_outside_its_year(snap, date(year, 1, 1))
     ):
         return
     await _ensure_sheet(session, region, str(data.get(CONF_DSO, "")), year)
@@ -969,8 +969,10 @@ def _proxy_for_month(
     holds today's, so the entry's own overlay is taken from the month as
     well, where it differs: otherwise a walk in January 2027 would bill
     December 2026 of a 2026 card on the 2027 sheet rather than the card's
-    table. The same holds for a card held into a later year that bills it
-    off the new year's sheet (``network_year``).
+    table. The same holds for a card billed in a year other than its own
+    off that year's sheet (``network_year``): held into a later year, or
+    standing in for a month of an earlier one, which bills that month off
+    its own year's sheet where ``current`` holds the card's table.
     """
     today = _resolve_snapshot(entry, raw)
     month = _resolve_snapshot(entry, raw, delivery_month=year_month, stand_in=True)
@@ -989,7 +991,8 @@ def _proxy_for_month(
         and network != today.dsos.get(dso)
         and (
             withdrawn_on(raw.supplier, raw.contract) is not None
-            or billed_after_its_year(raw, dt_util.now().date())
+            or billed_outside_its_year(raw, year_month)
+            or billed_outside_its_year(raw, dt_util.now().date())
         )
     ):
         out = replace(out, dsos={**out.dsos, dso: network})
