@@ -116,6 +116,7 @@ from .signing_month import _tariff_card_month
 from .snapshot_resolve import (
     analog_meter,
     ensure_custom_network,
+    ensure_new_year_sheet,
     reads_network_sheet,
 )
 from .snapshot_store import cached_month_card
@@ -282,6 +283,11 @@ class _TickMixin:
         # An entry taking its network off its region's sheet: a custom one
         # that asks for it, and a withdrawn product past its card's year.
         await ensure_custom_network(self._session, self.entry.data, dt_util.now().year)
+        # And any other entry still holding a card of an earlier year, which
+        # bills this year's months off this year's sheet once it is out.
+        await ensure_new_year_sheet(
+            self._session, self.entry.data, self._snapshot_raw, dt_util.now().year
+        )
         # The month's VAT rate, read before the card is resolved like the term
         # above, and from the card archive, so only where the entry reads it;
         # with it what the law billed each month the law no longer gives.

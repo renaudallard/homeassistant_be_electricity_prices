@@ -1556,6 +1556,21 @@ Fluvius's 2025 table, where every other supplier's card of those months has
 it reads its area's sheet like a withdrawn product's. The backfill's hold
 does not wait for that sheet: until it is read, the card's table bills.
 
+Any other card held into a later year takes the same overlay for a month
+of that year, once the regulator's sheet of the month's own year is read
+(`network_year.py`): a supplier's December card still pricing in January
+prints the year before's table, while the operators' tariffs change on
+1 January. The card's year is the last day it states, or else the month its
+title names (`card_year`), and a card naming neither is left alone. Only the
+delivery year's own sheet counts here: Fluvius's area sheet of that year
+(`held_area_terms`), Brugel's final sheet (`own_network_terms`), or a CWaPE
+grid that began in that year, the transport grid on its own. The sheet of
+the year before would bill what the card already prints, so until the new
+one is out the card's table stands. The tick reads that sheet for such an
+entry only (`ensure_new_year_sheet`, `snapshot_resolve.py`), and the sheet
+figures are in the stamp the coordinator re-resolves on (`sheet_network`),
+so a sheet read after the card reaches it on the next tick.
+
 Wase Wind's cards print no network table at all, so its reader takes every
 area's off these sheets for the card's year (`ensure_area_terms`,
 `held_area_terms`), grossed at the VAT rate the card states, and refuses the

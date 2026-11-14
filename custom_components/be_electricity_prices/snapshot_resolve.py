@@ -96,6 +96,12 @@ from .fluvius import (
     tariff_sheet_held,
 )
 from .network_archive import fields_for as archived_network
+from .network_year import (
+    billed_after_its_year,
+    new_year_network,
+    on_sheet,
+    own_year_sheet,
+)
 from .providers import (
     is_professional,
     offers_direct_debit,
@@ -119,7 +125,7 @@ from .providers._resolve import (
     resolve_welcome_credit_meter,
 )
 from .providers._settlement_grid import resolve_settlement_grid
-from .providers.base import DsoOverlay, SupplierSnapshot
+from .providers.base import SupplierSnapshot
 from .signing_month import resolve_signed_feed_in_floor
 
 # Where a compare-page proxy (``compare_inputs._quote_entry``) freezes the
@@ -380,7 +386,7 @@ def _resolve_fluvius_network(
         takes_fluvius_network(entry.data)
         or past_last_card(entry, snap, month, REGION_FLANDERS)
     ):
-        return snap
+        return new_year_network(entry.data, snap, month, REGION_FLANDERS)
     dso = str(entry.data.get(CONF_DSO, ""))
     return _with_sheet(snap, month, dso, _sheet_read(REGION_FLANDERS, month, dso))
 
@@ -414,7 +420,7 @@ def _resolve_brugel_network(
         takes_brugel_network(entry.data)
         or past_last_card(entry, snap, month, REGION_BRUSSELS)
     ):
-        return snap
+        return new_year_network(entry.data, snap, month, REGION_BRUSSELS)
     dso = str(entry.data.get(CONF_DSO, ""))
     return _with_sheet(snap, month, dso, _sheet_read(REGION_BRUSSELS, month, dso))
 
@@ -449,7 +455,7 @@ def _resolve_cwape_network(
         takes_cwape_network(entry.data)
         or past_last_card(entry, snap, month, REGION_WALLONIA)
     ):
-        return snap
+        return new_year_network(entry.data, snap, month, REGION_WALLONIA)
     dso = str(entry.data.get(CONF_DSO, ""))
     return _with_sheet(snap, month, dso, _sheet_read(REGION_WALLONIA, month, dso))
 
@@ -473,15 +479,22 @@ def _sheet_read(region: str, month: date, dso: str) -> dict[str, float | None]:
     return read if terms is None else terms.overlay_fields()
 
 
-def sheet_network(data: Mapping[str, Any], month: date) -> dict[str, float | None]:
+def sheet_network(
+    data: Mapping[str, Any], month: date, snap: SupplierSnapshot | None = None
+) -> dict[str, float | None]:
     """What this entry's region's sheet gives its area for ``month``, with
     what the card archive kept of it beneath, or nothing for an entry that
-    reads none (:func:`_sheet_region`). The coordinator stamps it, so a sheet
+    reads none (:func:`_sheet_region`), unless ``snap`` is a card of an
+    earlier year, which bills its area off the sheet of ``month``'s own
+    year once read (``network_year``). The coordinator stamps it, so a sheet
     read after the card was resolved reaches the card on the next tick."""
     region = _sheet_region(data)
-    if region is None:
-        return {}
     dso = str(data.get(CONF_DSO, ""))
+    if region is None:
+        region = data.get(CONF_REGION)
+        if snap is None or not billed_after_its_year(snap, month):
+            return {}
+        return own_year_sheet(region, month, dso) if isinstance(region, str) else {}
     return {**archived_network(month, dso), **_sheet_read(region, month, dso)}
 
 
@@ -563,24 +576,8 @@ def _with_sheet(
     fields = {**archived_network(month, dso), **read}
     if overlay is None or not fields:
         return snap
-    sheet = _on_sheet(snap, month, overlay, fields)
+    sheet = on_sheet(snap, month, overlay, fields)
     return replace(snap, dsos={**snap.dsos, dso: sheet})
-
-
-def _on_sheet(
-    snap: SupplierSnapshot,
-    month: date,
-    overlay: DsoOverlay,
-    fields: Mapping[str, float | None],
-) -> DsoOverlay:
-    """``overlay`` with the fields a regulator's sheet sets, each put on the
-    basis the entry typed on, and the typed figure dropped where the sheet
-    leaves a field ``None``."""
-    changes: dict[str, Any] = {
-        field: None if value is None else on_card_basis(snap, month, value)
-        for field, value in fields.items()
-    }
-    return replace(overlay, **changes)
 
 
 async def ensure_custom_network(
@@ -599,8 +596,37 @@ async def ensure_custom_network(
     cannot await. Never raises, as each reader promises.
     """
     region = _sheet_region(data)
+    if region is not None:
+        await _ensure_sheet(session, region, str(data.get(CONF_DSO, "")), year)
+
+
+async def ensure_new_year_sheet(
+    session: aiohttp.ClientSession,
+    data: Mapping[str, Any],
+    snap: SupplierSnapshot | None,
+    year: int,
+) -> None:
+    """Read ``year``'s sheet for this entry's area when the card it holds
+    prices an earlier year, which bills its months of ``year`` off that sheet
+    once read (``network_year``). Nothing for an entry that reads its sheet
+    anyway (:func:`ensure_custom_network`). Never raises."""
+    region = data.get(CONF_REGION)
+    if (
+        snap is None
+        or _sheet_region(data) is not None
+        or not isinstance(region, str)
+        or not billed_after_its_year(snap, date(year, 1, 1))
+    ):
+        return
+    await _ensure_sheet(session, region, str(data.get(CONF_DSO, "")), year)
+
+
+async def _ensure_sheet(
+    session: aiohttp.ClientSession, region: str, dso: str, year: int
+) -> None:
+    """Read ``region``'s sheet for ``dso`` and ``year``."""
     if region == REGION_FLANDERS:
-        await ensure_area_terms(session, year, str(data.get(CONF_DSO, "")))
+        await ensure_area_terms(session, year, dso)
     elif region == REGION_BRUSSELS:
         await ensure_power_term(session, year)
         # Brugel has no listing to find the year before on, as Fluvius does,
@@ -609,7 +635,7 @@ async def ensure_custom_network(
         if cached_network_terms(year) is None:
             await ensure_power_term(session, year - 1)
     elif region == REGION_WALLONIA:
-        await ensure_cwape_network(session, year, str(data.get(CONF_DSO, "")))
+        await ensure_cwape_network(session, year, dso)
 
 
 def entry_analog_surcharge(
@@ -943,7 +969,8 @@ def _proxy_for_month(
     holds today's, so the entry's own overlay is taken from the month as
     well, where it differs: otherwise a walk in January 2027 would bill
     December 2026 of a 2026 card on the 2027 sheet rather than the card's
-    table.
+    table. The same holds for a card held into a later year that bills it
+    off the new year's sheet (``network_year``).
     """
     today = _resolve_snapshot(entry, raw)
     month = _resolve_snapshot(entry, raw, delivery_month=year_month, stand_in=True)
@@ -960,7 +987,10 @@ def _proxy_for_month(
     if (
         network is not None
         and network != today.dsos.get(dso)
-        and withdrawn_on(raw.supplier, raw.contract) is not None
+        and (
+            withdrawn_on(raw.supplier, raw.contract) is not None
+            or billed_after_its_year(raw, dt_util.now().date())
+        )
     ):
         out = replace(out, dsos={**out.dsos, dso: network})
     return out

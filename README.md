@@ -1317,6 +1317,14 @@ Luminus served an early copy titled November with October's prices. Other
 suppliers still need an update of the integration to follow a move.
 What happens when a card stays missing is under *Failure mode* below.
 
+The network tariffs change on 1 January whatever the supplier publishes, and
+a December card still pricing in January prints the year before's. Once the
+regulator's sheet of the new year is read for your area (Fluvius's area
+sheet, Brugel's sheet or the CWaPE's grid for your operator), the months of
+the new year take their distribution, capacity and data management off it,
+and the energy price stays the card's. Until that sheet is out the card's own
+table keeps billing, as it does for every other month of the card's year.
+
 ### Failure mode
 
 If a refresh fails, the coordinator keeps serving the last known snapshot

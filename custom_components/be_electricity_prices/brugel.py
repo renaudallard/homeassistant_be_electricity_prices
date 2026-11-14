@@ -240,6 +240,12 @@ def cached_network_terms(year: int) -> NetworkTerms | None:
     return _network[max(held)] if held else None
 
 
+def own_network_terms(year: int) -> NetworkTerms | None:
+    """The year's network off its own final sheet, with no earlier year
+    standing in, or ``None`` before that sheet is read."""
+    return _network.get(year)
+
+
 def any_cached_power_term() -> tuple[float, float] | None:
     """The most recent term this process holds, for any year, or ``None``.
 

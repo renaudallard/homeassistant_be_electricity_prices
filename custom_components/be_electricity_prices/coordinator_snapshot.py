@@ -436,7 +436,9 @@ class _SnapshotMixin:
         power_term = cached_power_term(dt_util.now().year)
         ceiling = cached_network_ceiling(dt_util.now().year)
         analog = entry_analog_surcharge(self.entry, dt_util.now().year)
-        network = sheet_network(self.entry.data, dt_util.now().date())
+        network = sheet_network(
+            self.entry.data, dt_util.now().date(), self._snapshot_raw
+        )
         vat = _vat_now()
         excise = _excise_now()
         month = _month_now()
@@ -495,7 +497,9 @@ class _SnapshotMixin:
         self._snapshot_power_term = cached_power_term(dt_util.now().year)
         self._snapshot_ceiling = cached_network_ceiling(dt_util.now().year)
         self._snapshot_analog = entry_analog_surcharge(self.entry, dt_util.now().year)
-        self._snapshot_network = sheet_network(self.entry.data, dt_util.now().date())
+        self._snapshot_network = sheet_network(
+            self.entry.data, dt_util.now().date(), snap
+        )
         self._snapshot_vat = _vat_now()
         self._snapshot_excise = _excise_now()
         self._snapshot_month = _month_now()
