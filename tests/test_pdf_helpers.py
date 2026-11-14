@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import inspect
 import logging
@@ -3037,28 +3038,72 @@ def test_card_with_no_text_layer_raises_a_distinct_error() -> None:
 
 
 # Reads every fixture card; 382 s with none cached on a loaded Raspberry Pi 4.
-@pytest.mark.timeout(900)
+_READER_MODES = {
+    "fetch_pdf_text": "plain",
+    "extract_pdf_text": "plain",
+    "fetch_pdf_text_layout": "layout",
+    "extract_pdf_text_layout": "layout",
+    "fetch_pdf_text_aligned": "aligned",
+    "extract_pdf_text_aligned": "aligned",
+}
+
+# Fixtures whose prefix is not the name of the module reading them.
+_CARD_MODULES = {"creg": "providers/social.py"}
+
+
+def _reader_modes(prefix: str) -> set[str]:
+    """The readers the module behind the ``prefix`` fixtures uses, off its
+    syntax tree, so a comment naming one does not count and a reader handed
+    over as a render function does."""
+    from tests import PACKAGE
+
+    path = PACKAGE / _CARD_MODULES.get(prefix, f"providers/{prefix}.py")
+    if not path.exists():
+        path = PACKAGE / f"{prefix}.py"
+    assert path.exists(), f"no module reads the {prefix} fixtures"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    modes = {
+        _READER_MODES[name]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name | ast.Attribute)
+        and isinstance(node.ctx, ast.Load)
+        and (name := getattr(node, "id", getattr(node, "attr", None))) in _READER_MODES
+    }
+    assert modes, f"{path.name} uses no PDF reader"
+    return modes
+
+
+@pytest.mark.timeout(1800)
 def test_a_real_card_is_never_mistaken_for_an_image_only_one() -> None:
     """The threshold must clear every card we actually ship.
 
-    Measured across all fixtures the least texty readable card, Wase Wind's
-    one-page Vast-dynamisch card for 2027, carries 1404 characters against
-    172 and 342 for the rasterized Ecofix ones. The CREG's social tariff cards
-    are one table on one page and carry about 1550. That leaves the
-    600-character line a factor of two of headroom below every real card.
-    This asserts the margin rather than the constant, so shrinking the
-    threshold toward real data fails here.
+    Each card is measured with every reader its supplier's module uses, since
+    the floor is checked on what that reader returns and the readers differ:
+    Wase Wind's 2026 Vast-dynamisch card is 1476 characters through pypdf and
+    1270 through the layout reader Wase Wind uses. That card is the least
+    texty readable one, against 172 and 342 for the rasterized Ecofix ones,
+    which leaves the 600-character line a factor of two of headroom below
+    every real card. This asserts the margin rather than the constant, so
+    shrinking the threshold toward real data fails here.
 
-    Read through fixture_text, which runs the same extract_pdf_text and keeps
-    what it read: extracting every fixture here, uncached, was nine minutes
-    of a twenty-minute suite on one worker.
+    Read through fixture_text, which keeps what it read: extracting every
+    fixture here, uncached, takes over fifteen minutes on one worker of a
+    Raspberry Pi 5, most of it the layout reader, and runs again on CI after
+    every change to the render code.
     """
     from tests import FIXTURES, fixture_text
 
-    smallest = min(
-        len(fixture_text(path.name).strip()) for path in sorted(FIXTURES.glob("*.pdf"))
-    )
-    assert smallest > 2 * _MIN_TEXT_LAYER_CHARS
+    sizes = {
+        (path.name, mode): len(
+            fixture_text(
+                path.name, layout=mode == "layout", aligned=mode == "aligned"
+            ).strip()
+        )
+        for path in sorted(FIXTURES.glob("*.pdf"))
+        for mode in sorted(_reader_modes(path.name.split("_", 1)[0]))
+    }
+    smallest = min(sizes, key=sizes.__getitem__)
+    assert sizes[smallest] > 2 * _MIN_TEXT_LAYER_CHARS, smallest
 
 
 async def test_bom_prefixed_pdf_is_stripped_before_parsing() -> None:

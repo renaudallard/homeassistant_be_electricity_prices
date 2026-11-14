@@ -49,11 +49,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 # A tariff card that carries a text layer is never anywhere near this small:
-# across the shipped fixtures the LEAST texty is Wase Wind's one-page
-# Vast-dynamisch card for 2027 at 1404 characters, while Ecofix's rasterized
-# August 2026 cards yield 172 and 342. Anything in between separates the two
-# cleanly, and 600 sits 1,75 times above the rasterized ones and 2,3 times
-# below the smallest real one. Raising here only changes
+# across the shipped fixtures, each read with its supplier's reader, the LEAST
+# texty is Wase Wind's one-page Vast-dynamisch card for 2026 at 1270
+# characters through the layout reader, while Ecofix's rasterized August 2026
+# cards yield 172 and 342. Anything in between separates the two cleanly, and
+# 600 sits 1,75 times above the rasterized ones and 2,1 times below the
+# smallest real one. Raising here only changes
 # WHICH error the user is shown: a card with no text layer was already going
 # to fail its parse.
 _MIN_TEXT_LAYER_CHARS = 600
