@@ -1570,13 +1570,22 @@ def test_every_month_indexed_card_can_collect_a_key() -> None:
     from custom_components.be_electricity_prices.providers import EXTRACTORS
 
     by_id = {c.id: c for ex in EXTRACTORS.values() for c in ex.contracts}
+    shapes = [*lc._INJECTION_SHAPE.items()] + [
+        (cid, shape)
+        for cid, years in lc._INJECTION_SHAPE_FROM_YEAR.items()
+        for _year, shape in years
+    ]
+    # A month-indexed energy leg is offered the key on every solar regime too.
     missing = sorted(
-        cid
-        for cid, shape in lc._INJECTION_SHAPE.items()
-        if shape in ("spp", "month", "spot", "triplet")
-        and cid in by_id
-        and by_id[cid].kind not in SPOT_PRICED_CONTRACT_KINDS
-        and not by_id[cid].spot_indexed_injection
+        {
+            cid
+            for cid, shape in shapes
+            if shape in ("spp", "month", "spot", "triplet")
+            and cid in by_id
+            and by_id[cid].kind not in SPOT_PRICED_CONTRACT_KINDS
+            and not by_id[cid].spot_indexed_injection
+            and not by_id[cid].month_indexed_energy
+        }
     )
     assert missing == [], (
         "these contracts index injection on a monthly mean but no flow step "
@@ -1621,6 +1630,44 @@ def test_the_energyvision_cards_crediting_the_spp_mean_are_held_to_it(
     )
     assert snap.injection is not None and snap.injection.spp_indexed
     assert lc._expected_injection_shape(contract_id) == "spp"
+
+
+@pytest.mark.parametrize(
+    ("contract_id", "shapes"),
+    [
+        ("wasewind_vast_dynamisch", ("monthly", "spot")),
+        ("wasewind_vast_variabel", ("monthly", "month")),
+    ],
+)
+def test_a_wasewind_feed_in_is_held_to_the_shape_of_its_card_year(
+    contract_id: str, shapes: tuple[str, str]
+) -> None:
+    """Vast-dynamisch and Vast-variabel fix their feed-in on the 2026 cards
+    and price it on a formula on the 2027 ones, so the expected shape follows
+    the card read: each card passes its own year's shape and fails the other
+    year's, and the switch on 1 January needs no edit."""
+    from custom_components.be_electricity_prices.providers import wasewind
+    from tests import fixture_text, fluvius_network
+
+    for card, shape, other in (
+        ("2026-11", shapes[0], shapes[1]),
+        ("2027-00", shapes[1], shapes[0]),
+    ):
+        snap = wasewind.parse_snapshot(
+            contract_id,
+            fixture_text(f"{contract_id}_{card}.pdf", layout=True),
+            fluvius_network(2026),
+            "t://",
+        )
+        assert snap.valid_until is not None
+        assert lc._expected_injection_shape(contract_id, snap.valid_until.year) == shape
+        lc.CHECKS.clear()
+        lc._validate_injection("x", snap, shape)
+        assert all(c.ok for c in lc.CHECKS), [c for c in lc.CHECKS if not c.ok]
+        lc.CHECKS.clear()
+        lc._validate_injection("x", snap, other)
+        assert not all(c.ok for c in lc.CHECKS), (card, other)
+    lc.CHECKS.clear()
 
 
 def test_a_month_indexed_card_losing_its_flag_fails() -> None:

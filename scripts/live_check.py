@@ -4864,11 +4864,6 @@ def _validate_injection(prefix: str, snap: object, shape: str = "present") -> No
 # Anything not listed is derived from contract metadata by
 # _expected_injection_shape, so a new card is covered without editing this map.
 _INJECTION_SHAPE: dict[str, str] = {
-    # Wase Wind Vast-dynamisch prices its energy per quarter hour but fixes
-    # its feed-in at 2,0 c€/kWh on every 2026 card. Its 2027 cards price the
-    # feed-in on the quarter-hourly Belpex, which is "present", as
-    # Vast-variabel's 2027 month formula is "month".
-    "wasewind_vast_dynamisch": "monthly",
     # Eneco Power Fix and Flex index their credit on Belpex-injectie, the
     # plain arithmetic monthly mean, and print the LAST KNOWN value of it as
     # an estimate. Both the coefficients and the flag have to survive: the
@@ -5068,20 +5063,36 @@ _INJECTION_SHAPE: dict[str, str] = {
     "octaplus_basiconline": "spp",
 }
 
+# Contracts whose feed-in changes shape with the year of the card: each year
+# a shape starts from, the newest at or before the card's year applying.
+# Wase Wind fixes the feed-in of Vast-dynamisch and Vast-variabel at 2,0
+# c€/kWh on every 2026 card, and its 2027 cards price it on a formula, the
+# quarter-hourly Belpex for the first and the month's for the second.
+_INJECTION_SHAPE_FROM_YEAR: dict[str, tuple[tuple[int, str], ...]] = {
+    "wasewind_vast_dynamisch": ((2026, "monthly"), (2027, "spot")),
+    "wasewind_vast_variabel": ((2026, "monthly"), (2027, "month")),
+}
+
 # contract id -> Contract, populated in _run once the providers are loaded so
 # _expected_injection_shape can derive a shape for every card.
 _CONTRACTS_BY_ID: dict[str, object] = {}
 
 
-def _expected_injection_shape(contract_id: str) -> str:
-    """Expected injection shape for a contract.
+def _expected_injection_shape(contract_id: str, year: int | None = None) -> str:
+    """Expected injection shape for a contract, on a card of ``year``.
 
-    Explicit _INJECTION_SHAPE entries win; otherwise derive from the
+    A shape of the card's year (_INJECTION_SHAPE_FROM_YEAR) comes first, then
+    explicit _INJECTION_SHAPE entries; otherwise derive from the
     contract's own metadata so a fixed/variable (monthly-indexed) card can't
     silently gain a spot factor/base: the 0.6.7-class latent mispricing,
     without failing here. ``spot_indexed_injection`` marks the one variable
     card whose injection is a spot formula (Cociter Variable); dynamic and TOU
     cards carry factor/base or per-slot rates, so they stay presence-only."""
+    by_year = _INJECTION_SHAPE_FROM_YEAR.get(contract_id)
+    if by_year is not None and year is not None:
+        started = [shape for first, shape in by_year if first <= year]
+        if started:
+            return started[-1]
     if contract_id in _INJECTION_SHAPE:
         return _INJECTION_SHAPE[contract_id]
     contract = _CONTRACTS_BY_ID.get(contract_id)
@@ -5400,7 +5411,10 @@ def _validate_snapshot(
     _expect_direct_debit_registry(prefix, contract_id, snap)
     _expect_month_indexed_registry(prefix, contract_id, getattr(snap, "energy", None))
     _expect_quarter_hourly_registry(prefix, contract_id, getattr(snap, "energy", None))
-    shape = injection_shape or _expected_injection_shape(contract_id)
+    valid_until = getattr(snap, "valid_until", None)
+    shape = injection_shape or _expected_injection_shape(
+        contract_id, valid_until.year if isinstance(valid_until, date) else None
+    )
     _validate_injection(prefix, snap, shape)
     _expect_feed_in_fixed_for_term(prefix, contract_id, snap)
     _validate_dsos(

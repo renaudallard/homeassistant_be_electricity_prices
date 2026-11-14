@@ -646,9 +646,11 @@ means no spots, no monthly mean, and every path silently falls back to the
 card's printed figure, which is the defect the flag was set to fix. Nine
 contracts across five suppliers shipped in exactly that state.
 `test_every_month_indexed_card_can_collect_a_key` holds the registry against
-the live check's `_INJECTION_SHAPE`. A contract whose KIND already collects the
-key for its energy leg (`dynamic`, `spot_monthly`) is exempt and leaves the
-registry flag False, which is why energie.be Variabel does not set it.
+the live check's `_INJECTION_SHAPE` and `_INJECTION_SHAPE_FROM_YEAR`. A contract
+whose KIND already collects the key for its energy leg (`dynamic`,
+`spot_monthly`) is exempt and leaves the registry flag False, which is why
+energie.be Variabel does not set it, and so is one whose energy is
+`month_indexed_energy`, which is offered the key on every solar regime.
 
 A per-slot credit can be month-indexed too. Engie Empower Flextime prints one
 EPEXDAM formula per Flextime slot on the injection side as well, so its triplet

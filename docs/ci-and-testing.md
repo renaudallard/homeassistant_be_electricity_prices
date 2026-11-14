@@ -859,7 +859,10 @@ runs these gates:
   `"triplet"` (a per-slot peak/transition/offpeak feed-in tariff with its three month coefficient
   pairs and `month_indexed`, which only Empower Flextime has),
   or `"present"` (`factor`/`base` set). Per-contract
-  expectations live in `_INJECTION_SHAPE`; the DATS 24 check passes
+  expectations live in `_INJECTION_SHAPE`, and in `_INJECTION_SHAPE_FROM_YEAR` for a contract
+  whose feed-in changes shape with the card's year (Wase Wind Vast-dynamisch and Vast-variabel,
+  fixed on the 2026 cards and a formula on the 2027 ones), read off the card's `valid_until`;
+  the DATS 24 check passes
   `injection_shape` explicitly because its Wallonia card pays no feed-in while its Flanders card
   carries the BE_spotSPP formula.
 
