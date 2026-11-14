@@ -3667,17 +3667,35 @@ def test_prune_removes_months_older_than_the_retention(tmp_path: Path) -> None:
         text = tmp_path / "texts" / month / "abc.txt"
         text.parent.mkdir(parents=True, exist_ok=True)
         text.write_text("x")
-    old = tmp_path / "cards/old/old_fix/wallonia/2023-01.json"
-    old.parent.mkdir(parents=True)
-    old.write_text("{}")
-    assert ac._prune(tmp_path, 36, date(2026, 9, 11)) == 2
-    assert not (tmp_path / "old").exists()
+    assert ac._prune(tmp_path, 36, date(2026, 9, 11)) == 1
     assert not (tmp_path / "cards/acme/acme_fix/wallonia/2023-08.json").exists()
     assert (tmp_path / "cards/acme/acme_fix/wallonia/2023-09.json").exists()
     # The removed row's text goes with the texts no row names.
     assert ac._drop_unnamed_texts(tmp_path) == 1
     assert not (tmp_path / "texts/2023-08").exists()
     assert (tmp_path / "texts/2023-09/abc.txt").exists()
+
+
+def test_prune_keeps_a_withdrawn_products_last_card(tmp_path: Path) -> None:
+    """A withdrawn product's households are still billed on its last card,
+    and Goedkope stroom has only its September 2025 row: pruned by its month,
+    it went in October 2028 and left them with no card at all. A product's
+    newest row stays, with the PDF it names; its older rows go as before."""
+    rows = tmp_path / "cards/energyvision/energyvision_goedkope_stroom/flanders"
+    rows.mkdir(parents=True)
+    (rows / "2025-08.json").write_text(json.dumps({"_sources": [{"pdf": "aug"}]}))
+    (rows / "2025-09.json").write_text(json.dumps({"_sources": [{"pdf": "sep"}]}))
+    (tmp_path / "pdfs.json").write_text(
+        json.dumps(
+            {"aug": "electricity-2025-08/aug.pdf", "sep": "electricity-2025-09/sep.pdf"}
+        )
+    )
+    assert ac._prune(tmp_path, 36, date(2028, 10, 3)) == 2
+    assert not (rows / "2025-08.json").exists()
+    assert (rows / "2025-09.json").exists()
+    assert json.loads((tmp_path / "pdfs.json").read_text()) == {
+        "sep": "electricity-2025-09/sep.pdf"
+    }
 
 
 def test_prune_keeps_a_text_a_kept_row_reads_from_an_older_month(

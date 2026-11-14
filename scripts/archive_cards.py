@@ -1060,6 +1060,11 @@ def _read_row(path: Path) -> dict[str, Any] | None:
 def _prune(out: Path, keep_months: int, today: date) -> int:
     """Remove months more than ``keep_months`` before today's; count them.
 
+    A product's newest row stays whatever its month: a withdrawn product's
+    last card is what its households are still billed on, and Goedkope
+    stroom has only its September 2025 row, which the cutoff reaches in
+    October 2028. A product still sold has a newer row anyway.
+
     Only the rows go by their month. A text is filed under the month it was
     stored in, which is the month before for a card published ahead of its
     own (EBEM's October 2026 rows read texts kept under September), so pruning
@@ -1074,8 +1079,11 @@ def _prune(out: Path, keep_months: int, today: date) -> int:
     """
     cutoff = _months_before(today, keep_months)
     removed = 0
-    for path in out.glob(f"{_ROWS}/*/*/*/????-??.json"):
-        if path.stem < cutoff:
+    rows = sorted(out.glob(f"{_ROWS}/*/*/*/????-??.json"))
+    # Sorted, so each directory's last row is its newest month.
+    newest = {path.parent: path for path in rows}
+    for path in rows:
+        if path.stem < cutoff and newest[path.parent] != path:
             path.unlink()
             removed += 1
     # Deepest first, so a contract directory emptied above goes too.

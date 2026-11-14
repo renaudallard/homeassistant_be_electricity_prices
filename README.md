@@ -2185,7 +2185,9 @@ A withdrawn product whose households are billed on the card they signed is
 mirrored further back, to the first card it prices a signing on: DATS 24's
 from April 2023, as far back as the 36 months reach (November 2023 in
 November 2026), up to its last card of July 2026, so they stay readable once
-its own server drops them, for as long as the 36 months keep them.
+its own server drops them, for as long as the 36 months keep them. A
+product's newest card is never dropped, so a withdrawn product keeps its last
+card however long ago it was sold.
 
 **Finding a stored card by hand.** Everything is addressed by the same
 three ids the integration uses, which are the directory names under
