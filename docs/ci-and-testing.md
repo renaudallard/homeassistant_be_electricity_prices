@@ -529,6 +529,21 @@ applied to a source rather than a card.
 It checks shape, not values: a full local day of hourly slots and every price inside the publishable
 band. The 23/24/25 tolerance is deliberate -- a DST boundary day is a real Belgian day, not a fault.
 
+`_check_spot_scale` checks their scale, which the band cannot: every source is read as EUR/MWh,
+and prices a tenth or a thousandth of themselves still lie inside it. The cards print the index
+their energy settled at for a closed month, which the archive keeps as the energy leg's
+`index_realised`, so the newest closed month with such rows (the month just closed, or the one
+before it in the first days of a month) is averaged from energy-charts, or SMARD where energy-charts
+fails or covers under 90% of its hours, and each value has to lie within a factor 2 of that plain
+mean. The archive's 1637 values of January 2024 to October 2026 lay between 0,79 and 1,30 of it,
+forward-indexed and RLP-weighted ones included; the feed-in legs are left out, their SPP-weighted
+index falling to 0,25 of the plain mean in May 2025. Every card off says the prices are on another
+scale, one alone that its card was misread. On 15 November 2026 the 80 October rows passed, and
+failed all together with the prices divided by ten. It came out of gas issue #15, where Engie's
+index page read in c€/kWh priced every Engie gas index a tenth of itself and passed every check.
+ENTSO-E itself is not fetched here (no key); `_parse_energy_charts` also refuses an answer naming
+another unit than EUR/MWh (`docs/data-sources.md`).
+
 It exercises **our** `EnergyChartsClient` and `SmardClient`, not the endpoints alone, so an upstream
 that changes shape under the parser fails here rather than silently at a user's next ENTSO-E outage.
 Those clients are reached through the same synthetic `be_pkg` loader every other integration module uses

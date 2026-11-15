@@ -6355,3 +6355,117 @@ def test_an_archive_row_holding_another_months_card_is_reported(
     assert [(c.ok, c.label) for c in lc.CHECKS] == [
         (True, "_archive: every live row holds its month's card")
     ]
+
+
+_SPOT_SCALE = (
+    "spot/scale: the keyless day-ahead is on the scale of the cards' settled index"
+)
+# October 2026's plain mean of the Belgian day-ahead, from energy-charts.
+_OCTOBER_2026_MEAN = 0.17419
+
+
+def _settled_row(
+    root: Path, path: str, energy: float, injection: float | None = None
+) -> None:
+    target = root / "cards" / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    data: dict[str, Any] = {"energy": {"index_realised": energy}}
+    if injection is not None:
+        data["injection"] = {"index_realised": injection}
+    target.write_text(json.dumps(data), encoding="utf-8")
+
+
+def _keyless(value: float | None, hours: int = 745) -> Any:
+    """A keyless client answering every hour of the window at ``value``, or
+    raising when it is None; ``hours`` cuts the answer short."""
+
+    class _Client:
+        def __init__(self, _session: Any) -> None:
+            pass
+
+        async def fetch_day_ahead(
+            self, start: datetime, end: datetime
+        ) -> dict[datetime, float]:
+            if value is None:
+                raise RuntimeError("down")
+            slots = int((end - start).total_seconds() // 3600)
+            return {start + timedelta(hours=n): value for n in range(min(slots, hours))}
+
+    return _Client
+
+
+def _settle_october(root: Path) -> None:
+    # The values the archive's October 2026 rows settle at: Aspiravi on the
+    # plain mean, Engie's Easy on its forward price, Ecopower on the RLP one,
+    # and an SPP feed-in leg well below the plain mean, which is not held.
+    _settled_row(root, "aspiravi/aspiravi_variabel/flanders/2026-10.json", 0.17419)
+    _settled_row(root, "engie/engie_easy_variable/flanders/2026-10.json", 0.1744)
+    _settled_row(
+        root, "ecopower/ecopower_dbs/flanders/2026-10.json", 0.18183624, 0.14152081
+    )
+
+
+async def test_the_keyless_day_ahead_is_held_to_the_cards_settled_index(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A source read a tenth of itself passed the publishable band, as
+    Engie's gas index page did in c€/kWh in November 2026. October's
+    settled values put it ten times off; one card misread is named alone."""
+    _settle_october(tmp_path)
+    monkeypatch.setattr(lc, "_SMARD_CLIENT", _keyless(None))
+    today = date(2026, 11, 15)
+
+    async def check(mean: float) -> lc.Check:
+        lc.CHECKS.clear()
+        monkeypatch.setattr(lc, "_ENERGY_CHARTS_CLIENT", _keyless(mean))
+        await lc._check_spot_scale(None, tmp_path, today)
+        (row,) = lc.CHECKS
+        assert row.label == _SPOT_SCALE
+        return row
+
+    assert (await check(_OCTOBER_2026_MEAN)).ok
+    tenth = await check(_OCTOBER_2026_MEAN / 10)
+    assert not tenth.ok
+    assert tenth.detail.startswith(
+        "2026-10 averages 17.42 EUR/MWh on the keyless day-ahead, and 3 of 3 cards"
+    )
+    _settled_row(tmp_path, "engie/engie_easy_variable/flanders/2026-10.json", 1.744)
+    misread = await check(_OCTOBER_2026_MEAN)
+    assert not misread.ok
+    assert misread.detail.endswith(
+        "1 of 3 cards settle the month off its scale: "
+        "engie/engie_easy_variable/flanders at 1744.00 EUR/MWh"
+    )
+
+
+async def test_the_spot_scale_falls_back_to_smard_and_to_the_month_before(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """energy-charts down or short of the month leaves it to SMARD; both
+    failing is reported. Early in a month the closed one is not settled yet
+    and the month before it is held instead; nothing settled, nothing to
+    say."""
+    today = date(2026, 11, 15)
+
+    async def run(when: date = today) -> list[lc.Check]:
+        lc.CHECKS.clear()
+        await lc._check_spot_scale(None, tmp_path, when)
+        return list(lc.CHECKS)
+
+    assert await run() == []
+    _settle_october(tmp_path)
+    monkeypatch.setattr(
+        lc, "_ENERGY_CHARTS_CLIENT", _keyless(_OCTOBER_2026_MEAN, hours=600)
+    )
+    monkeypatch.setattr(lc, "_SMARD_CLIENT", _keyless(_OCTOBER_2026_MEAN))
+    assert [c.ok for c in await run()] == [True]
+    monkeypatch.setattr(lc, "_SMARD_CLIENT", _keyless(None))
+    (down,) = await run()
+    assert not down.ok
+    assert down.detail == (
+        "energy-charts: 600 of 745 hours of 2026-10; SMARD: RuntimeError: down"
+    )
+    # On 3 December November is not settled yet: October is held.
+    monkeypatch.setattr(lc, "_ENERGY_CHARTS_CLIENT", _keyless(_OCTOBER_2026_MEAN))
+    assert [c.ok for c in await run(date(2026, 12, 3))] == [True]
+    assert await run(date(2027, 1, 3)) == []

@@ -3038,6 +3038,109 @@ async def _check_keyless_source(
     )
 
 
+# How far the index a card settles its energy on for a closed month (the
+# ``index_realised`` of the energy leg in its archive row) may be from that
+# month's plain mean of the keyless day-ahead, as a ratio either way. The
+# archive's 1637 such values of January 2024 to October 2026 lay between
+# 0,79 and 1,30 of it, forward-indexed and RLP-weighted ones included. A price source read on another scale is ten times off or more:
+# Engie's gas index page read in c€/kWh gave a tenth of every value. The
+# feed-in legs are left out, their SPP-weighted index falling to 0,25 of the
+# plain mean in a sunny month (EBEM, May 2025).
+_SPOT_SCALE_RATIO = 2.0
+# Closed months looked at, newest first: a month is settled on the archive
+# only once its next card is out, in the first days of the month after.
+_SPOT_SCALE_MONTHS = 2
+# The share of a month's hours the keyless prices must cover to be averaged.
+_SPOT_SCALE_COVERAGE = 0.9
+
+
+def _settled_indices(archive: Path, month: str) -> list[tuple[str, float]]:
+    """Every archived row of ``month`` whose energy leg names the index it
+    settled at, as (supplier/contract/region, EUR/kWh)."""
+    settled: list[tuple[str, float]] = []
+    for row in sorted(archive.glob(f"cards/*/*/*/{month}.json")):
+        try:
+            energy = json.loads(row.read_text(encoding="utf-8")).get("energy")
+        except (OSError, ValueError, AttributeError):
+            continue
+        value = energy.get("index_realised") if isinstance(energy, dict) else None
+        # A bool is an int too, and no index.
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            settled.append(("/".join(row.parts[-4:-1]), float(value)))
+    return settled
+
+
+async def _check_spot_scale(
+    session: aiohttp.ClientSession, archive: Path | None, today: date | None = None
+) -> None:
+    """The keyless day-ahead against the index the cards settled a closed
+    month at.
+
+    Every spot leg bills on these prices, read as EUR/MWh whatever unit
+    they come in, and a tenth or a thousandth of themselves would still pass
+    the publishable band of :func:`_check_keyless_source`. The cards print
+    the index their month settled at, so the newest closed month the archive
+    holds such values for is averaged from the keyless sources and each value
+    has to lie within ``_SPOT_SCALE_RATIO`` of that mean. One value out is a
+    card misread; all of them out, the prices.
+    """
+    if archive is None:
+        return
+    label = (
+        "spot/scale: the keyless day-ahead is on the scale of the cards' settled index"
+    )
+    brussels = ZoneInfo("Europe/Brussels")
+    first = (today or datetime.now(brussels).date()).replace(day=1)
+    settled: list[tuple[str, float]] = []
+    for _ in range(_SPOT_SCALE_MONTHS):
+        first = (first - timedelta(days=1)).replace(day=1)
+        settled = _settled_indices(archive, f"{first:%Y-%m}")
+        if settled:
+            break
+    if not settled:
+        return
+    after = (first + timedelta(days=32)).replace(day=1)
+    start = datetime(first.year, first.month, 1, tzinfo=brussels).astimezone(UTC)
+    end = datetime(after.year, after.month, 1, tzinfo=brussels).astimezone(UTC)
+    hours = round((end - start).total_seconds() / 3600)
+    prices: dict[datetime, float] = {}
+    errors: list[str] = []
+    for name, client in (
+        ("energy-charts", _ENERGY_CHARTS_CLIENT),
+        ("SMARD", _SMARD_CLIENT),
+    ):
+        try:
+            prices = await client(session).fetch_day_ahead(start, end)
+        except Exception as err:  # any failure is the finding
+            errors.append(f"{name}: {type(err).__name__}: {err}")
+            prices = {}
+            continue
+        if len(prices) >= hours * _SPOT_SCALE_COVERAGE:
+            break
+        errors.append(f"{name}: {len(prices)} of {hours} hours of {first:%Y-%m}")
+        prices = {}
+    if not prices:
+        _record(label, False, "; ".join(errors))
+        return
+    mean = sum(prices.values()) / len(prices)
+    off = [
+        (name, value)
+        for name, value in settled
+        if mean <= 0 or not 1 / _SPOT_SCALE_RATIO <= value / mean <= _SPOT_SCALE_RATIO
+    ]
+    shown = ", ".join(f"{name} at {value * 1000:.2f}" for name, value in off[:5])
+    more = f" and {len(off) - 5} more" if len(off) > 5 else ""
+    _record(
+        label,
+        not off,
+        f"{first:%Y-%m} averages {mean * 1000:.2f} EUR/MWh on the keyless day-ahead, "
+        f"and {len(off)} of {len(settled)} cards settle the month off its scale: "
+        f"{shown}{more} EUR/MWh"
+        if off
+        else "",
+    )
+
+
 # Suppliers whose archived rows are not market cards and legitimately differ
 # from the fleet on the regulated figures: the social tariff carries the
 # protected customer's excise and the CREG's flat network component in place
@@ -6508,6 +6611,14 @@ async def _run(texts: Path | None = None) -> int:
             except Exception as err:
                 _record(
                     "spot/fallback: check crashed",
+                    False,
+                    f"{type(err).__name__}: {err}",
+                )
+            try:
+                await _check_spot_scale(session, texts)
+            except Exception as err:
+                _record(
+                    "spot/scale: check crashed",
                     False,
                     f"{type(err).__name__}: {err}",
                 )
