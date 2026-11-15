@@ -561,6 +561,41 @@ def test_energy_charts_rejects_a_non_finite_point(label: str, body: str) -> None
     assert out == {}, label
 
 
+@pytest.mark.parametrize(
+    ("unit", "read"),
+    [
+        ("EUR / MWh", True),
+        (None, True),
+        ("EUR / kWh", False),
+        ("ct / kWh", False),
+    ],
+)
+def test_energy_charts_reads_only_prices_in_eur_per_mwh(
+    unit: str | None, read: bool
+) -> None:
+    """The first slots of the answer of 15 November 2026 for the 14th, with
+    the unit it named. Prices in another unit would be read a thousandth or
+    a tenth of themselves and pass every bound, as Engie's gas index page
+    did in c€/kWh, so they are refused. An answer naming no unit is read as
+    before."""
+    doc: dict[str, Any] = {
+        "license_info": "CC BY 4.0 (creativecommons.org/licenses/by/4.0) from "
+        "Bundesnetzagentur | SMARD.de",
+        "unix_seconds": [1794610800, 1794611700, 1794612600],
+        "price": [240.23, 250.01, 236.06],
+        "deprecated": False,
+    }
+    if unit is not None:
+        doc["unit"] = unit
+    window = (datetime(2026, 1, 1, tzinfo=UTC), datetime(2030, 1, 1, tzinfo=UTC))
+    if read:
+        out = _parse_energy_charts(json.dumps(doc), *window, True)
+        assert list(out.values()) == pytest.approx([0.24023, 0.25001, 0.23606])
+        return
+    with pytest.raises(EntsoeError, match="prices in another unit than EUR / MWh"):
+        _parse_energy_charts(json.dumps(doc), *window, True)
+
+
 def test_energy_charts_drops_only_the_bad_point_not_the_window() -> None:
     """Skipped rather than raised, matching the rule for a null slot: one
     unusable point costs its own slot, not every good one beside it."""

@@ -52,6 +52,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     ENERGY_CHARTS_BE_ZONE,
+    ENERGY_CHARTS_UNIT,
     ENERGY_CHARTS_URL,
     ENTSOE_BASE_URL,
     ENTSOE_BE_DOMAIN,
@@ -644,6 +645,15 @@ def _parse_energy_charts(
         raise EntsoeError("energy-charts: non-JSON response") from err
     if not isinstance(doc, dict):
         raise EntsoeError("energy-charts: response was not an object")
+    # The answer names its unit ("EUR / MWh" on 15 November 2026), and the
+    # prices are read on that scale: one in any other would bill every spot
+    # leg at a thousandth or a tenth of itself, inside every bound. An answer
+    # that names none is read as before, as SMARD's always is.
+    unit = doc.get("unit")
+    if unit is not None and unit != ENERGY_CHARTS_UNIT:
+        raise EntsoeError(
+            f"energy-charts: prices in another unit than {ENERGY_CHARTS_UNIT}"
+        )
     seconds = doc.get("unix_seconds")
     prices = doc.get("price")
     if not isinstance(seconds, list) or not isinstance(prices, list):

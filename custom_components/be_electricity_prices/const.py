@@ -591,6 +591,8 @@ ENTSOE_BE_DOMAIN: Final = "10YBE----------2"
 # every one of the 96 daily slots across four days, negative prices included.
 ENERGY_CHARTS_URL: Final = "https://api.energy-charts.info/price"
 ENERGY_CHARTS_BE_ZONE: Final = "BE"
+# The unit its /price answer names for the prices.
+ENERGY_CHARTS_UNIT: Final = "EUR / MWh"
 ENERGY_CHARTS_ATTRIBUTION: Final = (
     "Day-ahead fallback: energy-charts.info, CC BY 4.0 from "
     "Bundesnetzagentur | SMARD.de"

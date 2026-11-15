@@ -113,6 +113,14 @@ day it served, joined by `+`, which reaches the `current_price` sensor as
 `spot_source`: `entsoe`, `energy-charts`, `smard`, `entsoe+energy-charts`,
 `entsoe+smard` or `energy-charts+smard`.
 
+Every source is read in EUR/MWh. energy-charts names its unit (`"unit": "EUR /
+MWh"`), and an answer naming another is refused (`_parse_energy_charts`), so the
+days go on to SMARD: a price read on the wrong scale passes every bound and
+bills every spot leg at a tenth or a thousandth of itself. An answer naming
+none is read as before. SMARD's files name no unit and ENTSO-E's unit tags are
+not read; the live check holds the keyless prices' scale against the index the
+cards print (`docs/ci-and-testing.md`).
+
 ### One keyless curve per installation
 
 energy-charts and SMARD are free services every installation shares as its
