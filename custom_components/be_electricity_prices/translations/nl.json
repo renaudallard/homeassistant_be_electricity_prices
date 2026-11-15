@@ -224,7 +224,7 @@
       },
       "custom_tax": {
         "title": "Belastingen en heffingen",
-        "description": "Gereguleerde belastingen en heffingen, exclusief btw. Het btw-tarief hieronder rekent energie, net en belastingen door (injectie blijft btw-vrij). De Belgische residentiele btw is 0.06; zet 0 als je alles inclusief btw hebt ingevoerd, of met 'Zakelijk contract' aangevinkt als je de btw aftrekt en alles exclusief btw hebt ingevoerd: de bedragen van de regulatoren, zoals het maximumtarief, worden dan ook exclusief btw aangerekend.",
+        "description": "Gereguleerde belastingen en heffingen, exclusief btw. Zonder 'Zakelijk contract' aangevinkt worden de federale accijns en de energiebijdrage vanaf augustus 2026 aangerekend zoals de wet ze vastlegt, wat er ook in hun vakjes staat: die tellen alleen voor een eerdere maand, of zolang de wet niet gelezen is. Het btw-tarief hieronder rekent energie, net en belastingen door (injectie blijft btw-vrij). De Belgische residentiele btw is 0.06; zet 0 als je alles inclusief btw hebt ingevoerd, of met 'Zakelijk contract' aangevinkt als je de btw aftrekt en alles exclusief btw hebt ingevoerd: de bedragen van de regulatoren, zoals het maximumtarief, worden dan ook exclusief btw aangerekend.",
         "data": {
           "custom_tax_federal_excise": "Federale accijns (EUR/kWh)",
           "custom_tax_energy_contribution": "Energiebijdrage (EUR/kWh)",
@@ -602,7 +602,7 @@
       },
       "custom_tax": {
         "title": "Belastingen en heffingen",
-        "description": "Gereguleerde belastingen en heffingen, exclusief btw. Het btw-tarief hieronder rekent energie, net en belastingen door (injectie blijft btw-vrij). De Belgische residentiele btw is 0.06; zet 0 als je alles inclusief btw hebt ingevoerd, of met 'Zakelijk contract' aangevinkt als je de btw aftrekt en alles exclusief btw hebt ingevoerd: de bedragen van de regulatoren, zoals het maximumtarief, worden dan ook exclusief btw aangerekend.",
+        "description": "Gereguleerde belastingen en heffingen, exclusief btw. Zonder 'Zakelijk contract' aangevinkt worden de federale accijns en de energiebijdrage vanaf augustus 2026 aangerekend zoals de wet ze vastlegt, wat er ook in hun vakjes staat: die tellen alleen voor een eerdere maand, of zolang de wet niet gelezen is. Het btw-tarief hieronder rekent energie, net en belastingen door (injectie blijft btw-vrij). De Belgische residentiele btw is 0.06; zet 0 als je alles inclusief btw hebt ingevoerd, of met 'Zakelijk contract' aangevinkt als je de btw aftrekt en alles exclusief btw hebt ingevoerd: de bedragen van de regulatoren, zoals het maximumtarief, worden dan ook exclusief btw aangerekend.",
         "data": {
           "custom_tax_federal_excise": "Federale accijns (EUR/kWh)",
           "custom_tax_energy_contribution": "Energiebijdrage (EUR/kWh)",
