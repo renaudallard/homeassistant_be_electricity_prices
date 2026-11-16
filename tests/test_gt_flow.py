@@ -278,7 +278,7 @@ async def test_a_recheck_that_rejects_an_optional_key_keeps_it_optional(
     result = await cfg(
         flow,
         {
-            const.CONF_SOLAR_KVA: 5.0,
+            const.CONF_SOLAR_KVA: "5.0",
             const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
         },
     )

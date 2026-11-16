@@ -465,7 +465,7 @@ Fields:
   capacity bill. The coordinator already scales W/kW/VA/kVA, but cutting the long
   tail at the picker is the only guarantee the bug class cannot recur
   (`flow_schemas.py` comment).
-- `CONF_CAPACITY_FIXED_KW`: a `NumberSelector` box, 0-50 kW step 0.1, default
+- `CONF_CAPACITY_FIXED_KW`: a `DecimalSelector` text field (`flow_decimal.py`), 0-50 kW, default
   `capacity_floor_kw()` (`fluvius.py`), the minimum monthly peak Fluvius bills
   against as this year's tariff sheet states it (2.5 kW on every sheet from 2023 to
   2026), else the latest earlier sheet held, else `VREG_CAPACITY_FLOOR_KW`
@@ -524,7 +524,7 @@ straight to solar (`flow_wizard.py` comment).
 
 Schema `_solar_schema` (`flow_schemas_meters.py`). Fields:
 
-- `CONF_SOLAR_KVA`: `NumberSelector` box 0-50 step 0.1, default 0.0 (0 means no
+- `CONF_SOLAR_KVA`: `DecimalSelector` text field, 0-50, default 0.0 (0 means no
   panels, no prosumer cost; `const.py`). With the compensation regime the step
   refuses 0 (`compensation_kva_missing` on `solar_kva`, via
   `compensation_lacks_kva` in `fees.py`): that regime bills the prosumer fee per
@@ -669,6 +669,7 @@ Anything pre-filled stays editable (`strings.json`).
 | kWh sensors restricted to device_class energy | `flow_schemas.py` | A non-energy sensor would be read as raw kWh |
 | ENTSO-E key validated live before finalize | `flow_wizard.py` | Prevents finalizing an entry that fails on first refresh |
 | Duplicate (supplier, contract, region, dso) tuple rejected | `config_flow.py` | Two coordinators on the same tuple double-poll the supplier |
+| A typed figure that is not digits with one decimal comma or point (and a minus where negative is allowed), or falls outside its field's bounds -> form error `invalid_number`, the form back as typed | `flow_decimal.py` (`reads_decimals` on `signed_rate`, `capacity`, `solar` and the four `custom_*` steps) | A browser's number field refuses the decimal comma Belgian cards print, or sends it on as empty, so every figure is a text field (`DecimalSelector`) carrying the bounds its number box had; a blanked one is dropped, as ha-form left out a blanked number box, and a stored one is shown without the exponent `str()` gives a small figure (`decimal_text`) |
 
 Note on partial register-pair wiring: every one of the six kWh fields is
 `vol.Optional`, but the meters step refuses a day/night pair with only one half

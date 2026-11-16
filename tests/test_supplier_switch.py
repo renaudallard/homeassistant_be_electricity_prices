@@ -444,7 +444,7 @@ async def test_the_options_menu_records_a_switch_and_sets_up_the_new_contract(
         "dso": {"dso": "ores"},
         "meter": {"meter": "bi"},
         "dso_tariff_mode": {"dso_tariff_mode": "bi_horaire"},
-        "solar": {"solar_kva": 0.0, "solar_regime": "none"},
+        "solar": {"solar_kva": "0.0", "solar_regime": "none"},
     }
     for _ in range(12):
         if result["type"] != data_entry_flow.FlowResultType.FORM:

@@ -131,6 +131,7 @@ from .flow_contracts import (
     _region_dso_slugs,
     _supplier_options,
 )
+from .flow_decimal import DecimalSelector, decimal_text
 from .flow_switch import _add_contract_date_fields
 from .snapshot_resolve import analog_answer, offers_analog_meter
 
@@ -280,9 +281,9 @@ def _add_manual_num(
     stored = defaults.get(key)
     selector = _custom_num(negative=negative, key=key)
     if stored is not None:
-        fields[vol.Optional(key, description={"suggested_value": float(stored)})] = (
-            selector
-        )
+        fields[
+            vol.Optional(key, description={"suggested_value": decimal_text(stored)})
+        ] = selector
     else:
         fields[vol.Optional(key)] = selector
 
@@ -640,8 +641,8 @@ _PER_KWH_BOUND: dict[str, float] = {
 }
 
 
-def _custom_num(*, negative: bool = False, key: str = "") -> NumberSelector:
-    """Number selector for a hand-entered EUR/kWh rate or coefficient.
+def _custom_num(*, negative: bool = False, key: str = "") -> DecimalSelector:
+    """Field for a hand-entered EUR/kWh rate or coefficient.
 
     ``negative=True`` for values a Belgian formula can legitimately drive
     below zero (an injection factor/base, a spot multiplier/offset); the
@@ -649,11 +650,6 @@ def _custom_num(*, negative: bool = False, key: str = "") -> NumberSelector:
     on both sides when it may be negative.
     """
     bound = _PER_KWH_BOUND.get(key)
-    config = NumberSelectorConfig(step="any", mode=NumberSelectorMode.BOX)
     if not negative:
-        config["min"] = 0.0
-    elif bound is not None:
-        config["min"] = -bound
-    if bound is not None:
-        config["max"] = bound
-    return NumberSelector(config)
+        return DecimalSelector(0.0, bound)
+    return DecimalSelector(None if bound is None else -bound, bound)

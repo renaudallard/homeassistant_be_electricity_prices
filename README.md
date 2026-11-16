@@ -528,7 +528,9 @@ supplier, depending on contract type and region. Apart from two paths no
 EUR values are asked, since energy, DSO and tax rates all come from the
 supplier's tariff card. The exceptions are the optional **signing-rate**
 step and the **Expert: custom formula** supplier, which has no card and asks
-for the whole set.
+for the whole set. Every figure you type, those, the inverter's kVA, a fixed
+capacity peak and the custom VAT rate, takes a decimal comma or point, as
+Belgian cards print them.
 
 The signing-rate step appears on a fixed, dynamic or monthly-indexed contract
 (a Bolt variable card billed per quarter-hour counts as dynamic) when you set a

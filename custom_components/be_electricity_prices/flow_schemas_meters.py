@@ -78,6 +78,7 @@ from .const import (
     SOLAR_REGIME_NONE,
     SOLAR_REGIMES,
 )
+from .flow_decimal import DecimalSelector, decimal_text
 from .fluvius import capacity_floor_kw
 
 
@@ -116,11 +117,11 @@ def _capacity_schema(defaults: dict[str, Any]) -> vol.Schema:
     fields[
         vol.Optional(
             CONF_CAPACITY_FIXED_KW,
-            default=defaults.get(CONF_CAPACITY_FIXED_KW, capacity_floor_kw()),
+            default=decimal_text(
+                defaults.get(CONF_CAPACITY_FIXED_KW, capacity_floor_kw())
+            ),
         )
-    ] = NumberSelector(
-        NumberSelectorConfig(min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX)
-    )
+    ] = DecimalSelector(0.0, 50.0)
     return vol.Schema(fields)
 
 
@@ -288,12 +289,8 @@ def _solar_schema(defaults: dict[str, Any]) -> vol.Schema:
     fields: dict[Any, Any] = {
         vol.Optional(
             CONF_SOLAR_KVA,
-            default=defaults.get(CONF_SOLAR_KVA, 0.0),
-        ): NumberSelector(
-            NumberSelectorConfig(
-                min=0.0, max=50.0, step=0.1, mode=NumberSelectorMode.BOX
-            )
-        ),
+            default=decimal_text(defaults.get(CONF_SOLAR_KVA, 0.0)),
+        ): DecimalSelector(0.0, 50.0),
         vol.Required(
             CONF_SOLAR_REGIME,
             default=default_regime,

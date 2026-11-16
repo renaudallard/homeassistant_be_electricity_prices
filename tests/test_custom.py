@@ -299,7 +299,7 @@ def test_impact_boxes_left_blank_do_not_bill_zero_distribution() -> None:
         {"region": "wallonia", "meter": "mono", "dso_tariff_mode": "impact"}
     )
     stored = schema(
-        {"custom_dso_distribution_single": 0.1198, "custom_dso_transport": 0.0274}
+        {"custom_dso_distribution_single": "0.1198", "custom_dso_transport": "0.0274"}
     )
     for key in (
         "custom_dso_distribution_pic",
@@ -763,10 +763,10 @@ async def test_flow_custom_dynamic_flanders(
     result = await cfg(
         flow,
         {
-            const.CONF_CUSTOM_ENERGY_FACTOR: 1.0,
-            const.CONF_CUSTOM_ENERGY_BASE: 0.02,
+            const.CONF_CUSTOM_ENERGY_FACTOR: "1.0",
+            const.CONF_CUSTOM_ENERGY_BASE: "0.02",
             const.CONF_CUSTOM_ENERGY_QUARTER_HOURLY: False,
-            const.CONF_CUSTOM_YEARLY_FIXED_FEE: 60.0,
+            const.CONF_CUSTOM_YEARLY_FIXED_FEE: "60.0",
         },
     )
     assert result["step_id"] == "capacity"  # Flanders
@@ -774,18 +774,18 @@ async def test_flow_custom_dynamic_flanders(
         flow,
         {
             const.CONF_CAPACITY_MODE: const.CAPACITY_MODE_FIXED,
-            const.CONF_CAPACITY_FIXED_KW: 4.0,
+            const.CONF_CAPACITY_FIXED_KW: "4.0",
         },
     )
     assert result["step_id"] == "solar"
     result = await cfg(
         flow,
-        {const.CONF_SOLAR_KVA: 0.0, const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
+        {const.CONF_SOLAR_KVA: "0.0", const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
     )
     assert result["step_id"] == "custom_dso"
-    result = await cfg(flow, {const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.05})
+    result = await cfg(flow, {const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: "0.05"})
     assert result["step_id"] == "custom_tax"
-    result = await cfg(flow, {const.CONF_CUSTOM_VAT_RATE: 0.06})
+    result = await cfg(flow, {const.CONF_CUSTOM_VAT_RATE: "0.06"})
     assert result["step_id"] == "meters"
     result = await cfg(flow, {})
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -812,20 +812,23 @@ async def test_flow_custom_monthly_injection(
     assert result["step_id"] == "custom_energy"
     result = await cfg(
         flow,
-        {const.CONF_CUSTOM_ENERGY_FACTOR: 1.0834, const.CONF_CUSTOM_ENERGY_BASE: 0.0},
+        {
+            const.CONF_CUSTOM_ENERGY_FACTOR: "1.0834",
+            const.CONF_CUSTOM_ENERGY_BASE: "0.0",
+        },
     )
     result = await cfg(
         flow,
         {
             const.CONF_CAPACITY_MODE: const.CAPACITY_MODE_FIXED,
-            const.CONF_CAPACITY_FIXED_KW: 4.0,
+            const.CONF_CAPACITY_FIXED_KW: "4.0",
         },
     )
     assert result["step_id"] == "solar"
     result = await cfg(
         flow,
         {
-            const.CONF_SOLAR_KVA: 5.0,
+            const.CONF_SOLAR_KVA: "5.0",
             const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_INJECTION,
         },
     )
@@ -834,14 +837,14 @@ async def test_flow_custom_monthly_injection(
         flow,
         {
             const.CONF_CUSTOM_INJECTION_MODE: const.CUSTOM_INJECTION_MODE_FORMULA,
-            const.CONF_CUSTOM_INJECTION_FACTOR: 0.96,
-            const.CONF_CUSTOM_INJECTION_BASE: -0.009,
+            const.CONF_CUSTOM_INJECTION_FACTOR: "0.96",
+            const.CONF_CUSTOM_INJECTION_BASE: "-0.009",
             const.CONF_CUSTOM_INJECTION_FLOOR: True,
         },
     )
     assert result["step_id"] == "custom_dso"
-    result = await cfg(flow, {const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.05})
-    result = await cfg(flow, {const.CONF_CUSTOM_VAT_RATE: 0.06})
+    result = await cfg(flow, {const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: "0.05"})
+    result = await cfg(flow, {const.CONF_CUSTOM_VAT_RATE: "0.06"})
     assert result["step_id"] == "meters"
     result = await cfg(flow, {})
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -862,15 +865,15 @@ async def test_flow_custom_fixed_wallonia_no_api_key(
     assert result["step_id"] == "dso_tariff_mode"  # Wallonia
     result = await cfg(flow, {const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_SIMPLE})
     assert result["step_id"] == "custom_energy"  # no api-key step for fixed
-    result = await cfg(flow, {const.CONF_CUSTOM_ENERGY_SINGLE: 0.30})
+    result = await cfg(flow, {const.CONF_CUSTOM_ENERGY_SINGLE: "0.3"})
     assert result["step_id"] == "solar"  # no capacity outside Flanders
     result = await cfg(
         flow,
-        {const.CONF_SOLAR_KVA: 0.0, const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
+        {const.CONF_SOLAR_KVA: "0.0", const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
     )
     assert result["step_id"] == "custom_dso"
-    result = await cfg(flow, {const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.06})
-    result = await cfg(flow, {const.CONF_CUSTOM_VAT_RATE: 0.06})
+    result = await cfg(flow, {const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: "0.06"})
+    result = await cfg(flow, {const.CONF_CUSTOM_VAT_RATE: "0.06"})
     assert result["step_id"] == "meters"
     result = await cfg(flow, {})
     assert result["type"] == FlowResultType.CREATE_ENTRY
@@ -1057,28 +1060,84 @@ async def _custom_bi_install(hass: HomeAssistant) -> Any:
     await cfg(
         flow,
         {
-            const.CONF_CUSTOM_ENERGY_SINGLE: 0.30,
-            const.CONF_CUSTOM_ENERGY_PEAK: 0.34,
-            const.CONF_CUSTOM_ENERGY_OFFPEAK: 0.24,
+            const.CONF_CUSTOM_ENERGY_SINGLE: "0.3",
+            const.CONF_CUSTOM_ENERGY_PEAK: "0.34",
+            const.CONF_CUSTOM_ENERGY_OFFPEAK: "0.24",
         },
     )
     result = await cfg(
         flow,
-        {const.CONF_SOLAR_KVA: 0.0, const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
+        {const.CONF_SOLAR_KVA: "0.0", const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
     )
     assert result["step_id"] == "custom_dso"
     await cfg(
         flow,
         {
-            const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: 0.10,
-            const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK: 0.12,
-            const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK: 0.07,
+            const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: "0.1",
+            const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK: "0.12",
+            const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK: "0.07",
         },
     )
-    await cfg(flow, {const.CONF_CUSTOM_VAT_RATE: 0.06})
+    await cfg(flow, {const.CONF_CUSTOM_VAT_RATE: "0.06"})
     result = await cfg(flow, {})
     assert result["type"] == FlowResultType.CREATE_ENTRY
     return result
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_the_custom_figures_take_a_decimal_comma(
+    hass: HomeAssistant, _no_setup: Any
+) -> None:
+    """Belgian cards print their figures with a decimal comma: the forms read
+    it, and a figure that is not a number brings the form back as typed."""
+    result = await _start(hass, const.SUPPLIER_CUSTOM, const.REGION_WALLONIA)
+    flow = result["flow_id"]
+    cfg = hass.config_entries.flow.async_configure
+    await cfg(flow, {const.CONF_CONTRACT: const.CUSTOM_CONTRACT_FIXED})
+    await cfg(flow, {const.CONF_DSO: const.DSO_ORES})
+    await cfg(flow, {const.CONF_METER: const.METER_BI})
+    result = await cfg(flow, {const.CONF_DSO_TARIFF_MODE: const.DSO_MODE_BI_HORAIRE})
+    assert result["step_id"] == "custom_energy"
+    typed = {
+        const.CONF_CUSTOM_ENERGY_SINGLE: "0,3 €",
+        const.CONF_CUSTOM_ENERGY_PEAK: "34",
+    }
+    result = await cfg(flow, typed)
+    assert result["step_id"] == "custom_energy"
+    assert result["errors"] == {
+        const.CONF_CUSTOM_ENERGY_SINGLE: "invalid_number",
+        const.CONF_CUSTOM_ENERGY_PEAK: "invalid_number",
+    }
+    schema = result["data_schema"]
+    assert schema is not None
+    shown = {
+        str(k.schema): (k.description or {}).get("suggested_value")
+        for k in schema.schema
+    }
+    assert {key: shown[key] for key in typed} == typed
+    await cfg(
+        flow,
+        {
+            const.CONF_CUSTOM_ENERGY_SINGLE: "0,3",
+            const.CONF_CUSTOM_ENERGY_PEAK: "0,34",
+            const.CONF_CUSTOM_ENERGY_OFFPEAK: "0,24",
+        },
+    )
+    result = await cfg(
+        flow,
+        {const.CONF_SOLAR_KVA: "4,6", const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
+    )
+    assert result["step_id"] == "custom_dso"
+    await cfg(flow, {const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE: "0,1"})
+    await cfg(flow, {const.CONF_CUSTOM_VAT_RATE: "0,06"})
+    result = await cfg(flow, {})
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    data = result["data"]
+    assert data[const.CONF_CUSTOM_ENERGY_SINGLE] == 0.3
+    assert data[const.CONF_CUSTOM_ENERGY_PEAK] == 0.34
+    assert data[const.CONF_SOLAR_KVA] == 4.6
+    assert data[const.CONF_CUSTOM_DSO_DISTRIBUTION_SINGLE] == 0.1
+    assert data[const.CONF_CUSTOM_VAT_RATE] == 0.06
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -1124,14 +1183,14 @@ async def test_an_edit_still_suggests_the_stored_network_split(
     await cfg(
         flow,
         {
-            const.CONF_CUSTOM_ENERGY_SINGLE: 0.30,
-            const.CONF_CUSTOM_ENERGY_PEAK: 0.34,
-            const.CONF_CUSTOM_ENERGY_OFFPEAK: 0.24,
+            const.CONF_CUSTOM_ENERGY_SINGLE: "0.3",
+            const.CONF_CUSTOM_ENERGY_PEAK: "0.34",
+            const.CONF_CUSTOM_ENERGY_OFFPEAK: "0.24",
         },
     )
     result = await cfg(
         flow,
-        {const.CONF_SOLAR_KVA: 0.0, const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
+        {const.CONF_SOLAR_KVA: "0.0", const.CONF_SOLAR_REGIME: const.SOLAR_REGIME_NONE},
     )
     assert result["step_id"] == "custom_dso"
     schema = result["data_schema"]
@@ -1140,8 +1199,8 @@ async def test_an_edit_still_suggests_the_stored_network_split(
         str(k.schema): (k.description or {}).get("suggested_value")
         for k in schema.schema
     }
-    assert suggested[const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK] == 0.12
-    assert suggested[const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK] == 0.07
+    assert suggested[const.CONF_CUSTOM_DSO_DISTRIBUTION_PEAK] == "0.12"
+    assert suggested[const.CONF_CUSTOM_DSO_DISTRIBUTION_OFFPEAK] == "0.07"
 
 
 def test_absent_fallback_rates_price_off_the_single_rate() -> None:
@@ -1251,25 +1310,30 @@ def test_a_per_kwh_figure_typed_in_cents_is_refused() -> None:
     import voluptuous as vol
 
     from custom_components.be_electricity_prices import const
+    from custom_components.be_electricity_prices.flow_decimal import (
+        DecimalSelector,
+        read_decimals,
+    )
     from custom_components.be_electricity_prices.flow_schemas import _custom_num
 
+    def read(selector: DecimalSelector, text: str) -> float | None:
+        typed: dict[str, Any] = {"figure": text}
+        schema = vol.Schema({vol.Optional("figure"): selector})
+        return None if read_decimals(schema, typed) else typed["figure"]
+
     fee = _custom_num(key=const.CONF_CUSTOM_TAX_REGION_CONNECTION_FEE)
-    assert fee(0.00075) == 0.00075
-    with pytest.raises(vol.Invalid):
-        fee(0.075)
+    assert read(fee, "0,00075") == 0.00075
+    assert read(fee, "0,075") is None
     base = _custom_num(negative=True, key=const.CONF_CUSTOM_ENERGY_BASE)
-    assert base(-0.02) == -0.02
-    for cents in (1.5, -1.5):
-        with pytest.raises(vol.Invalid):
-            base(cents)
+    assert read(base, "-0,02") == -0.02
+    for cents in ("1,5", "-1,5"):
+        assert read(base, cents) is None
     rate = _custom_num(key=const.CONF_MANUAL_ENERGY_SINGLE)
-    assert rate(0.7) == 0.7
-    with pytest.raises(vol.Invalid):
-        rate(18.021)
+    assert read(rate, "0.7") == 0.7
+    assert read(rate, "18,021") is None
     # A yearly figure is not a per-kWh one and keeps no bound.
-    assert (
-        _custom_num(key=const.CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR)(400.0) == 400.0
-    )
+    fee_per_year = _custom_num(key=const.CONF_CUSTOM_DSO_DATA_MANAGEMENT_PER_YEAR)
+    assert read(fee_per_year, "400") == 400.0
 
 
 def _business_levies(professional: bool) -> dict[str, Any]:
@@ -1440,7 +1504,7 @@ def test_an_unset_custom_vat_rate_is_the_months_residential_one() -> None:
     with patch("homeassistant.util.dt.now", return_value=today):
         schema = _custom_tax_schema({const.CONF_REGION: const.REGION_FLANDERS})
         snap = build_snapshot(data, const.REGION_FLANDERS, const.DSO_FLUVIUS_ANTWERPEN)
-    assert schema({})[const.CONF_CUSTOM_VAT_RATE] == 0.07
+    assert schema({})[const.CONF_CUSTOM_VAT_RATE] == "0.07"
     assert snap.taxes.vat_rate == 0.07
 
 

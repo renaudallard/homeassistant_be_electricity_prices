@@ -196,7 +196,7 @@ async def test_an_impact_product_is_not_asked_which_tariff_mode(
     assert result["step_id"] == "solar"
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     assert result["step_id"] == "meters"
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
@@ -230,7 +230,7 @@ async def test_the_meters_step_refuses_one_sensor_in_two_fields(
         result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["step_id"] == "meters"
@@ -291,7 +291,7 @@ async def test_options_flow_walks_every_step(hass: HomeAssistant) -> None:
     # Solar step.
     assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     # The Cociter variable card is month-indexed, so the optional ENTSO-E key
     # is offered on every regime; left blank here.
@@ -334,8 +334,8 @@ async def test_an_edit_keeps_a_title_the_user_typed(
         "contract": {"contract": "power_fix"},
         "dso": {"dso": "fluvius_antwerpen"},
         "meter": {"meter": "mono"},
-        "capacity": {"capacity_mode": "fixed", "capacity_fixed_kw": 0.0},
-        "solar": {"solar_kva": 0.0, "solar_regime": "none"},
+        "capacity": {"capacity_mode": "fixed", "capacity_fixed_kw": "0.0"},
+        "solar": {"solar_kva": "0.0", "solar_regime": "none"},
     }
     while result["type"] == data_entry_flow.FlowResultType.FORM:
         result = await hass.config_entries.options.async_configure(
@@ -376,7 +376,7 @@ async def test_meters_step_offers_its_boxes_with_their_defaults(
         result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["step_id"] == "meters"
@@ -680,7 +680,7 @@ async def test_options_flow_dynamic_branch_asks_api_key(
     )
     assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     assert result["step_id"] == "meters"
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
@@ -735,7 +735,7 @@ async def test_options_flow_keeps_an_unchanged_required_key_unasked(
     assert result["step_id"] == "solar"
     _bypass_entsoe_validation.assert_not_called()
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
@@ -777,7 +777,7 @@ async def test_options_flow_spot_injection_offers_optional_api_key(
     entry.add_to_hass(hass)
     result = await _walk_to_solar_cociter_variable(hass, entry)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 2.0, "solar_regime": "injection"}
+        result["flow_id"], {"solar_kva": "2.0", "solar_regime": "injection"}
     )
     # Variable energy + spot-indexed injection on the injection regime ->
     # the optional ENTSO-E key step appears (no key collected earlier).
@@ -799,7 +799,7 @@ async def test_options_flow_spot_injection_api_key_is_skippable(
     entry.add_to_hass(hass)
     result = await _walk_to_solar_cociter_variable(hass, entry)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 2.0, "solar_regime": "injection"}
+        result["flow_id"], {"solar_kva": "2.0", "solar_regime": "injection"}
     )
     assert result["step_id"] == "injection_api_key"
     # Submit blank -> skip; setup completes without a key.
@@ -822,7 +822,7 @@ async def test_options_flow_trades_the_key_for_the_keyless_box(
     entry.add_to_hass(hass)
     result = await _walk_to_solar_cociter_variable(hass, entry)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     assert result["step_id"] == "injection_api_key"
     result = await hass.config_entries.options.async_configure(
@@ -836,7 +836,7 @@ async def test_options_flow_trades_the_key_for_the_keyless_box(
 
     result = await _walk_to_solar_cociter_variable(hass, entry)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     schema = result["data_schema"]
     assert schema is not None
@@ -866,7 +866,7 @@ async def test_options_flow_lets_a_stored_optional_key_be_replaced(
     entry.add_to_hass(hass)
     result = await _walk_to_solar_cociter_variable(hass, entry)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     assert result["step_id"] == "injection_api_key"
     schema = result["data_schema"]
@@ -896,7 +896,7 @@ async def test_options_flow_keeps_an_unchanged_optional_key_unasked(
     entry.add_to_hass(hass)
     result = await _walk_to_solar_cociter_variable(hass, entry)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"api_key": "kept-key"}
@@ -908,7 +908,7 @@ async def test_options_flow_keeps_an_unchanged_optional_key_unasked(
 
     result = await _walk_to_solar_cociter_variable(hass, entry)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["step_id"] == "meters"
@@ -928,7 +928,7 @@ async def test_options_flow_month_indexed_energy_offers_the_key_on_every_regime(
     entry.add_to_hass(hass)
     result = await _walk_to_solar_cociter_variable(hass, entry)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     assert result["step_id"] == "injection_api_key"
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
@@ -947,12 +947,12 @@ async def test_solar_step_refuses_compensation_without_an_inverter(
     entry.add_to_hass(hass)
     result = await _walk_to_solar_cociter_variable(hass, entry)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "compensation"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "compensation"}
     )
     assert result["step_id"] == "solar"
     assert result["errors"] == {"solar_kva": "compensation_kva_missing"}
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 5.0, "solar_regime": "compensation"}
+        result["flow_id"], {"solar_kva": "5.0", "solar_regime": "compensation"}
     )
     assert result["step_id"] != "solar"
 
@@ -985,7 +985,7 @@ async def test_options_flow_spot_injection_skipped_when_not_injection_regime(
     )
     assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     assert result["step_id"] == "meters"
 
@@ -1031,14 +1031,14 @@ async def test_options_flow_flanders_branch_asks_capacity(
         result["flow_id"],
         {
             "capacity_mode": "fixed",
-            "capacity_fixed_kw": 4.0,
+            "capacity_fixed_kw": "4.0",
         },
     )
     assert result["step_id"] == "solar"
     # User has solar this time - 5 kVA inverter on the injection tariff (this
     # entry is in Flanders so compensation regime doesn't apply anyway).
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 5.0, "solar_regime": "injection"}
+        result["flow_id"], {"solar_kva": "5.0", "solar_regime": "injection"}
     )
     # Power Fix indexes its feed-in credit on the monthly Belpex-injectie, so
     # the injection regime now offers the optional ENTSO-E key. Skipped here.
@@ -1127,7 +1127,7 @@ async def test_options_flow_brussels_branch_asks_connection_power(
     )
     assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     assert result["step_id"] == "meters"
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
@@ -5584,7 +5584,7 @@ async def test_options_flow_contract_dates_round_trip(hass: HomeAssistant) -> No
     )
     assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     # Month-indexed card: the optional key step is offered, left blank.
     assert result["step_id"] == "injection_api_key"
@@ -5636,7 +5636,7 @@ async def test_a_signing_rate_is_dropped_when_the_new_contract_skips_the_step(
         result["flow_id"], {"dso_tariff_mode": "bi_horaire"}
     )
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
@@ -5681,7 +5681,7 @@ async def test_options_flow_tariff_card_date_round_trip(hass: HomeAssistant) -> 
             result["flow_id"], {"dso_tariff_mode": "simple"}
         )
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+            result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
         )
         assert result["step_id"] == "meters"
         result = await hass.config_entries.options.async_configure(
@@ -5837,7 +5837,7 @@ async def test_signing_rate_is_offered_only_for_the_contract_it_was_typed_for(
         for marker in schema.schema
         if (marker.description or {}).get("suggested_value") is not None
     }
-    expected = {"manual_energy_single": 0.1234, "manual_yearly_fee": 50.0}
+    expected = {"manual_energy_single": "0.1234", "manual_yearly_fee": "50.0"}
     assert suggested == (expected if kept else {})
 
 
@@ -6046,7 +6046,7 @@ async def test_options_flow_signed_rate_step_for_fixed_with_start_date(
     assert result["step_id"] == "signed_rate"
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {"manual_energy_single": 0.22, "manual_yearly_fee": 60.0},
+        {"manual_energy_single": "0.22", "manual_yearly_fee": "60.0"},
     )
     assert result["step_id"] == "dso"
     result = await hass.config_entries.options.async_configure(
@@ -6061,7 +6061,7 @@ async def test_options_flow_signed_rate_step_for_fixed_with_start_date(
     )
     assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     assert result["step_id"] == "meters"
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
@@ -6103,7 +6103,7 @@ async def test_options_flow_ytd_window_flag_needs_a_start_date(
             result["flow_id"], {"dso_tariff_mode": "simple"}
         )
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+            result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
         )
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {}
@@ -6195,7 +6195,7 @@ async def test_options_flow_clears_contract_dates_when_blanked(
     )
     assert result["step_id"] == "solar"
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"solar_kva": 0.0, "solar_regime": "none"}
+        result["flow_id"], {"solar_kva": "0.0", "solar_regime": "none"}
     )
     assert result["step_id"] == "meters"
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
@@ -6225,7 +6225,7 @@ _WALLONIA_ANSWERS: dict[str, dict[str, Any]] = {
     "meter": {"meter": "mono"},
     "dso_tariff_mode": {"dso_tariff_mode": "simple"},
     "api_key": {"keyless_spots": True},
-    "solar": {"solar_kva": 0.0, "solar_regime": "none"},
+    "solar": {"solar_kva": "0.0", "solar_regime": "none"},
 }
 
 
@@ -6543,8 +6543,8 @@ async def test_editing_out_of_wallonia_drops_the_impact_tariff_mode(
     assert result["step_id"] != "dso_tariff_mode"
     # Walk whatever remains (Flanders adds a capacity step) to the end.
     answers: dict[str, dict[str, Any]] = {
-        "capacity": {"capacity_mode": "fixed", "capacity_fixed_kw": 0.0},
-        "solar": {"solar_kva": 0.0, "solar_regime": "none"},
+        "capacity": {"capacity_mode": "fixed", "capacity_fixed_kw": "0.0"},
+        "solar": {"solar_kva": "0.0", "solar_regime": "none"},
         "meters": {},
     }
     while result["type"] == data_entry_flow.FlowResultType.FORM:
@@ -6591,7 +6591,7 @@ async def test_blanking_a_meter_picker_actually_clears_it(hass: HomeAssistant) -
         "dso": {"dso": "ores"},
         "meter": {"meter": "mono"},
         "dso_tariff_mode": {"dso_tariff_mode": "simple"},
-        "solar": {"solar_kva": 0.0, "solar_regime": "none"},
+        "solar": {"solar_kva": "0.0", "solar_regime": "none"},
         "meters": {},  # every picker blanked
     }
     while result["type"] == data_entry_flow.FlowResultType.FORM:

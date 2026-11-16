@@ -160,6 +160,7 @@ machinery.
 | `tests/test_file_ci_issue.py` | `scripts/file_ci_issue.sh`: one issue per problem, one comment per cooldown |
 | `tests/test_autorelease.py` | The release job of `autorelease.yml` against a scratch origin and a fake `gh`, and every workflow's token permissions |
 | `tests/test_doc_ref_check.py` | The doc reference checker (`scripts/doc_ref_check.py`) on a docs tree of its own |
+| `tests/test_flow_decimal.py` | Typed figures read with a decimal comma or point (`flow_decimal.py`): a blank one dropped, anything else or a figure past its field's bounds refused, a stored one shown without an exponent |
 
 Shared helpers live in `tests/__init__.py`:
 

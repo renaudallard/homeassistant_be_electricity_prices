@@ -81,6 +81,7 @@ from .flow_contracts import (
     _contracts_for,
     _region_mismatch_error,
 )
+from .flow_decimal import reads_decimals
 from .flow_prefill import (
     _apply_energy_manager_capacity_default,
     _apply_energy_manager_defaults,
@@ -367,6 +368,11 @@ class _WizardStepsMixin:
         self._data.pop(CONF_QUARTER_HOURLY, None)
         return await self._after_settlement()
 
+    @reads_decimals(
+        "signed_rate",
+        _signed_rate_schema,
+        placeholders=lambda flow: flow._signed_rate_placeholders(),
+    )
     async def async_step_signed_rate(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -663,6 +669,7 @@ class _WizardStepsMixin:
             errors=errors,
         )
 
+    @reads_decimals("capacity", _capacity_schema)
     async def async_step_capacity(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -685,6 +692,7 @@ class _WizardStepsMixin:
             step_id="capacity", data_schema=_capacity_schema(defaults)
         )
 
+    @reads_decimals("solar", _solar_schema)
     async def async_step_solar(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -916,6 +924,7 @@ class _WizardStepsMixin:
             return await self.async_step_capacity()
         return await self._before_solar()
 
+    @reads_decimals("custom_energy", _custom_energy_schema)
     async def async_step_custom_energy(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -928,6 +937,7 @@ class _WizardStepsMixin:
             data_schema=_custom_energy_schema(self._data),
         )
 
+    @reads_decimals("custom_injection", _custom_injection_schema)
     async def async_step_custom_injection(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -939,6 +949,7 @@ class _WizardStepsMixin:
             data_schema=_custom_injection_schema(self._data),
         )
 
+    @reads_decimals("custom_dso", _custom_dso_schema)
     async def async_step_custom_dso(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -951,6 +962,7 @@ class _WizardStepsMixin:
             data_schema=_custom_dso_schema(self._data),
         )
 
+    @reads_decimals("custom_tax", _custom_tax_schema)
     async def async_step_custom_tax(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
