@@ -51,6 +51,12 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
 
 from custom_components.be_electricity_prices import energy_meters as em
 
+# Writing these tests' statistics into a real recorder took up to 3 s on the
+# x86 runner at load 6 and 33 s on a Raspberry Pi 4 at load 11.
+# A test stopped by its timeout while a worker waits on the recorder can
+# hang in its teardown, so the thread method ends the process instead.
+pytestmark = pytest.mark.timeout(120, method="thread")
+
 SENSOR = "sensor.daily_yield"
 ATTRS = {
     "device_class": "energy",

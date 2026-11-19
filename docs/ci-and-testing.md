@@ -40,8 +40,16 @@ Raspberry Pi 4 with the fixture text cache empty: `tests/test_bolt.py` (up to 25
 fixture card (382 s and 108 s), one in `tests/test_coordinator_runtime.py` that lays out two
 Bolt cards, `tests/test_card_vat.py`, `tests/test_vat_rates.py`,
 `tests/test_month_indexed_registry.py` and `tests/test_live_check_harness.py`, which lay out a
-Bolt card among others (up to 73 s), and `tests/recorder/test_meter_tail_reads.py`, two of whose
-tests record a year and a half of hourly statistics into a real recorder (206 s and 126 s).
+Bolt card among others (up to 73 s).
+
+The recorder tests that write many statistics are sized on a Raspberry Pi 4 at load 11:
+`tests/recorder/test_meter_tail_reads.py`, two of whose tests record a year and a half of
+hourly statistics (556 s and 278 s there, 97 s and 59 s on the x86 runner at load 6), has
+1200 s; `tests/recorder/test_meter_read_memo.py` (60 s) has 180 s;
+`tests/recorder/test_daily_read_end.py`, `tests/recorder/test_meter_outage.py` and
+`tests/recorder/test_meter_reset_walk.py` (up to 39 s) have 120 s. They time out with
+pytest-timeout's thread method, which ends the process: a test stopped while a worker thread
+waits on the recorder would otherwise hang in its teardown.
 
 The integration is a Home Assistant custom component, so the suite depends on
 `pytest-homeassistant-custom-component` (which supplies the `hass` fixture and `MockConfigEntry`)

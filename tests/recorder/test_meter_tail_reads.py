@@ -66,8 +66,11 @@ from custom_components.be_electricity_prices.const import (
 )
 
 # Two tests record a year and a half of hourly statistics into a real
-# recorder: 206 s and 126 s on a loaded Raspberry Pi 4, past the suite's 60 s.
-pytestmark = pytest.mark.timeout(600)
+# recorder: 97 s and 59 s on the x86 runner at load 6, 556 s and 278 s on a
+# Raspberry Pi 4 at load 11. A test stopped by its timeout while a worker
+# waits on the recorder can hang in its teardown, so the thread method ends
+# the process instead.
+pytestmark = pytest.mark.timeout(1200, method="thread")
 
 DAY = "sensor.import_day"
 NIGHT = "sensor.import_night_wh"

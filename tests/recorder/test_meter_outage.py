@@ -38,6 +38,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
+import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
@@ -47,6 +48,12 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
 )
 
 from custom_components.be_electricity_prices.meter_daily import _measured_total
+
+# Writing these tests' statistics into a real recorder took up to 4 s on the
+# x86 runner at load 6 and 39 s on a Raspberry Pi 4 at load 11.
+# A test stopped by its timeout while a worker waits on the recorder can
+# hang in its teardown, so the thread method ends the process instead.
+pytestmark = pytest.mark.timeout(120, method="thread")
 
 METER = "sensor.grid_import"
 ATTRIBUTES = {

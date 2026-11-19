@@ -40,6 +40,7 @@ from datetime import UTC, date, timedelta
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.statistics import (
     StatisticMeanType,
@@ -54,6 +55,12 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
 
 from custom_components.be_electricity_prices import energy_meters as em
 from custom_components.be_electricity_prices.meter_daily import _resolve_daily_kwh
+
+# Writing these tests' statistics into a real recorder took up to 6 s on the
+# x86 runner at load 6 and 37 s on a Raspberry Pi 4 at load 11.
+# A test stopped by its timeout while a worker waits on the recorder can
+# hang in its teardown, so the thread method ends the process instead.
+pytestmark = pytest.mark.timeout(120, method="thread")
 
 CONSUMPTION = "sensor.grid_import"
 INJECTION = "sensor.grid_export"
