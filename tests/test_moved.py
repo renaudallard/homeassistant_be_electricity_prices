@@ -134,6 +134,62 @@ async def test_elegant_is_read_under_the_name_its_listing_gives(
     assert asked[0].endswith("/Current/FlexElectricity_Residential.pdf")
 
 
+def _calls(monkeypatch: pytest.MonkeyPatch, name: str) -> list[str]:
+    """The text each call of ``_moved``'s ``name`` is made on, its last
+    argument, as a search runs."""
+    texts: list[str] = []
+    real = getattr(_moved, name)
+
+    def call(*args: str) -> Any:
+        texts.append(args[-1])
+        return real(*args)
+
+    monkeypatch.setattr(_moved, name, call)
+    return texts
+
+
+async def test_elegant_looks_at_the_first_names_of_a_listing_each_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A listing is a few cards long. Of one that names thousands the first
+    hundred are compared with the product's, and a name is decoded by itself,
+    "&" as an entity or as JSON spells it, not the page before the search:
+    8 MiB of entities took seconds to decode on the event loop."""
+    spelt = (
+        "Zeker &amp; Vast Electricity",
+        "Zeker \\u0026 Vast Electricity",
+        "Zeker & Vast Electricity",
+    )
+    names = [*spelt, *spelt, *(f"Card {n}" for n in range(5000)), "Flex Electricity"]
+    page = " ".join(f'"/Current/{name}_Residential.pdf"' for name in names)
+    _pages(monkeypatch, {"elegant.be/tariefkaarten": page})
+    decoded = _calls(monkeypatch, "unescape")
+    compared = _calls(monkeypatch, "_squash")
+    found = await _moved._elegant(None, "elegant_zeker_vast", REGION_FLANDERS, None)  # type: ignore[arg-type]
+    assert [url.rsplit("/", 1)[1] for url, _where, _exact in found] == [
+        "Zeker%20%26%20Vast%20Electricity_Residential.pdf"
+    ]
+    assert len(decoded) == _moved._MAX_LISTED
+    assert max(len(text) for text in decoded) < 40
+    # The product's own key, then each listed name once decoded.
+    assert len(compared) == 1 + _moved._MAX_LISTED - 2
+    assert await _moved._elegant(None, "elegant_flex", REGION_FLANDERS, None) == []  # type: ignore[arg-type]
+
+
+async def test_engie_s_prices_pages_are_searched_as_served(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A document code spells no entity, so the pages are not decoded."""
+    decoded = _calls(monkeypatch, "unescape")
+    _pages(
+        monkeypatch,
+        {"/fr/energie/": (PAGES / "engie_prix_conditions.html").read_text()},
+    )
+    found = await _moved._engie(None, "engie_empty_house", REGION_WALLONIA, None)  # type: ignore[arg-type]
+    assert any("E_EMPTYHOUSE_R_GREY_C_I_36_W_F" in url for url, _w, _e in found)
+    assert decoded == []
+
+
 async def test_engie_is_read_under_the_code_its_prices_page_gives(
     monkeypatch: pytest.MonkeyPatch, freezer: Any
 ) -> None:
@@ -293,8 +349,13 @@ async def test_a_card_that_fails_otherwise_is_not_searched_for(
 
 
 @pytest.mark.parametrize(
-    ("supplier", "contract"),
-    [("elegant", "elegant_flex"), ("engie", "engie_empty_house")],
+    ("supplier", "contract", "raised"),
+    [
+        # html.unescape refuses a numeric entity of more than 4300 digits.
+        ("elegant", "elegant_flex", "ValueError"),
+        # The JSON decoder runs out of stack on a list nested this deep.
+        ("luminus", "luminus_basicflex", "RecursionError"),
+    ],
 )
 @pytest.mark.parametrize("old", ["404", "older card"])
 async def test_a_search_that_trips_over_a_page_leaves_the_usual_answer(
@@ -303,12 +364,12 @@ async def test_a_search_that_trips_over_a_page_leaves_the_usual_answer(
     freezer: Any,
     supplier: str,
     contract: str,
+    raised: str,
     old: str,
 ) -> None:
-    """A page the search raises a ValueError on: html.unescape refuses a
-    numeric entity of more than 4300 digits. It is a search that found
-    nothing: the 404 at the usual address stands, or October's card read
-    there, and the error goes to the debug log."""
+    """A page the search raises on, with no ExtractorError. It is a search
+    that found nothing: the 404 at the usual address stands, or October's
+    card read there, and the error goes to the debug log."""
     freezer.move_to("2026-11-03 12:00:00+01:00")
 
     async def fetch(_session: Any, contract_id: str, region: str) -> SupplierSnapshot:
@@ -318,7 +379,14 @@ async def test_a_search_that_trips_over_a_page_leaves_the_usual_answer(
             supplier=supplier, contract=contract_id, publication_label="oktober 2026"
         )
 
-    asked = _pages(monkeypatch, {"https://": "<p>&#" + "9" * 5000 + ";</p>"})
+    listed = '"/Current/&#' + "9" * 5000 + ';_Residential.pdf"'
+    asked = _pages(monkeypatch, {"elegant.be/tariefkaarten": listed})
+
+    async def nested(_session: Any, url: str, **_kw: Any) -> str:
+        asked.append(url)
+        return "[" * 100_000
+
+    monkeypatch.setattr(luminus, "fetch_text", nested)
     caplog.set_level(logging.DEBUG, logger=_moved.__name__)
     fetch_or_moved = _moved._with_moved_fallback(supplier, fetch)
     if old == "404":
@@ -330,7 +398,7 @@ async def test_a_search_that_trips_over_a_page_leaves_the_usual_answer(
     assert asked
     logged = [record for record in caplog.records if record.name == _moved.__name__]
     assert [record.levelno for record in logged] == [logging.DEBUG]
-    assert "no moved card looked for: ValueError: " in logged[0].getMessage()
+    assert f"no moved card looked for: {raised}: " in logged[0].getMessage()
 
 
 async def test_a_search_the_fetch_budget_cuts_short_is_a_timeout(

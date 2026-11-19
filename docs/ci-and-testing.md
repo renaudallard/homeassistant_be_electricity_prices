@@ -155,7 +155,7 @@ machinery.
 | `tests/test_live_check_harness.py` | The live check (`scripts/live_check.py`): its failure containment, the expectations it holds cards to, and the workflow's retry loop |
 | `tests/test_archive_cards.py` | `scripts/archive_cards.py`, the daily writer behind the card archive |
 | `tests/test_card_finder.py` | `scripts/card_finder.py`, the live check's search for a card that moved, replayed on November 2026's moves |
-| `tests/test_moved.py` | `providers/_moved.py`, the registry reading a moved card where its supplier lists it, on the same moves |
+| `tests/test_moved.py` | `providers/_moved.py`, the registry reading a moved card where its supplier lists it, on the same moves, a search that fails leaving the usual answer, and a listing of thousands of names compared on its first hundred |
 | `tests/test_card_texts.py` | `scripts/card_texts.py`, the card archive's texts as a render cache |
 | `tests/test_file_ci_issue.py` | `scripts/file_ci_issue.sh`: one issue per problem, one comment per cooldown |
 | `tests/test_autorelease.py` | The release job of `autorelease.yml` against a scratch origin and a fake `gh`, and every workflow's token permissions |

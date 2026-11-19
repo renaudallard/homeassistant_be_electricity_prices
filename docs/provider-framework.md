@@ -598,6 +598,14 @@ id of the month before are offered by the candidates but marked, and the
 wrapper skips them. The October id served a card titled November that
 carried October's prices on 1 November 2026 (#147).
 
+A search runs on the event loop over a page of up to 8 MiB, so it does
+little per name. The names Elegant's listing gives are compared with the
+product's each once, the first hundred at most (`_MAX_LISTED`: the listing
+named six cards in November 2026), and decoded one by one once kept, and
+Engie's prices pages are searched as served, since a document code spells no
+entity: decoding 8 MiB of entities took seconds, and comparing 250 000 names
+over a second.
+
 EnergyVision is not wrapped: its `fetch` already asks every folder its
 listing's script asks, newest upload first, and its card page linked the
 first edition of a card a corrected upload had replaced in November 2026.

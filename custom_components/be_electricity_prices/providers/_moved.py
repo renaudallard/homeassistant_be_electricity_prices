@@ -58,7 +58,7 @@ from __future__ import annotations
 import functools
 import logging
 import re
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import replace
 from datetime import date, timedelta
 from html import unescape
@@ -90,6 +90,11 @@ ReadAt = Callable[[aiohttp.ClientSession, str, str, str], Awaitable[SupplierSnap
 # The addresses read for one card, best first.
 _MAX_TRIED = 4
 
+# The names of one listing a search compares, each once. In November 2026
+# Elegant's listing named six cards, while 8 MiB of markup can name 250 000,
+# which took over a second to compare on the event loop.
+_MAX_LISTED = 100
+
 # Elegant's listing spells each card "/Current/<product> Electricity_
 # Residential.pdf", with its gas cards beside them.
 _ELEGANT_LISTED_RE = re.compile(r"/Current/([^\"'<>/]+?)_Residential\.pdf")
@@ -111,11 +116,23 @@ def _squash(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
+def _listed(found: Iterable[str]) -> list[str]:
+    """What a page lists, each once and :data:`_MAX_LISTED` at most, spelt
+    as the page spells it, read no further than that."""
+    kept: dict[str, None] = {}
+    for item in found:
+        kept[item] = None
+        if len(kept) == _MAX_LISTED:
+            break
+    return list(kept)
+
+
 async def _page(session: aiohttp.ClientSession, url: str) -> str:
     """A page's text, or nothing when it cannot be read: the search goes on
-    with the supplier's other pages."""
+    with the supplier's other pages. Its entities are left as they are: a
+    document code spells none, and decoding 8 MiB of them took seconds."""
     try:
-        return unescape(await fetch_text(session, url))
+        return await fetch_text(session, url)
     except ExtractorError:
         return ""
 
@@ -124,8 +141,10 @@ async def _elegant(
     session: aiohttp.ClientSession, contract_id: str, region: str, month: date
 ) -> list[Candidate]:
     contract = elegant._CONTRACTS_BY_ID[contract_id]
-    page = (await fetch_text(session, elegant._LISTING_URL)).replace("\\u0026", "&")
-    # The key is the listed name with its spaces and "&" taken out.
+    page = await fetch_text(session, elegant._LISTING_URL)
+    listed = _listed(m.group(1) for m in _ELEGANT_LISTED_RE.finditer(page))
+    # The key is the listed name with its spaces and "&" taken out. A name
+    # is decoded once it is kept, "&" as an entity or as JSON spells it.
     wanted = _squash(contract.key)
     return [
         (
@@ -133,7 +152,9 @@ async def _elegant(
             "Elegant's listing",
             True,
         )
-        for name in dict.fromkeys(_ELEGANT_LISTED_RE.findall(unescape(page)))
+        for name in dict.fromkeys(
+            unescape(name.replace("\\u0026", "&")) for name in listed
+        )
         if _squash(name) == wanted
     ]
 
