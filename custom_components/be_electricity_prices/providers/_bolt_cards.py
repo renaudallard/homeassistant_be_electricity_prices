@@ -43,6 +43,8 @@ from ._bolt_formulas import (
     _BELPEX_FORMULA_RE,
     _IMPACT_INJECTION_ROW_RE,
     _IMPACT_ROW_RE,
+    _PRICE_UNIT,
+    _fixed_price_unit,
     _formula_in_mwh,
     _impact_rows,
 )
@@ -252,6 +254,11 @@ def _extract_energy(
         # 9,91 65,59 Fixe" against the variable card's "... Belpex * 1,168 +
         # 16,90"). A template left over from the variable card rather than a
         # banded fixed price, so the one fixed price is billed in every band.
+        unit = _fixed_price_unit(text, match.span(1)) if match else None
+        if unit != _PRICE_UNIT:
+            raise ExtractorError(
+                f"Bolt: fixed price unit {unit!r}, expected {_PRICE_UNIT!r}"
+            )
         return FixedRates(
             single=mono,
             peak=peak,

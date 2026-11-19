@@ -102,3 +102,26 @@ def _impact_rows(text: str, pattern: re.Pattern[str]) -> list[re.Match[str]]:
         for m in pattern.finditer(text)
         if stated_unit(text, _INDEX_UNIT_RE, m.span(3), before=_INDEX_REACH) == _MWH
     ]
+
+
+# A fixed card's price has no formula to be worked out again from, so its
+# unit is read from the heading of the chart its figures are shown in, "Prix
+# de l'électricité verte (c€/kWh)". Every fixed card from April to November
+# 2026 prints it once, 489 to 523 characters behind the "Prix mensuel" row
+# (639 on the April card the tests keep), or 96 ahead of it on
+# the Plenty Fixe cards since August 2026. A price restated in €/kWh would
+# read a hundredth of itself, so only "c€/kWh" is taken. The reaches leave
+# room for a few lines more either side.
+_PRICE_UNIT_RE = re.compile(
+    r"Prix\s+de\s+l['’]électricité\s+verte\s*\(([^()\n]{0,30})\)"
+)
+_PRICE_UNIT = "c€/kWh"
+_PRICE_UNIT_BEFORE = 200
+_PRICE_UNIT_AFTER = 700
+
+
+def _fixed_price_unit(text: str, row: tuple[int, int]) -> str | None:
+    """The unit the chart heading states for the fixed price on ``row``."""
+    return stated_unit(
+        text, _PRICE_UNIT_RE, row, before=_PRICE_UNIT_BEFORE, after=_PRICE_UNIT_AFTER
+    )

@@ -109,6 +109,31 @@ def test_fix_extracts_consumption_rates() -> None:
     assert snap.energy.exclusive_night == pytest.approx(0.1671)
 
 
+_PRICE_HEADING = "Prix de l'électricité verte (c€/kWh)"
+
+
+@pytest.mark.parametrize(
+    ("contract", "fixture"),
+    [("bolt_fix", "bolt_fix.pdf"), ("bolt_plenty_fix", "bolt_plenty_fix_oct.pdf")],
+)
+@pytest.mark.parametrize("restated", ["(€/kWh)", ""], ids=["euro", "dropped"])
+def test_a_fixed_price_headed_in_another_unit_is_refused(
+    contract: str, fixture: str, restated: str
+) -> None:
+    """A fixed price has no formula to be checked against, and the heading
+    of the chart it is shown in is the only statement of its unit, behind
+    the price on Bolt Fixe and ahead of it on Plenty Fixe: read without it,
+    a price restated in €/kWh was a hundredth of itself."""
+    text = fixture_text(fixture, layout=True)
+    assert text.count(_PRICE_HEADING) == 1
+    assert isinstance(parse_snapshot(contract, text, "flanders").energy, FixedRates)
+    restated_text = text.replace(
+        _PRICE_HEADING, f"Prix de l'électricité verte {restated}"
+    )
+    with pytest.raises(ExtractorError, match="fixed price unit"):
+        parse_snapshot(contract, restated_text, "flanders")
+
+
 def test_injection_carries_the_quarter_hourly_formula() -> None:
     """The printed figure is an illustration, not the rate. The card says so:
     "Le tableau ci-dessus indique le prix de vente base sur la valeur Belpex

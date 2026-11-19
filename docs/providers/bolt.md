@@ -598,6 +598,16 @@ quarter's figures, as the card prints them, key or not
 (`test_the_variable_settlement_credits_the_spp_figures_per_register`,
 `test_a_walloon_meter_is_credited_the_single_spp_figure`, `tests/test_bolt.py`).
 
+### Fixed price unit
+
+A fixed card's `Prix mensuel` has no formula to be checked against, and the card states its unit
+once, in the heading of the chart the price is shown in: `Prix de l'électricité verte (c€/kWh)`,
+489 to 523 characters behind the row on every fixed card on file from April 2026 (639 on the
+April card the tests keep), or 96 ahead of it on Plenty Fixe since August 2026. `_fixed_price_unit`
+(`_bolt_formulas.py`) reads it through `stated_unit` (`_parse.py`), and a fixed card stating another
+unit there, or none, is refused: a price restated in €/kWh would read a hundredth of itself. The
+cards before April 2026 print the unit with each figure (`c€13,27/kWh`), which their reader requires.
+
 ### Formula units
 
 The card states the unit of its formulas once, in the heading of the column they print in:
