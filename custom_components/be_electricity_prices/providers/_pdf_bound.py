@@ -125,9 +125,10 @@ _MAX_CARD_OBJECTS = 180_000
 # kinds it reads of them, each reference it resolves and each line it reads
 # backwards from the end of the file; under pypdf every operand and operator
 # of a content stream each time it is interpreted, every element of an
-# array or dictionary, and each byte its reader module passes over one at a
+# array or dictionary, each byte its reader module passes over one at a
 # time, the blanks and comments ahead of an object's header or of an object
-# an object stream lists. What the bytes draw cost even when it built nothing:
+# an object stream lists, and each field of an entry it reads of a
+# cross-reference stream. What the bytes draw cost even when it built nothing:
 # 78 kB inflating to 32 MB of numbers no operator took held pypdf 238 s and
 # 1,2 GB, and 3 MB of paths pdfminer does not paint took 45 s, while a
 # 700-byte card naming an object that refers to itself had pdfminer resolve
@@ -144,7 +145,17 @@ _MAX_CARD_OBJECTS = 180_000
 # entry of a file's table as it opens it, and every object an object stream
 # lists as it reads one of them, so a card naming one run of blanks again
 # and again cost its entries times the run: 10 000 entries at 5000 blanks
-# took 28,7 s, from a 5 kB file.
+# took 28,7 s, from a 5 kB file. A cross-reference stream writes an entry
+# in as little as a byte, where only the bytes it inflated to counted, and
+# pypdf keeps each entry and reads a header where it points: a million of
+# them took 27,7 s and 215 MB, from a 1,3 kB file. Measured on 2026-11-19
+# across the 283 shipped fixtures, with pypdf 6.20.1: it passes over
+# 17 677 such bytes at most, on a Bolt card, and reads 17 703 such fields,
+# on a DATS 24 card, and counts 912 876 at most with them, where it counted
+# 892 347. Across the 4879 cards the archive held that day: 18 707 such
+# bytes and 17 913 such fields at most, and 1 177 730 counted at most with
+# them, where it counted 1 161 358, on Bolt's professional fixed card of
+# October 2026, of 4,2 MB.
 _MAX_PARSED = 3_000_000
 
 # The most a reader may build of a card's fonts, counted as it builds them:
@@ -648,14 +659,17 @@ def _count_pypdf_reader() -> None:
     """Have pypdf count as parsed, while a card is read, each byte its
     reader module passes over a byte at a time, through its
     ``read_non_whitespace``, ``skip_over_whitespace`` and
-    ``skip_over_comment``. Done once whatever the copy of this module, over
-    the other wrappers too where a release of either integration from
-    before put them in place without these."""
+    ``skip_over_comment``, and each field of an entry it reads of a
+    cross-reference stream, through its ``convert_to_int``. Done once
+    whatever the copy of this module, over the other wrappers too where a
+    release of either integration from before put them in place without
+    these."""
     reader = vars(pypdf_reader)
     if hasattr(reader["skip_over_whitespace"], _MARK):
         return
     for name in ("read_non_whitespace", "skip_over_whitespace", "skip_over_comment"):
         reader[name] = _passed_over(reader[name])
+    reader["convert_to_int"] = _parsed(reader["convert_to_int"])
     setattr(reader["skip_over_whitespace"], _MARK, True)
 
 
@@ -853,8 +867,9 @@ def bounded_pypdf() -> Iterator[None]:
     since pypdf never decodes an image to read text, and ASCII85 past
     :data:`_MAX_ASCII85_BYTES`. pypdf parses no more than
     :data:`_MAX_PARSED` operands, operators and elements of arrays and
-    dictionaries, a content stream's each time it is interpreted, and
-    bytes its reader module passes over one at a time, reads
+    dictionaries, a content stream's each time it is interpreted, bytes
+    its reader module passes over one at a time and fields of the entries
+    of a cross-reference stream, reads
     no more than :data:`_MAX_LINES_BACK` lines backwards from the end of
     the file, builds no more than :data:`_MAX_FONT_ENTRIES` entries of a
     card's fonts, and makes no more than :data:`_MAX_CHARACTERS`

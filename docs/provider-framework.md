@@ -858,12 +858,19 @@ Internals worth knowing:
   resolve that for good) and each line it reads backwards from the end of
   the file (2 MB of line ends there took 4,7 s); under pypdf each operand
   and operator of a content stream each time it is interpreted, each
-  element of an array or dictionary, and each byte its reader module
-  passes over one at a time, the blanks and comments ahead of an object's
+  element of an array or dictionary, each byte its reader module passes
+  over one at a time, the blanks and comments ahead of an object's
   header or of an object an object stream lists (a table pointing 10 000
-  entries at one run of 5000 blanks took 28,7 s, from a 5 kB file). The
-  most a card reaches is 935 796 under pdfminer and 912 313 under pypdf,
-  both on a Bolt card of 2,8 MB, and this is
+  entries at one run of 5000 blanks took 28,7 s, from a 5 kB file), and
+  each field of an entry it reads of a cross-reference stream, which
+  writes one in as little as a byte (a million entries took 27,7 s and
+  215 MB, from a 1,3 kB file). The most a card reaches is 935 796
+  under pdfminer and 912 313 under pypdf, both on a Bolt card of 2,8 MB;
+  on 2026-11-19 a shipped fixture passed over 17 677 such bytes at most
+  and read 17 703 such fields, and the most a fixture counts under pypdf
+  went from 892 347 to 912 876 with them, while across the 4879 cards the
+  archive held that day the most went from 1 161 358 to 1 177 730, on
+  Bolt's professional fixed card of October 2026. This is
   about three times that, since what it lets through is CPU: a token of a
   Bolt card costs pdfminer about 40 us on a Raspberry Pi, and of 30 kinds
   of operator made up to cost more none costs over a twentieth more but
