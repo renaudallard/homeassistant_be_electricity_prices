@@ -157,6 +157,33 @@ def network_read() -> Iterator[AsyncMock]:
         yield read
 
 
+class _Offline:
+    """The run's own aiohttp session, with no network: a request a test does
+    not serve from a canned session of its own fails at the socket, as an
+    unreachable supplier does. The real one sent the requests for the test
+    suppliers out through aiodns, which the socket guard does not stop."""
+
+    def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    async def __aenter__(self) -> _Offline:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+    def get(self, *_args: Any, **_kwargs: Any) -> Any:
+        raise aiohttp.ClientConnectionError("no network in the tests")
+
+    head = post = request = get
+
+
+@pytest.fixture(autouse=True)
+def offline() -> Iterator[None]:
+    with patch.object(ac.aiohttp, "ClientSession", _Offline):
+        yield
+
+
 async def _no_sleep(_seconds: float) -> None:
     return None
 

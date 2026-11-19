@@ -182,6 +182,10 @@ async def test_only_an_entry_reading_the_archive_reads_its_tables(
     coord._snapshot = make_snapshot()
     coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
     coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    # The year's archived cards are the supplier's to serve: asked for
+    # here, they went out to Eneco's CDN through aiodns, which the socket
+    # guard does not stop.
+    coord._fill_month_cards = AsyncMock()  # type: ignore[method-assign]
     await coord._async_update_data()
     for table in (
         coordinator_tick.ensure_vat_rates,
