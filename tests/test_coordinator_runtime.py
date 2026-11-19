@@ -3976,7 +3976,9 @@ async def test_transient_failure_defers_extractor_issue_until_threshold(
 @pytest.mark.parametrize(
     ("moment", "card_held", "raised"),
     [
-        # In the month's first days, with a card still pricing: held back.
+        # In the month's first days, with a card still pricing: held back,
+        # from the 1st, local time.
+        ("2026-11-01 00:30:00+01:00", True, False),
         ("2026-11-03 14:00:00+01:00", True, False),
         ("2026-11-05 23:30:00+01:00", True, False),
         # From the 6th, local time: raised as before.
@@ -9721,6 +9723,45 @@ async def test_a_card_past_its_validity_by_a_week_is_stale(
     # A card dated only by its title, as Bolt's and TotalEnergies' are.
     coord._set_snapshot(make_snapshot(publication_label="september 2026"))
     assert coord._snapshot_overdue()
+
+
+async def test_a_card_a_week_past_its_validity_goes_stale_no_sooner(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """September's card still the one served in October, read afresh every
+    tick: stale once its validity ended more than a week ago, on the 8th,
+    local time, and not on the 7th."""
+    freezer.move_to("2026-10-07 23:30:00+02:00")
+    entry = make_entry(contract="power_fix_one")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._set_snapshot(make_snapshot(valid_until=date(2026, 9, 30)))
+    for moment, stale in (
+        ("2026-10-07 23:30:00+02:00", False),
+        ("2026-10-08 00:30:00+02:00", True),
+    ):
+        freezer.move_to(moment)
+        coord._snapshot_fetched_at = dt_util.utcnow()
+        assert coord._snapshot_overdue() is stale, moment
+
+
+async def test_a_card_unread_for_a_week_goes_stale_no_sooner(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """The card read on 2 September and every fetch failing since: not stale
+    a week to the minute later, stale the minute after."""
+    freezer.move_to("2026-09-02 10:00:00+02:00")
+    entry = make_entry(contract="power_fix_one")
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+    coord._set_snapshot(make_snapshot())
+    coord._snapshot_fetched_at = dt_util.utcnow()
+    for moment, stale in (
+        ("2026-09-09 10:00:00+02:00", False),
+        ("2026-09-09 10:01:00+02:00", True),
+    ):
+        freezer.move_to(moment)
+        assert coord._snapshot_overdue() is stale, moment
 
 
 @pytest.mark.freeze_time("2026-10-20 12:00:00+02:00")

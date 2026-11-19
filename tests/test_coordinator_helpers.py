@@ -5481,6 +5481,43 @@ async def _september_from_a_live_row(
     return snap, asked
 
 
+async def test_a_month_no_one_holds_is_asked_again_after_a_day(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """Not on every tick of the day: the archive captures a month late, and a
+    supplier publishing in arrears has it days later, so a month neither
+    holds is asked again the next day."""
+    freezer.move_to("2026-09-15 10:00:00+02:00")
+    asked = 0
+
+    async def _fetch_for_month(*_a: object) -> SupplierSnapshot | None:
+        nonlocal asked
+        asked += 1
+        return None
+
+    extractor = SupplierExtractor(
+        id="test",
+        label="Test",
+        contracts=(),
+        fetch=AsyncMock(),
+        fetch_for_month=_fetch_for_month,
+    )
+    _monthly_snapshots(hass).clear()
+    _monthly_fetched_at(hass).clear()
+    current = _month_indexed_card(0.30, "2026-09")
+    for step, expected in (
+        (timedelta(0), 1),
+        (timedelta(hours=23, minutes=59), 1),
+        (timedelta(minutes=1), 2),
+    ):
+        freezer.tick(step)
+        snap = await _snapshot_for_month(
+            hass, MagicMock(), extractor, "test", "flanders", date(2026, 7, 1), current
+        )
+        assert snap is current
+        assert asked == expected, step
+
+
 async def test_a_supplier_settling_in_place_keeps_the_card_the_archive_holds(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -8070,6 +8107,37 @@ async def test_ytd_fees_prorate_over_the_contract_window(hass: HomeAssistant) ->
     # 365 EUR/year at 1 EUR/day: the full year, then 1 July to 31 December.
     assert whole_year.total == pytest.approx(365.0)
     assert half_year.total == pytest.approx(184.0)
+
+
+async def test_a_leap_years_fees_add_up_to_one_year(hass: HomeAssistant) -> None:
+    """2028 billed whole: its 366 days come to one year of the 366 EUR fee,
+    not a day more."""
+    snap = make_snapshot(
+        energy=VariableRates(current=0.16, yearly_fixed_fee=366.0), dsos={}
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={"meter": "mono", "dso": "", "contract": "x", "region": ""}
+    )
+
+    async def _snap_for_month(*_a: Any, **_k: Any) -> Any:
+        return snap
+
+    end = date(2028, 12, 31)
+    with patch(
+        "custom_components.be_electricity_prices.ytd_legs"
+        "._effective_snapshot_for_month",
+        new=_snap_for_month,
+    ):
+        fees = await _ytd_static_fees(
+            hass,
+            None,  # type: ignore[arg-type]
+            None,  # type: ignore[arg-type]
+            snap,
+            entry,
+            end,
+            window_start=date(2028, 1, 1),
+        )
+    assert fees.total == pytest.approx(366.0)
 
 
 async def test_the_ytd_attributes_describe_the_window_they_bill(
