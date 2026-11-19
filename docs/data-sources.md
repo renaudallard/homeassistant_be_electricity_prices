@@ -1799,7 +1799,9 @@ for the transport grid, so from 1 January until a year's grids are read the
 year before's stand in, and each stands on its own: a transport grid published
 after the operator's leaves the transport typed until it is.
 `ensure_network` reads what is not held, once per document for the life of the
-process, the listing and a document that did not read being kept six hours, and
+process, the listing and a document that did not read being kept six hours,
+its warning showing the document's address as the listing gives it escaped and
+cut to 500 characters, and the error cut too; and
 where a year's documents do not cover every month of it, it reads the year
 before's of the kind that is missing. RESA's 2027 workbook says its low-voltage
 sheet is valid until 31 January 2027, its other sheet and its PDF until 31

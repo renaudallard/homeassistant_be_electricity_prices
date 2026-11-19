@@ -71,7 +71,14 @@ import aiohttp
 from homeassistant.util import dt as dt_util
 
 from .const import DSO_AIEG, DSO_AIESH, DSO_ORES, DSO_RESA, DSO_REW
-from .providers._pdf import USER_AGENT, checked_request, fetch_text, read_capped
+from .providers._pdf import (
+    USER_AGENT,
+    checked_request,
+    error_text,
+    fetch_text,
+    read_capped,
+    shown_text,
+)
 from .providers._pdf_render import extract_pdf_text_layout
 from .synergrid import WorkbookZip, _shared_strings, sheet_paths, sheet_rows
 
@@ -398,14 +405,18 @@ def parse_listing(text: str) -> list[_Document]:
 
 async def _read(session: aiohttp.ClientSession, doc: _Document, dso: str) -> None:
     """Read one document into the caches, or note it for the backoff."""
+    # The address is the listing's own text, whose length only the cap on
+    # the listing bounds, and a newline in it would forge a log line: it is
+    # logged cut and escaped, and the error cut.
+    shown = shown_text(doc.url)
     try:
         terms = await read_document(session, doc)
     except Exception as err:  # the docstring promises no raise
-        _LOGGER.warning("CWaPE %s could not be read: %s", doc.url, err)
+        _LOGGER.warning("CWaPE %r could not be read: %s", shown, error_text(err))
         _failed_at[doc.url] = dt_util.utcnow()
         return
     if terms is None:
-        _LOGGER.warning("CWaPE %s gives no household network rates", doc.url)
+        _LOGGER.warning("CWaPE %r gives no household network rates", shown)
         _failed_at[doc.url] = dt_util.utcnow()
     elif isinstance(terms, TransportTerms):
         _transport[doc.url] = terms

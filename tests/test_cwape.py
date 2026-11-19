@@ -342,6 +342,34 @@ async def test_a_document_that_does_not_read_waits_for_the_backoff(
     assert len(session.asked) == 3
 
 
+@pytest.mark.parametrize(
+    ("body", "logged"),
+    [
+        (None, "could not be read"),
+        # A grid listed as the transport grid reads as no transport grid.
+        ((_FIXTURES / "cwape_ores_2026.xlsx").read_bytes(), "gives no household"),
+    ],
+    ids=["unreadable", "no rates"],
+)
+async def test_a_listed_address_is_logged_cut_and_escaped(
+    caplog: pytest.LogCaptureFixture, body: bytes | None, logged: str
+) -> None:
+    """The address of a document is the listing's own text: a newline in it
+    forged a log line, and only the cap on the listing bounded its length."""
+    url = cwape._SITE + "/sites/default/files/x.xlsx\nforged line " + "a" * 5000
+    doc = cwape._Document(cwape._TRANSPORT_TYPE, "1", 2026, url)
+    session: Any = _Session()
+    if body is not None:
+        session.pages[url] = body
+    with caplog.at_level("WARNING", logger=cwape.__name__):
+        await cwape._read(session, doc, DSO_ORES)
+    [record] = [r for r in caplog.records if r.name == cwape.__name__]
+    message = record.getMessage()
+    assert logged in message
+    assert "\n" not in message
+    assert len(message) < 1200
+
+
 async def test_a_listing_that_does_not_answer_never_raises() -> None:
     session: Any = _Session()
     session.pages[cwape._LISTING_URL] = b"<html>not json</html>"
