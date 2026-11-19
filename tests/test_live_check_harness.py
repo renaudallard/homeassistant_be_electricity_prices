@@ -3722,6 +3722,55 @@ def test_a_tariff_year_allowance_lapses_with_the_month_of_its_cards(
     ]
 
 
+@dataclass
+class _LabelledEdition:
+    energy: dict[str, bool]
+    publication_label: str
+
+
+@pytest.mark.parametrize(
+    ("day", "label", "allowed"),
+    [
+        ("2026-12-01", "novembre 2026", True),
+        ("2026-12-05", "novembre 2026", True),
+        ("2026-12-06", "novembre 2026", False),
+        ("2026-12-01", "décembre 2026", False),
+    ],
+)
+def test_a_known_card_defect_lapses_with_the_month_of_its_card(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any, day: str, label: str, allowed: bool
+) -> None:
+    """Mega's and TotalEnergies' known defects lapsed on 1 December by the
+    run's day, while November's cards are still the ones served and accepted
+    as fresh until the 5th, so each would have filed about a card nobody had
+    changed. They lapse with the month the card is for: a December card
+    printing the defect is news again."""
+    freezer.move_to(f"{day} 08:00:00+01:00")
+    _editions(
+        _LabelledEdition({"single_under_impact": True}, label),
+        _LabelledEdition({"single_under_impact": False}, label),
+        contract=SimpleNamespace(
+            contract_id="totalenergies_electricite_fixe", slug="TE"
+        ),
+    )
+    monkeypatch.setitem(
+        lc._CONTRACTS_BY_ID,
+        "mega_pro_smart_flex",
+        SimpleNamespace(month_indexed_energy=True),
+    )
+    lc._expect_month_indexed_registry(
+        "mega/mega_pro_smart_flex/flanders",
+        "mega_pro_smart_flex",
+        SimpleNamespace(month_indexed=False),
+        SimpleNamespace(publication_label=label),
+    )
+    edition, mega = lc.CHECKS
+    assert edition.detail.endswith("Dutch False") is not allowed
+    assert (edition.expected, mega.expected) == (allowed, allowed)
+    assert not edition.ok and not mega.ok
+    lc.CHECKS.clear()
+
+
 def test_a_live_card_is_held_to_an_allowance_in_its_own_month() -> None:
     """Never in one before the oldest a fresh card may be for that day, so an
     old label does not keep an allowance alive, and in the run's month when

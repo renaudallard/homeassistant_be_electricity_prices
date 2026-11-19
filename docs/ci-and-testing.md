@@ -686,7 +686,10 @@ A card its supplier published broken gets a marker of its own, `KnownCardDefect`
 `_KNOWN_CARD_DEFECTS`: the URL serves another document, or the card leaves out a figure or a
 formula. Each entry is keyed on the exact check label and failure detail, so another failure on
 the same card still files, and expires on the day the supplier's next card is due, when a card
-still broken is news again. Added for issue #114, where three October 2026 TotalEnergies URLs
+still broken is news again. It lapses with the month the card the check read is for
+(`_held_month`), not the run's day: a card is still served, and accepted as fresh, in the first
+five days of the month after it, and lapsing on 1 December filed November's known defects
+(`test_a_known_card_defect_lapses_with_the_month_of_its_card`). Added for issue #114, where three October 2026 TotalEnergies URLs
 served the Dutch card, the Brussels injection card and a card with no green energy contribution.
 The first went once the parser read Dutch cards, the other two once a French card that does not
 parse fell back to its Dutch edition. Mega's Flemish professional Smart Flex card printed no

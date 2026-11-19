@@ -873,7 +873,9 @@ def _expect_vat_stated(
 # here can make the supplier reprint. Keyed on the exact check label and
 # failure detail, so another failure on the same card still files, and each
 # entry expires on the day the supplier's next card is due: a card still broken
-# then is news again.
+# then is news again. It lapses with the month the card is for (_held_month),
+# not the run's day: a card is still served, and accepted as fresh, in the
+# first days of the month after it.
 _ALLOWED_CARD_MARKER = "KnownCardDefect"
 # (label, detail) -> (expires, why).
 _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
@@ -932,11 +934,13 @@ _KNOWN_CARD_DEFECTS: dict[tuple[str, str], tuple[date, str]] = {
 }
 
 
-def _mark_if_known_defect(label: str, detail: str) -> str:
-    """Prefix the card-defect marker when this exact failure was looked at."""
+def _mark_if_known_defect(label: str, detail: str, card: object = None) -> str:
+    """Prefix the card-defect marker when this exact failure was looked at,
+    on ``card``, the one the check read, while its allowance covers the
+    month that card is held in; the run's month without one."""
     known = _KNOWN_CARD_DEFECTS.get((label, detail))
     today = datetime.now(ZoneInfo("Europe/Brussels")).date()
-    if known is None or today >= known[0]:
+    if known is None or not _allowed(known[0], _held_month(card, today)):
         return detail
     return f"{_ALLOWED_CARD_MARKER}: {detail}; {known[1]}"
 
@@ -1046,9 +1050,18 @@ _EXPECTED_MARKERS: tuple[str, ...] = (
 )
 
 
-def _record(label: str, ok: bool, detail: str = "", kind: str = "extractor") -> None:
+def _record(
+    label: str,
+    ok: bool,
+    detail: str = "",
+    kind: str = "extractor",
+    *,
+    card: object = None,
+) -> None:
+    """Record a check; ``card`` is the card it read, which a known defect's
+    allowance is held to."""
     if not ok:
-        detail = _mark_if_known_defect(label, _mark_if_withdrawn(label, detail))
+        detail = _mark_if_known_defect(label, _mark_if_withdrawn(label, detail), card)
     CHECKS.append(
         Check(
             label=label,
@@ -1112,8 +1125,10 @@ def _mark_if_withdrawn(label: str, detail: str) -> str:
     return f"{_WITHDRAWN_MARKER}: {detail}"
 
 
-def _expect(label: str, condition: bool, detail: str = "") -> bool:
-    _record(label, condition, detail if not condition else "")
+def _expect(
+    label: str, condition: bool, detail: str = "", *, card: object = None
+) -> bool:
+    _record(label, condition, detail if not condition else "", card=card)
     return condition
 
 
@@ -2360,6 +2375,8 @@ async def _compare_totalenergies_editions(
     )
     figures: list[dict[str, Any]] = []
     french_error: Exception | None = None
+    # The first edition that read, which a known defect is held to.
+    card: Any = None
     for language in ("FR", "NL"):
         url = totalenergies._document_url(contract, region, language)
         text = None
@@ -2380,8 +2397,11 @@ async def _compare_totalenergies_editions(
                     False,
                     f"the Dutch card does not read: {type(err).__name__}: {err}",
                     kind="edition",
+                    card=card,
                 )
             return
+        if card is None:
+            card = snap
         figures.append(asdict(snap))
     if french_error is not None:
         _record(
@@ -2390,11 +2410,12 @@ async def _compare_totalenergies_editions(
             f"the French card does not read: {type(french_error).__name__}: "
             f"{french_error}; the Dutch card stands in",
             kind="edition",
+            card=card,
         )
         return
     french, dutch = figures
     differences = _edition_differences(french, dutch)
-    _record(label, not differences, "; ".join(differences), kind="edition")
+    _record(label, not differences, "; ".join(differences), kind="edition", card=card)
 
 
 async def _check_mega(session: aiohttp.ClientSession, mega: types.ModuleType) -> None:
@@ -5540,7 +5561,9 @@ def _validate_snapshot(
     )
     _expect_welcome_credit(prefix, contract_id, snap)
     _expect_direct_debit_registry(prefix, contract_id, snap)
-    _expect_month_indexed_registry(prefix, contract_id, getattr(snap, "energy", None))
+    _expect_month_indexed_registry(
+        prefix, contract_id, getattr(snap, "energy", None), snap
+    )
     _expect_quarter_hourly_registry(prefix, contract_id, getattr(snap, "energy", None))
     valid_until = getattr(snap, "valid_until", None)
     shape = injection_shape or _expected_injection_shape(
@@ -5765,7 +5788,7 @@ def _expect_direct_debit_registry(prefix: str, contract_id: str, snap: object) -
 
 
 def _expect_month_indexed_registry(
-    prefix: str, contract_id: str, energy: object
+    prefix: str, contract_id: str, energy: object, card: object = None
 ) -> None:
     """The parser's ``month_indexed`` and the registry's ``month_indexed_energy``
     have to agree, for the same reason the injection pair does: the flow offers
@@ -5786,6 +5809,7 @@ def _expect_month_indexed_registry(
         f"{prefix}: month-indexed energy matches the registry flag",
         parsed == flagged,
         detail=f"parsed month_indexed={parsed}, registry month_indexed_energy={flagged}",
+        card=card,
     )
 
 
