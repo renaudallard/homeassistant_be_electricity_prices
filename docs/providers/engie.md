@@ -287,7 +287,11 @@ Engie prints the yearly subscription fee in two different places
 The parser tries the standard anchor, falls back to the Empower layout, and
 raises `yearly fee row not found` if neither matches (`_engie_cards.py`): every
 residential Engie card carries a fee, so a miss is layout drift, not a fee-free
-product. The apostrophe in `d'usage` is matched as `[©']` because pypdf sometimes
+product. The standard anchor reads the fee with its `€/an`; the Empower row's fee is
+held to the heading over it, `Redevance fixe(1) €/an` (`_FEE_HEADER_RE`, 237
+characters ahead of the row at the farthest on the archived cards), and one headed
+in another unit, or not at all, is refused: a fee restated a month would read a
+twelfth of itself. The apostrophe in `d'usage` is matched as `[©']` because pypdf sometimes
 renders the typographic apostrophe as a copyright glyph.
 
 ### Consumption row and price-column counts
@@ -295,7 +299,12 @@ renders the typographic apostrophe as a copyright glyph.
 `_extract_energy` captures the whole `Consommation(2)` row and reads its numbers
 (`_engie_cards.py`). The last column is always the regional renewables levy and is
 dropped (`_engie_cards.py`); the remaining numbers are the price columns, and their
-count selects the layout (`_engie_cards.py`):
+count selects the layout (`_engie_cards.py`). The row's unit is stated only in the
+heading over it, "Prix par kWh (€cent/kWh)" up to December 2025 and "(c€/kWh)" since,
+"Prix de consommation par kWh (c€/kWh)" on Empower Flextime (`_ROW_HEADER_RE`), which
+every archived card prints within 216 characters ahead of the row. A row headed in
+another unit, or not at all, is refused: a price restated in €/kWh would read a
+hundredth of itself.
 
 | Column count | Layout | Meaning |
 | --- | --- | --- |

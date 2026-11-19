@@ -170,6 +170,14 @@ def _extract_energy(
         fee_match = re.search(
             rf"Prix\s+mensuels{LINE_BREAK}(\d+[,.]\d+)\s+Consommation", text
         )
+        if fee_match is not None:
+            fee_unit = stated_unit(
+                text, _FEE_HEADER_RE, fee_match.span(1), before=_HEADER_REACH
+            )
+            if fee_unit != _FEE_UNIT:
+                raise ExtractorError(
+                    f"Engie: yearly fee headed {fee_unit!r}, expected {_FEE_UNIT!r}"
+                )
     if fee_match is None:
         raise ExtractorError("Engie: yearly fee row not found")
     yearly_fee = to_float(fee_match.group(1))
@@ -207,6 +215,12 @@ def _extract_energy(
     consumption = re.search(r"Consommation\(2\)([^\n]+)", text)
     if not consumption:
         raise ExtractorError(f"could not parse Engie {kind} consumption block")
+    unit = stated_unit(text, _ROW_HEADER_RE, consumption.span(), before=_HEADER_REACH)
+    if unit not in _PRICE_HEADERS:
+        raise ExtractorError(
+            f"Engie: {kind} prices headed {unit!r}, expected one of "
+            f"{sorted(_PRICE_HEADERS)!r}"
+        )
     nums = [to_float(n) for n in re.findall(r"[\d,.]+", consumption.group(1))]
     # Last column is the regional renewables levy; drop it, what remains
     # is the price columns.
@@ -557,6 +571,18 @@ _ESPOT_FORMULA_RE = re.compile(
 _PRICE_HEADER_RE = re.compile(r"Prix\s+par\s+kWh\s*\(([^)\n]{0,30})\)")
 _PRICE_HEADERS = frozenset({"€cent/kWh", "c€/kWh"})
 _HEADER_REACH = 450
+# The other cards head their "Consommation(2)" row's prices the same way, or
+# "Prix de consommation par kWh (c€/kWh)" on Empower Flextime, and it is the
+# only statement of their unit: a price restated in €/kWh would read a
+# hundredth of itself. Every archived card prints one, ending 216 characters
+# ahead of the row at the farthest. The Flextime cards print their fee as the
+# row's first figure under "Redevance fixe(1) €/an", 237 characters ahead at
+# the farthest, where the others print it beside its unit.
+_ROW_HEADER_RE = re.compile(
+    r"Prix\s+(?:de\s+consommation\s+)?par\s+kWh(?:\(\d+\))?\s*\(([^()\n]{0,30})\)"
+)
+_FEE_HEADER_RE = re.compile(r"Redevance\s+fixe\(\d+\)\s*([^\s()]{1,30})")
+_FEE_UNIT = "€/an"
 # The footnote under the table quotes the index "Les cotations eSpot_15 sont
 # exprimées en €/MWh" ("eSpot" up to September 2025), the card's only sentence
 # of the kind, which ends 1811 to 3658 characters after the formulas.

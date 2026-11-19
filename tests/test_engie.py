@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import Callable
 from datetime import date
@@ -751,6 +752,55 @@ def test_dynamic_extracts_taxes_for_every_region() -> None:
     assert snap.taxes.energy_fund_eur_per_month == 0.0
     # Engie's PDF prints 6% VAT inclusive, so the snapshot is post-VAT.
     assert snap.taxes.vat_rate == 0.0
+
+
+@pytest.mark.parametrize(
+    ("contract", "fixture", "statement", "restated", "message"),
+    [
+        (
+            "engie_easy_fixed",
+            "engie_easy_fixed_v.pdf",
+            "fixe(1) Prix par kWh (c€/kWh)",
+            "fixe(1) Prix par kWh (€/kWh)",
+            "fixed prices headed '€/kWh'",
+        ),
+        (
+            "engie_easy_fixed",
+            "engie_easy_fixed_v.pdf",
+            "fixe(1) Prix par kWh (c€/kWh)",
+            "fixe(1)",
+            "fixed prices headed None",
+        ),
+        (
+            "engie_empower_flextime",
+            "engie_empower_flextime_w.pdf",
+            "Prix de consommation par kWh (c€/kWh)",
+            "Prix de consommation par kWh (€/MWh)",
+            "tou prices headed '€/MWh'",
+        ),
+        (
+            "engie_empower_flextime",
+            "engie_empower_flextime_w.pdf",
+            "fixe(1)\n€/an",
+            "fixe(1)\n€/mois",
+            "yearly fee headed '€/mois'",
+        ),
+    ],
+    ids=["price", "price-dropped", "flextime-price", "flextime-fee"],
+)
+def test_a_price_or_fee_headed_in_another_unit_is_refused(
+    contract: str, fixture: str, statement: str, restated: str, message: str
+) -> None:
+    """The heading over the "Consommation(2)" row is the only statement of
+    its prices' unit, and on Empower Flextime of the fee's: read without it,
+    a price restated in €/kWh was a hundredth of itself and a fee restated a
+    month a twelfth."""
+    region = REGION_WALLONIA if fixture.endswith("_w.pdf") else REGION_FLANDERS
+    text = fixture_text(fixture)
+    assert statement in text
+    parse_snapshot(contract, {region: text})
+    with pytest.raises(ExtractorError, match=re.escape(message)):
+        parse_snapshot(contract, {region: _restate(text, statement, restated)})
 
 
 def test_easy_fixed_extracts_bihourly_rates() -> None:
