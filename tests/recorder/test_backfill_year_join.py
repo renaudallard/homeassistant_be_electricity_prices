@@ -51,7 +51,10 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
     do_adhoc_statistics,
 )
 
-from custom_components.be_electricity_prices.backfill_cost import _import_cost_rows
+from custom_components.be_electricity_prices.backfill_cost import (
+    UNJOINED,
+    _import_cost_rows,
+)
 
 SID = "sensor.be_current_year_cost"
 OLD = datetime(2025, 12, 31, 23, tzinfo=UTC)  # 1 January 2026, Brussels
@@ -166,3 +169,38 @@ async def test_a_first_backfill_imports_the_bill_as_it_is(
     await _live(hass, freezer, NEW + timedelta(hours=2, minutes=56), "5.5", NEW)
     got = await hass.async_add_executor_job(_hours, hass, NEW - timedelta(hours=1))
     assert [r[2] for r in got] == pytest.approx([3.0, 5.0, 5.5]), got
+
+
+async def test_a_new_year_waits_for_the_sensors_first_row_of_it(
+    recorder_mock: Any, hass: HomeAssistant, freezer: Any
+) -> None:
+    """No tick in the first hour of 1 January: that hour is compiled on last
+    year's figure, and a backfill after it writes the new year while the
+    sensor's newest row is still that one. Joined to it, the live rows were
+    moved up by last year's bill and the second hour rose by 1200.5. Nothing
+    is written until a row of the new year is compiled, and that one already
+    carries on from last year's total."""
+    assert await async_setup_component(hass, "sensor", {})
+    await hass.async_block_till_done()
+    last = NEW - timedelta(hours=1)
+    await _live(hass, freezer, last + timedelta(minutes=1), "1000.0", OLD)
+    await _live(hass, freezer, last + timedelta(minutes=56), "1200.0", OLD)
+    await _live(hass, freezer, NEW + timedelta(minutes=56), "1200.0", OLD)
+    chain = (await hass.async_add_executor_job(_hours, hass, last))[-1][2]
+    assert chain is not None
+    rows = [StatisticData(start=NEW, state=3.0, sum=3.0)]
+    freezer.move_to(NEW + timedelta(hours=1, minutes=2))
+    why = await _import_cost_rows(hass, META, rows, NEW, async_import_statistics)
+    await async_wait_recording_done(hass)
+    assert why == UNJOINED
+    got = await hass.async_add_executor_job(_hours, hass, NEW)
+    assert [r[1:3] for r in got] == [(1200.0, pytest.approx(chain))], got
+
+    await _live(hass, freezer, NEW + timedelta(hours=1, minutes=2), "3.0", NEW)
+    why = await _import_cost_rows(hass, META, rows, NEW, async_import_statistics)
+    await async_wait_recording_done(hass)
+    assert why is None
+    await _live(hass, freezer, NEW + timedelta(hours=1, minutes=56), "3.5", NEW)
+    got = await hass.async_add_executor_job(_hours, hass, NEW)
+    assert [r[2] for r in got] == pytest.approx([chain + 3.0, chain + 3.5]), got
+    assert [r[3] for r in got] == pytest.approx([3.0, 0.5]), got

@@ -4272,12 +4272,13 @@ async def test_a_cost_chain_the_recorder_did_not_answer_imports_nothing(
     ) -> dict[str, Any]:
         if failing and p == period:
             raise RuntimeError("database is locked")
-        if types != {"sum", "state"}:
+        if not {"sum", "state"} <= types:
             return {}
         if end is None:
-            # The sensor's first five minutes after the window, its total
-            # started on its own.
-            return {sid: [{"start": start.timestamp(), "sum": 0.0, "state": 0.19}]}
+            # The sensor's first five minutes after the window, of the year's
+            # cycle, its total started on its own.
+            row = {"start": start.timestamp(), "sum": 0.0, "state": 0.19}
+            return {sid: [{**row, "last_reset": reset.timestamp()}]}
         if end > reset:
             return {}
         # The chain before 1 January, by month and then by hour.

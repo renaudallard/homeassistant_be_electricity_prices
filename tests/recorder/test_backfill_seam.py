@@ -259,3 +259,57 @@ async def test_a_live_compile_before_the_backfill_keeps_the_seam(
     changes = [float(c) for r in got if (c := r.get("change")) is not None]
     assert min(changes) > -1.0, got
     assert got[-1].get("sum") == pytest.approx(500.3), got
+
+
+async def test_a_moved_window_waits_for_the_sensors_first_row_of_it(
+    recorder_mock: Any, hass: HomeAssistant, freezer: Any
+) -> None:
+    """An entry counting from 1 January is edited to count from its contract
+    start on 1 July, and a backfill writes the new window while the newest
+    hour compiled is still of the year's cycle. Joined to that one, the hour
+    after the last one written rose by the year's whole bill, 800.8 here.
+    Nothing is written until the sensor's first five minutes of the new
+    cycle are compiled, and the rows are joined to those."""
+    assert await async_setup_component(hass, "sensor", {})
+    await hass.async_block_till_done()
+    july = datetime(2026, 6, 30, 22, tzinfo=UTC)  # 1 July 2026, Brussels
+    h = datetime(2026, 10, 10, 8, tzinfo=UTC)
+    await _live(hass, freezer, h + timedelta(minutes=1), "800.0", OLD)
+    await _live(hass, freezer, h + timedelta(minutes=56), "800.5", OLD)
+    await _live(hass, freezer, h + timedelta(hours=1, minutes=1), "800.6", OLD)
+    year = [
+        StatisticData(
+            start=OLD + timedelta(days=31 * n), state=80.0 * (n + 1), sum=80.0 * (n + 1)
+        )
+        for n in range(9)
+    ]
+    year += [
+        StatisticData(start=h - timedelta(hours=1), state=799.9, sum=799.9),
+        StatisticData(start=h, state=800.5, sum=800.5),
+    ]
+    assert (
+        await _import_cost_rows(hass, META, year, OLD, async_import_statistics) is None
+    )
+    await async_wait_recording_done(hass)
+    # 480 on the total by the end of June, and 300 billed since.
+    moved = [
+        StatisticData(start=july, state=0.1, sum=0.1),
+        StatisticData(start=h - timedelta(hours=1), state=299.9, sum=299.9),
+        StatisticData(start=h, state=300.0, sum=300.0),
+    ]
+    freezer.move_to(h + timedelta(hours=1, minutes=11))
+    why = await _import_cost_rows(hass, META, moved, july, async_import_statistics)
+    await async_wait_recording_done(hass)
+    assert why == UNJOINED
+    got = await hass.async_add_executor_job(_hours, hass, h)
+    assert [r[1:3] for r in got] == [(800.5, pytest.approx(800.5))], got
+
+    await _live(hass, freezer, h + timedelta(hours=1, minutes=11), "300.0", july)
+    why = await _import_cost_rows(hass, META, moved, july, async_import_statistics)
+    await async_wait_recording_done(hass)
+    assert why is None
+    await _live(hass, freezer, h + timedelta(hours=1, minutes=56), "300.2", july)
+    await _live(hass, freezer, h + timedelta(hours=2, minutes=56), "300.4", july)
+    got = await hass.async_add_executor_job(_hours, hass, h)
+    assert [r[2] for r in got] == pytest.approx([780.0, 780.2, 780.4]), got
+    assert [r[3] for r in got[1:]] == pytest.approx([0.2, 0.2]), got

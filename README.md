@@ -1735,7 +1735,10 @@ is not written from meter or statistics reads that failed (the service result
 says so under `skipped`). Nor is it written before `current_year_cost` has
 recorded its first five minutes, since the imported year joins the sensor's own
 statistics: on a fresh install whose first backfill finishes sooner, the
-automatic backfill writes it an hour later. A disabled cost sensor, or one the
+automatic backfill writes it an hour later. The same holds after a change that
+moves the start of the year's window (the contract start, or billing from it)
+and on 1 January: the sensor's first five minutes on the new window come
+first. A disabled cost sensor, or one the
 recorder excludes, is left out of the backfill.
 
 States history (the per-entity timeline shown in the **History**

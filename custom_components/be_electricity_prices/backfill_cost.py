@@ -388,9 +388,9 @@ async def _import_cost_rows(
 
     None once the rows are queued. With nothing imported, ``UNANSWERED``
     when the recorder did not answer one of those reads, and ``UNJOINED``
-    when it holds no live row of the sensor yet to move: a new sensor's
-    first is compiled within five minutes, and the automatic backfill runs
-    again. Taken for nothing recorded, a chain it could not read put every
+    when it holds no live row of the rows' cycle yet to move: a new sensor's
+    first is compiled within five minutes, and so is the first of a window
+    that has just moved, and the automatic backfill runs again. Taken for nothing recorded, a chain it could not read put every
     row a year's bill below it, which the first hour of the year read as
     minus that bill, and the imported rows stay.
     """
@@ -411,7 +411,7 @@ async def _import_cost_rows(
             return UNANSWERED
         try:
             anchor = await _live_anchor(
-                hass, sid, rows[-1]["start"] + timedelta(hours=1)
+                hass, sid, rows[-1]["start"] + timedelta(hours=1), reset
             )
         except Exception:  # recorder may surface anything
             _LOGGER.debug("could not read the live %s rows the backfill joins", sid)
@@ -466,18 +466,34 @@ def _join_lock(hass: HomeAssistant, statistic_id: str) -> asyncio.Lock:
 
 
 async def _live_anchor(
-    hass: HomeAssistant, statistic_id: str, end: datetime
+    hass: HomeAssistant, statistic_id: str, end: datetime, reset: datetime
 ) -> tuple[float, float] | None:
-    """The state and ``sum`` of a live row of the cycle near ``end``: the
-    sensor's hour before it, or, for a sensor that started after it, its
-    first five minutes. None when the recorder holds neither. Raises what
-    the recorder raised."""
-    rows = await _read(hass, statistic_id, end - timedelta(hours=1), end, "hour")
-    if not rows:
-        rows = await _read(hass, statistic_id, end, None, "5minute")
-    for row in rows:
-        if row.get("state") is not None and row.get("sum") is not None:
-            return float(row["state"]), float(row["sum"])
+    """The state and ``sum`` of a live row of the cycle that began at
+    ``reset``, near ``end``: the sensor's hour before it, or else its first
+    five minutes of that cycle from ``end`` on. None when the recorder holds
+    neither. Raises what the recorder raised.
+
+    A row of another cycle stands that cycle's whole bill away from the rows
+    to come. After an edit that moved the window, or at a New Year whose
+    first hour saw no tick, the newest rows stay the cycle before's until
+    the sensor's next five minutes compile, and joined to one of them the
+    hour after the last one written rose by that bill.
+    """
+    for start, stop, period in (
+        (end - timedelta(hours=1), end, "hour"),
+        (end, None, "5minute"),
+    ):
+        for row in await _read(hass, statistic_id, start, stop, period, True):
+            began = row.get("last_reset")
+            if isinstance(began, datetime):
+                began = began.timestamp()
+            if (
+                began is not None
+                and abs(began - reset.timestamp()) < 1.0
+                and row.get("state") is not None
+                and row.get("sum") is not None
+            ):
+                return float(row["state"]), float(row["sum"])
     return None
 
 
@@ -487,9 +503,11 @@ async def _read(
     start: datetime,
     stop: datetime | None,
     period: str,
+    last_reset: bool = False,
 ) -> list[Any]:
     """The state and ``sum`` rows of ``period`` from ``start`` to ``stop``,
-    or to the newest when None. Raises what the recorder raised."""
+    or to the newest when None, with the instant each was last reset at
+    when ``last_reset``. Raises what the recorder raised."""
     from homeassistant.components.recorder import (  # type: ignore[attr-defined]
         get_instance,
     )
@@ -505,7 +523,7 @@ async def _read(
         {statistic_id},
         period,
         None,
-        {"sum", "state"},
+        {"sum", "state", "last_reset"} if last_reset else {"sum", "state"},
     )
     return list(got.get(statistic_id, []))
 

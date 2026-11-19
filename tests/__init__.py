@@ -416,17 +416,27 @@ def make_text_session(body: str) -> Any:
 
 def make_recorder(executor: Any = None) -> MagicMock:
     """A recorder instance answering each read through ``executor``, with no
-    rows by default, but holding the cost sensor's first five minutes: the
-    cost rows join a live row, and nothing is imported before there is one."""
+    rows by default, but holding the cost sensor's first five minutes of the
+    year: the cost rows join a live row of their cycle, and nothing is
+    imported before there is one."""
     from homeassistant.components.recorder.statistics import (
         statistics_during_period,
     )
+    from homeassistant.util import dt as dt_util
 
     async def answer(fn: Any, *args: Any) -> Any:
         if fn is statistics_during_period and args[4:6] == ("5minute", None):
             start, ids = args[1], args[3]
+            jan1 = dt_util.start_of_local_day(date(dt_util.now().year, 1, 1))
             return {
-                sid: [{"start": start.timestamp(), "state": 0.0, "sum": 0.0}]
+                sid: [
+                    {
+                        "start": start.timestamp(),
+                        "state": 0.0,
+                        "sum": 0.0,
+                        "last_reset": jan1.timestamp(),
+                    }
+                ]
                 for sid in ids
             }
         return {} if executor is None else await executor(fn, *args)

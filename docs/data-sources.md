@@ -818,8 +818,9 @@ this year starts at zero, so the first compiled hour after the backfill reports
 `change = 0 - <year to date>` and the Energy dashboard's Cost card shows roughly
 **minus one annual bill** for that hour. So the recorder moves them:
 `_import_cost_rows` (`backfill_cost.py`) reads a live row of the cycle at the
-window's end (`_live_anchor`: the sensor's last hour before it, or, for a sensor
-that started after it, its first five minutes) and queues
+window's end (`_live_anchor`: the sensor's last hour before it, or else its
+first five minutes from it on, whichever carries the `last_reset` of the rows'
+cycle) and queues
 `async_adjust_statistics` from the first imported hour, by the distance between
 the two chains, ahead of the import. Within a cycle the compile adds to `sum`
 exactly what the state moves by, so every live row stands the same distance from
@@ -829,7 +830,12 @@ the live ones. A row compiled before the adjustment reaches the recorder's queue
 is moved with the rest, and one compiled after it resumes from a moved one, so
 no compile can fall between a read and a write. Read and written back from the
 integration, one that did stayed on the old chain, and the next hour fell by the
-whole year's bill. A sensor with no live row yet has nothing to move, and one
+whole year's bill. A row of another cycle stands that cycle's whole bill away
+from the rows: after an edit that moved the window, or on 1 January when its
+first hour saw no tick, the newest rows stay the cycle before's until the
+sensor's next five minutes compile, and joined to one of them the hour after the
+last one written rose by that bill. A sensor with no live row of the cycle yet
+has nothing to move, and one
 compiled after the import would start a chain of its own, so nothing is imported
 until there is one: a new sensor's first five minutes are compiled within five
 minutes, the automatic backfill runs again an hour later, and the service
@@ -839,8 +845,8 @@ would find the row. The shift is relative, so two joins that read before either
 was written, the automatic backfill's and a service call's, moved the live rows
 twice: one join per sensor runs at a time (`_join_lock`), and it holds until the
 recorder has committed what it queued (`async_block_till_done`).
-`tests/recorder/test_backfill_seam.py` pins the wait for the first live row, a
-compile before the backfill and two joins on a busy recorder against a real
+`tests/recorder/test_backfill_seam.py` pins the wait for the first live row, and
+for the first of a moved window, a compile before the backfill and two joins on a busy recorder against a real
 recorder, `tests/recorder/test_backfill_slow_run.py` a run that crosses an hour
 and New Year's midnight.
 
