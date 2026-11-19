@@ -144,7 +144,10 @@ every credit it is read off a contract's signing month's card, so it reaches a c
 signed on the November card and no other. The named card's subscription is read once per
 process (`_NAMED_FEES`): a published card's does not change, and laying out a Frank card
 costs about 25 s of CPU on a Raspberry Pi. A waiver over another term than twelve months, or
-one naming no card, fails the fetch, since a first-year credit would misprice it.
+one naming no card, fails the fetch, since a first-year credit would misprice it. So does one
+lowering the subscription to another amount than € 0,00 a month, or not saying to what, and a
+card printing another subscription than 0,00 above the footnote: the whole named subscription
+would be credited back where only part of it is waived.
 
 ### Hourly or quarter-hourly settlement
 

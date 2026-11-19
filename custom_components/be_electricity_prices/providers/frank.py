@@ -420,9 +420,13 @@ async def fetch_for_month(
 # per maand. Na afloop van deze periode gelden de abonnementskosten volgens de
 # tariefkaart Dynamisch - JN - Oktober 2026", under the JN card's "0,00*". The
 # variable JN card of the same month names "Variabel - JN - Oktober 2026".
+# The amount the subscription is lowered to is read with it, and is missing
+# from the match where the sentence goes on another way: only a subscription
+# lowered to nothing is one waived.
 _FEE_WAIVER_RE = re.compile(
     r"eerste\s+(\d+)\s+maanden\s+van\s+het\s+contract\s+ontvang\s+je\s+een\s+"
-    r"maandelijkse\s+korting\s+op\s+de\s+abonnementskosten",
+    r"maandelijkse\s+korting\s+op\s+de\s+abonnementskosten"
+    r"(?:\s*,\s*waardoor\s+deze\s+worden\s+verlaagd\s+naar\s+€\s*(\d+,\d+)\s+per\s+maand)?",
     re.IGNORECASE,
 )
 _FEE_CARD_RE = re.compile(
@@ -448,7 +452,10 @@ async def _with_waived_fee(
     contract signed on it as a first-year credit of the same amount, pro rata
     over the year. A card without a waiver is returned as it is; one waiving
     for another term than a year, or naming no card, or another product's,
-    fails loud, since a credit over the first year would misprice it."""
+    fails loud, since a credit over the first year would misprice it. So does
+    one lowering its subscription to another amount than 0, or not saying
+    to what, or printing another than 0 above the footnote: the whole named
+    subscription would be credited back."""
     waiver = _FEE_WAIVER_RE.search(text)
     if waiver is None:
         return snap
@@ -459,6 +466,9 @@ async def _with_waived_fee(
         or month_name not in _NL_MONTHS_LOWER
         or waiver.group(1) != "12"
         or named.group(1).casefold() != _PRODUCT[contract_id].casefold()
+        or waiver.group(2) is None
+        or to_float(waiver.group(2)) != 0.0
+        or snap.energy.yearly_fixed_fee != 0.0
     ):
         raise ExtractorError(
             "Frank Energie: the card waives its subscription in a way not priced here"

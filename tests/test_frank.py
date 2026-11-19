@@ -973,6 +973,37 @@ async def test_a_waiver_for_another_term_than_a_year_fails_loud(
         await frank.fetch(None, "frank_dynamic_jn", REGION_FLANDERS)  # type: ignore[arg-type]
 
 
+_JN_FEE_ROW = "Abonnementskost (EUR/maand) 0,00*"
+_JN_LOWERED = ", waardoor deze worden verlaagd naar € 0,00 per maand"
+
+
+@pytest.mark.parametrize(
+    ("row", "lowered"),
+    [
+        ("1,00*", ", waardoor deze worden verlaagd naar € 1,00 per maand"),
+        ("0,00*", ", waardoor deze worden verlaagd naar € 1,00 per maand"),
+        ("1,00*", _JN_LOWERED),
+        ("0,00*", ""),
+    ],
+    ids=["both", "footnote", "row", "unsaid"],
+)
+async def test_a_subscription_lowered_to_another_amount_than_0_fails_loud(
+    monkeypatch: pytest.MonkeyPatch, row: str, lowered: str
+) -> None:
+    """Only a subscription lowered to nothing is one waived. Read short of
+    the amount, one lowered to 1,00 a month was credited back whole and its
+    first year billed none of it."""
+    assert _JN_FEE_ROW in _jn_nov_text() and _JN_LOWERED in _jn_nov_text()
+    text = (
+        _jn_nov_text()
+        .replace(_JN_FEE_ROW, f"Abonnementskost (EUR/maand) {row}")
+        .replace(_JN_LOWERED, lowered)
+    )
+    _served_jn(monkeypatch, text)
+    with pytest.raises(ExtractorError, match="waives its subscription"):
+        await frank.fetch(None, "frank_dynamic_jn", REGION_FLANDERS)  # type: ignore[arg-type]
+
+
 async def test_a_card_without_a_waiver_keeps_its_subscription(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
