@@ -25,9 +25,9 @@
 
 """What pdfminer, under pdfplumber, is held to while a card is read, on
 top of the bound :mod:`._pdf_bound` counts: the wrappers holding it to
-that bound, what it may hold at once laying a page out, how many of its
-own CMaps it may load, and how many names and keywords it may make for a
-card, which it keeps for the read alone."""
+that bound, what it may hold at once reading the file and laying a page
+out, how many of its own CMaps it may load, and how many names and
+keywords it may make for a card, which it keeps for the read alone."""
 
 from __future__ import annotations
 
@@ -61,10 +61,27 @@ from ._pdf_bound import (
 # the rest, took 157 s. Measured on 2026-10-15 as pdfplumber reads them,
 # across the 179 shipped fixtures and the 2488 cards the archive held: at
 # most 407 on a stack, an OCTA+ card, nested 2 deep, and 42 987 segments on
-# a page of a Bolt card. These are about ten times that.
+# a page of a Bolt card. These are about ten times that. Every parser of
+# pdfminer's is held to the stack and the nesting, the one reading a font's
+# map or its program as the one reading a page's content: measured on
+# 2026-11-19 across the 283 shipped fixtures and the 4879 cards the archive
+# held, a font's map reaches 750 on a stack, an OCTA+ card.
 _MAX_STACK = 5_000
 _MAX_NESTING = 20
 _MAX_PATH_SEGMENTS = 450_000
+
+# The most the parsers reading the file itself may hold on a stack, its
+# objects and its object streams, and how deep the arrays and dictionaries
+# they read may nest: they keep the pieces of each as the content parser
+# does, and nothing held them. pdfminer.six 20251230 formats what an array
+# holds each time it closes one, for a debug log it writes or not, so
+# 20 000 numbers in arrays nested 800 deep took 23 s, from a 42 kB file.
+# Measured on 2026-11-19 across the 283 shipped fixtures and the 4879
+# cards the archive held: at most 1824 on a stack, an energie.be dynamic
+# card, nested 5 deep, on Bolt, Ecopower, Eneco and EBEM cards. These are
+# about eleven and eight times that.
+_MAX_FILE_STACK = 20_000
+_MAX_FILE_NESTING = 40
 
 # pdfminer decrypts RC4 a byte at a time, appending each to what it holds:
 # 64 kB took 0,27 s of CPU on a Raspberry Pi and 1 MiB 365 s. A decryption
@@ -216,6 +233,77 @@ def _held(count: int, most: int) -> None:
         reading.hold(count, most)
 
 
+class _Unshown(list[Any]):
+    """A pdfminer parser's stack, shown as nothing: pdfminer.six 20251230
+    formats the whole stack at each keyword it reads, for a debug log it
+    writes or not, so an array of keywords cost its length squared. 8000
+    references in a page tree took 124 s, from a 48 kB file, and each array
+    of 4900 keywords in a page's content 30,8 s, while a Bolt card has it
+    format 619 870 entries."""
+
+    def __repr__(self) -> str:
+        return "[...]"
+
+
+def _unshown(method: Any) -> Any:
+    """``method``, which leaves a pdfminer parser on a new, empty stack:
+    an :class:`_Unshown` one while a card is read."""
+
+    def emptied(self: Any, *args: Any) -> Any:
+        found = method(self, *args)
+        if _READING.get() is not None:
+            self.curstack = _Unshown()
+        return found
+
+    return emptied
+
+
+def _hold_pdfminer_parsers() -> None:
+    """Have every parser of pdfminer's held while a card is read, the one
+    reading the file and its object streams as the one reading a page's
+    content, a font's map or its program: to :data:`_MAX_STACK` on its
+    stack and arrays and dictionaries nested :data:`_MAX_NESTING` deep,
+    or :data:`_MAX_FILE_STACK` and :data:`_MAX_FILE_NESTING` reading the
+    file, through ``PSStackParser.push`` and ``start_type``, on a stack
+    that shows as
+    nothing, through all that gives it a new one, ``reset``, ``start_type``
+    and ``popall``. Done once whatever the copy of this module, over the
+    other wrappers too where a release of either integration from before
+    put them in place without these, a content parser's own included, and
+    only holding :data:`_HOLDING`."""
+    from pdfminer.pdfinterp import PDFContentParser
+    from pdfminer.pdfparser import PDFParser
+    from pdfminer.psparser import PSStackParser
+
+    if hasattr(PSStackParser.push, _MARK):
+        return
+    push = PSStackParser.push
+
+    def pushed(self: Any, *objs: Any) -> None:
+        push(self, *objs)
+        _held(
+            len(self.curstack),
+            _MAX_FILE_STACK if isinstance(self, PDFParser) else _MAX_STACK,
+        )
+
+    start = PSStackParser.start_type
+
+    def nested(self: Any, pos: int, type: str) -> None:
+        start(self, pos, type)
+        _held(
+            len(self.context),
+            _MAX_FILE_NESTING if isinstance(self, PDFParser) else _MAX_NESTING,
+        )
+
+    setattr(pushed, _MARK, True)
+    PSStackParser.push = pushed  # type: ignore[method-assign]
+    PSStackParser.start_type = nested  # type: ignore[method-assign]
+    for parser in (PSStackParser, PDFContentParser):
+        for name in ("reset", "start_type", "popall"):
+            if name in vars(parser):
+                setattr(parser, name, _unshown(vars(parser)[name]))
+
+
 def _count_pdfminer_text() -> None:
     """Have pdfminer count the characters of text it makes while a card is
     read: each glyph's text it lays out through ``LTChar``, and as font
@@ -262,7 +350,8 @@ def _hold_pdfminer_to_the_bound() -> None:
     every stream it inflates through its module's ``zlib``, every page it
     lists through ``PDFPage.create_pages``, everything it lays out through
     the device pdfplumber gives it, what it holds through its interpreter's
-    and content parser's ``push``, every token but a comment it parses
+    ``push`` and as :func:`_hold_pdfminer_parsers` says, every token but a
+    comment it parses
     through ``PSBaseParser.nexttoken``, every reference it resolves through
     ``PDFObjRef.resolve``, every step its parsers take, and the token, line
     or inline image they gather, through their ``fillbuf``, ``nextline``
@@ -289,6 +378,7 @@ def _hold_pdfminer_to_the_bound() -> None:
 
     with _HOLDING:
         _count_pdfminer_text()
+        _hold_pdfminer_parsers()
         if hasattr(pdftypes.PDFStream.get_data, _MARK):
             return
         names = vars(pdftypes)
@@ -373,18 +463,6 @@ def _hold_pdfminer_to_the_bound() -> None:
         def closed(self: PDFPageInterpreter) -> None:
             close(self)
             _held(len(self.curpath), _MAX_PATH_SEGMENTS)
-
-        parse = PDFContentParser.push
-
-        def parsed(self: Any, *objs: Any) -> None:
-            parse(self, *objs)
-            _held(len(self.curstack), _MAX_STACK)
-
-        start = PDFContentParser.start_type
-
-        def nested(self: Any, pos: int, type: str) -> None:
-            start(self, pos, type)
-            _held(len(self.context), _MAX_NESTING)
 
         init_resources = PDFPageInterpreter.init_resources
 
@@ -500,8 +578,6 @@ def _hold_pdfminer_to_the_bound() -> None:
         PDFPageInterpreter.push = pushed  # type: ignore[method-assign]
         PDFPageInterpreter.do_q = saved  # type: ignore[method-assign]
         PDFPageInterpreter.do_h = closed  # type: ignore[method-assign]
-        PDFContentParser.push = parsed  # type: ignore[method-assign]
-        PDFContentParser.start_type = nested  # type: ignore[method-assign]
         PDFPage.create_pages = staticmethod(paged)  # type: ignore[method-assign]
         PDFResourceManager.get_font = font  # type: ignore[method-assign]
         cmapdb.CMapDB.get_cmap = classmethod(cmap)  # type: ignore[assignment]
@@ -559,8 +635,11 @@ def bounded_pdfminer() -> Iterator[None]:
     :data:`_MAX_PAGE_OBJECTS` on a page and :data:`_MAX_CARD_OBJECTS` on the
     card; no path is painted, a card's text being read off its glyphs alone;
     and no stack holds more than :data:`_MAX_STACK` at once, arrays and
-    dictionaries nest no deeper than :data:`_MAX_NESTING`, and a path not
-    yet painted has no more than :data:`_MAX_PATH_SEGMENTS` segments. It
+    dictionaries nest no deeper than :data:`_MAX_NESTING`, or
+    :data:`_MAX_FILE_STACK` and :data:`_MAX_FILE_NESTING` reading the file
+    itself, and a path not yet painted has no more than
+    :data:`_MAX_PATH_SEGMENTS` segments. A parser's stack shows as nothing
+    where pdfminer formats it, at each keyword it reads. It
     parses no more than :data:`_MAX_PARSED` tokens, references resolved and
     resources walked, a content stream's for each page drawing it and a
     form's for each draw, takes no more than :data:`_MAX_STEPS` steps,

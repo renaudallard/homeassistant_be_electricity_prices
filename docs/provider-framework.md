@@ -838,14 +838,24 @@ Internals worth knowing:
   most `_MAX_PAGES` (50) pages, on both readers; pdfminer builds at most
   `_MAX_PAGE_OBJECTS` (120 000) glyphs, forms and images on a page and
   `_MAX_CARD_OBJECTS` (180 000) on the card; no stack of its interpreter or
-  content parser holds more than `_MAX_STACK` (5 000) at once, arrays and
-  dictionaries nest at most `_MAX_NESTING` (20) deep, and a path not yet
+  of any of its parsers holds more than `_MAX_STACK` (5 000) at once, arrays
+  and dictionaries nest at most `_MAX_NESTING` (20) deep, and a path not yet
   painted has at most `_MAX_PATH_SEGMENTS` (450 000) segments. Each is about
   ten times the most any shipped fixture or any of the 2488 cards the
   archive held on 2026-10-15 reaches: 5 pages, 11 213 objects on a page of
   a Luminus card and 17 374 on a Cociter card, 407 on a stack, 2 deep and
   42 987 segments on a page of a Bolt card; a page of 119 000 glyphs holds
-  437 MB and takes 56 s on a Raspberry Pi. No path is painted while a card
+  437 MB and takes 56 s on a Raspberry Pi. A font's map reaches 750 on a
+  stack, on an OCTA+ card, across the shipped fixtures and the 4879 cards
+  the archive held on 2026-11-19. The parsers reading the file itself and
+  its object streams are held to `_MAX_FILE_STACK` (20 000) and
+  `_MAX_FILE_NESTING` (40) instead, as a card reaches 1824 on a stack
+  there, an energie.be one, and nests 5 deep (20 000 numbers in arrays
+  nested 800 deep took 23 s, from a 42 kB file). pdfminer.six 20251230
+  formats a parser's whole stack at each keyword it reads, for a debug log
+  it writes or not, so an array of keywords cost its length squared (8000
+  references in a page tree took 124 s, from a 48 kB file): a stack shows
+  as nothing while a card is read. No path is painted while a card
   is read, its text being read off its glyphs alone (a page of a Bolt card
   held 123 000 segments), pdfplumber lets go of each page once read rather
   than with the document, and its `dedupe_chars` finds each glyph it keeps

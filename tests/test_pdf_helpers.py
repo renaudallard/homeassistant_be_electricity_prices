@@ -2028,6 +2028,71 @@ def test_what_pdfminer_holds_at_once_is_held(
             extract(_pdf_of(content, attrs=b""))
 
 
+def _catalog_pdf(entry: bytes) -> bytes:
+    """A PDF of one empty page whose catalog holds ``entry``."""
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R/X %s>>" % entry,
+            b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>",
+        )
+    )
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_the_parsers_of_the_file_are_held_too(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """The stack and the nesting were held on the parser of a page's
+    content alone, and the one reading the file kept every piece of an
+    array as long, or nested as deep, as the file wrote it: pdfminer.six
+    20251230 formats what an array holds each time it closes one, so 20 000
+    numbers in arrays nested 800 deep took 23 s, from a 42 kB file."""
+    monkeypatch.setattr(_pdf_bound_pdfminer, "_MAX_FILE_STACK", 50)
+    monkeypatch.setattr(_pdf_bound_pdfminer, "_MAX_FILE_NESTING", 6)
+    for entry in (b"[" + b"0 " * 60 + b"]", b"[" * 6 + b"]" * 6):
+        with pytest.raises(ExtractorError, match=r"^PDF has pdfminer hold more"):
+            extract(_catalog_pdf(entry))
+    for entry in (b"[" + b"0 " * 40 + b"]", b"[" * 5 + b"]" * 5):
+        with pytest.raises(CardNotReadableError, match="no text layer"):
+            extract(_catalog_pdf(entry))
+
+
+@pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
+def test_pdfminer_formats_no_stack_at_a_keyword(
+    monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
+) -> None:
+    """pdfminer.six 20251230 formats a parser's whole stack at each keyword
+    it reads, for a debug log it writes or not, so an array of keywords
+    cost its length squared: 8000 references in a page tree took 124 s,
+    from a 48 kB file, and each array of 4900 keywords in a page's content
+    30,8 s. A stack shows as nothing while a card is read, so what an array
+    holds is formatted a few times over, not once for each keyword."""
+    from pdfminer.pdftypes import PDFObjRef
+    from pdfminer.psparser import PSKeyword
+
+    shown = 0
+
+    def counting(show: Any) -> Any:
+        def counted(self: Any) -> str:
+            nonlocal shown
+            shown += 1
+            return str(show(self))
+
+        return counted
+
+    for kind in (PDFObjRef, PSKeyword):
+        monkeypatch.setattr(kind, "__repr__", counting(kind.__repr__))
+    for card in (
+        _catalog_pdf(b"[" + b"9 0 R " * 300 + b"]"),
+        _pdf_of(b"[" + b"x " * 300 + b"]", attrs=b""),
+    ):
+        shown = 0
+        with pytest.raises(CardNotReadableError, match="no text layer"):
+            extract(card)
+        assert shown < 20 * 300
+
+
 @pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
 def test_what_pdfminer_gathers_of_one_token_is_held(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
@@ -2808,6 +2873,42 @@ def test_the_reader_count_is_put_over_wrappers_that_lack_it(
     assert all(first[name] is not bare[name] for name in bare)
     assert hasattr(first["skip_over_whitespace"], _pdf_bound._MARK)
     assert counting() == first
+
+
+def test_the_hold_on_every_parser_is_put_over_wrappers_that_lack_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A release of either integration from before held a content parser
+    alone, through wrappers of its own: the hold on every parser goes in
+    over them, once, and a content parser's own start of an array leaves it
+    on a stack that shows as nothing too."""
+    from pdfminer.pdfinterp import PDFContentParser
+    from pdfminer.pdftypes import PDFStream
+    from pdfminer.psparser import PSStackParser
+
+    _pdf_bound_pdfminer._hold_pdfminer_to_the_bound()
+    others = PDFStream.get_data
+    names = ("push", "reset", "start_type", "popall")
+    for name in names:
+        monkeypatch.setattr(PSStackParser, name, lambda self, *args: None)
+    monkeypatch.setattr(PDFContentParser, "start_type", lambda self, *args: None)
+
+    def held() -> list[Any]:
+        return [vars(PSStackParser)[name] for name in names] + [
+            vars(PDFContentParser)["start_type"]
+        ]
+
+    bare = held()
+
+    def holding() -> list[Any]:
+        _pdf_bound_pdfminer._hold_pdfminer_to_the_bound()
+        assert PDFStream.get_data is others
+        return held()
+
+    first = holding()
+    assert all(new is not old for new, old in zip(first, bare, strict=True))
+    assert hasattr(PSStackParser.push, _pdf_bound._MARK)
+    assert holding() == first
 
 
 @pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
