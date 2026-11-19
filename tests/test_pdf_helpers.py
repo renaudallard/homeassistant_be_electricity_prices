@@ -2840,11 +2840,13 @@ def test_each_field_of_a_cross_reference_stream_s_entry_counts(
 
 def _undefined_pdf(references: int, padding: int) -> bytes:
     """A PDF of ``padding`` bytes and more whose page tree names
-    ``references`` times an object it does not define."""
+    ``references`` objects it does not define, each once: pypdf keeps note
+    of one it did not find from 6.21.2."""
+    kids = b"".join(b" %d 0 R" % number for number in range(9, 9 + references))
     return _pdf_from(
         (
             b"<</Type/Catalog/Pages 2 0 R>>",
-            b"<</Type/Pages/Kids[3 0 R" + b" 9 0 R" * references + b"]/Count 1>>",
+            b"<</Type/Pages/Kids[3 0 R" + kids + b"]/Count 1>>",
             b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>",
             b"<</Length %d>>\nstream\n%s\nendstream" % (padding, b"x" * padding),
         )
@@ -2855,10 +2857,10 @@ def test_a_search_of_the_whole_file_counts_its_length(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """pypdf answers a reference to an object its table lacks by copying
-    the whole file and searching it, and keeps no note that it found none,
-    so the read cost its references times its size with each counting as
-    one object parsed: 2000 of them took 60 s in a file of 2 MB. Each
-    search counts the file's length."""
+    the whole file and searching it, and kept no note that it found none
+    up to 6.21.1, so the read cost its references times its size with each
+    counting as one object parsed: 2000 of them took 60 s in a file of
+    2 MB. Each search counts the file's length, and each copy."""
     monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
     refused = r"^PDF streams decode to more than 1048576"
     with pytest.raises(ExtractorError, match=refused):
@@ -2867,13 +2869,50 @@ def test_a_search_of_the_whole_file_counts_its_length(
         extract_pdf_text(_undefined_pdf(5, 50_000))
 
 
+def _unreadable_tables_pdf(tables: int, padding: int) -> bytes:
+    """A PDF of ``padding`` bytes and more with ``tables`` cross-reference
+    tables more, chained by /Prev, each of one line that gives no offset."""
+    out = _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>",
+            b"<</Length %d>>\nstream\n%s\nendstream" % (padding, b"x" * padding),
+        )
+    )
+    xref = out.rindex(b"xref", 0, out.rindex(b"startxref"))
+    out = out[: out.rindex(b"startxref")]
+    for _ in range(tables):
+        previous, xref = xref, len(out)
+        out += b"xref\n0 1\nxxxxxxxxxx 65535 f \n"
+        out += b"trailer<</Size 5/Root 1 0 R/Prev %d>>\n" % previous
+    return out + b"startxref\n%d\n%%%%EOF\n" % xref
+
+
+def test_each_copy_pypdf_makes_of_the_whole_file_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pypdf copies the whole file to look up the object of a line of a
+    cross-reference table it cannot read, for each such line up to 6.21.1
+    and once a table from then on, and searches the copy for every object
+    once a table, with nothing counting it: 4000 such lines took 19,9 s in
+    a file of 2 MB. Each copy counts the file's length."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    refused = r"^PDF streams decode to more than 1048576"
+    with pytest.raises(ExtractorError, match=refused):
+        extract_pdf_text(_unreadable_tables_pdf(40, 50_000))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract_pdf_text(_unreadable_tables_pdf(5, 50_000))
+
+
 def test_the_reader_count_is_put_over_wrappers_that_lack_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Like the character count, the count of what pypdf's reader module
     passes over, reads of a cross-reference stream, reads again of an
-    object stream and searches goes in over the wrappers a release from
-    before put in place without it, once, and leaves them as they are."""
+    object stream, searches and copies goes in over the wrappers a release
+    from before put in place without it, once, and leaves them as they
+    are."""
     from pypdf.generic import EncodedStreamObject
 
     reader = vars(_pdf_bound.pypdf_reader)
@@ -2885,6 +2924,7 @@ def test_the_reader_count_is_put_over_wrappers_that_lack_it(
         "convert_to_int",
         "read_object",
         "re",
+        "get_stream_data" if "get_stream_data" in reader else "bytes",
     )
     for name in names:
         monkeypatch.setitem(reader, name, lambda *args: None)

@@ -787,7 +787,11 @@ Internals worth knowing:
   the whole file, which it copies and searches for each reference to an
   object its table lacks or misplaces, counts the file's length (2000
   references to an object not defined took 60 s in a file of 2 MB, each
-  counting as one object parsed; no shipped fixture has pypdf make one).
+  counting as one object parsed), and so does each copy it makes of the
+  file, for each such search and for each line of a cross-reference table
+  it cannot read, or once a table from pypdf 6.21.2 (4000 such lines took
+  19,9 s in a file of 2 MB); no shipped fixture, nor any of the 4879
+  cards the archive held on 2026-11-19, has pypdf make either.
   A check made beforehand, on a
   reading of the file, missed what the readers do: pypdf counted nothing for a
   page's content written into the page (a 175 kB file decoded 60 MB), a form

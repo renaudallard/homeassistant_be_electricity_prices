@@ -547,6 +547,26 @@ def _read_again(read: Any) -> Any:
     return counted
 
 
+def _copied(copy: Any) -> Any:
+    """``copy``, by which pypdf's reader module copies the whole file, for
+    each search it makes of it and for each line of a table it cannot
+    read, once a table from 6.21.2, counted while a card is read as that
+    many bytes decoded: 4000 such lines took 19,9 s in a file of 2 MB. No
+    shipped fixture, nor any of the 4879 cards the archive held on
+    2026-11-19, has pypdf make a copy."""
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        data = copy(*args, **kwargs)
+        # A view of the file, which a refusal's traceback would keep open.
+        del args, kwargs
+        reading = _READING.get()
+        if reading is not None:
+            reading.charge(len(data))
+        return data
+
+    return counted
+
+
 class _FileSearch:
     """``re`` as pypdf's reader module sees it, which only searches the
     whole file with it, a copy it makes each time, for an object its table
@@ -716,7 +736,9 @@ def _count_pypdf_reader() -> None:
     it reads again of an object stream, through its ``read_object``, and
     as decoded
     the file's length for each search it makes of the whole file, through
-    its ``re``. Done once whatever the copy of this module, over the other
+    its ``re``, and for each copy it makes of it, through its
+    ``get_stream_data`` or, up to 6.21.1, the ``bytes`` it finds ahead of
+    the builtin one, which the module calls for nothing else. Done once whatever the copy of this module, over the other
     wrappers too where a release of either integration from before put them
     in place without these."""
     reader = vars(pypdf_reader)
@@ -727,6 +749,8 @@ def _count_pypdf_reader() -> None:
     reader["convert_to_int"] = _parsed(reader["convert_to_int"])
     reader["read_object"] = _read_again(reader["read_object"])
     reader["re"] = _FileSearch()
+    copy = "get_stream_data" if "get_stream_data" in reader else "bytes"
+    reader[copy] = _copied(reader.get(copy, bytes))
     setattr(reader["skip_over_whitespace"], _MARK, True)
 
 
@@ -920,7 +944,9 @@ def bounded_pypdf() -> Iterator[None]:
     as pdfminer's does, its length too; a stream counts what its decoding
     hands back past its last inflate; a search of the whole file, which
     pypdf makes for each reference to an object its table lacks or
-    misplaces, counts the file's length; and a font load counts
+    misplaces, counts the file's length, and so does the copy it makes of
+    the file for each, and for a line of a table it cannot read; and a
+    font load counts
     :data:`_FONT_LOAD_BYTES`, pypdf loading the same dictionary to the same
     font once a read. LZW, run length, CCITT fax and JBIG2 are refused,
     since pypdf never decodes an image to read text, and ASCII85 past
