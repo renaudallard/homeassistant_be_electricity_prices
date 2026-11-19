@@ -815,12 +815,14 @@ Internals worth knowing:
   one a byte at a time in a time quadratic in its size. pypdf reads one cut
   short at once, but goes on past a failure, or a gzip header, a byte at a
   time to the end of the stream, so there such a one counts again, its
-  length as well. The costliest such stream in the archive, on Bolt's
-  professional Plenty fixed card of June 2026, takes 12,6 s of CPU on a
-  Raspberry Pi, and under the bound one can cost 52 to 105 s, where before
-  it was unbounded. Across the shipped fixtures pdfminer counts at most 9,9
-  MB and pypdf 7,4 MB, and across the 2468 cards the archive held on
-  2026-10-14 the most is 16,6 MB, pdfminer reading that Bolt card. LZW, run
+  length as well. The costliest such stream the archive held on
+  2026-10-14, on Bolt's professional Plenty fixed card of June 2026, takes
+  12,6 s of CPU on a Raspberry Pi, and under the bound one can cost 52 to
+  105 s, where before it was unbounded. On 2026-11-19, across the shipped
+  fixtures pdfminer counts at most 9,8 MB and pypdf 7,4 MB, and across the
+  4879 cards the archive held the most is 22,3 MB, pdfminer reading Frank's
+  variable card for Flanders of April 2025, so the bound leaves about half
+  as much again. LZW, run
   length and CCITT fax are refused while a card is read, and JBIG2, which
   pypdf hands to an outside program, under pypdf: no reader decodes an image
   to read text, pdfminer decodes the first three in pure Python with no
@@ -848,7 +850,10 @@ Internals worth knowing:
   ten times the most any shipped fixture or any of the 2488 cards the
   archive held on 2026-10-15 reaches: 5 pages, 11 213 objects on a page of
   a Luminus card and 17 374 on a Cociter card, 407 on a stack, 2 deep and
-  42 987 segments on a page of a Bolt card; a page of 119 000 glyphs holds
+  42 987 segments on a page of a Bolt card. On 2026-11-19 the 4879 cards
+  the archive held reach 8 pages and 21 637 objects on a card, a DATS 24
+  card, so the page and card bounds are six and eight times that; a page
+  of 119 000 glyphs holds
   437 MB and takes 56 s on a Raspberry Pi. A font's map reaches 750 on a
   stack, on an OCTA+ card, across the shipped fixtures and the 4879 cards
   the archive held on 2026-11-19. The parsers reading the file itself and
@@ -888,14 +893,14 @@ Internals worth knowing:
   stream, all of whose objects it reads each time it reads one of them
   (5000 bytes listed 2000 times took 6,4 s, from a 440-byte file; a
   stream listing each object once, as every shipped fixture's and every
-  archived card's does, counts nothing). The most a card reaches is 935 796
-  under pdfminer and 912 313 under pypdf, both on a Bolt card of 2,8 MB;
-  on 2026-11-19 a shipped fixture passed over 17 677 such bytes at most
-  and read 17 703 such fields, and the most a fixture counts under pypdf
-  went from 892 347 to 912 876 with them, while across the 4879 cards the
-  archive held that day the most went from 1 161 358 to 1 177 730, on
-  Bolt's professional fixed card of October 2026. This is
-  about three times that, since what it lets through is CPU: a token of a
+  archived card's does, counts nothing). On 2026-11-19 a shipped fixture
+  passed over 17 677 such bytes at most and read 17 703 such fields, and
+  the most a fixture counts under pypdf went from 892 347 to 912 876 with
+  them (912 887 under pdfminer, a Bolt card of 2,7 MB), while across the
+  4879 cards the archive held that day the most went from 1 161 358 to
+  1 177 730 (1 177 205 under pdfminer), on a Bolt fixed card of October
+  2026 in French. This is about two and a half times that, since what it
+  lets through is CPU: a token of a
   Bolt card costs pdfminer about 40 us on a Raspberry Pi, and of 30 kinds
   of operator made up to cost more none costs over a twentieth more but
   one showing a glyph for every four tokens, half as much again, which the
@@ -925,8 +930,10 @@ Internals worth knowing:
   each escape in a string or a name and each line a parser reads take one
   each, which the parse count does not see
   (2 MB of NUL bytes took 7,5 s on a Raspberry Pi, in the file itself held
-  only by the download cap). The most a card takes is 2 612 279, on a Bolt
-  card of 2,8 MB, and this is about three times that: a step costs at most
+  only by the download cap). On 2026-11-19 the most a shipped fixture
+  takes is 2 550 986, a Bolt card of 2,7 MB, and the most an archived card
+  takes 3 310 682, that Bolt card of October 2026, and this is about two
+  and a half times that: a step costs at most
   about 8,5 us, a line of a stream read to its end, so the most it lets
   through take about 68 s. pypdf reads at most `_MAX_LINES_BACK` (4096) lines
   backwards from the end of a file, looking for its end marker and the
@@ -1001,7 +1008,9 @@ Internals worth knowing:
   otherwise. The most a shipped fixture makes is 17 037 under pdfminer and
   17 321 under pypdf, both on Cociter's dynamic card of April 2026, the
   longest text the archive held on 2026-11-06 being the same card's of
-  November 2026, 18 197 characters, and this is about five times that. A
+  November 2026, 18 197 characters; on 2026-11-19 the longest the archive
+  held is 22 191 characters under pypdf, a DATS 24 card of May 2026, and
+  this is about four and a half times that. A
   refusal ends the read where it is made, raised as an error no
   reader catches: pypdf
   catches any error a form raises and goes on to its next draw, logging

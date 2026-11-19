@@ -108,8 +108,10 @@ _MAX_CMAPS = 4
 # importing its modules. Measured on 2026-10-16 as pdfplumber reads them,
 # across the 181 shipped fixtures and the 2488 cards the archive held: at
 # most 893 on a card, all but 35 of them names, energie.be's dynamic card
-# for Flanders of September 2026, and at most 17 no other card names. This
-# is about ten times that, each held costing about 200 bytes.
+# for Flanders of September 2026, and at most 17 no other card names. On
+# 2026-11-19 the 4879 cards the archive held reach 1041, on a card of
+# October 2026 with no text layer. This is about ten times that, each held
+# costing about 200 bytes.
 _MAX_SYMBOLS = 10_000
 
 

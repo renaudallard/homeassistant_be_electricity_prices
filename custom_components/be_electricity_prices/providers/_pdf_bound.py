@@ -66,19 +66,20 @@ except ModuleNotFoundError:
 pypdf_extractor: Any = importlib.import_module("pypdf._text_extraction._text_extractor")
 
 # What every stream of a card may decode to, together, counted as each
-# reader reads it. Across the 179 shipped fixtures pdfminer counts at most
-# 9,9 MB, for a 2,4 MB Bolt card, and pypdf 7,4 MB. Across the 2468 cards
-# the archive held on 2026-10-14 the most counted is 16,6 MB, pdfminer
-# reading Bolt's professional Plenty fixed card of June 2026 with its
-# damaged stream, so this leaves twice that.
+# reader reads it. Measured on 2026-11-19 across the 283 shipped fixtures:
+# pdfminer counts at most 9,8 MB, for a 2,4 MB Bolt card, and pypdf 7,4 MB.
+# Across the 4879 cards the archive held that day the most counted is
+# 22,3 MB, pdfminer reading Frank's variable card for Flanders of April
+# 2025, so this leaves about half as much again.
 _MAX_DECODED_STREAM_BYTES = 32 * 1024 * 1024
 
 # A damaged FlateDecode stream counts what it decodes to again, once for
 # every this many bytes of the stream. zlib refuses one cut short or failing
 # its checksum, and pdfminer then inflates it again a byte at a time,
 # appending each piece to what it holds: a cost of its length times its
-# output. The costliest in the archive, 211 kB decoding to 658 kB on that
-# Bolt card, takes 12,6 s of CPU on a Raspberry Pi and counts 8,9 MB more.
+# output. The costliest the archive held on 2026-10-14, 211 kB decoding to
+# 658 kB on Bolt's professional Plenty fixed card of June 2026, takes 12,6 s
+# of CPU on a Raspberry Pi and counts 8,9 MB more.
 # Under the bound one damaged stream can carry close to four times that
 # length times output, which took 52 to 105 s for text, random bytes or
 # blanks cut short.
@@ -112,9 +113,11 @@ _FONT_LOAD_BYTES = 1024
 # GB. Measured on 2026-10-15 as pdfplumber reads them, across the 179
 # shipped fixtures and the 2488 cards the archive held: at most 5 pages,
 # 11 213 objects on a page, Luminus' SmartFlex card for Wallonia of October
-# 2026, and 17 374 on a card, Cociter's dynamic card of October 2026.
-# These are about ten times that: a page of 119 000 glyphs holds 437 MB and
-# takes 56 s on a Raspberry Pi.
+# 2026, and 17 374 on a card, Cociter's dynamic card of October 2026. On
+# 2026-11-19 the 4879 cards the archive held reach 8 pages and 21 637
+# objects on a card, DATS 24's Groen Variabel card of May 2026. These are
+# six to ten times that: a page of 119 000 glyphs holds 437 MB and takes
+# 56 s on a Raspberry Pi.
 _MAX_PAGES = 50
 _MAX_PAGE_OBJECTS = 120_000
 _MAX_CARD_OBJECTS = 180_000
@@ -136,9 +139,8 @@ _MAX_CARD_OBJECTS = 180_000
 # 78 kB inflating to 32 MB of numbers no operator took held pypdf 238 s and
 # 1,2 GB, and 3 MB of paths pdfminer does not paint took 45 s, while a
 # 700-byte card naming an object that refers to itself had pdfminer resolve
-# it for good. Measured as above: at most 935 796 under pdfminer and 912 313
-# under pypdf, both on a Bolt card of 2,8 MB. This is about three times
-# that, since what it lets through is CPU: a token of a Bolt card costs
+# it for good. The most a card counts, measured below, is 1 177 730. This
+# is about two and a half times that, since what it lets through is CPU: a token of a Bolt card costs
 # pdfminer about 40 us on a Raspberry Pi, and of 30 kinds of operator made
 # up to cost more none costs over a twentieth more but one showing a glyph
 # for every four tokens, half as much again, which the object bound holds to
@@ -156,10 +158,11 @@ _MAX_CARD_OBJECTS = 180_000
 # across the 283 shipped fixtures, with pypdf 6.20.1: it passes over
 # 17 677 such bytes at most, on a Bolt card, and reads 17 703 such fields,
 # on a DATS 24 card, and counts 912 876 at most with them, where it counted
-# 892 347. Across the 4879 cards the archive held that day: 18 707 such
-# bytes and 17 913 such fields at most, and 1 177 730 counted at most with
-# them, where it counted 1 161 358, on Bolt's professional fixed card of
-# October 2026, of 4,2 MB.
+# 892 347, and pdfminer 912 887, both on a Bolt card of 2,7 MB. Across the
+# 4879 cards the archive held that day: 18 707 such bytes and 17 913 such
+# fields at most, and 1 177 730 counted at most with them, where it counted
+# 1 161 358, and pdfminer 1 177 205, both on a Bolt fixed card of October
+# 2026 in French, of 4,2 MB.
 _MAX_PARSED = 3_000_000
 
 # The most a reader may build of a card's fonts, counted as it builds them:
@@ -199,8 +202,9 @@ _MAX_FONT_ENTRIES = 1_000_000
 # Pi. Measured on 2026-11-06 across the 243 shipped fixtures:
 # at most 17 037 under pdfminer and 17 321 under pypdf, both on Cociter's
 # dynamic card of April 2026, while the longest text the archive held that
-# day is the same card's of November 2026, 18 197 characters. This is
-# about five times that.
+# day is the same card's of November 2026, 18 197 characters. On 2026-11-19
+# the longest the archive held is 22 191 characters under pypdf, DATS 24's
+# Groen Variabel card of May 2026. This is about four and a half times that.
 _MAX_CHARACTERS = 100_000
 
 # The longest token pdfminer may gather, a comment included, the longest
@@ -221,8 +225,10 @@ _MAX_TOKEN_BYTES = 16 * 1024
 # byte, a lone ">", each escape in a string or a name and each line a parser
 # reads take one each, which the parse count does not see: 2 MB of NUL bytes
 # took 7,5 s on a Raspberry Pi, in the file itself held only by the download
-# cap. Measured as above: at most 2 612 279, on a Bolt card of 2,8 MB. This
-# is about three times that: a step costs at most about 8,5 us, a line of a
+# cap. Measured on 2026-11-19: at most 2 550 986 across the 283 shipped
+# fixtures, on a Bolt card of 2,7 MB, and 3 310 682 across the 4879 cards
+# the archive held, on the Bolt fixed card of October 2026 above. This is
+# about two and a half times that: a step costs at most about 8,5 us, a line of a
 # stream read to its end, so the most it lets through take about 68 s.
 _MAX_STEPS = 8_000_000
 
