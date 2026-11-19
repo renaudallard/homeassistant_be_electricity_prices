@@ -455,9 +455,17 @@ async def _with_waived_fee(
     fails loud, since a credit over the first year would misprice it. So does
     one lowering its subscription to another amount than 0, or not saying
     to what, or printing another than 0 above the footnote: the whole named
-    subscription would be credited back."""
+    subscription would be credited back. And so does a card whose
+    subscription is 0 or bears a footnote mark ("0,00*") while no waiver was
+    read: a footnote worded another way, which would bill every household,
+    those past their first year too, no subscription at all."""
     waiver = _FEE_WAIVER_RE.search(text)
     if waiver is None:
+        fee = _MONTHLY_FEE_RE.search(text)
+        if snap.energy.yearly_fixed_fee == 0.0 or (fee is not None and fee.group(2)):
+            raise ExtractorError(
+                "Frank Energie: the card prints its subscription with a footnote not read"
+            )
         return snap
     named = _FEE_CARD_RE.search(text)
     month_name = "" if named is None else named.group(2).lower()
@@ -683,8 +691,9 @@ _FORMULA_RE = re.compile(
     re.IGNORECASE,
 )
 
+# "0,00*" on the JN cards of November 2026, whose footnote waives it.
 _MONTHLY_FEE_RE = re.compile(
-    r"Abonnementskost\s*\(EUR/maand\)\s*" + _NUM,
+    r"Abonnementskost\s*\(EUR/maand\)\s*" + _NUM + r"(\s*\*)?",
 )
 
 

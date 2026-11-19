@@ -147,7 +147,10 @@ costs about 25 s of CPU on a Raspberry Pi. A waiver over another term than twelv
 one naming no card, fails the fetch, since a first-year credit would misprice it. So does one
 lowering the subscription to another amount than € 0,00 a month, or not saying to what, and a
 card printing another subscription than 0,00 above the footnote: the whole named subscription
-would be credited back where only part of it is waived.
+would be credited back where only part of it is waived. A card whose subscription is 0 or bears a footnote
+mark (`0,00*`) while no waiver was read is refused as well: a footnote worded another way would
+otherwise bill every JN household, those past their first year too, no subscription at all. No
+other card in the archive prints either.
 
 ### Hourly or quarter-hourly settlement
 

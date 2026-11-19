@@ -1004,6 +1004,28 @@ async def test_a_subscription_lowered_to_another_amount_than_0_fails_loud(
         await frank.fetch(None, "frank_dynamic_jn", REGION_FLANDERS)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("row", ["0,00*", "0,00", "2,33*"])
+async def test_a_subscription_under_a_footnote_not_read_fails_loud(
+    monkeypatch: pytest.MonkeyPatch, row: str
+) -> None:
+    """The subscription billed after the waiver and the waiver itself hang
+    on one sentence. Reworded, the card read as a subscription of 0 with no
+    waiver, and every JN household, those past their first year too, was
+    billed none."""
+    text = (
+        _jn_nov_text()
+        .replace(
+            "eerste 12 maanden van het contract ontvang je",
+            "eerste 12 maanden krijg je",
+        )
+        .replace(_JN_FEE_ROW, f"Abonnementskost (EUR/maand) {row}")
+    )
+    assert "ontvang je een" not in text
+    _served_jn(monkeypatch, text)
+    with pytest.raises(ExtractorError, match="footnote not read"):
+        await frank.fetch(None, "frank_dynamic_jn", REGION_FLANDERS)  # type: ignore[arg-type]
+
+
 async def test_a_card_without_a_waiver_keeps_its_subscription(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
