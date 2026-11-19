@@ -23,6 +23,10 @@
 # gate result; on a Mac the suite runs under caffeinate so the machine does
 # not sleep under it.
 #
+# pytest is given PYTEST_LIMIT seconds, on the remote host by a timeout run
+# there, so a hung suite is stopped where it runs and fails the gate rather
+# than holding it for good. The remote needs GNU timeout in its PATH too.
+#
 # Usage: scripts/gate.sh [pytest args...]
 #   scripts/gate.sh                     the whole suite, as test.yml runs it
 #   scripts/gate.sh tests/test_ebem.py  one file, for a quick pass
@@ -51,6 +55,12 @@ REMOTE_DIR="be_gate/gate-$SHA.$$"
 # because every second of it comes off what the remote saves.
 SSH=(ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=5
   -o ServerAliveCountMax=3)
+# A whole suite takes about four minutes on the runner and twenty on a
+# Raspberry Pi with an empty text cache: three times that is a hang, not a
+# slow run. A test that hangs in its teardown outlives its own pytest
+# timeout. KILL follows TERM after 30 s.
+PYTEST_LIMIT=3600
+BOUND=(timeout -k 30 "$PYTEST_LIMIT")
 shipped=""
 names=()
 pids=()
@@ -142,7 +152,7 @@ PYTEST_ARGS=("${@:-tests/}")
 export BE_FIXTURE_TEXT_CACHE="$ROOT/tmp/fixture_text"
 if remote_ready; then
   where="$REMOTE"
-  remote_pytest="../.venv/bin/python -m pytest $(printf '%q ' "${PYTEST_ARGS[@]}")-q -n auto --dist loadfile"
+  remote_pytest="${BOUND[*]} ../.venv/bin/python -m pytest $(printf '%q ' "${PYTEST_ARGS[@]}")-q -n auto --dist loadfile"
   # caffeinate keeps a Mac awake for as long as the suite runs. -i alone is
   # not enough: with its screen off the Mac only half-wakes for the ssh
   # connection, and from there it went back to sleep 45 s later with pytest
@@ -152,7 +162,8 @@ if remote_ready; then
     "cd $REMOTE_DIR && export BE_FIXTURE_TEXT_CACHE=\$HOME/be_gate/fixture_text && { command -v caffeinate >/dev/null && exec caffeinate -s -i $remote_pytest; exec $remote_pytest; }"
 else
   where=local
-  start "pytest" "$PYTHON" -m pytest "${PYTEST_ARGS[@]}" -q -n auto --dist loadfile
+  start "pytest" "${BOUND[@]}" "$PYTHON" -m pytest "${PYTEST_ARGS[@]}" -q -n auto \
+    --dist loadfile
 fi
 echo "pytest runs on $where"
 echo
@@ -190,12 +201,15 @@ for n in "${order[@]}"; do
     cat "$LOGS/$n.log"
     echo "   lost $REMOTE, rerunning pytest locally"
     name="pytest"
-    ( cd "$WORKTREE" && "$PYTHON" -m pytest "${PYTEST_ARGS[@]}" -q -n auto \
-      --dist loadfile ) > "$LOGS/$n.log" 2>&1
+    ( cd "$WORKTREE" && "${BOUND[@]}" "$PYTHON" -m pytest "${PYTEST_ARGS[@]}" -q \
+      -n auto --dist loadfile ) > "$LOGS/$n.log" 2>&1
     rc=$?
   fi
   echo "== $name"
   cat "$LOGS/$n.log"
+  if [ "$n" -eq 0 ] && { [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; }; then
+    echo "   stopped after $PYTEST_LIMIT s: pytest hung or ran far too long"
+  fi
   if [ "$rc" -eq 0 ]; then
     echo "   ok"
   else

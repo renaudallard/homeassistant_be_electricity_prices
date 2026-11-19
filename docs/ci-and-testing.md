@@ -2107,9 +2107,12 @@ commit, cold caches, with maci7, an eight-thread Intel MacBook Air, as the remot
 | pytest on maci7, the rest on the Pi at the same time | about 365 s | |
 
 Unset, everything runs locally. The remote needs a venv at `~/be_gate/.venv`, which the
-gate refreshes with uv whenever `requirements-dev.txt` changes, and GNU `date` first in its
-`PATH` for the tests of `scripts/file_ci_issue.sh`. A remote that cannot be reached, or drops
-mid-run, costs a local pytest, never a gate result. An ssh keepalive notices a remote that went
+gate refreshes with uv whenever `requirements-dev.txt` changes, GNU `date` first in its
+`PATH` for the tests of `scripts/file_ci_issue.sh`, and GNU `timeout`. A remote that cannot be
+reached, or drops mid-run, costs a local pytest, never a gate result. pytest gets an hour, three
+times a run on a Pi with an empty text cache, under `timeout` on the host it runs on, so a suite
+that hangs is stopped there and fails the gate with a line saying so, rather than holding it for
+good. An ssh keepalive notices a remote that went
 away without closing the connection, a Mac put to sleep for one, within about 15 s, and on a Mac
 the suite runs under `caffeinate -s -i` so the machine does not sleep under it: with the screen off
 the Mac only half-wakes for the connection, and `-i` alone let it go back to sleep mid-run.
