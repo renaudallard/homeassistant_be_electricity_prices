@@ -42,7 +42,16 @@ fix cards:  https://files.boltenergie.be/pricelists/fix/<slug>_res_el_fr_<YYYYMM
 var cards:  https://files.boltenergie.be/pricelists/var/<slug>_res_el_fr_<version>.pdf
 ```
 
-Fixed cards roll monthly via a `YYYYMM` suffix. Variable cards carry a version number that Bolt
+Fixed cards roll monthly via a `YYYYMM` suffix, and a card Bolt reissues within its month is filed
+under the month with a number after it: March 2026's first cards are for the 1st to the 13th and
+say so in their title (`01/03/2026-13/03/2026 - résidentiel`), and `<YYYYMM>_2` is the card for the
+14th to the 31st (15,61 c€/kWh on Bolt Fixe where the first card prints 12,98; 14,93 against 12,45
+on the professional cards). The fetch and the probe read the listing for a fixed card too and take
+the highest reissue of the month it links (`_fixed_suffix`, `bolt.py`); a listing that does not
+load, or links none, leaves the month's own card read, as before (`_fixed_listing`). A past month
+is the card in force on its last day (`_card_on_last_day`): a card naming days that end before the
+month does is passed over for its `_2` reissue, which is what the fetch read as the month ended.
+Variable cards carry a version number that Bolt
 bumps in place on no fixed schedule, leaving every superseded file served, so a pinned version
 keeps returning 200 and parsing cleanly while billing an old formula. `_resolve_variable_suffix`
 (`bolt.py`) therefore reads the version off the listing on every fetch rather than trusting a
@@ -338,7 +347,7 @@ The month suffix in `_document_url` is deliberately `dt_util.now()` (Brussels lo
 ### `probe` (freshness)
 
 `probe` (`bolt.py`) resolves the card `fetch` reads, a variable card's version off the listing
-and a fixed card's month off the clock, and keys on its address and its own `Last-Modified`
+and a fixed card's month off the clock, with the reissue of it the listing links, and keys on its address and its own `Last-Modified`
 through `head_freshness_key` (`_pdf.py`). Plenty Online adds the Online card's, the one its formula
 is read off. The address moves with a new version or month; the header moves when Bolt overwrites
 a card in place, which it does: the October 2026 Online card was served from 30 September and

@@ -73,6 +73,13 @@ from tests import FIXTURES, fixture_text
 pytestmark = pytest.mark.timeout(600)
 
 
+@pytest.fixture(autouse=True)
+def _listing_links_no_reissue(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fixed card's fetch reads the listing for a reissue of its month;
+    unless a test says otherwise, it links none."""
+    monkeypatch.setattr(bolt_mod, "_fixed_listing", AsyncMock(return_value=""))
+
+
 def test_bolt_is_registered() -> None:
     assert "bolt" in EXTRACTORS
     assert EXTRACTORS["bolt"].label == "Bolt"
@@ -856,23 +863,120 @@ def test_variable_fetch_uses_the_resolved_version_not_a_pin() -> None:
     assert seen == ["https://files.boltenergie.be/pricelists/var/bolt_res_el_fr_14.pdf"]
 
 
-def test_fix_fetch_does_not_consult_the_listing() -> None:
-    # Fixed cards are URL-keyed by month and need no version lookup;
-    # spending a listing round-trip on them would be pure waste.
-    text = fixture_text("bolt_fix.pdf", layout=True)
-    listing = AsyncMock(return_value=_LISTING_HTML)
+_REISSUED = (
+    '<a href="https://files.boltenergie.be/pricelists/fix/fix_res_el_fr_202603.pdf">fix</a>'
+    '<a href="https://files.boltenergie.be/pricelists/fix/fix_res_el_fr_202603_2.pdf">fix</a>'
+    '<a href="https://files.boltenergie.be/pricelists/fix/fix_pro_el_fr_202603.pdf">pro</a>'
+)
 
-    async def _run() -> None:
-        with (
-            patch.object(bolt_mod, "fetch_text", new=listing),
-            patch.object(
-                bolt_mod, "fetch_pdf_text_layout", new=AsyncMock(return_value=text)
-            ),
-        ):
-            await bolt_mod.fetch(None, "bolt_fix", "flanders")  # type: ignore[arg-type]
 
-    asyncio.run(_run())
-    listing.assert_not_awaited()
+@pytest.mark.parametrize(
+    ("listing", "suffix"),
+    [
+        (_REISSUED, "202603_2"),
+        (_REISSUED.replace("fix_res_el_fr_202603.pdf", "x.pdf"), "202603_2"),
+        (_REISSUED.replace("202603_2", "202602_2"), "202603"),
+        ("", "202603"),
+    ],
+    ids=["both", "reissue-only", "other-month", "no-listing"],
+)
+async def test_a_fixed_card_reissued_within_its_month_is_the_current_one(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any, listing: str, suffix: str
+) -> None:
+    """Bolt filed the second card of March 2026 under the month with "_2",
+    for the 14th to the 31st, and the listing linked it: the fetch read the
+    month's first card instead. The highest reissue of the month the listing
+    links is the current card; a listing that does not load, or links none,
+    leaves the month's own card read."""
+    freezer.move_to("2026-03-20 12:00:00+01:00")
+    monkeypatch.setattr(bolt_mod, "_fixed_listing", AsyncMock(return_value=listing))
+    read: list[str] = []
+
+    async def text(_session: object, url: str, **_kw: object) -> str:
+        read.append(url)
+        return "card"
+
+    monkeypatch.setattr(bolt_mod, "fetch_pdf_text_layout", text)
+    url, _text = await bolt_mod._fetch_pdf_text(
+        None,  # type: ignore[arg-type]
+        bolt_mod._CONTRACTS_BY_ID["bolt_fix"],
+    )
+    assert url == f"{bolt_mod._BASE_URL}/fix/fix_res_el_fr_{suffix}.pdf"
+    assert read == [url]
+    seen: list[str] = []
+
+    async def head(_session: object, url: str, **_kw: object) -> str:
+        seen.append(url)
+        return "Fri, 13 Mar 2026 10:47:19 GMT"
+
+    monkeypatch.setattr(bolt_mod, "head_freshness_key", head)
+    key = await bolt_mod.probe(None, "bolt_fix", "flanders")  # type: ignore[arg-type]
+    assert seen == [url] and key == f"{url} Fri, 13 Mar 2026 10:47:19 GMT"
+
+
+async def test_the_listing_down_leaves_a_fixed_card_read_by_its_month(
+    monkeypatch: pytest.MonkeyPatch, freezer: Any
+) -> None:
+    """Only a reissue needs the listing: one that does not load is no reason
+    to read no fixed card at all."""
+    freezer.move_to("2026-03-20 12:00:00+01:00")
+    monkeypatch.undo()
+    monkeypatch.setattr(
+        bolt_mod,
+        "fetch_text",
+        AsyncMock(side_effect=ExtractorError("HTTP 503 fetching x")),
+    )
+    monkeypatch.setattr(
+        bolt_mod, "fetch_pdf_text_layout", AsyncMock(return_value="card")
+    )
+    url, _text = await bolt_mod._fetch_pdf_text(
+        None,  # type: ignore[arg-type]
+        bolt_mod._CONTRACTS_BY_ID["bolt_fix"],
+    )
+    assert url.endswith("/fix/fix_res_el_fr_202603.pdf")
+
+
+@pytest.mark.parametrize(
+    ("first", "reissue", "read"),
+    [
+        (
+            "Bolt Fixe\n01/03/2026-13/03/2026 - résidentiel",
+            "14/03/2026 - 31/03/2026 - résidentiel",
+            "202603_2",
+        ),
+        ("Bolt Fixe\nMars 2026 - résidentiel", None, "202603"),
+        ("Bolt Fixe\n01/03/2026-13/03/2026 - résidentiel", None, None),
+        ("Bolt Fixe\n01/03/2026-31/03/2026 - professionnel HTVA", None, "202603"),
+    ],
+    ids=["reissued", "whole-month", "no-reissue", "every-day"],
+)
+async def test_a_past_fixed_month_is_the_card_in_force_on_its_last_day(
+    monkeypatch: pytest.MonkeyPatch, first: str, reissue: str | None, read: str | None
+) -> None:
+    """March 2026's first card was for the 1st to the 13th and said so, and
+    the month was billed on it: the card in force at its end is the "_2"
+    reissue, the one the fetch read as March ended."""
+    plain = f"{bolt_mod._BASE_URL}/fix/fix_res_el_fr_202603.pdf"
+    texts = {plain: first}
+    if reissue is not None:
+        texts[plain.replace(".pdf", "_2.pdf")] = reissue
+
+    async def text(_session: object, url: str, **_kw: object) -> str:
+        if url not in texts:
+            raise ExtractorError(f"HTTP 404 fetching {url}")
+        return texts[url]
+
+    monkeypatch.setattr(bolt_mod, "fetch_pdf_text_layout", text)
+    found = await bolt_mod._card_on_last_day(
+        None,  # type: ignore[arg-type]
+        bolt_mod._CONTRACTS_BY_ID["bolt_fix"],
+        date(2026, 3, 1),
+    )
+    if read is None:
+        assert found is None
+    else:
+        assert found is not None
+        assert found[0] == f"{bolt_mod._BASE_URL}/fix/fix_res_el_fr_{read}.pdf"
 
 
 def test_probe_keys_on_the_card_and_its_own_freshness() -> None:
@@ -914,7 +1018,7 @@ def test_probe_keys_on_the_card_and_its_own_freshness() -> None:
     stamps[online] = "Fri, 02 Oct 2026 08:40:44 GMT"
     assert asyncio.run(key("bolt_online")) != first
     assert asyncio.run(key("bolt_plenty_online")) != first_plenty
-    # A fixed card is the month's address, no listing read.
+    # A fixed card is the month's address where the listing links no reissue.
     fixed = bolt_mod._document_url(bolt_mod._CONTRACTS_BY_ID["bolt_fix"])
     stamps[fixed] = "Fri, 02 Oct 2026 08:39:10 GMT"
     assert asyncio.run(key("bolt_fix", "")) == f"{fixed} Fri, 02 Oct 2026 08:39:10 GMT"

@@ -30,7 +30,11 @@ Bolt publishes tariff cards at predictable URLs:
     https://files.boltenergie.be/pricelists/fix/<slug>_res_el_fr_<YYYYMM>.pdf
     https://files.boltenergie.be/pricelists/var/<slug>_res_el_fr_<version>.pdf
 
-Fixed contracts roll monthly via the YYYYMM suffix. Variable contracts
+Fixed contracts roll monthly via the YYYYMM suffix, and a card reissued
+within its month is filed under the month with a number after it: March
+2026's second card, for the 14th to the 31st, is ``<YYYYMM>_2``. The
+listing links the reissue, which is then the current card, and a past
+month is the card in force on its last day. Variable contracts
 carry a version-number suffix that Bolt bumps in place whenever it
 revises the formula, on no fixed schedule; the superseded files stay
 served, so pinning a version reads a stale card that still answers 200
@@ -294,6 +298,39 @@ def _document_url(contract: _ContractDef, suffix: str | None = None) -> str:
     )
 
 
+# A fixed card's suffix on the listing: its month, and the number of a card
+# reissued within it ("202603_2" from 14 March 2026).
+_FIXED_SUFFIX_RE = re.compile(r"(\d{6})(?:_(\d+))?")
+
+
+def _fixed_suffix(listing_html: str, contract: _ContractDef, month: str) -> str:
+    """``month``, or its highest reissue the listing links for ``contract``,
+    "202603_2" where it links that: the card in force."""
+    reissues = [
+        int(found.group(2))
+        for folder, slug, segment, version in _CARD_URL_RE.findall(listing_html)
+        if folder.lower() == "fix"
+        and slug.lower() == contract.slug
+        and segment.lower() == contract.segment
+        and (found := _FIXED_SUFFIX_RE.fullmatch(version)) is not None
+        and found.group(1) == month
+        and found.group(2) is not None
+    ]
+    return f"{month}_{max(reissues)}" if reissues else month
+
+
+async def _fixed_listing(session: aiohttp.ClientSession) -> str:
+    """The listing a fixed card's reissue is read off, or nothing where it
+    does not load: the card is addressed by its month, and only a reissue
+    needs the listing, so a listing down keeps the month's own card read
+    as before rather than none."""
+    try:
+        return await fetch_text(session, _LISTING_URL)
+    except ExtractorError as err:
+        _LOGGER.debug("Bolt: listing unread, fixed cards by their month (%s)", err)
+        return ""
+
+
 async def _resolve_variable_suffix(
     session: aiohttp.ClientSession, contract: _ContractDef
 ) -> str:
@@ -369,7 +406,9 @@ async def probe(
             suffix = (
                 await _resolve_variable_suffix(session, card)
                 if card.folder == "var"
-                else None
+                else _fixed_suffix(
+                    await _fixed_listing(session), card, dt_util.now().strftime("%Y%m")
+                )
             )
         except ExtractorError:
             return None
@@ -426,9 +465,11 @@ async def _fetch_pdf_text(
         # fetch-the-index-then-the-card shape is what Ecopower already
         # does. A cache here would only add a staleness window to the
         # very thing that exists to prevent staleness.
-        suffix: str | None = await _resolve_variable_suffix(session, contract)
+        suffix = await _resolve_variable_suffix(session, contract)
+        listing = ""
     else:
-        suffix = None
+        listing = await _fixed_listing(session)
+        suffix = _fixed_suffix(listing, contract, dt_util.now().strftime("%Y%m"))
     url = _document_url(contract, suffix=suffix)
     try:
         return url, await fetch_pdf_text_layout(session, url, timeout=pdf_timeout)
@@ -466,7 +507,9 @@ async def _fetch_pdf_text(
         # "previous month" boundary follows local time so we don't
         # accidentally roll back two months on the new-month UTC seam.
         previous = (dt_util.now().replace(day=1) - timedelta(days=1)).strftime("%Y%m")
-        fallback_url = _document_url(contract, suffix=previous)
+        fallback_url = _document_url(
+            contract, suffix=_fixed_suffix(listing, contract, previous)
+        )
         _LOGGER.warning(
             "Bolt %s: current-month PDF unavailable (%s); "
             "falling back to previous-month card %s",
@@ -569,7 +612,8 @@ async def fetch_for_month(
     (``bolt_res_el_fr_13.pdf``), so older months can't be addressed there,
     those return ``None`` and the YTD path falls back to the current snapshot
     as a proxy. A variable month the card archive holds settles in place
-    (:func:`settle_month`).
+    (:func:`settle_month`). A fixed month is the card in force on its last
+    day, its reissue where Bolt reissued it (:func:`_card_on_last_day`).
     """
     if contract_id not in _CONTRACTS_BY_ID:
         return None
@@ -577,16 +621,10 @@ async def fetch_for_month(
     if contract.folder != "fix":
         # The variable folder has no month-addressable card.
         return None
-    suffix = year_month.strftime("%Y%m")
-    url = _document_url(contract, suffix=suffix)
-    try:
-        text = await fetch_pdf_text_layout(session, url, timeout=60)
-    except ExtractorError as err:
-        # A timeout, a reset or a 5xx says nothing about the month: raise,
-        # so the month cache retries it instead of caching it as absent.
-        if is_transient_fetch_error(str(err)):
-            raise
+    found = await _card_on_last_day(session, contract, year_month)
+    if found is None:
         return None
+    url, text = found
     dutch_text = await _dutch_edition(session, contract, url, text)
     try:
         snap = parse_snapshot(contract_id, text, region, url, dutch_text=dutch_text)
@@ -600,6 +638,52 @@ async def fetch_for_month(
     # against the requested month and fall back to the proxy snapshot on
     # a mismatch rather than mis-billing a past month at current rates.
     return archive_validity_check(snap, text, year_month, month_names=_FR_MONTH_NAMES)
+
+
+# The days a fixed card is for, where it names them in its title rather
+# than the month: "01/03/2026-13/03/2026 - résidentiel" on the first card of
+# March 2026, "14/03/2026 - 31/03/2026" on its reissue. No other card on
+# file names them.
+_CARD_DAYS_RE = re.compile(
+    r"\d{2}/\d{2}/\d{4}\s*-\s*(\d{2})/(\d{2})/(\d{4})\s*-\s*(?:résidentiel|professionnel)"
+)
+
+
+async def _card_on_last_day(
+    session: aiohttp.ClientSession, contract: _ContractDef, year_month: date
+) -> tuple[str, str] | None:
+    """The address and text of the fixed card in force on the last day of
+    ``year_month``, or None where Bolt has none.
+
+    The card is filed under its month, and a card reissued within it under
+    the month with "_2": the first card of March 2026 is for the 1st to the
+    13th and says so, and its reissue is what the listing linked as the
+    month ended. A card naming days that end before the month does is
+    passed over for its reissue. A transient failure raises, so the month
+    cache retries the month instead of caching it as absent.
+    """
+    month = f"{year_month:%Y%m}"
+    following = date(
+        year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
+    )
+    for suffix in (month, f"{month}_2"):
+        url = _document_url(contract, suffix=suffix)
+        try:
+            text = await fetch_pdf_text_layout(session, url, timeout=60)
+        except ExtractorError as err:
+            if is_transient_fetch_error(str(err)):
+                raise
+            return None
+        days = _CARD_DAYS_RE.search(text)
+        if days is None:
+            return url, text
+        try:
+            last = date(int(days.group(3)), int(days.group(2)), int(days.group(1)))
+        except ValueError:
+            return None
+        if last >= following - timedelta(days=1):
+            return url, text
+    return None
 
 
 async def settle_month(
