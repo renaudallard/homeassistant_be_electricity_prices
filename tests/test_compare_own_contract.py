@@ -77,6 +77,9 @@ async def test_a_held_contract_is_not_granted_a_new_welcome_credit(
     assert float(p["delta_annual"]) == 0.0
 
 
+# Laying out the Bolt Variable card took 90 s on a Raspberry Pi 4 at load 10
+# with its text not cached yet, past the suite's 60 s.
+@pytest.mark.timeout(180)
 async def test_a_per_slot_feed_in_is_not_baked_on_the_own_contract(
     hass: HomeAssistant, freezer: Any
 ) -> None:

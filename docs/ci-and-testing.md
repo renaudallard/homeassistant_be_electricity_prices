@@ -40,7 +40,9 @@ Raspberry Pi 4 with the fixture text cache empty: `tests/test_bolt.py` (up to 25
 fixture card (382 s and 108 s), one in `tests/test_coordinator_runtime.py` that lays out two
 Bolt cards, `tests/test_card_vat.py`, `tests/test_vat_rates.py`,
 `tests/test_month_indexed_registry.py` and `tests/test_live_check_harness.py`, which lay out a
-Bolt card among others (up to 73 s).
+Bolt card among others (up to 73 s), the test of `tests/test_compare_own_contract.py` that lays
+out the Bolt Variable card (90 s) and the one of `tests/test_coordinator_helpers.py` that lays
+out an energie.be and a Frank card (77 s).
 
 The recorder tests that write many statistics are sized on a Raspberry Pi 4 at load 11:
 `tests/recorder/test_meter_tail_reads.py`, two of whose tests record a year and a half of

@@ -567,6 +567,9 @@ def test_a_card_ahead_of_the_stand_in_ceiling_keeps_its_own() -> None:
     assert _resolved(0.2035480) == pytest.approx(0.35 * vat)
 
 
+# Laying out the energie.be and Frank cards took 77 s on a Raspberry Pi 4 at
+# load 10 with their text not cached yet, past the suite's 60 s.
+@pytest.mark.timeout(180)
 def test_the_fluvius_sheets_ceiling_is_what_the_fleet_prints() -> None:
     """The regulator's figure as Fluvius's 2026 sheet prints it, held against
     two suppliers that read the ceiling off their own footnote: they must
