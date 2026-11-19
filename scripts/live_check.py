@@ -727,7 +727,8 @@ _ALLOWED_NETWORK_MARKER = "KnownNetworkFigure"
 # taxshift steps the residential excise down on 2027-01-01, so every card in
 # the country has to be reprinted by then and a card still printing these
 # figures after it is news again. An allowance that cannot expire is a mute
-# button, which is the thing this check exists not to have.
+# button, which is the thing this check exists not to have. It lapses with
+# the month of the cards compared (_allowed), not the run's day.
 _KNOWN_TAX_BLOCKS: dict[tuple[str, float, float], tuple[date, str]] = {
     ("ecofix", 0.0503288, 0.0020417): (
         date(2027, 1, 1),
@@ -766,7 +767,8 @@ _KNOWN_TAX_BLOCKS: dict[tuple[str, float, float], tuple[date, str]] = {
 # a supplier that changes it by a digit stops matching and files.
 #
 # Every allowance expires on 2027-01-01, when the DSOs publish next year's
-# tariffs and every card is reprinted.
+# tariffs and every card is reprinted, with the month of the cards compared
+# (_allowed).
 _KNOWN_VREG_CEILINGS: dict[tuple[str, float], tuple[date, str]] = {
     ("bolt", 0.2035480): (
         date(2027, 1, 1),
@@ -815,6 +817,31 @@ _KNOWN_VAT_GAPS: dict[tuple[str, str], tuple[date, str]] = {
 }
 
 
+def _allowed(until: date, month: str) -> bool:
+    """Whether an allowance lapsing on ``until`` covers a card of ``month``
+    (``YYYY-MM``), which a month that does not read never is.
+
+    The card's month, not the run's day: a December card is still the one
+    served, and accepted as fresh, in the first days of January, and an
+    allowance for the tariff year lapsing on 1 January failed it then."""
+    parsed = label_month(month)
+    return parsed is not None and date(parsed[0], parsed[1], 1) < until
+
+
+def _held_month(snap: object, today: date) -> str:
+    """The month a live card is held to an allowance in: the one it is
+    labelled for, but never one before the oldest a card may still be for
+    on ``today`` (:func:`_expect_card_period`), so an old label does not keep
+    an allowance alive. The run's month when the label does not read."""
+    parsed = label_month(str(getattr(snap, "publication_label", "") or ""))
+    oldest = today.replace(day=1)
+    if parsed is None:
+        return f"{oldest:%Y-%m}"
+    if today.day <= _PERIOD_GRACE_DAYS:
+        oldest = (oldest - timedelta(days=1)).replace(day=1)
+    return f"{max(oldest, date(parsed[0], parsed[1], 1)):%Y-%m}"
+
+
 def _expect_vat_stated(
     prefix: str, contract_id: str, region: str, snap: object
 ) -> None:
@@ -836,7 +863,7 @@ def _expect_vat_stated(
     )
     known = _KNOWN_VAT_GAPS.get((supplier, region))
     today = datetime.now(ZoneInfo("Europe/Brussels")).date()
-    if known is not None and today < known[0]:
+    if known is not None and _allowed(known[0], _held_month(snap, today)):
         detail = f"{_ALLOWED_VAT_MARKER}: {detail}; {known[1]}"
     _record(f"{prefix}: VAT rate stated", False, detail)
 
@@ -914,29 +941,31 @@ def _mark_if_known_defect(label: str, detail: str) -> str:
     return f"{_ALLOWED_CARD_MARKER}: {detail}; {known[1]}"
 
 
-def _vreg_ceiling_allowance(supplier: str, printed: float, today: date) -> str | None:
-    """The reason this exact ceiling is allowed today, or ``None``.
+def _vreg_ceiling_allowance(supplier: str, printed: float, month: str) -> str | None:
+    """The reason this exact ceiling is allowed on a card of ``month``, or
+    ``None``.
 
     Matched on the figure rather than the supplier, for the reason
     :func:`_tax_block_allowance` is: an allowance covers the disagreement that
     was looked at and nothing else.
     """
     known = _KNOWN_VREG_CEILINGS.get((supplier, round(printed, 7)))
-    if known is None or today >= known[0]:
+    if known is None or not _allowed(known[0], month):
         return None
     return known[1]
 
 
 def _tax_block_allowance(
-    supplier: str, excise: float, contribution: float, today: date
+    supplier: str, excise: float, contribution: float, month: str
 ) -> str | None:
-    """The reason this exact block is allowed today, or ``None``.
+    """The reason this exact block is allowed on a card of ``month``, or
+    ``None``.
 
     Matched on the figures rather than on the supplier, so an allowance covers
     the disagreement that was looked at and nothing else.
     """
     known = _KNOWN_TAX_BLOCKS.get((supplier, round(excise, 7), round(contribution, 7)))
-    if known is None or today >= known[0]:
+    if known is None or not _allowed(known[0], month):
         return None
     return known[1]
 
@@ -3155,7 +3184,6 @@ _SHEET_NETWORK_SUPPLIERS = frozenset({"wasewind"})
 def _check_vreg_ceiling_consensus(
     archive: Path | None,
     ceilings: Mapping[int, float | None],
-    today: date | None = None,
 ) -> None:
     """Assert the Flemish cards that print a ceiling agree with Fluvius's sheet.
 
@@ -3187,7 +3215,6 @@ def _check_vreg_ceiling_consensus(
     """
     if archive is None:
         return
-    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
     rows = [
         row
         for row in sorted(archive.glob("cards/*/*/flanders/????-??.json"))
@@ -3238,7 +3265,7 @@ def _check_vreg_ceiling_consensus(
     # another moved, its vote made the stale side a majority and the run
     # asked for the figure billed to be moved.
     allowances = {
-        name: _vreg_ceiling_allowance(name, printed[name], today) for name in odd
+        name: _vreg_ceiling_allowance(name, printed[name], month) for name in odd
     }
     moved = [name for name in odd if allowances[name] is None]
     seen = len(printed) - (len(odd) - len(moved))
@@ -3683,7 +3710,7 @@ async def _check_dso_schedules(
 
 
 def _check_federal_tax_consensus(
-    archive: Path | None, today: date | None = None, *, law_read: bool = False
+    archive: Path | None, *, law_read: bool = False
 ) -> None:
     """Assert every supplier prints the same federal tax block for a month,
     and the one the integration bills.
@@ -3731,7 +3758,6 @@ def _check_federal_tax_consensus(
     """
     if archive is None:
         return
-    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
     rows = sorted(archive.glob("cards/*/*/*/????-??.json"))
     residential = [
         row
@@ -3801,7 +3827,7 @@ def _check_federal_tax_consensus(
                     f"{top_pair[0]} + {top_pair[1]} on {len(top_suppliers)} other "
                     f"suppliers ({', '.join(sorted(top_suppliers))})"
                 )
-                allowed = _tax_block_allowance(supplier, pair[0], pair[1], today)
+                allowed = _tax_block_allowance(supplier, pair[0], pair[1], month)
                 if allowed is not None:
                     detail = f"{_ALLOWED_TAX_MARKER}: {detail}; {allowed}"
                 _record(
@@ -3973,7 +3999,8 @@ _NETWORK_STRUCTURAL: dict[tuple[str, str, str], str] = {
 # integration bills what each card prints, so an entry on these cards pays
 # the card's figure. Keyed on the exact figure stored, so a supplier that
 # changes it by a digit files again. Every allowance expires on 2027-01-01,
-# when the DSOs publish next year's tariffs and every card is reprinted.
+# when the DSOs publish next year's tariffs and every card is reprinted, with
+# the month of the cards compared (_allowed).
 _KNOWN_NETWORK_FIGURES: dict[tuple[str, str, str, float], tuple[date, str]] = {}
 
 
@@ -4074,11 +4101,12 @@ _allow_network(
 
 
 def _network_allowance(
-    supplier: str, dso: str, field: str, printed: float, today: date
+    supplier: str, dso: str, field: str, printed: float, month: str
 ) -> str | None:
-    """The reason this exact network figure is allowed today, or ``None``."""
+    """The reason this exact network figure is allowed on a card of
+    ``month``, or ``None``."""
     known = _KNOWN_NETWORK_FIGURES.get((supplier, dso, field, round(printed, 6)))
-    if known is None or today >= known[0]:
+    if known is None or not _allowed(known[0], month):
         return None
     return known[1]
 
@@ -4223,7 +4251,7 @@ def _network_votes(
     return month, votes
 
 
-def _check_network_consensus(archive: Path | None, today: date | None = None) -> None:
+def _check_network_consensus(archive: Path | None) -> None:
     """Assert every supplier prints the same regulated network figures.
 
     Distribution, transport, metering, capacity and prosumer tariffs are set
@@ -4242,7 +4270,6 @@ def _check_network_consensus(archive: Path | None, today: date | None = None) ->
     """
     if archive is None:
         return
-    today = today or datetime.now(ZoneInfo("Europe/Brussels")).date()
     held = _network_votes(archive)
     if held is None:
         return
@@ -4263,7 +4290,7 @@ def _check_network_consensus(archive: Path | None, today: date | None = None) ->
                     f"{figures[(supplier, printed)][1]} card(s) against "
                     f"{agreed:.6f} ex VAT on {len(_voters(top))} suppliers' cards"
                 )
-                allowed = _network_allowance(supplier, dso, field, printed, today)
+                allowed = _network_allowance(supplier, dso, field, printed, month)
                 if allowed is not None:
                     detail = f"{_ALLOWED_NETWORK_MARKER}: {detail}; {allowed}"
                 _record(

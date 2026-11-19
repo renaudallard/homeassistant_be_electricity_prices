@@ -3178,8 +3178,10 @@ def _federal_archive(
     root: Path,
     rows: dict[tuple[str, str, str], tuple[float, float]],
     vat_rates: dict[str, float] | None = None,
+    month: str = "2026-09",
 ) -> Path:
-    """A card archive holding just the tax block each row needs.
+    """A card archive holding just the tax block each row needs, filed
+    under ``month``.
 
     ``vat_rates`` maps a supplier to the vat_rate its rows store; a row of any
     other supplier stores none, as a card printed including VAT does.
@@ -3187,7 +3189,7 @@ def _federal_archive(
     import json
 
     for (supplier, contract, region), (excise, contribution) in rows.items():
-        path = root / "cards" / supplier / contract / region / "2026-09.json"
+        path = root / "cards" / supplier / contract / region / f"{month}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         taxes: dict[str, float] = {
             "federal_excise": excise,
@@ -3366,16 +3368,14 @@ def test_the_fleet_s_tax_block_is_measured_against_the_law(
         return _federal_archive(tmp_path / name, rows)
 
     billed = _fleet("billed", (0.04876, 0.0))
-    lc._check_federal_tax_consensus(billed, date(2026, 9, 30))
+    lc._check_federal_tax_consensus(billed)
     assert lc.CHECKS == []
-    lc._check_federal_tax_consensus(billed, date(2026, 9, 30), law_read=True)
+    lc._check_federal_tax_consensus(billed, law_read=True)
     (row,) = lc.CHECKS
     assert (row.label, row.ok, row.kind) == (label, True, "tax")
     for name, pair in (("stale", (0.0503288, 0.0020417)), ("back", (0.04876, 0.0021))):
         lc.CHECKS.clear()
-        lc._check_federal_tax_consensus(
-            _fleet(name, pair), date(2026, 9, 30), law_read=True
-        )
+        lc._check_federal_tax_consensus(_fleet(name, pair), law_read=True)
         (row,) = lc.CHECKS
         assert row.label == label and not row.ok
         assert row.detail == (
@@ -3386,7 +3386,7 @@ def test_the_fleet_s_tax_block_is_measured_against_the_law(
     lc.CHECKS.clear()
     vat_rates.hold({"residential": {"2026-09": {"rate": 0.21}}})
     grossed = _fleet("grossed", (round(0.046 * 1.21, 7), 0.0))
-    lc._check_federal_tax_consensus(grossed, date(2026, 9, 30), law_read=True)
+    lc._check_federal_tax_consensus(grossed, law_read=True)
     (row,) = lc.CHECKS
     assert row.ok
     # One card is no fleet to measure the law against.
@@ -3394,7 +3394,7 @@ def test_the_fleet_s_tax_block_is_measured_against_the_law(
     alone = _federal_archive(
         tmp_path / "alone", {("a", "a_fixed", "flanders"): (0.0503288, 0.0020417)}
     )
-    lc._check_federal_tax_consensus(alone, date(2026, 9, 30), law_read=True)
+    lc._check_federal_tax_consensus(alone, law_read=True)
     assert lc.CHECKS == []
 
 
@@ -3443,12 +3443,12 @@ def test_a_tax_block_printed_excluding_vat_agrees_with_the_fleet(
         ("ecopower", "ex_vat", "flanders"): (0.046, 0.0),
     }
     archive = _federal_archive(tmp_path / "right", rows, {"ecopower": 0.06})
-    lc._check_federal_tax_consensus(archive, date(2026, 9, 30))
+    lc._check_federal_tax_consensus(archive)
     assert lc.CHECKS == []
 
     rows[("ecopower", "ex_vat", "flanders")] = (0.0474801, 0.0019261)
     stale = _federal_archive(tmp_path / "stale", rows, {"ecopower": 0.06})
-    lc._check_federal_tax_consensus(stale, date(2026, 9, 30))
+    lc._check_federal_tax_consensus(stale)
     assert len(lc.CHECKS) == 1
     check = lc.CHECKS[0]
     assert not check.ok
@@ -3492,7 +3492,7 @@ def test_a_known_tax_block_reports_without_filing_until_it_expires(
 
     # Inside the allowance: reported, expected, and the report carries no
     # Failures table, which is what the workflow files on.
-    lc._check_federal_tax_consensus(archive, date(2026, 9, 17))
+    lc._check_federal_tax_consensus(archive)
     (check,) = lc.CHECKS
     assert not check.ok and check.expected
     assert check.kind == "tax"
@@ -3502,9 +3502,19 @@ def test_a_known_tax_block_reports_without_filing_until_it_expires(
     assert "## Known tax blocks (expected, not a regression)" in report
     assert lc._catalog_gates_ci(list(lc.CHECKS)) is False
 
-    # Past the expiry it is news again.
+    # On the cards of a month past the expiry it is news again.
     lc.CHECKS.clear()
-    lc._check_federal_tax_consensus(archive, date(2027, 1, 1))
+    lc._check_federal_tax_consensus(
+        _federal_archive(
+            tmp_path / "2027",
+            {
+                ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+                ("b", "b_fixed", "flanders"): (0.04876, 0.0),
+                ("ecofix", "ecofix_flexy", "flanders"): stale,
+            },
+            month="2027-01",
+        )
+    )
     (check,) = lc.CHECKS
     assert not check.expected
     assert lc._catalog_gates_ci(list(lc.CHECKS)) is True
@@ -3519,9 +3529,89 @@ def test_a_known_tax_block_reports_without_filing_until_it_expires(
         },
     )
     lc.CHECKS.clear()
-    lc._check_federal_tax_consensus(moved, date(2026, 9, 17))
+    lc._check_federal_tax_consensus(moved)
     (check,) = lc.CHECKS
     assert not check.expected
+
+
+@pytest.mark.parametrize(("month", "allowed"), [("2026-12", True), ("2027-01", False)])
+def test_a_tariff_year_allowance_lapses_with_the_month_of_its_cards(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    freezer: Any,
+    month: str,
+    allowed: bool,
+) -> None:
+    """The allowances for the 2026 tariff year lapsed on the day of the run.
+    In the first days of January the December cards are still the ones
+    served, accepted as fresh, and the ones the archive compares, so every
+    known tax block, network figure, ceiling and VAT gap would have filed
+    from 1 January about cards nobody had changed. They lapse on the month
+    of the cards compared: a card for January 2027 printing the old figure
+    is news again."""
+    freezer.move_to("2027-01-02 08:00:00+01:00")
+    monkeypatch.setattr(
+        lc,
+        "_CONTRACTS_BY_ID",
+        {
+            name: SimpleNamespace(professional=False)
+            for name in (
+                "a_fixed",
+                "b_fixed",
+                "ecofix_flexy",
+                "te_dyn",
+                "bolt_fix",
+                "luminus_fix",
+                "frank_fix",
+            )
+        },
+    )
+    tax = {
+        ("a", "a_fixed", "flanders"): (0.04876, 0.0),
+        ("b", "b_fixed", "flanders"): (0.04876, 0.0),
+        ("ecofix", "ecofix_flexy", "flanders"): (0.0503288, 0.0020417),
+    }
+    lc._check_federal_tax_consensus(
+        _federal_archive(tmp_path / "tax", tax, month=month)
+    )
+    network = {
+        ("a", "a_fixed", "wallonia"): (0.0, {"distribution_medium": 0.1083}),
+        ("b", "b_fixed", "wallonia"): (0.0, {"distribution_medium": 0.1083}),
+        ("bolt", "bolt_pro_fix", "wallonia"): (0.21, {"distribution_medium": 0.1518}),
+    }
+    lc._check_network_consensus(_network_archive(tmp_path / "network", network, month))
+    ceilings = {"bolt": "0,2035480", "luminus": "0,3472738", "frank": "0,3472738"}
+    monkeypatch.setattr(lc, "_parse_vreg_ceiling", _read_ceiling)
+    lc._check_vreg_ceiling_consensus(
+        _ceiling_archive(tmp_path / "ceiling", ceilings, month),
+        {int(month[:4]): FLUVIUS_CEILINGS[2026]},
+    )
+    card = SimpleNamespace(
+        publication_label=month, taxes=SimpleNamespace(card_vat_rate=None)
+    )
+    lc._expect_vat_stated("totalenergies/te_dyn/brussels", "te_dyn", "brussels", card)
+    assert [(c.label, c.expected) for c in lc.CHECKS] == [
+        (f"ecofix/federal tax block disagrees for {month}", allowed),
+        (f"bolt/ores distribution_medium 0.1518 disagrees for {month}", allowed),
+        (f"bolt/VREG ceiling disagrees for {month}", allowed),
+        ("totalenergies/te_dyn/brussels: VAT rate stated", allowed),
+    ]
+
+
+def test_a_live_card_is_held_to_an_allowance_in_its_own_month() -> None:
+    """Never in one before the oldest a fresh card may be for that day, so an
+    old label does not keep an allowance alive, and in the run's month when
+    the label does not read."""
+
+    def held(label: str, today: date) -> str:
+        return lc._held_month(SimpleNamespace(publication_label=label), today)
+
+    assert held("décembre 2026", date(2027, 1, 5)) == "2026-12"
+    assert held("décembre 2026", date(2027, 1, 6)) == "2027-01"
+    assert held("2026-09", date(2026, 12, 2)) == "2026-11"
+    assert held("janvier 2027", date(2026, 12, 28)) == "2027-01"
+    assert held("winter", date(2027, 1, 2)) == "2027-01"
+    assert not lc._allowed(date(2027, 1, 1), "not a month")
 
 
 def test_an_allowance_covers_only_the_supplier_it_was_granted_to(
@@ -3556,7 +3646,7 @@ def test_an_allowance_covers_only_the_supplier_it_was_granted_to(
             ("bolt", "bolt_fix", "flanders"): stale,
         },
     )
-    lc._check_federal_tax_consensus(archive, date(2026, 9, 17))
+    lc._check_federal_tax_consensus(archive)
     by_supplier = {c.label.split("/")[0]: c for c in lc.CHECKS}
     assert set(by_supplier) == {"aspiravi", "bolt"}
     assert by_supplier["aspiravi"].expected
@@ -3700,11 +3790,14 @@ def test_the_federal_check_stays_quiet_without_a_consensus(tmp_path: Path) -> No
 
 
 def _network_archive(
-    root: Path, rows: dict[tuple[str, str, str], tuple[float, dict[str, float]]]
+    root: Path,
+    rows: dict[tuple[str, str, str], tuple[float, dict[str, float]]],
+    month: str = "2026-09",
 ) -> Path:
-    """A card archive holding, per row, its VAT rate and one DSO's figures."""
+    """A card archive holding, per row, its VAT rate and one DSO's figures,
+    filed under ``month``."""
     for (supplier, contract, region), (vat, figures) in rows.items():
-        path = root / "cards" / supplier / contract / region / "2026-09.json"
+        path = root / "cards" / supplier / contract / region / f"{month}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         dso = "ores" if region == "wallonia" else "fluvius_antwerpen"
         path.write_text(
@@ -3732,7 +3825,7 @@ def test_a_card_printing_another_network_rate_than_the_fleet_is_caught(
             ("odd", "odd_pro", "wallonia"): (0.21, {"distribution_medium": 0.1518}),
         },
     )
-    lc._check_network_consensus(archive, date(2026, 9, 25))
+    lc._check_network_consensus(archive)
     (check,) = lc.CHECKS
     assert not check.ok and not check.expected
     assert check.kind == "network"
@@ -3760,7 +3853,7 @@ def test_a_network_figure_is_put_ex_vat_at_the_rate_its_card_states(
         row = json.loads(path.read_text(encoding="utf-8"))
         row["taxes"]["card_vat_rate"] = 0.09
         path.write_text(json.dumps(row), encoding="utf-8")
-    lc._check_network_consensus(archive, date(2026, 9, 25))
+    lc._check_network_consensus(archive)
     (check,) = lc.CHECKS
     assert check.label == "c/ores distribution_single 0.1022 disagrees for 2026-09"
     assert "0.099358 ex VAT on 2 suppliers' cards" in check.detail
@@ -3783,7 +3876,7 @@ def test_a_network_figure_read_as_zero_is_caught(tmp_path: Path) -> None:
             ("c", "c_pro", "flanders"): (0.21, {"transport": 0.0}),
         },
     )
-    lc._check_network_consensus(archive, date(2026, 9, 25))
+    lc._check_network_consensus(archive)
     (check,) = lc.CHECKS
     assert check.label == "odd/ores transport 0.0 disagrees for 2026-09"
     assert "0.025849 ex VAT on 3 suppliers' cards" in check.detail
@@ -3814,7 +3907,7 @@ def test_the_social_tariff_is_left_out_of_the_regulated_consensus(
             ("social", "social_other", "wallonia"): (0.00106, 0.0),
         },
     )
-    lc._check_federal_tax_consensus(federal, date(2026, 9, 25))
+    lc._check_federal_tax_consensus(federal)
     network = _network_archive(
         tmp_path / "network",
         {
@@ -3826,7 +3919,7 @@ def test_the_social_tariff_is_left_out_of_the_regulated_consensus(
             ),
         },
     )
-    lc._check_network_consensus(network, date(2026, 9, 25))
+    lc._check_network_consensus(network)
     assert lc.CHECKS == []
 
 
@@ -3845,7 +3938,7 @@ def test_a_known_network_figure_reports_without_filing_until_it_expires(
         ),
     }
     archive = _network_archive(tmp_path, rows)
-    lc._check_network_consensus(archive, date(2026, 9, 25))
+    lc._check_network_consensus(archive)
     (check,) = lc.CHECKS
     assert not check.ok and check.expected
     assert "billed as printed" in check.detail
@@ -3855,7 +3948,7 @@ def test_a_known_network_figure_reports_without_filing_until_it_expires(
     assert lc._catalog_gates_ci(list(lc.CHECKS)) is False
 
     lc.CHECKS.clear()
-    lc._check_network_consensus(archive, date(2027, 1, 1))
+    lc._check_network_consensus(_network_archive(tmp_path / "2027", rows, "2027-01"))
     (check,) = lc.CHECKS
     assert not check.expected
 
@@ -3865,7 +3958,7 @@ def test_a_known_network_figure_reports_without_filing_until_it_expires(
     )
     moved = _network_archive(tmp_path / "moved", rows)
     lc.CHECKS.clear()
-    lc._check_network_consensus(moved, date(2026, 9, 25))
+    lc._check_network_consensus(moved)
     (check,) = lc.CHECKS
     assert not check.expected
 
@@ -3903,7 +3996,7 @@ def test_a_network_figure_that_differs_by_structure_does_not_vote(
             ),
         },
     )
-    lc._check_network_consensus(archive, date(2026, 9, 25))
+    lc._check_network_consensus(archive)
     assert lc.CHECKS == []
 
     stale = _network_archive(
@@ -3917,7 +4010,7 @@ def test_a_network_figure_that_differs_by_structure_does_not_vote(
             ),
         },
     )
-    lc._check_network_consensus(stale, date(2026, 9, 25))
+    lc._check_network_consensus(stale)
     assert [check.label for check in lc.CHECKS] == [
         "luminus/fluvius_antwerpen data_management_per_year 18.56 disagrees for 2026-09"
     ]
@@ -3933,7 +4026,7 @@ def test_the_network_check_stays_quiet_without_a_consensus(tmp_path: Path) -> No
             ("b", "b_fixed", "wallonia"): (0.0, {"distribution_single": 0.1150}),
         },
     )
-    lc._check_network_consensus(archive, date(2026, 9, 25))
+    lc._check_network_consensus(archive)
     assert lc.CHECKS == []
     lc._check_network_consensus(None)
     assert lc.CHECKS == []
@@ -3985,13 +4078,13 @@ def test_a_card_stating_no_rate_is_put_ex_vat_at_the_month_s_rate(
             ("d", "d_pro", "wallonia"): (0.21, {"distribution_medium": 0.1022}),
         },
     )
-    lc._check_network_consensus(archive, date(2026, 9, 25))
+    lc._check_network_consensus(archive)
     assert [c.label for c in lc.CHECKS] == [
         "d/ores distribution_medium 0.1022 disagrees for 2026-09"
     ]
     lc.CHECKS.clear()
     vat_rates.hold({"residential": {"2026-09": {"rate": 0.21}}})
-    lc._check_network_consensus(archive, date(2026, 9, 25))
+    lc._check_network_consensus(archive)
     assert lc.CHECKS == []
 
 
@@ -4022,13 +4115,13 @@ def test_the_vreg_ceiling_is_grossed_at_the_month_s_rate(
         {f"{name}_fix": SimpleNamespace(professional=False) for name in names},
     )
     monkeypatch.setattr(lc, "_parse_vreg_ceiling", _read_ceiling)
-    lc._check_vreg_ceiling_consensus(tmp_path, FLUVIUS_CEILINGS, date(2026, 9, 21))
+    lc._check_vreg_ceiling_consensus(tmp_path, FLUVIUS_CEILINGS)
     assert "_federal: Fluvius's VREG ceiling disagrees with the fleet" in [
         c.label for c in lc.CHECKS
     ]
     lc.CHECKS.clear()
     vat_rates.hold({"residential": {"2026-09": {"rate": 0.21}}})
-    lc._check_vreg_ceiling_consensus(tmp_path, FLUVIUS_CEILINGS, date(2026, 9, 21))
+    lc._check_vreg_ceiling_consensus(tmp_path, FLUVIUS_CEILINGS)
     assert lc.CHECKS == []
 
 
@@ -5019,7 +5112,7 @@ def test_a_known_vreg_ceiling_is_allowed_and_expires() -> None:
     keyed on the exact figure, so a supplier changing it by a digit files
     again, and it expires.
     """
-    live = date(2026, 9, 21)
+    live = "2026-09"
     assert lc._vreg_ceiling_allowance("bolt", 0.2035480, live) is not None, (
         "the disagreement that was looked at should be allowed"
     )
@@ -5028,7 +5121,7 @@ def test_a_known_vreg_ceiling_is_allowed_and_expires() -> None:
     # Nor does it cover another supplier printing the same wrong figure.
     assert lc._vreg_ceiling_allowance("mega", 0.2035480, live) is None
     # And it lapses rather than standing forever.
-    assert lc._vreg_ceiling_allowance("bolt", 0.2035480, date(2027, 1, 1)) is None
+    assert lc._vreg_ceiling_allowance("bolt", 0.2035480, "2027-01") is None
 
 
 def test_every_vreg_ceiling_allowance_expires_with_the_tariff_year() -> None:
@@ -5179,10 +5272,30 @@ def test_an_unreadable_fluvius_sheet_is_reported(
         lc, "_CONTRACTS_BY_ID", {"bolt_fix": SimpleNamespace(professional=False)}
     )
     monkeypatch.setattr(lc, "_parse_vreg_ceiling", _read_ceiling)
-    lc._check_vreg_ceiling_consensus(tmp_path, {2026: None}, today)
+    lc._check_vreg_ceiling_consensus(tmp_path, {2026: None})
     assert lc.CHECKS == []
-    lc._check_vreg_ceiling_consensus(tmp_path, FLUVIUS_CEILINGS, today)
+    lc._check_vreg_ceiling_consensus(tmp_path, FLUVIUS_CEILINGS)
     assert [c.label for c in lc.CHECKS] == ["bolt/VREG ceiling disagrees for 2026-09"]
+
+
+def _ceiling_archive(root: Path, cards: dict[str, str], month: str = "2026-09") -> Path:
+    """A card archive whose Flemish card of each supplier states the ceiling
+    given, filed under ``month``."""
+    for name, ceiling in cards.items():
+        text = root / "texts" / month / f"{name}.txt"
+        text.parent.mkdir(parents=True, exist_ok=True)
+        text.write_text(
+            "Un tarif maximal de " + ceiling + " €/kWh (hors gestion des "
+            "données) s'applique aux compteurs digitaux.",
+            encoding="utf-8",
+        )
+        row = root / "cards" / name / f"{name}_fix" / "flanders" / f"{month}.json"
+        row.parent.mkdir(parents=True, exist_ok=True)
+        row.write_text(
+            json.dumps({"_sources": [{"text": f"texts/{month}/{name}.txt"}]}),
+            encoding="utf-8",
+        )
+    return root
 
 
 def test_the_ceiling_consensus_uses_the_allowance(
@@ -5194,39 +5307,16 @@ def test_the_ceiling_consensus_uses_the_allowance(
     anything calls it, which is the half that decides whether a run files an
     issue every day about a card nothing can make the supplier reprint.
     """
-    archive = tmp_path / "electricity"
-    texts = archive / "texts" / "2026-09"
-    texts.mkdir(parents=True)
-
-    def _card(name: str, ceiling: str) -> None:
-        text = texts / f"{name}.txt"
-        text.write_text(
-            "Un tarif maximal de " + ceiling + " €/kWh (hors gestion des "
-            "données) s'applique aux compteurs digitaux.",
-            encoding="utf-8",
-        )
-        row = archive / "cards" / name / f"{name}_fix" / "flanders" / "2026-09.json"
-        row.parent.mkdir(parents=True, exist_ok=True)
-        row.write_text(
-            json.dumps({"_sources": [{"text": f"texts/2026-09/{name}.txt"}]}),
-            encoding="utf-8",
-        )
-
-    _card("bolt", "0,2035480")
-    _card("luminus", "0,3472738")
-    _card("frank", "0,3472738")
-
+    cards = {"bolt": "0,2035480", "luminus": "0,3472738", "frank": "0,3472738"}
+    archive = _ceiling_archive(tmp_path / "electricity", cards)
     monkeypatch.setattr(
         lc,
         "_CONTRACTS_BY_ID",
-        {
-            f"{n}_fix": SimpleNamespace(professional=False)
-            for n in ("bolt", "luminus", "frank")
-        },
+        {f"{n}_fix": SimpleNamespace(professional=False) for n in cards},
     )
     monkeypatch.setattr(lc, "_parse_vreg_ceiling", _read_ceiling)
 
-    lc._check_vreg_ceiling_consensus(archive, FLUVIUS_CEILINGS, date(2026, 9, 21))
+    lc._check_vreg_ceiling_consensus(archive, FLUVIUS_CEILINGS)
     rows = _rows("bolt/VREG ceiling")
     assert len(rows) == 1, [c.label for c in lc.CHECKS]
     assert rows[0].expected is True, (
@@ -5234,9 +5324,12 @@ def test_the_ceiling_consensus_uses_the_allowance(
         "about it every day"
     )
 
-    # And past the expiry the same card is a real failure again.
+    # And on the cards of a month past the expiry it is a real failure again.
     lc.CHECKS.clear()
-    lc._check_vreg_ceiling_consensus(archive, FLUVIUS_CEILINGS, date(2027, 1, 2))
+    lc._check_vreg_ceiling_consensus(
+        _ceiling_archive(tmp_path / "2027", cards, "2027-01"),
+        {2027: FLUVIUS_CEILINGS[2026]},
+    )
     assert _rows("bolt/VREG ceiling")[0].expected is False
 
 
@@ -5701,7 +5794,7 @@ def test_a_lone_stale_card_is_not_a_majority(tmp_path: Any, monkeypatch: Any) ->
         )
         monkeypatch.setattr(lc, "_parse_vreg_ceiling", _read_ceiling)
         lc.CHECKS.clear()
-        lc._check_vreg_ceiling_consensus(archive, FLUVIUS_CEILINGS, date(2026, 9, 21))
+        lc._check_vreg_ceiling_consensus(archive, FLUVIUS_CEILINGS)
 
     # One stale card and nothing to compare it against: no fleet, so no verdict
     # about the constant. The per-supplier row still files, which is the claim

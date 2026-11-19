@@ -1783,7 +1783,13 @@ none. Two properties keep the allowance from becoming a mute button. It is keyed
 (supplier, excise, contribution) triple, so a card that moves either figure by a digit files
 again, which is how Bolt and Trevion were seen correcting themselves between August and
 September. And each entry carries an expiry, all of them 2027-01-01, when the excise steps down
-and every card in the country has to be reprinted anyway. Each disagreeing supplier gets a row
+and every card in the country has to be reprinted anyway. It lapses on the month of the cards
+compared (`_allowed`), not the day of the run: in the first days of January the December cards
+are still the ones served, accepted as fresh and compared, and lapsing on the day filed every
+known tax block, network figure, ceiling and VAT gap about cards nobody had changed. A live
+card is held in its own month, never one before the oldest a fresh card may be for that day
+(`_held_month`), so an old label does not keep an allowance alive
+(`test_a_tariff_year_allowance_lapses_with_the_month_of_its_cards`). Each disagreeing supplier gets a row
 of its own, judged on its own allowance: two suppliers printing the same stale pair used to share
 one row named after the first of them, so an allowance granted to Aspiravi would have silenced
 any other card printing its July block.
