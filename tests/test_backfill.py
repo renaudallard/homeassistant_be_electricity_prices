@@ -3606,6 +3606,10 @@ async def test_a_january_backfill_prices_no_december_hour(
                     lambda *_a, _s=_snap_for, **_k: _s,
                 ),
                 patch(
+                    "homeassistant.components.recorder.get_instance",
+                    return_value=make_recorder(),
+                ),
+                patch(
                     "homeassistant.components.recorder.statistics."
                     "async_import_statistics",
                     # Bound when the patch is made, inside the loop.
@@ -3682,6 +3686,10 @@ async def test_a_tick_during_the_backfill_does_not_prune_the_hours_it_reads(
         patch.object(bf, "BePricesCoordinator", SimpleNamespace),
         patch.object(
             backfill_window, "_month_snapshot_cache", lambda *_a, **_k: _snap_for
+        ),
+        patch(
+            "homeassistant.components.recorder.get_instance",
+            return_value=make_recorder(),
         ),
         patch(
             "homeassistant.components.recorder.statistics.async_import_statistics",
@@ -4416,6 +4424,82 @@ async def test_a_cost_sensor_the_recorder_does_not_compile_is_left_alone(
     assert entry.runtime_data._backfill_retry_from is None
 
 
+@pytest.mark.parametrize("why", ["disabled", "excluded"])
+async def test_a_price_sensor_the_recorder_does_not_compile_is_left_alone(
+    hass: HomeAssistant, freezer: Any, why: str
+) -> None:
+    """A price sensor the user disabled, or keeps out of the recorder, got its
+    hourly rows written all the same, and a clear deleted what it held. It is
+    left out of both, and the other series are written as usual."""
+    freezer.move_to("2026-01-03 12:00:00+01:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_price", "energy_component"])
+    sid = ids["energy_component"]
+    entry.runtime_data = await _make_coordinator(entry)
+    instance = make_recorder()
+    if why == "disabled":
+        er.async_get(hass).async_update_entity(
+            sid, disabled_by=er.RegistryEntryDisabler.USER
+        )
+    else:
+        instance.entity_filter = lambda entity_id: entity_id != sid
+    captured: dict[str, list[Any]] = {}
+    cleared: list[str] = []
+
+    def _fake_import(_hass: HomeAssistant, metadata: Any, statistics: Any) -> None:
+        captured.setdefault(metadata["statistic_id"], []).extend(statistics)
+
+    async def _fake_clear(_hass: HomeAssistant, statistic_ids: list[str]) -> None:
+        cleared.extend(statistic_ids)
+
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch.object(bf, "_clear_all", _fake_clear),
+        patch(
+            "homeassistant.components.recorder.statistics.async_import_statistics",
+            new=_fake_import,
+        ),
+        patch("homeassistant.components.recorder.get_instance", return_value=instance),
+    ):
+        result = await bf.backfill_range(hass, entry, clear=True)
+    assert list(captured) == [ids["current_price"]]
+    assert sid not in result["sensors"]
+    assert cleared == [ids["current_price"]]
+
+
+async def test_the_automatic_backfill_probes_a_sensor_the_recorder_compiles(
+    hass: HomeAssistant, freezer: Any
+) -> None:
+    """A disabled current_price gets no rows, so probed on it the probe never
+    found any and the whole year ran again at every start. The next price
+    sensor stands in."""
+    freezer.move_to("2026-01-03 12:00:00+01:00")
+    entry = _entry()
+    entry.add_to_hass(hass)
+    ids = _register_sensors(hass, entry, ["current_price", "energy_component"])
+    er.async_get(hass).async_update_entity(
+        ids["current_price"], disabled_by=er.RegistryEntryDisabler.USER
+    )
+    entry.runtime_data = await _make_coordinator(entry)
+    probed: list[str] = []
+
+    async def _probe(_hass: HomeAssistant, statistic_id: str, _anchor: Any) -> bool:
+        probed.append(statistic_id)
+        return True
+
+    with (
+        patch.object(bf, "BePricesCoordinator", SimpleNamespace),
+        patch.object(bf, "_existing_stat_window", _probe),
+        patch(
+            "homeassistant.components.recorder.get_instance",
+            return_value=make_recorder(),
+        ),
+    ):
+        assert await bf.backfill_if_missing(hass, entry) is None
+    assert probed == [ids["energy_component"]]
+
+
 async def test_a_signing_month_read_that_failed_leaves_the_whole_contract_out(
     hass: HomeAssistant, freezer: Any
 ) -> None:
@@ -4925,6 +5009,10 @@ async def test_the_backfill_bills_a_contract_with_no_source_on_its_card(
                 backfill_window,
                 "_month_snapshot_cache",
                 lambda *_a, **_k: _snap_for,
+            ),
+            patch(
+                "homeassistant.components.recorder.get_instance",
+                return_value=make_recorder(),
             ),
             patch(
                 "homeassistant.components.recorder.statistics.async_import_statistics",

@@ -552,7 +552,7 @@ and ENTSO-E historical spots via the coordinator's persistent cache
 | Function | Trigger | Behaviour |
 | --- | --- | --- |
 | `backfill_range` (`backfill.py`) | `backfill_statistics` service | Always runs over the requested range; `clear=True` deletes the series first. |
-| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor and runs only when nothing exists; when a card read failed, again an hour later and then less often until those days are written, carrying on at the next setup when Home Assistant stopped during a wait (`_backfill_retry_from`, kept in the coordinator's store). A probe the recorder did not answer is asked again on the same waits, never taken for no statistics, and a running cost whose meter or chain reads failed (`noting_failed_reads`), or whose sensor has no live row yet to join, is not imported and retried the same way. |
+| `backfill_if_missing` (`backfill.py`) | fire-and-forget task from `async_setup_entry` | Probes the recorder at the Jan 1 anchor, on the first sensor it writes that the recorder compiles (`current_price`, else the next price sensor, else the cost), and runs only when nothing exists; when a card read failed, again an hour later and then less often until those days are written, carrying on at the next setup when Home Assistant stopped during a wait (`_backfill_retry_from`, kept in the coordinator's store). A probe the recorder did not answer is asked again on the same waits, never taken for no statistics, and a running cost whose meter or chain reads failed (`noting_failed_reads`), or whose sensor has no live row yet to join, is not imported and retried the same way. |
 
 There is no backfill button, nor any other: the integration has no button
 platform since the monthly peak reset moved into the options flow. Backfill is reached either automatically
@@ -844,7 +844,8 @@ until there is one: a new sensor's first five minutes are compiled within five
 minutes, the automatic backfill runs again an hour later, and the service
 response says so under `skipped` (`UNJOINED`). A sensor the recorder never
 compiles, disabled or excluded from it, is left out (`_compiled`), since no run
-would find the row. The shift is relative, so two joins that read before either
+would find the row; so is a price sensor the recorder never compiles, from the
+price rows and from a `clear`. The shift is relative, so two joins that read before either
 was written, the automatic backfill's and a service call's, moved the live rows
 twice: one join per sensor runs at a time (`_join_lock`), and it holds until the
 recorder has committed what it queued (`async_block_till_done`).

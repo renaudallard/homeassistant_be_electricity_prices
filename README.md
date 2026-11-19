@@ -1738,8 +1738,9 @@ statistics: on a fresh install whose first backfill finishes sooner, the
 automatic backfill writes it an hour later. The same holds after a change that
 moves the start of the year's window (the contract start, or billing from it)
 and on 1 January: the sensor's first five minutes on the new window come
-first. A disabled cost sensor, or one the
-recorder excludes, is left out of the backfill.
+first. A disabled sensor, price or cost, or one the recorder excludes, is left
+out of the backfill, and `clear` leaves what it holds alone; once it is enabled
+or recorded again, a service call fills its history.
 
 States history (the per-entity timeline shown in the **History**
 view) is append-only by design and is not affected; only the

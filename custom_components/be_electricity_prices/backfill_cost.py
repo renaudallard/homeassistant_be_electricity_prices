@@ -434,23 +434,24 @@ async def _import_cost_rows(
 
 def _compiled(hass: HomeAssistant, statistic_id: str) -> bool:
     """Whether the recorder compiles the statistics of ``statistic_id``: an
-    enabled sensor it records. The cost rows join the live ones, and a
-    sensor it does not compile never has any, which every run would wait
-    for again."""
+    enabled sensor it records. One it does not is a sensor the user turned
+    off or keeps out of the recorder, and gets no history written either.
+    The cost rows join the live ones besides, and a sensor it does not
+    compile never has any, which every run would wait for again."""
     from homeassistant.components.recorder import (  # type: ignore[attr-defined]
         get_instance,
     )
 
     found = er.async_get(hass).async_get(statistic_id)
     if found is not None and found.disabled_by is not None:
-        _LOGGER.debug("%s is disabled; its cost is not backfilled", statistic_id)
+        _LOGGER.debug("%s is disabled; it is not backfilled", statistic_id)
         return False
     # The filter is_entity_recorded reads: newer releases (2026.9.4) only
     # re-export that function from the recorder package, and strict mypy
     # refuses the import there.
     recorded = get_instance(hass).entity_filter
     if recorded is not None and not recorded(statistic_id):
-        _LOGGER.debug("%s is not recorded; its cost is not backfilled", statistic_id)
+        _LOGGER.debug("%s is not recorded; it is not backfilled", statistic_id)
         return False
     return True
 

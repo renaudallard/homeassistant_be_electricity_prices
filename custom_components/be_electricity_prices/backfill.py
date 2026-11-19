@@ -66,6 +66,7 @@ from homeassistant.util import dt as dt_util
 from . import energy_meters
 from .backfill_cost import (
     _backfill_cost_sensor,
+    _compiled,
     _injection_rate_for_hour,
 )
 from .backfill_window import (
@@ -242,7 +243,8 @@ async def _backfill_price_sensors(
     the caller (or a CLI user) can verify the backfill landed.
     Sensors that have no entity in the registry yet (auto path firing
     before platform setup completes) are skipped silently and reported
-    with a 0 count.
+    with a 0 count. So is a sensor the recorder does not compile, disabled
+    or excluded from it, which gets no count at all.
     """
     (
         StatisticData,
@@ -261,7 +263,7 @@ async def _backfill_price_sensors(
     stat_ids: dict[str, str] = {}
     for key in keys:
         sid = _stat_id(hass, entry, key)
-        if sid is not None:
+        if sid is not None and _compiled(hass, sid):
             stat_ids[key] = sid
     if not stat_ids:
         _LOGGER.debug(
@@ -604,7 +606,8 @@ async def _backfill_range(
             keys.append(_INJECTION_PRICE_SENSOR_KEY)
         for key in keys:
             sid = _stat_id(hass, entry, key)
-            if sid is not None:
+            # A sensor left out of the backfill keeps what it holds.
+            if sid is not None and _compiled(hass, sid):
                 ids.append(sid)
         if ids:
             await _clear_all(hass, ids)
@@ -769,10 +772,21 @@ async def backfill_if_missing(
         # be asked again for as long as Home Assistant runs.
         _LOGGER.debug("backfill skipped: the recorder is not loaded")
         return None
-    sid = _stat_id(hass, entry, "current_price")
+    # Probed on a series the backfill writes: a sensor the recorder does not
+    # compile gets no rows, and probed on one the whole year ran again at
+    # every start.
+    sid = next(
+        (
+            written
+            for key in (*_PRICE_SENSOR_KEYS, _COST_SENSOR_KEY)
+            if (written := _stat_id(hass, entry, key)) is not None
+            and _compiled(hass, written)
+        ),
+        None,
+    )
     if sid is None:
         _LOGGER.debug(
-            "backfill skipped: current_price entity not registered for %s",
+            "backfill skipped: no sensor registered and recorded for %s",
             entry.entry_id,
         )
         return None

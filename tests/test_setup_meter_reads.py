@@ -95,6 +95,8 @@ class _Recorder:
         self.reads: list[dict[str, Any]] = []
         self._series: dict[str, tuple[list[float], list[float]]] = {}
         self.statistics_meta_manager = None
+        # Records every entity, as a recorder with no include or exclude does.
+        self.entity_filter = None
 
     def series(self, eid: str) -> tuple[list[float], list[float]]:
         if eid not in self._series:
