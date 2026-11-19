@@ -468,6 +468,15 @@ feed-in alike (`test_a_motion_belpex_in_another_unit_is_refused`). Flexy never
 states its index's unit. Ecofix prints no index value either, so a formula
 cannot be checked against its printed figure.
 
+The printed figures are held to the Vlaanderen block's headings, the only
+statement of their units (`_require_block_units`, `ecofix.py`): the block's
+first two brackets, "(€ cent/kWh)" for the energy price and "(€/jaar)" for the
+standing charge, read so on every card of May and of August to November 2026,
+Flexy and Motion alike. Flexy's monthly prices and every card's fee are read
+off that block without a unit of their own, so a block heading either in
+another unit, or with either left out, is refused, after the formulas' own
+units are checked (`test_a_block_headed_in_another_unit_is_refused`).
+
 ## DSO overlay coverage
 
 ### Flanders

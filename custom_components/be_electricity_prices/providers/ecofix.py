@@ -248,6 +248,7 @@ def parse_snapshot(
         text, contract.kind, yearly_fee, vat_multiplier(text, _VAT_RE)
     )
     injection = _extract_injection(text, contract.kind)
+    _require_block_units(text)
     publication_label, valid_until = _extract_publication(text)
 
     federal_excise, excise_bands, energy_contribution = _extract_federal_taxes(text)
@@ -332,6 +333,28 @@ def _flanders_energy_block(text: str) -> str:
         raise ExtractorError("Ecofix: Vlaanderen / Wallonië energy block not found")
     start, end = found
     return text[start : end.start()]
+
+
+# The Vlaanderen block's headings are the only statement of the units of its
+# energy price and its fee: "Energieprijs (€ cent/kWh)" then "Vaste vergoeding
+# (€/jaar)", read as the block's first two brackets on every card held, Flexy
+# and Motion, May and August to November 2026. A price restated in €/kWh
+# would read a hundredth of itself and a fee restated a month a twelfth, so a
+# block headed otherwise, or with either left out, is refused. Blanks do not
+# count: the cards print "€cent/kWh" too.
+_BLOCK_UNIT_RE = re.compile(r"\(([^()\n]{0,30})\)")
+_BLOCK_UNITS = ("€cent/kWh", "€/jaar")
+
+
+def _require_block_units(text: str) -> None:
+    """Refuse a card whose Vlaanderen block does not head its price and its
+    fee in the units read."""
+    found = _BLOCK_UNIT_RE.findall(_flanders_energy_block(text))[: len(_BLOCK_UNITS)]
+    units = tuple("".join(unit.split()) for unit in found)
+    if units != _BLOCK_UNITS:
+        raise ExtractorError(
+            f"Ecofix: the Vlaanderen block is headed {units!r}, expected {_BLOCK_UNITS!r}"
+        )
 
 
 def _extract_fee_and_flanders_renewables(

@@ -115,6 +115,46 @@ def test_afname_anchor_does_not_reach_injection_formula() -> None:
 # ---- Motion Online (dynamic, low yearly fee) --------------------------------
 
 
+@pytest.mark.parametrize(
+    ("contract", "fixture", "printed", "restated"),
+    [
+        (
+            "ecofix_flexy",
+            _FLEXY,
+            "vergoeding (€ cent/kWh)\n(€/jaar)",
+            "vergoeding (€/kWh)\n(€/jaar)",
+        ),
+        (
+            "ecofix_flexy",
+            _FLEXY,
+            "vergoeding (€ cent/kWh)\n(€/jaar)",
+            "vergoeding (€ cent/kWh)\n(€/maand)",
+        ),
+        ("ecofix_flexy", _FLEXY, "vergoeding (€ cent/kWh)\n(€/jaar)", "vergoeding"),
+        (
+            "ecofix_motion",
+            _MOTION,
+            "(€ cent/kWh)\n(€/jaar) & WKK",
+            "(€ cent/kWh)\n(€/maand) & WKK",
+        ),
+    ],
+    ids=["flexy-price", "flexy-fee", "flexy-dropped", "motion-fee"],
+)
+def test_a_block_headed_in_another_unit_is_refused(
+    contract: str, fixture: str, printed: str, restated: str
+) -> None:
+    """The Vlaanderen block's headings are the only statement of the units
+    of its energy price and its fee: read without them, a price restated in
+    €/kWh was a hundredth of itself and a fee restated a month a twelfth."""
+    text = _layout(fixture)
+    assert text.count(printed) == 1
+    parse_snapshot(contract, text, "flanders", "test://x")
+    with pytest.raises(ExtractorError, match="Vlaanderen block is headed"):
+        parse_snapshot(
+            contract, text.replace(printed, restated), "flanders", "test://x"
+        )
+
+
 def test_motion_online_energy_formula() -> None:
     snap = parse_snapshot(
         "ecofix_motion_online", _layout(_MOTION_ONLINE), "flanders", "test://mo"
