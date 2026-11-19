@@ -44,6 +44,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, SupportsIndex
+from weakref import WeakKeyDictionary
 
 from pypdf import PageObject
 from pypdf import _cmap as pypdf_cmap
@@ -128,8 +129,9 @@ _MAX_CARD_OBJECTS = 180_000
 # of a content stream each time it is interpreted, every element of an
 # array or dictionary, each byte its reader module passes over one at a
 # time, the blanks and comments ahead of an object's header or of an object
-# an object stream lists, and each field of an entry it reads of a
-# cross-reference stream. What the bytes draw cost even when it built nothing:
+# an object stream lists, each field of an entry it reads of a
+# cross-reference stream, and each byte it reads again of an object stream.
+# What the bytes draw cost even when it built nothing:
 # 78 kB inflating to 32 MB of numbers no operator took held pypdf 238 s and
 # 1,2 GB, and 3 MB of paths pdfminer does not paint took 45 s, while a
 # 700-byte card naming an object that refers to itself had pdfminer resolve
@@ -516,6 +518,35 @@ def _passed_over(skip: Any) -> Any:
     return counted
 
 
+def _read_again(read: Any) -> Any:
+    """``read``, by which pypdf's reader module reads an object, counted
+    while a card is read as one object parsed for each byte it reads again
+    of an object stream: pypdf reads every object a stream lists each time
+    it reads one of them, keeping none the file's table does not give that
+    stream, so a stream listing one string again and again cost its
+    entries times the string, each one object parsed. 5000 bytes listed 500
+    times took 2,9 s, from a 430-byte file. A stream listing each object
+    once, as every shipped fixture's and every archived card's does on
+    2026-11-19, counts nothing."""
+    read_to: WeakKeyDictionary[Any, int] = WeakKeyDictionary()
+
+    def counted(stream: Any, pdf: Any, *args: Any, **kwargs: Any) -> Any:
+        reading = _READING.get()
+        # The file itself, which is all pypdf reads until it has opened it
+        # and names it as its stream.
+        if reading is None or stream is getattr(pdf, "stream", stream):
+            return read(stream, pdf, *args, **kwargs)
+        start = stream.tell()
+        try:
+            return read(stream, pdf, *args, **kwargs)
+        finally:
+            end, before = stream.tell(), read_to.get(stream, 0)
+            read_to[stream] = max(end, before)
+            reading.parse(max(min(end, before) - start, 0))
+
+    return counted
+
+
 class _FileSearch:
     """``re`` as pypdf's reader module sees it, which only searches the
     whole file with it, a copy it makes each time, for an object its table
@@ -681,7 +712,9 @@ def _count_pypdf_reader() -> None:
     reader module passes over a byte at a time, through its
     ``read_non_whitespace``, ``skip_over_whitespace`` and
     ``skip_over_comment``, and each field of an entry it reads of a
-    cross-reference stream, through its ``convert_to_int``, and as decoded
+    cross-reference stream, through its ``convert_to_int``, and each byte
+    it reads again of an object stream, through its ``read_object``, and
+    as decoded
     the file's length for each search it makes of the whole file, through
     its ``re``. Done once whatever the copy of this module, over the other
     wrappers too where a release of either integration from before put them
@@ -692,6 +725,7 @@ def _count_pypdf_reader() -> None:
     for name in ("read_non_whitespace", "skip_over_whitespace", "skip_over_comment"):
         reader[name] = _passed_over(reader[name])
     reader["convert_to_int"] = _parsed(reader["convert_to_int"])
+    reader["read_object"] = _read_again(reader["read_object"])
     reader["re"] = _FileSearch()
     setattr(reader["skip_over_whitespace"], _MARK, True)
 
@@ -893,8 +927,8 @@ def bounded_pypdf() -> Iterator[None]:
     :data:`_MAX_ASCII85_BYTES`. pypdf parses no more than
     :data:`_MAX_PARSED` operands, operators and elements of arrays and
     dictionaries, a content stream's each time it is interpreted, bytes
-    its reader module passes over one at a time and fields of the entries
-    of a cross-reference stream, reads
+    its reader module passes over one at a time, fields of the entries of
+    a cross-reference stream and bytes read again of an object stream, reads
     no more than :data:`_MAX_LINES_BACK` lines backwards from the end of
     the file, builds no more than :data:`_MAX_FONT_ENTRIES` entries of a
     card's fonts, and makes no more than :data:`_MAX_CHARACTERS`

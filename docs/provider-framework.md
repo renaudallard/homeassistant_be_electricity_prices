@@ -876,10 +876,14 @@ Internals worth knowing:
   element of an array or dictionary, each byte its reader module passes
   over one at a time, the blanks and comments ahead of an object's
   header or of an object an object stream lists (a table pointing 10 000
-  entries at one run of 5000 blanks took 28,7 s, from a 5 kB file), and
-  each field of an entry it reads of a cross-reference stream, which
+  entries at one run of 5000 blanks took 28,7 s, from a 5 kB file), each
+  field of an entry it reads of a cross-reference stream, which
   writes one in as little as a byte (a million entries took 27,7 s and
-  215 MB, from a 1,3 kB file). The most a card reaches is 935 796
+  215 MB, from a 1,3 kB file), and each byte it reads again of an object
+  stream, all of whose objects it reads each time it reads one of them
+  (5000 bytes listed 2000 times took 6,4 s, from a 440-byte file; a
+  stream listing each object once, as every shipped fixture's and every
+  archived card's does, counts nothing). The most a card reaches is 935 796
   under pdfminer and 912 313 under pypdf, both on a Bolt card of 2,8 MB;
   on 2026-11-19 a shipped fixture passed over 17 677 such bytes at most
   and read 17 703 such fields, and the most a fixture counts under pypdf
