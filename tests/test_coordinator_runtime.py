@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
@@ -720,6 +721,49 @@ async def test_ensure_historical_spots_backs_off_after_a_rejected_key(
     refetched, filled = await _refuse(EntsoeError("timeout"))
     assert filled, "a 5xx is what the keyless source is there for"
     assert refetched == 0, "a filled day is not short, so there is nothing to retry"
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        EntsoeNoDataError("no data (999 " + "x" * 100_000 + ")"),
+        EntsoeError("malformed timeInterval timestamp '" + "x" * 100_000 + "'"),
+    ],
+    ids=["acknowledgement reason", "document that did not read"],
+)
+async def test_a_historical_spot_failure_is_logged_cut(
+    hass: HomeAssistant,
+    freezer: Any,
+    caplog: pytest.LogCaptureFixture,
+    exc: Exception,
+) -> None:
+    """ENTSO-E's reason and the document it could not read are quoted in its
+    error, as long as the answer makes them. last_error is cut where it is
+    kept; the warnings of the historical walk logged them whole."""
+    freezer.move_to("2026-06-29 12:00:00+02:00")
+    entry = _dynamic_entry()
+    entry.add_to_hass(hass)
+    coord = BePricesCoordinator(hass, entry)
+
+    async def _entsoe_fails(
+        _self: Any,
+        start: datetime,
+        end: datetime,
+        *,
+        quarter_hourly: bool = False,
+    ) -> dict[datetime, float]:
+        raise exc
+
+    with (
+        patch(_SPOTS + ".EntsoeClient.fetch_day_ahead", _entsoe_fails),
+        patch(_API + ".EnergyChartsClient.fetch_day_ahead", _smard_is_down),
+        patch(_API + ".SmardClient.fetch_day_ahead", _smard_is_down),
+        caplog.at_level(logging.WARNING, logger=_SPOTS),
+    ):
+        await coord._ensure_historical_spots(date(2026, 1, 1), date(2026, 1, 3))
+    logged = [r for r in caplog.records if r.name == _SPOTS]
+    assert logged
+    assert all(len(r.getMessage()) < 1200 for r in logged)
 
 
 async def test_a_day_entsoe_answers_short_is_completed_from_the_fallback(

@@ -695,7 +695,10 @@ Internals worth knowing:
   failed fetch's message it hands back and caches, the coordinator cuts a
   failed tick's and ENTSO-E's (`coordinator.py`, `coordinator_prices.py`), and
   `_sync_entsoe_auth_issue` the text the `entsoe_auth_failed` Repairs card
-  quotes.
+  quotes. So do the warnings that log such a message: the excise law's, whose
+  error quotes a figure `float()` could not read, and the historical day-ahead
+  walk's, whose ENTSO-E error quotes the acknowledgement's reason or the
+  document it could not read.
 - `_is_pdf_payload` (`_pdf_payload.py`) validates by magic bytes (`%PDF`, allowing a
   leading UTF-8 BOM that OCTA+ prepends and blank space after it, which some
   servers emit), not Content-Type, because some CDNs return 200 + text/html for

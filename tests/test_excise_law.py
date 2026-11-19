@@ -319,6 +319,24 @@ async def test_an_impossible_date_backs_off_like_any_unreadable_page(
     assert excise_law._failed_at is not None
 
 
+async def test_a_figure_that_does_not_read_is_logged_cut(
+    fresh_fetch: None, page: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """float() quotes a figure it cannot convert whole: a special excise
+    printed as 20 000 ones joined by commas gave a 40 kB warning."""
+    figure = "spécial: 1 euro par MWh"
+    assert figure in page
+    bad = page.replace(figure, "spécial: " + ",".join(["1"] * 20_000) + " euro par MWh")
+    with (
+        patch.object(excise_law, "fetch_text", AsyncMock(return_value=bad)),
+        caplog.at_level(logging.WARNING, logger=excise_law.__name__),
+    ):
+        await excise_law.ensure_excise_law(AsyncMock())
+    [record] = [r for r in caplog.records if r.name == excise_law.__name__]
+    assert record.getMessage().startswith("The excise law could not be read: ")
+    assert len(record.getMessage()) < 600
+
+
 async def test_an_unread_law_is_a_warning_and_a_held_one_is_not(
     fresh_fetch: None, caplog: pytest.LogCaptureFixture
 ) -> None:

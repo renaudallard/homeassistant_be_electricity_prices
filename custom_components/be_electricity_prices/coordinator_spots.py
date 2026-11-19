@@ -62,6 +62,7 @@ from .coordinator_profiles import _ProfilesMixin
 from .injection import (
     _injection_needs_spot_quarters,
 )
+from .providers._pdf import shown_text
 from .providers._rates import EnergyRates
 from .providers.base import SupplierSnapshot
 from .snapshot_store import cached_month_card
@@ -495,11 +496,12 @@ class _SpotsMixin(_ProfilesMixin):
                         # No fallback either: a credential the owner has to renew
                         # must keep raising its Repairs card rather than being
                         # quietly papered over by a keyless source.
+                        # Cut, as last_error is: the reason is ENTSO-E's text.
                         _LOGGER.warning(
                             "ENTSO-E historical fetch failed for %s..%s: %s",
                             chunk_start,
                             chunk_end,
-                            err,
+                            shown_text(str(err)),
                         )
                         self._defer_spot_days(
                             [(chunk_start, chunk_end)],
@@ -697,7 +699,8 @@ class _SpotsMixin(_ProfilesMixin):
                     "fallback: %s",
                     span_start,
                     span_end,
-                    primary,
+                    # A document that did not read is quoted in it.
+                    shown_text(str(primary)),
                     cause,
                 )
             self._defer_spot_days(unanswered, stable_before, now + _SPOT_OUTAGE_TTL)

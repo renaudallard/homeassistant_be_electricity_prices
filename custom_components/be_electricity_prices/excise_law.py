@@ -83,7 +83,7 @@ from homeassistant.util import dt as dt_util
 from . import law_archive
 from .const import EXCISE_LAW_ARCHIVE_URL, EXCISE_LAW_URL
 from .providers._markup import strip_tags
-from .providers._pdf import FR_MONTHS, fetch_text
+from .providers._pdf import FR_MONTHS, fetch_text, shown_text
 from .providers.base import ExtractorError
 
 _LOGGER = logging.getLogger(__name__)
@@ -733,7 +733,9 @@ async def ensure_excise_law(session: aiohttp.ClientSession) -> None:
         # The page came back and is not the article: a layout change, or a
         # bot check served instead of the law. Worth a warning, since the
         # excise is read off the cards until it is fixed.
-        _LOGGER.warning("The excise law could not be read: %s", err)
+        # Cut: float() quotes a figure it cannot read whole, as long as the
+        # page makes it.
+        _LOGGER.warning("The excise law could not be read: %s", shown_text(str(err)))
         _failed_at = now
         return
     except ExtractorError as err:
@@ -768,7 +770,7 @@ async def ensure_excise_law(session: aiohttp.ClientSession) -> None:
             "The household excise in force before the current law could not "
             "be read from Justel, so a card standing in for one of those "
             "months is billed the levies it prints: %s",
-            err,
+            shown_text(str(err)),
         )
         return
     _SCHEDULES[SCHEDULE] = schedule
