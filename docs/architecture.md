@@ -179,11 +179,12 @@ In addition, twenty-three supplier modules that read a published card live under
 `luminus.py`, `mega.py`, `octaplus.py`, `social.py`, `totalenergies.py`, `trevion.py` and `wasewind.py`. Each has its own page under
 [providers/](providers/).
 
-Eleven of them carry their card readers in sibling modules, named
+Twelve of them carry their card readers in sibling modules, named
 `_<supplier>_cards.py` for the product legs the supplier prices and
 `_<supplier>_overlays.py` for the regulated ones it only reprints: Bolt, EBEM,
 Ecopower, Eneco, Energy Knights, EnergyVision, Engie, Luminus, Mega, OCTA+ and
-TotalEnergies. Some keep a further piece apart. EnergyVision has
+TotalEnergies, and energie.be, whose `_energiebe_overlays.py` holds its network
+table alone. Some keep a further piece apart. EnergyVision has
 `_energyvision_wallonia.py`, because its Walloon card is a different document in
 a different language rather than a variant of the Dutch one, and
 `_energyvision_contracts.py`, which holds its contract registry, as Mega's

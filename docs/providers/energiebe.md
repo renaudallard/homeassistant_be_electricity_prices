@@ -532,9 +532,10 @@ pins GSC 1,17 + WKK 0,39 = 1,56 c€/kWh. All c€/kWh values are divided by 100
 
 ## DSO overlay
 
-`_extract_dsos` (`providers/energiebe.py`) covers all eight Fluvius sub-areas via
-`_DSO_ROWS` (`providers/energiebe.py`), which maps each card label prefix to the
-canonical DSO key:
+`_extract_dsos` (`providers/_energiebe_overlays.py`, kept apart to hold `energiebe.py` under
+the module size limit) covers all eight Fluvius sub-areas via `_DSO_ROWS`
+(`providers/_energiebe_overlays.py`), which maps each card label prefix to the canonical
+DSO key:
 
 | card label | canonical key |
 | --- | --- |
