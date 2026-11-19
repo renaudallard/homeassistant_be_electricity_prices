@@ -97,6 +97,7 @@ import base64
 import binascii
 import functools
 import hashlib
+import io
 import json
 import re
 import sys
@@ -897,14 +898,17 @@ def _sources_of(
 
 
 def _write_text(out: Path, seen_month: str, text: str) -> str:
-    """Store ``text`` once, content-addressed, and return its path in ``out``."""
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    rel = f"texts/{seen_month}/{digest}.txt"
+    """Store ``text`` once, content-addressed, and return its path in ``out``.
+
+    With surrogatepass, as ``card_texts.read_text`` reads it back: pypdf
+    decodes a font's ToUnicode map that way, so a card can read as half a
+    surrogate pair, which strict UTF-8 refuses."""
+    payload = text.encode("utf-8", "surrogatepass")
+    rel = f"texts/{seen_month}/{hashlib.sha256(payload).hexdigest()}.txt"
     path = out / rel
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            handle.write(text)
+        path.write_bytes(payload)
     return rel
 
 
@@ -984,6 +988,10 @@ def _write_card(
     one of them need be the unreadable one. The row carried a derived copy as
     ``_ocr`` and nothing kept it in step, so it is gone; readers ask the
     sources.
+
+    Raises on a value holding half a surrogate pair, read off a card's text
+    (see ``_UNWRITABLE``), before the file is opened, so the row held there
+    stays whole.
     """
     today = seen_on or now.astimezone(_BRUSSELS).date()
     card: dict[str, Any] = json.loads(json_dumps(_snapshot_to_dict(snap, now)))
@@ -994,12 +1002,27 @@ def _write_card(
     existing = _read_row(path)
     if _same_card(existing, card):
         return False
+    text = json.dumps(card, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
+    payload = text.encode("utf-8")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(card, indent=1, sort_keys=True, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    path.write_bytes(payload)
     return True
+
+
+# What a row no installation could read raises: half a surrogate pair is
+# refused by Home Assistant's encoder in a parsed field and by UTF-8 in a
+# source, and an installation reads the row as UTF-8.
+_UNWRITABLE = (TypeError, UnicodeEncodeError)
+
+
+def _stored(lines: list[str], label: str, write: Callable[[], bool]) -> bool | None:
+    """``write()``, or None when its row cannot be written, which is that
+    card's failure alone and is noted in ``lines``."""
+    try:
+        return write()
+    except _UNWRITABLE as err:
+        lines.append(f"{label}: {type(err).__name__}: {err}")
+        return None
 
 
 def _awaits_settlement(row: dict[str, Any] | None, in_place: bool = False) -> bool:
@@ -2061,20 +2084,28 @@ async def _replay_row(
     # A card the row had never named (OCTA+'s, before its archive path went
     # through the seam) is kept now, under this row's month.
     cards.file(path.stem, (s["pdf"] for s in sources if "pdf" in s))
-    summary.replayed += 1
     before = _read_row(path)
-    if _write_card(
-        out,
-        supplier,
-        contract,
-        region,
-        path.stem,
-        snap,
-        sources,
-        now,
-        row.get("_via", "live"),
-        seen_on,
-    ):
+    changed = _stored(
+        summary.unreplayable,
+        label,
+        functools.partial(
+            _write_card,
+            out,
+            supplier,
+            contract,
+            region,
+            path.stem,
+            snap,
+            sources,
+            now,
+            row.get("_via", "live"),
+            seen_on,
+        ),
+    )
+    if changed is None:
+        return
+    summary.replayed += 1
+    if changed:
         if _same_card(before, _read_row(path) or {}, ignore_schema=True):
             summary.restamped += 1
         else:
@@ -2160,19 +2191,27 @@ async def _retry_unparsed(
         ):
             continue
         read = _sources_of(memo, cards, out, month)
+        changed = _stored(
+            summary.unreplayable,
+            label,
+            functools.partial(
+                _write_card,
+                out,
+                supplier,
+                contract,
+                region,
+                named,
+                snap,
+                read,
+                now,
+                "live",
+                captured,
+            ),
+        )
+        if changed is None:
+            continue
         summary.replayed += 1
-        if _write_card(
-            out,
-            supplier,
-            contract,
-            region,
-            named,
-            snap,
-            read,
-            now,
-            "live",
-            captured,
-        ):
+        if changed:
             summary.reparsed += 1
 
 
@@ -2322,17 +2361,25 @@ async def archive(
                     summary.unchanged += 1
                     cards.file(month_id, (s["pdf"] for s in sources if "pdf" in s))
                     continue
-                if _write_card(
-                    out,
-                    ex.id,
-                    contract,
-                    region,
-                    month_id,
-                    snap,
-                    sources,
-                    now,
-                    "live",
-                ):
+                changed = _stored(
+                    summary.failed,
+                    label,
+                    functools.partial(
+                        _write_card,
+                        out,
+                        ex.id,
+                        contract,
+                        region,
+                        month_id,
+                        snap,
+                        sources,
+                        now,
+                        "live",
+                    ),
+                )
+                if changed is None:
+                    continue
+                if changed:
                     summary.stored += 1
                 else:
                     summary.unchanged += 1
@@ -2469,18 +2516,25 @@ async def archive(
                         via = held.get("_via", "live")
                         if held.get("_seen_on"):
                             seen = date.fromisoformat(held["_seen_on"])
-                    _write_card(
-                        out,
-                        ex.id,
-                        contract,
-                        region,
-                        month_id,
-                        past,
-                        sources,
-                        now,
-                        via,
-                        seen,
+                    written = _stored(
+                        summary.failed,
+                        label,
+                        functools.partial(
+                            _write_card,
+                            out,
+                            ex.id,
+                            contract,
+                            region,
+                            month_id,
+                            past,
+                            sources,
+                            now,
+                            via,
+                            seen,
+                        ),
                     )
+                    if written is None:
+                        continue
                     if held is None:
                         summary.backfilled += 1
                     else:
@@ -2630,6 +2684,11 @@ def main() -> int:
         # links written by the walk before it point at files that now exist.
         _write_listings(args.out, args.pdf_base_url, args.archive_base_url)
         return 0
+    # A failure can quote its card, half a surrogate pair included, which a
+    # strict stream refuses: printed as an escape, it cannot fail a run whose
+    # rows are already written.
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(errors="backslashreplace")
     summary = asyncio.run(
         archive(
             args.out,
@@ -2647,6 +2706,7 @@ def main() -> int:
         args.ocr_failures.write_text(
             "".join(" ".join(line.split()) + "\n" for line in summary.ocr_failed),
             encoding="utf-8",
+            errors="backslashreplace",
         )
     return 0 if summary.stored or summary.unchanged else 1
 

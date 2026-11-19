@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -1431,15 +1432,19 @@ PDF_URL = "https://acme.test/card.pdf"
 
 
 def _pdf_fetch(
-    session: _PdfSession, renders: list[bytes], variant: list[str] | None = None
+    session: _PdfSession,
+    renders: list[bytes],
+    variant: list[str] | None = None,
+    lead: str = "",
 ) -> Fetch:
     """A fetch that reads its card through the PDF reader seam, the way the
     real extractors do, with a renderer that counts what it rendered. The
-    reader variant is ``variant[0]`` at call time, plain if none is given."""
+    reader variant is ``variant[0]`` at call time, plain if none is given,
+    and the text read starts with ``lead``."""
 
     def render(payload: bytes) -> str:
         renders.append(payload)
-        return f"card text for {payload.decode()}"
+        return f"{lead}card text for {payload.decode()}"
 
     async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
         # The canned session while it holds the card; once the test empties
@@ -1533,6 +1538,107 @@ async def test_an_unchanged_card_is_kept_once_and_never_rendered_again(
     card = json.loads((out / "cards/acme/acme_fix/wallonia/2026-09.json").read_text())
     assert card["_sources"][0]["pdf"] == digest2
     assert card["energy"]["single"] == 0.3
+
+
+# Half a surrogate pair, which pypdf reads off a font whose ToUnicode map
+# names one and strict UTF-8 refuses.
+_HALF_PAIR = "\ud83d"
+
+
+async def test_a_card_reading_as_half_a_surrogate_pair_is_stored_as_read(
+    tmp_path: Path,
+) -> None:
+    """Such a text raised out of the walk when it was stored: no row of any
+    supplier and no stamp, every day the card was served. It is written and
+    read back as it was read, so the next walk is served it and a replay
+    parses the same string."""
+    session = _PdfSession({PDF_URL: b"%PDF v1"})
+    renders: list[bytes] = []
+    extractor = _extractor(_pdf_fetch(session, renders, lead=_HALF_PAIR))
+    first = await ac.archive(tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep)
+    assert (first.stored, first.failed) == (1, [])
+    row = tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json"
+    [source] = json.loads(row.read_text())["_sources"]
+    text = ac.read_text(tmp_path / source["text"])
+    assert text == f"{_HALF_PAIR}card text for %PDF v1"
+    assert (tmp_path / "parser.txt").exists()
+    held = row.read_bytes()
+
+    second = await ac.archive(
+        tmp_path,
+        extractors=[extractor],
+        now=NOW.replace(day=12),
+        sleep=_no_sleep,
+        reparse=True,
+    )
+    assert (second.unchanged, second.failed) == (1, [])
+    assert (second.replayed, second.reparsed, second.unreplayable) == (1, 0, [])
+    assert renders == [b"%PDF v1"]
+    assert row.read_bytes() == held
+
+
+async def test_a_row_no_installation_can_read_fails_its_card_alone(
+    tmp_path: Path,
+) -> None:
+    """A row is read as UTF-8 by every installation, so one quoting half a
+    surrogate pair in a field is not written. That is its card's failure:
+    the walk goes on to the next card, and the row held from before stays
+    whole, in the walk and in a replay."""
+    page = _Session({CARD_URL: "card text"})
+    quoted: set[str] = set()
+    price = [0.2]
+
+    async def fetch(_session: Any, contract: str, region: str) -> SupplierSnapshot:
+        await fetch_text(page, CARD_URL)  # type: ignore[arg-type]
+        label = "september 2026"
+        return make_snapshot(
+            supplier="acme",
+            contract=contract,
+            energy=FixedRates(single=price[0]),
+            publication_label=f"{label} {_HALF_PAIR}" if contract in quoted else label,
+            source_url=CARD_URL,
+        )
+
+    extractor = _extractor(fetch, contracts=("acme_fix", "acme_var"))
+    await ac.archive(tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep)
+    fixed = tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json"
+    held = fixed.read_bytes()
+
+    quoted.add("acme_fix")
+    price[0] = 0.3
+    summary = await ac.archive(
+        tmp_path, extractors=[extractor], now=NOW, sleep=_no_sleep, reparse=True
+    )
+    assert [line.split(": ")[:2] for line in summary.failed] == [
+        ["acme/acme_fix/wallonia", "TypeError"]
+    ]
+    assert summary.stored == 1
+    variable = tmp_path / "cards/acme/acme_var/wallonia/2026-09.json"
+    assert json.loads(variable.read_text())["energy"]["single"] == 0.3
+    assert [line.split(": ")[:2] for line in summary.unreplayable] == [
+        ["acme/acme_fix/wallonia/2026-09", "TypeError"]
+    ]
+    assert summary.replayed == 1
+    assert fixed.read_bytes() == held
+    assert (tmp_path / "parser.txt").exists()
+
+
+def test_a_row_that_cannot_be_encoded_leaves_the_held_file_whole(
+    tmp_path: Path,
+) -> None:
+    """A source quoting half a surrogate pair passes Home Assistant's encoder
+    and is refused by UTF-8 only. Encoded after the file was opened, it
+    emptied the row held there."""
+    snap = make_snapshot(supplier="acme", contract="acme_fix")
+    args = ("acme", "acme_fix", "wallonia", "2026-09", snap)
+    source = {"url": CARD_URL, "variant": "text", "text": "texts/a.txt"}
+    assert ac._write_card(tmp_path, *args, [source], NOW, "live")
+    row = tmp_path / "cards/acme/acme_fix/wallonia/2026-09.json"
+    held = row.read_bytes()
+    quoting = {**source, "url": f"{CARD_URL}/{_HALF_PAIR}"}
+    with pytest.raises(UnicodeEncodeError):
+        ac._write_card(tmp_path, *args, [quoting], NOW, "live")
+    assert row.read_bytes() == held
 
 
 def _text_fetch(session: _Session, parser: dict[str, str], seen: list[date]) -> Fetch:
@@ -3737,6 +3843,35 @@ def test_main_fails_the_run_only_when_nothing_was_archived(
         ac, "all_extractors", lambda: (_extractor(_card_fetch("september 2026")),)
     )
     assert ac.main() == 0
+
+
+def test_a_failure_quoting_half_a_surrogate_pair_is_printed_and_listed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failure can quote its card. Printed to a strict stream, or written
+    to the workflow's list, it raised once the rows were written and failed
+    a walk that had succeeded. It is shown as an escape."""
+
+    def refuse(_payload: bytes, strict: bool) -> object:
+        raise RuntimeError(f"no glyph for {_HALF_PAIR}")
+
+    session = _PdfSession({PDF_URL: b"%PDF page images"})
+    extractor = _extractor(_page_image_fetch(session))
+    monkeypatch.setattr(ac, "all_extractors", lambda: (extractor,))
+    printed = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(printed, encoding="utf-8"))
+    report = tmp_path / "ocr_failed.txt"
+    argv = ["archive_cards.py", "--out", str(tmp_path / "out")]
+    monkeypatch.setattr(sys, "argv", [*argv, "--ocr-failures", str(report)])
+    with _ocr_engine(refuse):
+        assert ac.main() == 1
+    sys.stdout.flush()
+    line = (
+        "acme/acme_fix/wallonia: CardNotReadableError: "
+        "OCR could not read the card: no glyph for \\ud83d"
+    )
+    assert f"  failed {line}\n" in printed.getvalue().decode("utf-8")
+    assert report.read_text(encoding="utf-8") == f"{line}\n"
 
 
 async def test_a_row_priced_on_a_sibling_card_replays_from_the_siblings_text(

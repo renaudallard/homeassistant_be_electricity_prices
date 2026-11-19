@@ -1232,7 +1232,11 @@ Three design points:
   entries each fetch touched. Those texts are stored content-addressed under
   `texts/<YYYY-MM>/<sha256>.txt` and listed in the card's `_sources`, so a stored month can be
   re-read against a later parser or checked by hand. Bytes are not kept: a month of PDFs is
-  tens of megabytes.
+  tens of megabytes. The texts are written and read back with `surrogatepass`: pypdf reads a
+  glyph whose font map names half a surrogate pair as just that, which strict UTF-8 refuses,
+  and one such card stopped the whole walk. A row is read as UTF-8 by every installation, so a
+  row quoting one is not written and its card fails alone (`_stored`), the row held before
+  left whole; a failure quoting one is printed and listed as an escape.
 - **A quiet day writes nothing.** A month file is rewritten only when the parse differs from
   what is on disk, ignoring the two timestamps (`_write_card`, `scripts/archive_cards.py`),
   so the archive gains a commit only when a card changed. Months older than `--keep-months`
