@@ -44,9 +44,10 @@ import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from datetime import date, datetime
+from datetime import date, datetime, time
 from functools import partial
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
@@ -124,6 +125,31 @@ def _asked_while_it_ran(
         year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
     )
     return dt_util.as_local(stamped).date() < after
+
+
+# Cards are Belgian, whatever zone Home Assistant keeps: a supplier can still
+# put up or correct a month's card until the month is over in Belgium.
+_BELGIUM = ZoneInfo("Europe/Brussels")
+
+
+def _belgian_close(stamped: datetime | None, year_month: date) -> datetime | None:
+    """When the month is over in Belgium, for a row asked once Home
+    Assistant's day said its month was over but before it was over in
+    Belgium, else None.
+
+    East of Belgium Home Assistant's month turns first: in Tokyo November is
+    over at 16:00 on the 30th in Belgium, and a row asked then was kept for
+    good, while EnergyVision can upload November's card again that evening.
+    Such a row is asked again as an open month until that moment, and once
+    more after it. Where both turn together, or Belgium's first, nothing
+    changes.
+    """
+    after = date(
+        year_month.year + (year_month.month == 12), year_month.month % 12 + 1, 1
+    )
+    close = datetime.combine(after, time(), _BELGIUM)
+    local = datetime.combine(after, time(), dt_util.get_default_time_zone())
+    return close if stamped is not None and local <= stamped < close else None
 
 
 def archived_months_present(
@@ -823,13 +849,15 @@ async def _month_row(
     if cache_key in cache:
         row = cache[cache_key]
         stamped = fetched_at.get(cache_key)
+        close = _belgian_close(stamped, year_month)
         if (
             cached_only
-            or not _month_row_is_provisional(row, year_month, today)
+            or (close is None and not _month_row_is_provisional(row, year_month, today))
             or (
                 stamped is not None
                 and dt_util.utcnow() - stamped < _MONTHLY_PROVISIONAL_TTL
                 and not _asked_while_it_ran(stamped, year_month, today)
+                and (close is None or dt_util.utcnow() < close)
             )
         ):
             # A caller that cannot fetch keeps the row it has, expired or not: dropping
