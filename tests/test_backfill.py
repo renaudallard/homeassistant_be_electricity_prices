@@ -50,6 +50,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import backfill as bf
 from custom_components.be_electricity_prices import (
+    backfill_cost,
     backfill_window,
     energy_meters,
     snapshot_months,
@@ -114,6 +115,11 @@ def _no_card_archive() -> Iterator[None]:
     with (
         patch.object(snapshot_months, "_archived_card_from_github", new=nothing),
         patch.object(backfill_window, "get_extractor", extractor),
+        # The signing card and the first year's charges are read through the
+        # names backfill and backfill_cost imported, which the patch above
+        # does not reach.
+        patch.object(bf, "get_extractor", extractor),
+        patch.object(backfill_cost, "get_extractor", extractor),
     ):
         yield
 
@@ -908,8 +914,6 @@ async def test_cost_rows_priced_before_new_year_import_on_their_own_cycle(
     January of the new year, and joined the old cycle's rows to the recorded
     chain as the first rows of a new one: a year's bill out at the join. The
     reset is the one of the hours the rows were priced for."""
-    from custom_components.be_electricity_prices import backfill_cost
-
     freezer.move_to("2026-12-31 22:30:00+01:00")
     entry = _entry()
     hour = datetime(2026, 12, 31, 20, tzinfo=UTC)
