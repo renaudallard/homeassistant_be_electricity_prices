@@ -623,8 +623,10 @@ comment:
 - **quarter_hourly=True.** Cociter Dynamique bills on the 15-minute Belpex grid;
   keep native quarter-hour slots, not the hourly mean (`cociter.py`,
   `_rates.py`). YTD statistics still aggregate to hourly.
-- **Split-glyph spellings.** pypdf can split "HOURLY" into `HOURL Y` and emit
-  several apostrophe/quote/dash glyphs; the regexes tolerate all of these
+- **Split-glyph spellings.** pypdf 6 splits "HOURLY" into `HOURL Y` and the
+  variable card's "BELPEX" into `BEL PEX`, where pypdf 7 prints both whole,
+  and pypdf emits several apostrophe/quote/dash glyphs; the regexes tolerate
+  all of these
   (`cociter.py`, `SIGN_CHARS`, `_parse.py`).
 - **Injection has no indicative fallback.** `current=None` always; the credit
   is spot-only, gated on `spot_indexed_injection` (`cociter.py`).

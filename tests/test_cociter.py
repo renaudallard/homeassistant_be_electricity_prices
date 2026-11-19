@@ -1170,7 +1170,8 @@ def test_a_belpex_the_notes_no_longer_state_in_eur_per_mwh_is_refused(
     €/MWh." A card restating it, or no longer stating it, is refused, as one
     whose formula does not read is. A card moving its BELPEX to c€/kWh with
     the factor to match leaves the box above the formula true, and the
-    factor would bill ten times out."""
+    factor would bill ten times out. pypdf 6 prints the variable card's
+    index BEL PEX and 7 BELPEX: each is read."""
     dynamic = fixture_text("cociter_dyn_2604.pdf")
     note = "BELPEX sont exprimées en €/MWh."
     assert dynamic.count(note) == 1
@@ -1184,27 +1185,36 @@ def test_a_belpex_the_notes_no_longer_state_in_eur_per_mwh_is_refused(
     with pytest.raises(ExtractorError, match=f"dynamic formula on a BELPEX in {shown}"):
         parse_snapshot(changed, "cociter_dynamic", "test://dyn", "2026-04")
     variable = fixture_text("cociter_var_2609.pdf")
-    note = "BEL PEX sont exprimées en €/MWh."
-    assert variable.count(note) == 1
-    assert cociter_mod._extract_injection(variable).factor == pytest.approx(0.97)
-    changed = variable.replace(note, f"BEL PEX sont exprimées en {restated}")
-    with pytest.raises(
-        ExtractorError, match=f"injection formula on a BELPEX in {shown}"
-    ):
-        cociter_mod._extract_injection(changed)
+    notes = [f"{index} sont exprimées en €/MWh." for index in ("BEL PEX", "BELPEX")]
+    (rendered,) = (note for note in notes if note in variable)
+    assert variable.count(rendered) == 1
+    for note in notes:
+        card = variable.replace(rendered, note)
+        assert cociter_mod._extract_injection(card).factor == pytest.approx(0.97)
+        changed = card.replace(note, note.replace("€/MWh.", restated))
+        with pytest.raises(
+            ExtractorError, match=f"injection formula on a BELPEX in {shown}"
+        ):
+            cociter_mod._extract_injection(changed)
 
 
 def test_a_dynamic_formula_restated_with_its_belpex_is_refused() -> None:
     """The dynamic factor moved to a BELPEX in c€/kWh, and the notes with it,
-    under the same box: refused rather than billed ten times out."""
+    under the same box: refused rather than billed ten times out. pypdf 6
+    prints the index QUARTER HOURL Y BELPEX and 7 QUARTER HOURLY BELPEX:
+    each is read."""
     text = fixture_text("cociter_dyn_2604.pdf")
-    formula = "(0,103 x QUARTER HOURL Y BELPEX + 3)"
-    assert text.count(formula) == 1
-    changed = text.replace(formula, "(1,03 x QUARTER HOURL Y BELPEX + 3)").replace(
-        "exprimées en €/MWh", "exprimées en c€/kWh"
-    )
-    with pytest.raises(ExtractorError, match="dynamic formula on a BELPEX in c€/kWh"):
-        parse_snapshot(changed, "cociter_dynamic", "test://dyn", "2026-04")
+    indices = ("QUARTER HOURL Y", "QUARTER HOURLY")
+    formulas = [f"(0,103 x {index} BELPEX + 3)" for index in indices]
+    (rendered,) = (formula for formula in formulas if formula in text)
+    assert text.count(rendered) == 1
+    for formula in formulas:
+        changed = text.replace(rendered, formula.replace("0,103", "1,03"))
+        changed = changed.replace("exprimées en €/MWh", "exprimées en c€/kWh")
+        with pytest.raises(
+            ExtractorError, match="dynamic formula on a BELPEX in c€/kWh"
+        ):
+            parse_snapshot(changed, "cociter_dynamic", "test://dyn", "2026-04")
 
 
 def test_a_belix_restated_with_its_factors_is_not_read() -> None:
