@@ -100,6 +100,35 @@ async def test_fetching_again_closes_the_card_only_when_it_is_cleared(
         assert left is not None
 
 
+async def test_a_card_the_supplier_has_not_replaced_says_the_supplier_is_late(
+    hass: HomeAssistant,
+) -> None:
+    """The supplier still serves a card whose period ended weeks ago: the
+    fetch the flow asks for works and the card stays overdue by its
+    period. The flow said the card "could not be refreshed", with "unknown"
+    for the error, and now says the supplier has published none since."""
+    assert await async_setup_component(hass, "repairs", {})
+    assert await async_setup_component(hass, DOMAIN, {})
+    coord = _stale_entry(hass)
+    coord._set_snapshot(
+        make_snapshot(valid_until=dt_util.now().date() - timedelta(days=20))
+    )
+    issue_id = f"snapshot_stale_{coord.entry.entry_id}"
+    manager = hass.data["repairs"]["flow_manager"]
+    form = await manager.async_init(DOMAIN, data={"issue_id": issue_id})
+
+    async def _fetched(*_args: object, wait: bool = False) -> None:
+        coord._snapshot_fetched_at = dt_util.utcnow()
+        coord._last_error = ""
+
+    with patch.object(coord, "async_force_refresh", AsyncMock(side_effect=_fetched)):
+        done = await manager.async_configure(form["flow_id"], {})
+    assert done["type"] is FlowResultType.ABORT
+    assert done["reason"] == "supplier_late"
+    assert done["description_placeholders"] == {"supplier": "Eneco"}
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+
+
 async def test_an_entry_that_is_not_loaded_keeps_its_card(
     hass: HomeAssistant,
 ) -> None:

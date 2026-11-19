@@ -73,8 +73,18 @@ class RetryFetchFlow(RepairsFlow):
         await coordinator.async_force_refresh(wait=True)
         if coordinator._snapshot is None or coordinator._snapshot_overdue():
             # Finishing the flow would delete the Repairs card although
-            # nothing was fixed; aborted, it stays. The reason is markdown,
-            # and the error quotes what the supplier's server answered.
+            # nothing was fixed; aborted, it stays.
+            if coordinator._snapshot is not None and not coordinator._last_error:
+                # The fetch worked, so the card is fresh and still overdue by
+                # its period: the supplier has published none since.
+                return self.async_abort(
+                    reason="supplier_late",
+                    description_placeholders={
+                        "supplier": coordinator._issue_names()["supplier"]
+                    },
+                )
+            # The reason is markdown, and the error quotes what the
+            # supplier's server answered.
             return self.async_abort(
                 reason="still_stale",
                 description_placeholders={

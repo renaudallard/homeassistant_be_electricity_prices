@@ -848,6 +848,7 @@
         },
         "abort": {
           "still_stale": "De kaart kon nog steeds niet vernieuwd worden. Laatste fout: {last_error}. Ze wordt elk uur opnieuw geprobeerd, en deze reparatie blijft staan tot dat lukt.",
+          "supplier_late": "Het ophalen is gelukt, maar {supplier} biedt nog steeds een kaart aan waarvan de periode al meer dan een week voorbij is. Ze wordt elk uur opnieuw opgevraagd, en deze reparatie blijft staan tot er een nieuwere kaart gepubliceerd is.",
           "not_loaded": "Deze invoer is niet geladen, dus de kaart kan nu niet opgehaald worden. Probeer opnieuw zodra de invoer geladen is; deze reparatie blijft staan tot de kaart vernieuwd is."
         }
       }
