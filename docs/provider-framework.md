@@ -587,8 +587,10 @@ listing, Engie's prices pages, Luminus's product id for the month) and reads
 each address with the module's `_read_at`, the read step its `fetch` uses. The first card that names
 the running month (`card_month`, by its title or else its stated last day) is
 kept and the address logged; with none the usual answer stands, the error or
-the older card. A parse error or a network failure is no sign of a move and
-is never searched for.
+the older card, and a search that fails is one that found none, whatever it
+raised: a page that cannot be read, or one with an entity `html.unescape`
+refuses, goes to the debug log. A parse error or a network failure at the
+usual address is no sign of a move and is never searched for.
 
 Only an address that is the product's own card for the month by construction
 is read: an Engie sibling under the same family code and Luminus's product

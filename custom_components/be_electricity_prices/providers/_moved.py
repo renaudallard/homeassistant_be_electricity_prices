@@ -68,7 +68,7 @@ import aiohttp
 from homeassistant.util import dt as dt_util
 
 from . import elegant, engie, luminus
-from ._pdf import fetch_text, is_missing_card_error
+from ._pdf import error_text, fetch_text, is_missing_card_error
 from ._validity import label_month_end
 from .base import (
     ExtractorError,
@@ -213,11 +213,23 @@ async def read_moved(
     month: date,
 ) -> SupplierSnapshot | None:
     """The product's card for ``month`` where its supplier's pages put it,
-    or None when no address the pages give is that card."""
+    or None when no address the pages give is that card, the search for one
+    having failed included."""
     read_at, candidates = FALLBACKS[supplier]
     try:
         found = await candidates(session, contract_id, region, month)
-    except ExtractorError:
+    except Exception as err:
+        # A page that cannot be read, or one the search trips over, such as
+        # an entity html.unescape refuses: no address found, the usual
+        # answer stands.
+        _LOGGER.debug(
+            "%s/%s/%s: no moved card looked for: %s: %s",
+            supplier,
+            contract_id,
+            region,
+            type(err).__name__,
+            error_text(err),
+        )
         return None
     for url, where, _exact in [c for c in found if c[2]][:_MAX_TRIED]:
         try:

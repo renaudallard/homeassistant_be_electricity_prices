@@ -31,7 +31,9 @@ there."""
 
 from __future__ import annotations
 
+import asyncio
 import inspect
+import logging
 from dataclasses import replace
 from typing import Any
 
@@ -288,6 +290,67 @@ async def test_a_card_that_fails_otherwise_is_not_searched_for(
     with pytest.raises(ExtractorError, match=error):
         await fetch_or_moved(None, "elegant_flex", REGION_FLANDERS)  # type: ignore[arg-type]
     assert asked == []
+
+
+@pytest.mark.parametrize(
+    ("supplier", "contract"),
+    [("elegant", "elegant_flex"), ("engie", "engie_empty_house")],
+)
+@pytest.mark.parametrize("old", ["404", "older card"])
+async def test_a_search_that_trips_over_a_page_leaves_the_usual_answer(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    freezer: Any,
+    supplier: str,
+    contract: str,
+    old: str,
+) -> None:
+    """A page the search raises a ValueError on: html.unescape refuses a
+    numeric entity of more than 4300 digits. It is a search that found
+    nothing: the 404 at the usual address stands, or October's card read
+    there, and the error goes to the debug log."""
+    freezer.move_to("2026-11-03 12:00:00+01:00")
+
+    async def fetch(_session: Any, contract_id: str, region: str) -> SupplierSnapshot:
+        if old == "404":
+            raise ExtractorError("HTTP 404 fetching x")
+        return make_snapshot(
+            supplier=supplier, contract=contract_id, publication_label="oktober 2026"
+        )
+
+    asked = _pages(monkeypatch, {"https://": "<p>&#" + "9" * 5000 + ";</p>"})
+    caplog.set_level(logging.DEBUG, logger=_moved.__name__)
+    fetch_or_moved = _moved._with_moved_fallback(supplier, fetch)
+    if old == "404":
+        with pytest.raises(ExtractorError, match="HTTP 404"):
+            await fetch_or_moved(None, contract, REGION_FLANDERS)  # type: ignore[arg-type]
+    else:
+        snap = await fetch_or_moved(None, contract, REGION_FLANDERS)  # type: ignore[arg-type]
+        assert snap.publication_label == "oktober 2026"
+    assert asked
+    logged = [record for record in caplog.records if record.name == _moved.__name__]
+    assert [record.levelno for record in logged] == [logging.DEBUG]
+    assert "no moved card looked for: ValueError: " in logged[0].getMessage()
+
+
+async def test_a_search_the_fetch_budget_cuts_short_is_a_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fetch budget ends a fetch by cancelling it, in the search as
+    anywhere: that is no search that found nothing."""
+
+    async def fetch(_session: Any, contract_id: str, region: str) -> SupplierSnapshot:
+        raise ExtractorError("HTTP 404 fetching x")
+
+    async def never(_session: Any, url: str, **_kw: Any) -> str:
+        await asyncio.sleep(3600)
+        return ""
+
+    monkeypatch.setattr(_moved, "fetch_text", never)
+    fetch_or_moved = _moved._with_moved_fallback("elegant", fetch)
+    with pytest.raises(TimeoutError):
+        async with asyncio.timeout(0.05):
+            await fetch_or_moved(None, "elegant_flex", REGION_FLANDERS)  # type: ignore[arg-type]
 
 
 def test_only_the_registry_falls_back() -> None:
