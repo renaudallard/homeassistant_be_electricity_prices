@@ -515,6 +515,27 @@ async def test_an_archive_row_naming_its_network_year_still_reads() -> None:
     assert _figure_bound("network_year") > 2025
 
 
+async def test_a_row_nested_past_the_decoder_s_stack_does_not_decode() -> None:
+    """json.loads raises RecursionError on it, which is no ValueError: it
+    stopped the walk back to an older row where a row that does not decode
+    is a month the archive does not hold."""
+
+    async def _body(*_args: object, **_kw: object) -> str:
+        return "[" * 100_000
+
+    with patch.object(snapshot_months, "fetch_text", _body):
+        assert (
+            await _archived_card_from_github(
+                MagicMock(),
+                "trevion",
+                "groene_stroom_flex",
+                "flanders",
+                date(2026, 9, 1),
+            )
+            is None
+        )
+
+
 async def test_a_real_archive_row_still_reads() -> None:
     card = await _served(_ARCHIVED_ROW)
     assert card is not None

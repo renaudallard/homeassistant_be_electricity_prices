@@ -266,7 +266,11 @@ The endpoint takes plain dates on the local (Brussels) day, inclusive at both
 ends, so the client resolves the local days the UTC window spans and trims the
 response back afterwards. A range it holds no data for answers **200 with a
 plain-text body** (`end must be >= start`), not JSON, which the parser rejects
-as `EntsoeError` rather than letting a decode error escape. Gaps arrive as
+as `EntsoeError` rather than letting a decode error escape. So are a body
+nested deeper than the decoder's stack, on which `json.loads` raises
+RecursionError, and an integer of more than 4300 digits, a ValueError of its
+own, at energy-charts and at SMARD alike: neither is a `JSONDecodeError`, and
+either escaped the fallback before SMARD was asked. Gaps arrive as
 `null` and are skipped, leaving the slot absent -- which every caller already
 reads as "no data" -- rather than coerced to a free hour.
 

@@ -573,7 +573,11 @@ class SmardClient:
             raise EntsoeError(f"smard: {error_text(err)}") from err
         try:
             return json.loads(body)
-        except json.JSONDecodeError as err:
+        except (ValueError, RecursionError) as err:
+            # A JSONDecodeError, a ValueError of its own on an integer of
+            # more than 4300 digits, or a RecursionError on a body nested
+            # deeper than the decoder's stack: none of them an EntsoeError
+            # the fallback goes on past.
             _answered(f"smard {url}", body)
             raise EntsoeError("smard: non-JSON response") from err
 
@@ -641,7 +645,9 @@ def _parse_energy_charts(
     """
     try:
         doc = json.loads(body)
-    except json.JSONDecodeError as err:
+    except (ValueError, RecursionError) as err:
+        # As SmardClient._get_json reads it: past the decode errors, the
+        # integer of more than 4300 digits and the body nested too deep.
         _answered("energy-charts", body)
         raise EntsoeError("energy-charts: non-JSON response") from err
     if not isinstance(doc, dict):

@@ -499,7 +499,9 @@ async def _archived_card_from_github(
     try:
         row = json.loads(body)
         snapshot = _archived_snapshot_from_dict(row)
-    except (KeyError, TypeError, ValueError) as err:
+    except (KeyError, TypeError, ValueError, RecursionError) as err:
+        # RecursionError: a row nested deeper than the JSON decoder's stack,
+        # which is no ValueError and stopped the walk back to an older row.
         _LOGGER.debug("card archive row %s does not decode: %s", url, err)
         return None
     # A live row is filed under the month its card names, so one naming

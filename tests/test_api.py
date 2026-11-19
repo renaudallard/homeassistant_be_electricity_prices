@@ -922,6 +922,37 @@ async def test_an_outage_of_every_source_names_each_cause() -> None:
     assert "smard HTTP 404" in msg
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param("[" * 100_000, id="nested past the decoder's stack"),
+        pytest.param('{"price": [' + "9" * 5000 + "]}", id="5000-digit integer"),
+    ],
+)
+async def test_a_body_the_json_decoder_trips_over_is_non_json(body: str) -> None:
+    """json.loads raises RecursionError on a body nested deeper than its
+    stack, and a ValueError of its own on an integer of more than 4300
+    digits, neither a JSONDecodeError: it escaped the fallback, SMARD was
+    never asked and the tick failed. Each source now fails as one that did
+    not answer JSON."""
+    session = _FakeSession(
+        entsoe=EntsoeError("503"),
+        fallback_body=body,
+        smard={"index_quarterhour.json": body},
+    )
+    with pytest.raises(EntsoeError) as excinfo:
+        await fetch_day_ahead_or_fallback(
+            "key",
+            session,  # type: ignore[arg-type]
+            _TODAY_START,
+            _TOMORROW_START,
+        )
+    msg = str(excinfo.value)
+    assert "energy-charts: non-JSON" in msg
+    assert "smard: non-JSON" in msg
+    assert session.smard_files == ["index_quarterhour.json"]
+
+
 async def test_an_entsoe_http_error_is_labelled_once() -> None:
     """The client's message is unlabelled and the fallback names ENTSO-E's
     half, so a 503 reads "ENTSO-E: HTTP 503", not "ENTSO-E: ENTSO-E HTTP
