@@ -1396,10 +1396,11 @@ def test_pdfplumber_is_bounded_on_what_pdfminer_decodes(
         extract(_hidden_stream_pdf(zlib.compress(_comment(1000), 9), shape))
 
 
-def _object_stream_pdf(padding: int) -> bytes:
+def _object_stream_pdf(padding: int, *, listed: int = 0) -> bytes:
     """A PDF whose catalog, page tree and page sit in an object stream padded
     with ``padding`` blanks, behind a cross-reference stream, so pdfminer
-    inflates it opening the file."""
+    inflates it opening the file. The stream lists ``listed`` times more an
+    object the file's table lacks, a null behind the blanks."""
     import struct
     import zlib
 
@@ -1414,7 +1415,9 @@ def _object_stream_pdf(padding: int) -> bytes:
         offsets.append(len(body))
         body += obj + b"\n"
     header = b" ".join(b"%d %d" % (n, o) for n, o in enumerate(offsets, 1))
-    packed = zlib.compress(header + b"\n" + body + b" " * padding, 9)
+    header += b" 9 %d" % len(body) * listed
+    tail = b" " * padding + b"null" * bool(listed)
+    packed = zlib.compress(header + b"\n" + body + tail, 9)
     text = b"BT /F1 12 Tf 72 720 Td (Hello) Tj ET"
     out = bytearray(b"%PDF-1.5\n")
     at = {4: len(out)}
@@ -1423,7 +1426,8 @@ def _object_stream_pdf(padding: int) -> bytes:
         text,
     )
     at[5] = len(out)
-    out += b"5 0 obj\n<</Type/ObjStm/N 3/First %d/Filter/FlateDecode/Length %d>>" % (
+    out += b"5 0 obj\n<</Type/ObjStm/N %d/First %d/Filter/FlateDecode/Length %d>>" % (
+        3 + listed,
         len(header) + 1,
         len(packed),
     )
@@ -2153,6 +2157,43 @@ def test_the_lines_pypdf_reads_backwards_are_held(
     assert "tariff card" in extract_pdf_text(_lined_pdf(b"", b"x\n" * 50))
 
 
+def _blank_run_pdf(entries: int, blanks: int) -> bytes:
+    """A PDF of no page whose cross-reference table points ``entries``
+    objects at one run of ``blanks`` blanks ahead of its catalog."""
+    out = b"%PDF-1.4\n"
+    run = len(out)
+    out += b" " * blanks + b"1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n"
+    tree = len(out)
+    out += b"2 0 obj\n<</Type/Pages/Kids[]/Count 0>>\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (entries + 1)
+    out += b"".join(
+        b"%010d 00000 n \n" % (tree if number == 2 else run)
+        for number in range(1, entries + 1)
+    )
+    trailer = b"trailer<</Size %d/Root 1 0 R>>\n" % (entries + 1)
+    return out + trailer + b"startxref\n%d\n%%%%EOF\n" % xref
+
+
+def test_the_bytes_pypdf_s_reader_passes_over_one_at_a_time_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pypdf reads an object's header at every entry of a file's table as
+    it opens it, and every object an object stream lists as it reads one of
+    them, passing over the blanks ahead of each a byte at a time, so a card
+    naming one run of blanks again and again cost its entries times the
+    run with nothing counting it: 10 000 entries at 5000 blanks took 28,7 s
+    on a Raspberry Pi, from a 5 kB file. Each byte passed over counts."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_PARSED", 20_000)
+    refused = r"^PDF has a reader parse more than 20000"
+    for card in (_blank_run_pdf(60, 1000), _object_stream_pdf(1000, listed=60)):
+        with pytest.raises(ExtractorError, match=refused):
+            extract_pdf_text(card)
+    assert extract_pdf_text(_blank_run_pdf(60, 100)) == ""
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract_pdf_text(_object_stream_pdf(100, listed=60))
+
+
 @pytest.mark.parametrize("extract", [extract_pdf_text_layout, extract_pdf_text_aligned])
 def test_the_cmaps_pdfminer_loads_of_its_own_are_held(
     monkeypatch: pytest.MonkeyPatch, extract: Callable[[bytes], str]
@@ -2683,6 +2724,32 @@ def test_the_character_count_is_put_over_wrappers_that_lack_it(
     assert all(hasattr(method, _pdf_bound._MARK) for method in first[:2])
     assert first[2] is not pypdf_check
     assert first[2].__qualname__.startswith("_tail_only.")
+    assert counting() == first
+
+
+def test_the_reader_count_is_put_over_wrappers_that_lack_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Like the character count, the count of what pypdf's reader module
+    passes over goes in over the wrappers a release from before put in
+    place without it, once, and leaves them as they are."""
+    from pypdf.generic import EncodedStreamObject
+
+    reader = vars(_pdf_bound.pypdf_reader)
+    others = EncodedStreamObject.get_data
+    names = ("read_non_whitespace", "skip_over_whitespace", "skip_over_comment")
+    for name in names:
+        monkeypatch.setitem(reader, name, lambda stream: None)
+    bare = {name: reader[name] for name in names}
+
+    def counting() -> dict[str, Any]:
+        _pdf_bound._hold_pypdf_to_the_bound()
+        assert EncodedStreamObject.get_data is others
+        return {name: reader[name] for name in bare}
+
+    first = counting()
+    assert all(first[name] is not bare[name] for name in bare)
+    assert hasattr(first["skip_over_whitespace"], _pdf_bound._MARK)
     assert counting() == first
 
 

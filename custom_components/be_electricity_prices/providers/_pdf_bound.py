@@ -124,8 +124,10 @@ _MAX_CARD_OBJECTS = 180_000
 # procedure set of a page's or form's resources it walks for each draw, the
 # kinds it reads of them, each reference it resolves and each line it reads
 # backwards from the end of the file; under pypdf every operand and operator
-# of a content stream each time it is interpreted, and every element of an
-# array or dictionary. What the bytes draw cost even when it built nothing:
+# of a content stream each time it is interpreted, every element of an
+# array or dictionary, and each byte its reader module passes over one at a
+# time, the blanks and comments ahead of an object's header or of an object
+# an object stream lists. What the bytes draw cost even when it built nothing:
 # 78 kB inflating to 32 MB of numbers no operator took held pypdf 238 s and
 # 1,2 GB, and 3 MB of paths pdfminer does not paint took 45 s, while a
 # 700-byte card naming an object that refers to itself had pdfminer resolve
@@ -138,7 +140,11 @@ _MAX_CARD_OBJECTS = 180_000
 # 180 000 glyphs, so 3 million take about 140 s. A comment counts nothing:
 # pdfminer passes over one in a time linear in its length, the decode bound
 # and the download cap holding how many bytes it passes over, and
-# _MAX_TOKEN_BYTES how long one may be.
+# _MAX_TOKEN_BYTES how long one may be. pypdf reads the header at every
+# entry of a file's table as it opens it, and every object an object stream
+# lists as it reads one of them, so a card naming one run of blanks again
+# and again cost its entries times the run: 10 000 entries at 5000 blanks
+# took 28,7 s, from a 5 kB file.
 _MAX_PARSED = 3_000_000
 
 # The most a reader may build of a card's fonts, counted as it builds them:
@@ -481,6 +487,23 @@ def _parsed(parse: Any) -> Any:
     return counted
 
 
+def _passed_over(skip: Any) -> Any:
+    """``skip``, by which pypdf's reader module passes over blanks or a
+    comment a byte at a time, counted while a card is read as one object
+    parsed for each byte it read."""
+
+    def counted(stream: Any) -> Any:
+        reading = _READING.get()
+        if reading is None:
+            return skip(stream)
+        start = stream.tell()
+        found = skip(stream)
+        reading.parse(stream.tell() - start)
+        return found
+
+    return counted
+
+
 def _font_range(*args: SupportsIndex) -> range:
     """``range``, as the readers' font modules find it ahead of the builtin
     one, every loop of theirs building a font going through it: counted
@@ -621,6 +644,21 @@ def _count_pypdf_text() -> None:
     font.__init__ = make
 
 
+def _count_pypdf_reader() -> None:
+    """Have pypdf count as parsed, while a card is read, each byte its
+    reader module passes over a byte at a time, through its
+    ``read_non_whitespace``, ``skip_over_whitespace`` and
+    ``skip_over_comment``. Done once whatever the copy of this module, over
+    the other wrappers too where a release of either integration from
+    before put them in place without these."""
+    reader = vars(pypdf_reader)
+    if hasattr(reader["skip_over_whitespace"], _MARK):
+        return
+    for name in ("read_non_whitespace", "skip_over_whitespace", "skip_over_comment"):
+        reader[name] = _passed_over(reader[name])
+    setattr(reader["skip_over_whitespace"], _MARK, True)
+
+
 def _hold_pypdf_to_the_bound() -> None:
     """Have pypdf held to the bound while a card is read, and left as it is
     otherwise. Every stream it reads goes through ``get_data``, every one it
@@ -631,10 +669,12 @@ def _hold_pypdf_to_the_bound() -> None:
     and ``read_until_regex``, every line it reads backwards from the end of
     the file through its reader module's ``read_previous_line``, every font
     map it builds through ``_parse_to_unicode`` and every loop building a
-    font through its font modules' ``range``, and every character of text
-    it makes as :func:`_count_pypdf_text` says. Done once whatever the copy
+    font through its font modules' ``range``, every character of text it
+    makes as :func:`_count_pypdf_text` says, and what its reader module
+    reads as :func:`_count_pypdf_reader` says. Done once whatever the copy
     of this module."""
     _count_pypdf_text()
+    _count_pypdf_reader()
     if hasattr(EncodedStreamObject.get_data, _MARK):
         return
     decompress = pypdf_filters.decompress
@@ -813,7 +853,8 @@ def bounded_pypdf() -> Iterator[None]:
     since pypdf never decodes an image to read text, and ASCII85 past
     :data:`_MAX_ASCII85_BYTES`. pypdf parses no more than
     :data:`_MAX_PARSED` operands, operators and elements of arrays and
-    dictionaries, a content stream's each time it is interpreted, reads
+    dictionaries, a content stream's each time it is interpreted, and
+    bytes its reader module passes over one at a time, reads
     no more than :data:`_MAX_LINES_BACK` lines backwards from the end of
     the file, builds no more than :data:`_MAX_FONT_ENTRIES` entries of a
     card's fonts, and makes no more than :data:`_MAX_CHARACTERS`

@@ -857,10 +857,13 @@ Internals worth knowing:
   resolves (a 700-byte card naming an object that refers to itself had it
   resolve that for good) and each line it reads backwards from the end of
   the file (2 MB of line ends there took 4,7 s); under pypdf each operand
-  and operator of a content stream each time it is interpreted, and each
-  element of an array or dictionary. The most a card reaches is 935 796
-  under pdfminer and 912 313 under pypdf, both on a Bolt card of 2,8 MB,
-  and this is
+  and operator of a content stream each time it is interpreted, each
+  element of an array or dictionary, and each byte its reader module
+  passes over one at a time, the blanks and comments ahead of an object's
+  header or of an object an object stream lists (a table pointing 10 000
+  entries at one run of 5000 blanks took 28,7 s, from a 5 kB file). The
+  most a card reaches is 935 796 under pdfminer and 912 313 under pypdf,
+  both on a Bolt card of 2,8 MB, and this is
   about three times that, since what it lets through is CPU: a token of a
   Bolt card costs pdfminer about 40 us on a Raspberry Pi, and of 30 kinds
   of operator made up to cost more none costs over a twentieth more but
