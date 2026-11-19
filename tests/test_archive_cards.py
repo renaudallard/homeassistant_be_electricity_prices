@@ -15,7 +15,7 @@ import types
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -4559,15 +4559,17 @@ def test_the_archive_push_survives_the_water_archives_push(
         )
         (stubs / "git").chmod(0o755)
     env = {**os.environ, "PATH": f"{stubs}:{os.environ['PATH']}"}
+    # The step names its commit by its own clock, after this was read: on a
+    # run across 00:00 UTC that is the day after.
+    day = datetime.now(UTC).date()
     done = subprocess.run(
         ["bash", "-e", "-c", script], cwd=work, env=env, capture_output=True, text=True
     )
     assert done.returncode == 0, done.stderr
-    log = git("log", "--format=%s", "main", cwd=origin)
-    assert log.splitlines()[:2] == [
-        f"Cards seen on {datetime.now(UTC).date().isoformat()}",
-        "Water listings",
-    ]
+    log = git("log", "--format=%s", "main", cwd=origin).splitlines()
+    days = (day, day + timedelta(days=1))
+    assert log[0] in [f"Cards seen on {seen.isoformat()}" for seen in days]
+    assert log[1] == "Water listings"
 
 
 def _archive_jobs() -> dict[str, Any]:
