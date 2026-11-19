@@ -21,6 +21,8 @@ from custom_components.be_electricity_prices import (
     coordinator_tick,
     excise_law,
     law_archive,
+    network_archive,
+    vat_rates,
 )
 from custom_components.be_electricity_prices.const import CONF_CARD_ARCHIVE, DOMAIN
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
@@ -105,6 +107,50 @@ async def test_the_table_is_read_once_a_day_and_a_failure_waits(freezer: Any) ->
         freezer.tick(timedelta(hours=2))
         await law_archive.ensure_law_archive(None)  # type: ignore[arg-type]
         assert fetch.await_count == 3
+
+
+@pytest.mark.parametrize(
+    ("module", "body"),
+    [
+        (vat_rates, '{"residential": {"2026-09": {"rate": %s}}}'),
+        (law_archive, '{"residential": {"2026-09": {"standard": %s}}}'),
+        (
+            network_archive,
+            '{"months": {"2026-09": {"ores": {"distribution_single": %s,'
+            ' "transport": 0.01, "data_management_per_year": 10}}}}',
+        ),
+    ],
+    ids=["vat", "law", "network"],
+)
+async def test_a_figure_no_float_holds_is_no_figure(module: Any, body: str) -> None:
+    """json.loads reads an integer of 400 digits as an int, and float() of
+    it raised OverflowError out of the daily read with neither stamp set, so
+    the tick raised again every time. The figure is not read, and the table
+    is."""
+    table = archive_table.ArchiveTable("https://example.invalid/t.json", module.hold)
+    fetch = AsyncMock(return_value=body % (10**400))
+    with patch.object(archive_table, "fetch_text", fetch):
+        await table.ensure(None)  # type: ignore[arg-type]
+        await table.ensure(None)  # type: ignore[arg-type]
+    assert fetch.await_count == 1
+    assert table.fetched_at is not None and table.failed_at is None
+    assert "2026-09" not in json.dumps(module.held_table())
+
+
+async def test_a_table_that_cannot_be_held_is_a_failed_read() -> None:
+    """The tick calls ensure: a reader that raises on what the archive sent
+    is a failure asked again six hours on, not one raised on every tick."""
+
+    def hold(table: Any) -> None:
+        raise OverflowError("int too large to convert to float")
+
+    table = archive_table.ArchiveTable("https://example.invalid/law.json", hold)
+    fetch = AsyncMock(return_value="{}")
+    with patch.object(archive_table, "fetch_text", fetch):
+        await table.ensure(None)  # type: ignore[arg-type]
+        await table.ensure(None)  # type: ignore[arg-type]
+    assert fetch.await_count == 1
+    assert table.fetched_at is None and table.failed_at is not None
 
 
 # The coordinator.

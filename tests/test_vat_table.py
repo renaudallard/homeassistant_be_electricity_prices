@@ -101,6 +101,10 @@ def test_only_agreed_months_within_bounds_are_held() -> None:
                 "2026-12": {"rate": 6},
                 "2027-13": {"rate": 0.07},
                 "not a month": {"rate": 0.07},
+                # No JSON number: false was 0 %, the string 0.21 a rate.
+                "2027-01": {"rate": False},
+                "2027-02": {"rate": "0.21"},
+                "2027-03": {"rate": 10**400},
             },
             "standard": {"2026-10": {"rate": 0.21}},
         }

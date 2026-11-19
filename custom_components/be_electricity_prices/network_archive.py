@@ -50,6 +50,7 @@ import aiohttp
 
 from .archive_table import ArchiveTable
 from .const import NETWORK_TABLE_URL
+from .providers._parse import finite_number
 
 # The overlay fields a sheet sets (``overlay_fields`` in each reader), and
 # the ones a DSO overlay cannot leave unset.
@@ -107,12 +108,11 @@ def _fields(raw: Any) -> dict[str, float | None]:
         if value is None and field not in _REQUIRED:
             out[field] = None
             continue
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            return {}
+        figure = finite_number(value)
         bound = _MAX_EUR_PER_YEAR if field in _YEARLY else _MAX_EUR_PER_KWH
-        if not 0.0 <= float(value) < bound:
+        if figure is None or not 0.0 <= figure < bound:
             return {}
-        out[field] = float(value)
+        out[field] = figure
     return out
 
 

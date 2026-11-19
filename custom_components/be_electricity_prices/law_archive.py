@@ -49,6 +49,7 @@ import aiohttp
 
 from .archive_table import ArchiveTable
 from .const import LAW_TABLE_URL
+from .providers._parse import finite_number
 
 # The kinds excise_law.py bills, which imports this module.
 _KINDS: Final = ("standard", "protected")
@@ -71,11 +72,9 @@ def _entry(raw: Any) -> dict[str, float]:
     if not isinstance(raw, Mapping):
         return out
     for kind in _KINDS:
-        value = raw.get(kind)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            continue
-        if 0.0 <= float(value) < _MAX_EUR_PER_KWH:
-            out[kind] = float(value)
+        value = finite_number(raw.get(kind))
+        if value is not None and 0.0 <= value < _MAX_EUR_PER_KWH:
+            out[kind] = value
     return out
 
 

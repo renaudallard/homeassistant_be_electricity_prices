@@ -33,6 +33,7 @@ raise rather than guess. They know nothing about which supplier printed it.
 
 from __future__ import annotations
 
+import math
 import re
 import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
@@ -179,6 +180,18 @@ def to_float(text: str) -> float:
     for sep in _NUMERIC_SEPARATORS:
         cleaned = cleaned.replace(sep, "")
     return float(cleaned.replace(",", "."))
+
+
+def finite_number(value: object) -> float | None:
+    """A JSON number as a float, or None for anything else: a bool, a
+    string, NaN, an infinity, an integer no float holds."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    return number if math.isfinite(number) else None
 
 
 def tier_bound_kwh(text: str) -> float:

@@ -39,6 +39,7 @@ import aiohttp
 
 from .archive_table import ArchiveTable
 from .const import VAT_RATE_REDUCED, VAT_RATE_STANDARD, VAT_TABLE_URL
+from .providers._parse import finite_number
 
 # A rate outside these is a misread, not a rate.
 _MIN_RATE: Final = 0.0
@@ -75,13 +76,14 @@ def _months(section: Any) -> dict[tuple[int, int], float]:
     if not isinstance(section, Mapping):
         return out
     for label, entry in section.items():
-        rate = entry.get("rate") if isinstance(entry, Mapping) else None
+        # A JSON number, as the other two tables read theirs: false is no
+        # 0 % and the string "0.21" no rate.
+        rate = finite_number(entry.get("rate") if isinstance(entry, Mapping) else None)
         try:
             year, month = (int(part) for part in str(label).split("-"))
-            rate = float(rate)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
+        except ValueError:
             continue
-        if 1 <= month <= 12 and _MIN_RATE <= rate < _MAX_RATE:
+        if rate is not None and 1 <= month <= 12 and _MIN_RATE <= rate < _MAX_RATE:
             out[(year, month)] = rate
     return out
 

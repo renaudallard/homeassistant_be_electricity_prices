@@ -1061,6 +1061,7 @@ downstream regex would miss silently.
 | Symbol | Signature (sync) | Solves |
 | --- | --- | --- |
 | `to_float` | `to_float(text: str) -> float` | Parse a Belgian/French decimal (`15,93` or `0.102`). Strips every Unicode space variant used as a thousands separator (NBSP, thin space, NNBSP, line separator) before swapping comma for dot, so `5 029` does not raise (`_parse.py`). |
+| `finite_number` | `finite_number(value: object) -> float \| None` | A JSON number as a finite float, or `None` for a bool, a string, NaN, an infinity or an integer no float holds, which `float()` raises OverflowError on. The archive's tables read their figures through it (`_parse.py`). |
 | `parse_sign` | `parse_sign(char: str) -> float` | Return `-1.0` for any hyphen/dash/Unicode-minus, `+1.0` otherwise. Use as `base = parse_sign(m.group(N)) * to_float(m.group(N+1))` so a card that swaps to U+2212 or flips polarity does not silently break the parser (`_parse.py`). |
 | `SIGN_CHARS` | module constant | Character-class string `+\-` plus six dash variants, to drop into a regex as `[` + `SIGN_CHARS` + `]` (`_parse.py`). Supplier PDFs flip silently between these on re-renders. |
 | `LINE_BREAK` | module constant | The blanks between two fields that hold a line break, to drop into a regex where `\s*\n\s*` would go: the same text, read one way. Two runs of `\s` either side of the break split a run of blank lines between them in every way before what follows failed, which cost the square of the run (`_parse.py`). |
