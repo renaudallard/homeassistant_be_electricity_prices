@@ -1962,7 +1962,10 @@ its first step (`Check the cards token is set`), and the push, which writes with
 lands nothing either: the run is filed as a failure, and the next run that has the token fetches
 that day's cards again, since the archive holds none of them. Releases older than the retention are deleted on the same cutoff the
 script uses for the rows, except one `pdfs.json` still lists, which is a card a kept row still
-names (`test_a_release_the_manifest_still_lists_is_not_deleted`).
+names (`test_a_release_the_manifest_still_lists_is_not_deleted`). A `pdfs.json` holding a value
+that is no path fails the step before a release is deleted: read through a pipe, under `bash -e`
+without pipefail, it passed as a shorter list and the releases it still named went
+(`test_a_manifest_that_does_not_read_deletes_no_release`).
 
 The archive lives in its own repository on purpose: three years of daily commits would bury
 `main`'s history, race the maintainer's own pushes, and land in every HACS download. The push

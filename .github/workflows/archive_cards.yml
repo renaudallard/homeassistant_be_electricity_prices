@@ -446,9 +446,12 @@ jobs:
           # never listed and never deleted. A release pdfs.json
           # still lists stays: an unchanged card is uploaded once, under the
           # month it was first captured in, and the walk keeps its entry while
-          # a kept row names it.
+          # a kept row names it. Those are read by jq alone: piped into sort,
+          # under bash -e without pipefail, a manifest holding a value jq
+          # cannot split passed as a shorter list, and the releases it still
+          # named were deleted.
           cutoff="electricity-$(date -u -d "$(date -u +%Y-%m-01) -36 months" +%Y-%m)"
-          jq -r '.[] | split("/")[0]' "$manifest" | sort -u > named.txt
+          jq -r '[.[] | split("/")[0]] | unique[]' "$manifest" > named.txt
           gh release list --repo "$CARDS_REPO" --limit 1000 --json tagName --jq '.[].tagName'             | while read -r tag; do
               case "$tag" in electricity-*) ;; *) continue ;; esac
               grep -qxF "$tag" named.txt && continue

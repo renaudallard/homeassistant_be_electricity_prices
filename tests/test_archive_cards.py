@@ -4806,13 +4806,12 @@ def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:
         assert "!cancelled()" in jobs[job]["if"], job
 
 
-def test_a_release_the_manifest_still_lists_is_not_deleted(tmp_path: Path) -> None:
-    """Retention deletes the releases past the cutoff, except one pdfs.json
-    still lists: the walk keeps the entry of an old card a kept row names,
-    and deleting its release broke that row's link and its replay."""
+def _keep_releases(tmp_path: Path, manifest: dict[str, Any]) -> tuple[int, str]:
+    """The keep step run on ``manifest`` with nothing to upload, three old
+    releases listed: its exit code and the releases it deleted."""
     (tmp_path / "tmp" / "cards" / "electricity").mkdir(parents=True)
     (tmp_path / "tmp" / "cards" / "electricity" / "pdfs.json").write_text(
-        json.dumps({"aaa": "electricity-2020-01/aaa.pdf"})
+        json.dumps(manifest)
     )
     done = _run_keep_step(
         tmp_path,
@@ -4823,8 +4822,35 @@ def test_a_release_the_manifest_still_lists_is_not_deleted(tmp_path: Path) -> No
         "esac\n"
         "exit 0\n",
     )
-    assert done.returncode == 0, done.stderr
-    assert (tmp_path / "deleted.txt").read_text() == "electricity-2020-02\n"
+    deleted = tmp_path / "deleted.txt"
+    return done.returncode, deleted.read_text() if deleted.exists() else ""
+
+
+def test_a_release_the_manifest_still_lists_is_not_deleted(tmp_path: Path) -> None:
+    """Retention deletes the releases past the cutoff, except one pdfs.json
+    still lists: the walk keeps the entry of an old card a kept row names,
+    and deleting its release broke that row's link and its replay."""
+    manifest = {"aaa": "electricity-2020-01/aaa.pdf"}
+    assert _keep_releases(tmp_path, manifest) == (0, "electricity-2020-02\n")
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        {"000": 1, "aaa": "electricity-2020-01/aaa.pdf"},
+        {"aaa": "electricity-2020-01/aaa.pdf", "zzz": 1},
+    ],
+)
+def test_a_manifest_that_does_not_read_deletes_no_release(
+    tmp_path: Path, manifest: dict[str, Any]
+) -> None:
+    """The step runs under bash -e without pipefail, and read the releases
+    pdfs.json lists through a pipe into sort: jq stopping at a value that is
+    no path left the list short and the step went on, deleting a release the
+    manifest still named. The step fails before it deletes anything."""
+    code, deleted = _keep_releases(tmp_path, manifest)
+    assert code != 0
+    assert deleted == ""
 
 
 def test_the_cards_token_is_on_no_command_line(tmp_path: Path) -> None:
