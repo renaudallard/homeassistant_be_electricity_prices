@@ -758,10 +758,13 @@ cost. Two rules enforce this:
   this cycle's `sum` less the bill it already counts. That row is found by a
   read by month, whose end the recorder moves to the next month's start, so on
   1 January in Brussels it returns January as well; a month from the window's
-  start on is dropped before the last one is taken. A first backfill, with
-  nothing recorded before it, imports the rows as built.
-  `tests/recorder/test_backfill_year_join.py` pins both against a real recorder,
-  the new year in Brussels as well.
+  start on is dropped before the last one is taken. A window opening at a
+  contract start in the middle of a month gets that month's row too, which
+  may hold no hour before the start, and the last hour is then taken from the
+  month before. A first backfill, with nothing recorded before it, imports the
+  rows as built. `tests/recorder/test_backfill_year_join.py` pins both against
+  a real recorder, the new year in Brussels as well, and
+  `tests/recorder/test_backfill_seam.py` the window opening mid-month.
 - A window ending on or before Jan 1 of the *current* year rebuilds the price
   sensors only. The two rules above keep one request inside one year, but a
   finished past year's series would then sit immediately before the current

@@ -536,23 +536,28 @@ async def _chain_before(
     when the recorder did not answer.
 
     The last long-term row before ``first`` is found by month and then by
-    hour, so a long gap costs two bounded reads. A row from before ``reset``
-    belongs to an earlier cycle, whose bill the new one starts on top of, so
-    its whole ``sum`` is carried; a row of this cycle carries its ``sum`` less
-    the bill it already counts.
+    hour, so a long gap costs two or three bounded reads. A row from before
+    ``reset`` belongs to an earlier cycle, whose bill the new one starts on
+    top of, so its whole ``sum`` is carried; a row of this cycle carries its
+    ``sum`` less the bill it already counts.
 
     The recorder moves a month read's end to the next month's start, so on
     1 January it returns January too, which holds nothing before ``first``.
+    So it does for a window opening in the middle of a month: that month's
+    row begins before ``first`` and may hold no hour before it, and the last
+    one is then in a month before.
     """
+    hours: list[Any] = []
     try:
         months = await _read(
             hass, statistic_id, first - timedelta(days=400), first, "month"
         )
         months = [row for row in months if row["start"] < first.timestamp()]
-        if not months:
-            return 0.0
-        month_start = datetime.fromtimestamp(months[-1]["start"], tz=UTC)
-        hours = await _read(hass, statistic_id, month_start, first, "hour")
+        for month in reversed(months):
+            month_start = datetime.fromtimestamp(month["start"], tz=UTC)
+            hours = await _read(hass, statistic_id, month_start, first, "hour")
+            if hours:
+                break
     except Exception:  # recorder may surface anything
         _LOGGER.debug("could not read the %s chain before the backfill", statistic_id)
         return None
