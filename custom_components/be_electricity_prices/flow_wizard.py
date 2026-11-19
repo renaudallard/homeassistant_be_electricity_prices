@@ -516,6 +516,7 @@ class _WizardStepsMixin:
             return await self._ask_direct_debit()
         return await self.async_step_professional()
 
+    @reads_decimals("professional", _professional_schema)
     async def async_step_professional(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:

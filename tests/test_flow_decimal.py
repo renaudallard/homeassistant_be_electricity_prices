@@ -31,7 +31,10 @@ from typing import Any
 
 import pytest
 import voluptuous as vol
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.selector import NumberSelector, NumberSelectorConfig
 
+from custom_components.be_electricity_prices import const
 from custom_components.be_electricity_prices.flow_decimal import (
     DecimalSelector,
     decimal_text,
@@ -105,3 +108,49 @@ def test_a_stored_figure_is_shown_as_its_field_reads_it(
     """str() writes 0.000075 as 7.5e-05, which the field would refuse."""
     assert decimal_text(stored) == shown
     assert _read(shown, None, None) == float(stored)
+
+
+@pytest.mark.parametrize("volume", ["nan", "NaN", float("nan")])
+def test_a_number_field_holding_a_nan_is_refused(volume: str | float) -> None:
+    """A number field holds a value to its bounds, which a NaN passes. The
+    frontend sends none, a script calling the flow may."""
+    field = NumberSelector(NumberSelectorConfig(min=0, max=1_000_000))
+    schema = vol.Schema({vol.Required("kwh"): field})
+    typed = schema({"kwh": volume})
+    assert read_decimals(schema, typed) == {"kwh": "invalid_number"}
+    typed = schema({"kwh": 5000})
+    assert read_decimals(schema, typed) == {}
+    assert typed == {"kwh": 5000.0}
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_yearly_volume_that_is_no_number_comes_back(
+    hass: HomeAssistant,
+) -> None:
+    """A professional card's yearly volume typed as NaN through the flow
+    was stored, and every leg priced against it read NaN. The step comes
+    back with the volume it showed."""
+    result = await hass.config_entries.flow.async_init(
+        const.DOMAIN, context={"source": "user"}
+    )
+    cfg = hass.config_entries.flow.async_configure
+    flow = result["flow_id"]
+    await cfg(flow, {const.CONF_SUPPLIER: "engie", const.CONF_REGION: "wallonia"})
+    await cfg(flow, {const.CONF_CONTRACT: "engie_pro_easy_fixed"})
+    await cfg(flow, {const.CONF_DSO: const.DSO_ORES})
+    result = await cfg(flow, {const.CONF_METER: const.METER_MONO})
+    assert result["step_id"] == "professional", result
+    result = await cfg(
+        flow, {const.CONF_INCLUDE_VAT: True, const.CONF_ANNUAL_CONSUMPTION_KWH: "nan"}
+    )
+    assert result["step_id"] == "professional"
+    assert result["errors"] == {const.CONF_ANNUAL_CONSUMPTION_KWH: "invalid_number"}
+    schema = result["data_schema"]
+    assert schema is not None
+    shown = next(k for k in schema.schema if k == const.CONF_ANNUAL_CONSUMPTION_KWH)
+    assert shown.default() == float(const.DEFAULT_ANNUAL_CONSUMPTION_KWH)
+    assert not shown.description
+    result = await cfg(
+        flow, {const.CONF_INCLUDE_VAT: True, const.CONF_ANNUAL_CONSUMPTION_KWH: 5000}
+    )
+    assert result["step_id"] != "professional"

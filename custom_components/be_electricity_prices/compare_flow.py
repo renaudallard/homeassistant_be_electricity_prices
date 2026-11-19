@@ -97,6 +97,7 @@ from .flow_contracts import (
     _contracts_for,
     _entry_is_professional,
 )
+from .flow_decimal import read_decimals
 from .flow_schemas import (
     _direct_debit_schema,
     _settlement_schema,
@@ -473,7 +474,13 @@ class _CompareStepsMixin(_PlaceholdersMixin, OptionsFlow):
                 user_input.get(CONF_WHATIF_CONSUMPTION_KWH),
                 user_input.get(CONF_WHATIF_INJECTION_KWH),
             )
-            if picked != stored and ask_volumes and any(v is None for v in typed):
+            errors = read_decimals(
+                _compare_solar_schema(dict(current), ask_volumes=ask_volumes),
+                user_input,
+            )
+            if errors:
+                user_input = {k: v for k, v in user_input.items() if k not in errors}
+            elif picked != stored and ask_volumes and any(v is None for v in typed):
                 # Refuse rather than quietly quoting the override off a
                 # possibly-netted register: the error names what is
                 # missing, where silently dropping the override would look

@@ -262,8 +262,10 @@ excluding VAT and may band the federal excise by annual volume, so the step asks
 prices should include VAT (`CONF_INCLUDE_VAT`, default on) and the estimated yearly
 consumption (`CONF_ANNUAL_CONSUMPTION_KWH`, default 3500 kWh). The volume is what
 `entry_annual_kwh` (`snapshot_resolve.py`) falls back to until a full year has been
-measured. On a residential contract `_ask_professional` pops both keys, so a switch back
-from a professional contract cannot leave an ex-VAT preference in force.
+measured. A NaN volume, which the number field's bounds let through from a client other
+than the frontend, brings the step back with `invalid_number`. On a residential contract
+`_ask_professional` pops both keys, so a switch back from a professional contract cannot
+leave an ex-VAT preference in force.
 
 ### `direct_debit`: how the household pays, where the card prices it
 
@@ -669,7 +671,7 @@ Anything pre-filled stays editable (`strings.json`).
 | kWh sensors restricted to device_class energy | `flow_schemas.py` | A non-energy sensor would be read as raw kWh |
 | ENTSO-E key validated live before finalize | `flow_wizard.py` | Prevents finalizing an entry that fails on first refresh |
 | Duplicate (supplier, contract, region, dso) tuple rejected | `config_flow.py` | Two coordinators on the same tuple double-poll the supplier |
-| A typed figure that is not digits with one decimal comma or point (and a minus where negative is allowed), or falls outside its field's bounds -> form error `invalid_number`, the form back as typed | `flow_decimal.py` (`reads_decimals` on `signed_rate`, `capacity`, `solar` and the four `custom_*` steps) | A browser's number field refuses the decimal comma Belgian cards print, or sends it on as empty, so every figure is a text field (`DecimalSelector`) carrying the bounds its number box had; a blanked one is dropped, as ha-form left out a blanked number box, and a stored one is shown without the exponent `str()` gives a small figure (`decimal_text`) |
+| A typed figure that is not digits with one decimal comma or point (and a minus where negative is allowed), or falls outside its field's bounds -> form error `invalid_number`, the form back as typed; a whole kWh volume that is a NaN -> the same error, its field showing what it held | `flow_decimal.py` (`reads_decimals` on `signed_rate`, `capacity`, `solar`, `professional` and the four `custom_*` steps, `read_decimals` on `compare_solar`) | A browser's number field refuses the decimal comma Belgian cards print, or sends it on as empty, so every figure is a text field (`DecimalSelector`) carrying the bounds its number box had; a blanked one is dropped, as ha-form left out a blanked number box, and a stored one is shown without the exponent `str()` gives a small figure (`decimal_text`). The volumes stay number fields, whose bounds a NaN passes: the frontend sends none, a script calling the flow may |
 
 Note on partial register-pair wiring: every one of the six kWh fields is
 `vol.Optional`, but the meters step refuses a day/night pair with only one half

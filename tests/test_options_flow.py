@@ -3420,6 +3420,18 @@ async def test_compare_solar_requires_volumes_without_an_injection_meter(
         )
         assert result["step_id"] == "compare_solar"
         assert result["errors"] == {"whatif_consumption_kwh": "whatif_volumes_required"}
+        # A NaN, which a number field's bounds let through from a client other
+        # than the frontend, is refused rather than quoted.
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {
+                "solar_regime": "injection",
+                "whatif_consumption_kwh": "nan",
+                "whatif_injection_kwh": 1000,
+            },
+        )
+        assert result["step_id"] == "compare_solar"
+        assert result["errors"] == {"whatif_consumption_kwh": "invalid_number"}
         # Keeping the entry's own regime needs no volumes.
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"solar_regime": "compensation"}
