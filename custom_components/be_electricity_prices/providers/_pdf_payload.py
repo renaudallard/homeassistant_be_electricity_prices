@@ -29,6 +29,20 @@ from __future__ import annotations
 
 import re
 
+# How much of a payload is read to tell what it is: the BOM and blank space
+# ahead of its first byte, then an error document's root. Acrobat looks for
+# "%PDF" in a file's first 1024 bytes, and Luminus's error document was 248.
+# The payload is judged on the event loop and can be 64 MiB of blanks, which
+# the storage error pattern took 5 s to give up on.
+_HEAD_BYTES = 1024
+
+
+def _prefix_length(payload: bytes) -> int:
+    """How many bytes of a UTF-8 BOM, then blank space, ``payload`` starts
+    with, :data:`_HEAD_BYTES` at most."""
+    head = payload[:_HEAD_BYTES]
+    return len(head) - len(head.removeprefix(b"\xef\xbb\xbf").lstrip(b"\r\n\t "))
+
 
 def _strip_pdf_prefix(payload: bytes) -> bytes:
     """The bytes without a UTF-8 BOM, then blank space, ahead of ``%PDF``.
@@ -40,20 +54,27 @@ def _strip_pdf_prefix(payload: bytes) -> bytes:
     rather than a few stray bytes. pypdf recovers on its own, so the two
     aligned/layout variants are the ones this protects.
     """
-    return payload.removeprefix(b"\xef\xbb\xbf").lstrip(b"\r\n\t ")
+    return payload[_prefix_length(payload) :]
 
 
 def _is_pdf_payload(payload: bytes) -> bool:
     """Return True if the bytes look like a PDF: ``%PDF`` once
     :func:`_strip_pdf_prefix` has taken off what may precede it."""
-    return _strip_pdf_prefix(payload).startswith(b"%PDF")
+    return payload.startswith(b"%PDF", _prefix_length(payload))
+
+
+def _is_web_page(payload: bytes) -> bool:
+    """Whether ``payload`` opens with a tag once :func:`_strip_pdf_prefix`
+    has taken off what may precede it."""
+    return payload.startswith(b"<", _prefix_length(payload))
 
 
 # An object store that refuses the read answers the proxy in front of it
 # with its own XML error document, and the proxy passes that through as a
 # 200. Azure Blob and S3 both shape it as a root <Error> carrying a <Code>.
+# Matched past the payload's prefix and within the kilobyte after it.
 _STORAGE_ERROR_RE = re.compile(
-    rb"^(?:\xef\xbb\xbf)?\s*(?:<\?xml[^>]*\?>\s*)?<Error>\s*<Code>([^<]{1,64})</Code>",
+    rb"(?:<\?xml[^>]*\?>\s*)?<Error>\s*<Code>([^<]{1,64})</Code>",
     re.IGNORECASE,
 )
 
@@ -70,7 +91,8 @@ def _storage_error_code(payload: bytes) -> str | None:
     own download button was broken the same way, and nothing here could
     fix it, which is the definition of transient in this taxonomy.
     """
-    match = _STORAGE_ERROR_RE.match(payload)
+    start = _prefix_length(payload)
+    match = _STORAGE_ERROR_RE.match(payload, start, start + _HEAD_BYTES)
     if match is None:
         return None
     return match.group(1).decode("ascii", "replace").strip() or None

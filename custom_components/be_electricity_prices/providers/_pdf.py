@@ -53,7 +53,12 @@ from ._links import on_hosts
 from ._parse import (
     to_float,
 )
-from ._pdf_payload import _is_pdf_payload, _storage_error_code, _strip_pdf_prefix
+from ._pdf_payload import (
+    _is_pdf_payload,
+    _is_web_page,
+    _storage_error_code,
+    _strip_pdf_prefix,
+)
 from ._pdf_render import (
     _MIN_TEXT_LAYER_CHARS,
     extract_pdf_text,
@@ -113,11 +118,10 @@ def is_transient_fetch_error(message: str) -> bool:
 
 
 # How _fetch_validated_pdf_bytes's message opens when the payload opens with
-# a tag past any blank space: a web page came in the card's place. Said
-# before the address, so the check reads the message's start, which a cut
-# of the message keeps.
+# a tag past any BOM and blank space: a web page came in the card's place.
+# Said before the address, so the check reads the message's start, which a
+# cut of the message keeps.
 _A_WEB_PAGE = "expected a PDF, got a web page"
-_WEB_PAGE_RE = re.compile(rb"[ \t\r\n]*<")
 
 
 def is_missing_card_error(message: str) -> bool:
@@ -455,7 +459,7 @@ async def _fetch_validated_pdf_bytes(
         # reliable than the Content-Type header.
         got = (
             _A_WEB_PAGE
-            if _WEB_PAGE_RE.match(payload)
+            if _is_web_page(payload)
             else "expected a PDF, got something else"
         )
         raise ExtractorError(f"{got}, at {shown_text(url)}")

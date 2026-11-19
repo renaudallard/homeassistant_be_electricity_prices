@@ -47,6 +47,7 @@ from custom_components.be_electricity_prices.providers import (
     _pdf,
     _pdf_bound,
     _pdf_bound_pdfminer,
+    _pdf_payload,
     _render_thread,
 )
 from custom_components.be_electricity_prices.providers._parse import (
@@ -554,6 +555,34 @@ async def test_an_error_element_inside_an_html_page_is_not_a_storage_error() -> 
     session = _FakeBodySession(b"<html><body><Error><Code>x</Code></body></html>")
     with pytest.raises(ExtractorError, match="expected a PDF"):
         await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
+
+
+def test_a_payload_of_blanks_is_told_from_its_first_kilobyte() -> None:
+    """What a payload is gets decided on the event loop. On 64 MiB of blanks
+    the storage error pattern skipped them all, then gave them back one by
+    one: 5 s on a Raspberry Pi. The document itself, behind a BOM and blank
+    lines, is still read."""
+    blanks = b" " * MAX_RESPONSE_BYTES
+    document = (
+        b"\xef\xbb\xbf\r\n<?xml version='1.0'?>\n<Error><Code>AccessDenied</Code>"
+    )
+    for head, code in ((b"", None), (b"<?xml ?>", None), (document, "AccessDenied")):
+        payload = head + blanks
+        start = time.monotonic()
+        assert _pdf_payload._storage_error_code(payload) == code
+        assert not _pdf_payload._is_pdf_payload(payload)
+        assert time.monotonic() - start < 0.5
+    # A BOM after a blank line is no BOM.
+    assert _pdf_payload._storage_error_code(b"\n" + document) is None
+
+
+async def test_a_web_page_behind_a_bom_is_a_web_page() -> None:
+    """The BOM is taken off a card, so a page behind one is the page it is,
+    a missing card, as it is without."""
+    session = _FakeBodySession(b"\xef\xbb\xbf\n<!DOCTYPE html><html></html>")
+    with pytest.raises(ExtractorError) as excinfo:
+        await _fetch_validated_pdf_bytes(session, "https://x/card.pdf")  # type: ignore[arg-type]
+    assert is_missing_card_error(str(excinfo.value))
 
 
 async def test_non_empty_exception_message_is_passed_through() -> None:

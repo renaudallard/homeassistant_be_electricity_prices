@@ -697,7 +697,7 @@ Internals worth knowing:
   corrupt card rather than a few stray bytes. pypdf recovers on its own, so this
   is what keeps the `aligned` and `layout` variants working on such a card.
   A payload that is not a PDF raises `expected a PDF, got a web page, at <url>`
-  when it opens with a tag past any blank space, which `is_missing_card_error`
+  when it opens with a tag past any BOM and blank space, which `is_missing_card_error`
   reads as a card not there, and `expected a PDF, got something else, at <url>`
   otherwise. Both say what came before the address, so the check reads the
   message's start and a cut of the message, where last_error keeps it, cannot
@@ -711,7 +711,10 @@ Internals worth knowing:
   the payload is not a PDF and used to report as a permanent parse failure.
   Azure Blob and S3 both shape it as a root `<Error>` carrying a `<Code>`; the
   match is anchored at the start of the payload so an HTML page that merely
-  mentions such a block is not caught. A hit is wrapped as
+  mentions such a block is not caught. The BOM and blank space ahead of a
+  payload are counted in its first 1024 bytes only, where Acrobat looks for
+  `%PDF`, and the document is matched in the 1024 after: the payload is judged
+  on the event loop, and on 64 MiB of blanks the pattern took 5 s. A hit is wrapped as
   `storage error fetching <url>: the store refused the read` and classifies as
   transient, because no code change can fix it; the `<Code>` goes to the debug
   log. Luminus switched anonymous access off on the storage
