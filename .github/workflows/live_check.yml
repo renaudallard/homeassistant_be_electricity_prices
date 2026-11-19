@@ -428,7 +428,13 @@ jobs:
                    END{
                      if (dropped)
                        printf "\n_%d transient failure(s) that an earlier attempt passed are omitted from the table above; the run log has them._\n", dropped
-                   }' tmp/report/persistent_failures.txt tmp/report/report.md
+                   }' tmp/report/persistent_failures.txt tmp/report/report.md > report.txt
+              # Written by the check job, which runs the readers on what the
+              # suppliers serve, and posted by this one, which writes issues:
+              # in a code block nothing in it can close, so a report that
+              # job was made to write cannot mention, link or embed as the
+              # bot. The tables show as plain text.
+              bash scripts/code_block.sh report.txt
             else
               # No report at all means the harness died before printing
               # (see the CancelledError note in live_check.py). Filing the
@@ -441,9 +447,16 @@ jobs:
 
           # Defensive cap: a mass failure could still blow the limit
           # through the failures table alone. Cut at a line boundary and
-          # point at the run log for the rest.
+          # point at the run log for the rest. The cut takes the closing
+          # fence with it, so a block it left open is closed again: the
+          # first line of backticks alone is the opening fence, and no line
+          # of the report inside it is one that long.
           if [ "$(wc -c < issue_body.md)" -gt 60000 ]; then
             head -c 60000 issue_body.md | sed '$d' > issue_body.tmp
+            fence=$(awk '/^```+$/ { print; exit }' issue_body.tmp)
+            if [ -n "$fence" ]; then
+              printf '%s\n' "$fence" >> issue_body.tmp
+            fi
             printf '\n_[issue body truncated: full report in the run log]_\n' >> issue_body.tmp
             mv issue_body.tmp issue_body.md
           fi
@@ -482,7 +495,8 @@ jobs:
             echo
             echo "## Drift report"
             echo
-            cat tmp/report/drift_report.md
+            # Fenced as the extractor issue's report is, for its reason.
+            bash scripts/code_block.sh tmp/report/drift_report.md
           } > drift_issue_body.md
 
           bash scripts/file_ci_issue.sh \
@@ -544,7 +558,8 @@ jobs:
             echo
             echo "## Catalog diff"
             echo
-            cat tmp/report/catalog_report.md
+            # Fenced as the extractor issue's report is, for its reason.
+            bash scripts/code_block.sh tmp/report/catalog_report.md
           } > catalog_issue_body.md
 
           # Fingerprinted on the failing labels, not the report: the report
@@ -583,7 +598,8 @@ jobs:
             echo
             echo "## Federal tax block"
             echo
-            cat tmp/report/tax_report.md
+            # Fenced as the extractor issue's report is, for its reason.
+            bash scripts/code_block.sh tmp/report/tax_report.md
           } > tax_issue_body.md
 
           # Titled after what failed, as the products issue is. Two kinds of
@@ -642,7 +658,8 @@ jobs:
             echo
             echo "## Network figures"
             echo
-            cat tmp/report/network_report.md
+            # Fenced as the extractor issue's report is, for its reason.
+            bash scripts/code_block.sh tmp/report/network_report.md
           } > network_issue_body.md
 
           # Titled after what failed, as the tax issue is. A regulator's
@@ -692,7 +709,8 @@ jobs:
             echo
             echo "## Card editions"
             echo
-            cat tmp/report/edition_report.md
+            # Fenced as the extractor issue's report is, for its reason.
+            bash scripts/code_block.sh tmp/report/edition_report.md
           } > edition_issue_body.md
 
           bash scripts/file_ci_issue.sh \

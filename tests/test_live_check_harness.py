@@ -2415,6 +2415,7 @@ def _file_catalog_issue(
     )
     script = re.sub(r"\$\{\{[^}]*\}\}", "x", script)
     (tmp_path / "scripts").mkdir()
+    shutil.copy(_CODE_BLOCK, tmp_path / "scripts")
     (tmp_path / "scripts" / "file_ci_issue.sh").write_text(
         'while [ $# -gt 0 ]; do [ "$1" = --title ] && printf %s "$2" > title; '
         '[ "$1" = --label ] && printf %s "$2" > label; '
@@ -2452,30 +2453,153 @@ def test_the_products_issue_is_titled_after_what_failed(tmp_path: Path) -> None:
     ) == ("[live-check] a registered product left the supplier listing")
 
 
-def _extractor_issue_body(tmp_path: Path, persistent: str, report: str) -> str:
-    """The body the extractor issue step writes from these two hand-overs,
-    read as bytes, since text mode would turn a CR into a line ending."""
+# The script the issue job fences each report with.
+_CODE_BLOCK = Path(__file__).resolve().parents[1] / "scripts" / "code_block.sh"
+
+# Each issue step, the report it posts and the body it writes.
+_POSTED_REPORTS = [
+    ("Open or update extractor-broken issue", "report.md", "issue_body.md"),
+    ("Open or update drift issue", "drift_report.md", "drift_issue_body.md"),
+    ("Open or update new-products issue", "catalog_report.md", "catalog_issue_body.md"),
+    ("Open or update tax-block issue", "tax_report.md", "tax_issue_body.md"),
+    (
+        "Open or update network-figure issue",
+        "network_report.md",
+        "network_issue_body.md",
+    ),
+    (
+        "Open or update card-editions issue",
+        "edition_report.md",
+        "edition_issue_body.md",
+    ),
+]
+
+
+def _posted_body(
+    tmp_path: Path, posted: tuple[str, str, str], persistent: str, report: str
+) -> str:
+    """The body an issue step writes, run under bash -e as the runner runs
+    it, from ``report`` handed over as its report and ``persistent`` as every
+    list of failing labels; read as bytes, since text mode would turn a CR
+    into a line ending."""
     import yaml  # type: ignore[import-untyped]
 
+    step, report_name, body_name = posted
     workflow = yaml.safe_load(
         (
             Path(__file__).resolve().parents[1] / ".github/workflows/live_check.yml"
         ).read_text()
     )
     script = next(
-        s["run"]
-        for s in workflow["jobs"]["file"]["steps"]
-        if s.get("name") == "Open or update extractor-broken issue"
+        s["run"] for s in workflow["jobs"]["file"]["steps"] if s.get("name") == step
     )
     script = re.sub(r"\$\{\{[^}]*\}\}", "x", script)
     (tmp_path / "scripts").mkdir()
+    shutil.copy(_CODE_BLOCK, tmp_path / "scripts")
     (tmp_path / "scripts" / "file_ci_issue.sh").write_text("exit 0\n")
     handed = tmp_path / "tmp" / "report"
     handed.mkdir(parents=True)
-    (handed / "persistent_failures.txt").write_bytes(persistent.encode())
-    (handed / "report.md").write_bytes(report.encode())
-    subprocess.run(["bash", "-c", script], cwd=tmp_path, check=True)
-    return (tmp_path / "issue_body.md").read_bytes().decode()
+    for name in ("persistent", "catalog", "tax", "network", "edition"):
+        (handed / f"{name}_failures.txt").write_bytes(persistent.encode())
+    (handed / report_name).write_bytes(report.encode())
+    subprocess.run(["bash", "-e", "-c", script], cwd=tmp_path, check=True)
+    return (tmp_path / body_name).read_bytes().decode()
+
+
+def _extractor_issue_body(tmp_path: Path, persistent: str, report: str) -> str:
+    """The body the extractor issue step writes from these two hand-overs."""
+    return _posted_body(tmp_path, _POSTED_REPORTS[0], persistent, report)
+
+
+def _rendered(body: str) -> str:
+    """The lines of ``body`` outside its fenced code blocks, which GitHub
+    renders as markdown. By CommonMark's rule a block opens on a line of
+    three or more backticks or tildes, indented at most three spaces, and
+    closes on a line of at least as many of the same character and nothing
+    else but spaces and tabs."""
+    outside: list[str] = []
+    fence = ""
+    for line in body.split("\n"):
+        text = line.lstrip(" ")
+        run = re.match(r"`{3,}|~{3,}", text) if len(line) - len(text) <= 3 else None
+        if not fence:
+            if run is not None and (run[0][0] == "~" or "`" not in text[run.end() :]):
+                fence = run[0]
+            else:
+                outside.append(line)
+        elif (
+            run is not None
+            and run[0][0] == fence[0]
+            and len(run[0]) >= len(fence)
+            and not text[run.end() :].strip(" \t")
+        ):
+            fence = ""
+    return "\n".join(outside)
+
+
+# What a report must never get rendered: a mention, an image, a link, a tag,
+# and the fences and line endings that would let them out of a code block.
+_CRAFTED_REPORT = (
+    "# Live extractor check: 0 pass, 1 fail\n\n## Failures\n\n"
+    "| `acme/fix/flanders: fetch` | `HTTP 404` |\n"
+    "```\n@someone a mention\n"
+    "   `````\n![an image](https://evil.example/x.png)\n"
+    "~~~~\n[a link](https://evil.example)\n"
+    "```\r```\n<img src=https://evil.example/y.png>\n"
+    "\x00```\x00```\x00```\n@someone again"
+)
+_CRAFTED = ("@someone", "![an image]", "[a link]", "evil.example", "<img", "~~~~")
+
+
+@pytest.mark.parametrize("posted", _POSTED_REPORTS, ids=lambda p: p[1])
+def test_a_report_is_posted_in_a_code_block_it_cannot_close(
+    tmp_path: Path, posted: tuple[str, str, str]
+) -> None:
+    """The reports are written by the job that runs the readers on what the
+    suppliers serve, and were posted as markdown by the job that writes
+    issues: a report that job was made to write could mention, link and
+    embed as the bot. Each is posted in a block fenced longer than any run
+    of backticks in it, counted once its control characters are gone, since
+    a CR or a NUL dropped later would join two runs. A report not ending
+    in a newline still has its block closed on a line of its own."""
+    body = _posted_body(
+        tmp_path,
+        posted,
+        "acme/fix/flanders: fetch\n",
+        f"{_CRAFTED_REPORT}\n\n## All checks\n\n- [x] a",
+    )
+    assert "\r" not in body and "\x00" not in body
+    rendered = _rendered(body)
+    for crafted in _CRAFTED:
+        assert crafted in body
+        assert crafted not in rendered
+    # The longest run is the nine backticks the three NULs kept apart.
+    assert body.count(f"\n{'`' * 10}\n") == 2
+
+
+@pytest.mark.parametrize(
+    ("failures", "fenced"),
+    [
+        ("acme/fix/flanders: fetch\n", True),
+        ("acme/fix/flanders: fetch\n" * 3000, False),
+    ],
+)
+def test_a_report_cut_at_the_limit_stays_in_its_code_block(
+    tmp_path: Path, failures: str, fenced: bool
+) -> None:
+    """A body near GitHub's limit is cut, which takes the closing fence
+    with it: the block is closed again before the note. A cut that falls in
+    the persistent failures, before the report, has no block to close."""
+    body = _extractor_issue_body(tmp_path, failures, f"{_CRAFTED_REPORT}\n" * 400)
+    assert len(body.encode()) <= 60100
+    rendered = _rendered(body)
+    assert rendered.endswith(
+        "\n\n_[issue body truncated: full report in the run log]_\n"
+    )
+    for crafted in _CRAFTED:
+        assert (crafted in body) is fenced
+        assert crafted not in rendered
+    assert body.count(f"\n{'`' * 10}\n") == (2 if fenced else 0)
 
 
 def test_the_extractor_issue_names_the_rows_an_earlier_attempt_passed(

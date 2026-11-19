@@ -1845,6 +1845,18 @@ with lose their backticks and CRs before each is put in its span
 row an earlier attempt passed reads the list and the table's labels the same way, a pipe
 included (`test_a_persistent_failure_keeps_its_row_whatever_its_label_holds`).
 
+The issues do not rest on those spans. The reports are written by the check job, the one that
+runs the readers on what the suppliers serve, and posted by the `file` job, the one that writes
+issues: posted as markdown, a report the check job was made to write could mention, link and
+embed as the bot. The `file` job posts each of the six inside a fenced code block of its own
+making (`scripts/code_block.sh`, tr and awk on the file and no code of the integration). The
+report's control characters go first, since a CR ends a line and one dropped later would join two
+runs of backticks, and the fence is one backtick longer than the longest run left, so no line of
+the report closes it. An extractor body cut at the 60,000 byte cap has its block closed again
+before the note that says so. The tables therefore show as plain text in the issues
+(`test_a_report_is_posted_in_a_code_block_it_cannot_close`,
+`test_a_report_cut_at_the_limit_stays_in_its_code_block`).
+
 On `pull_request` events the `file` job is skipped; instead a final step of `check` fails the PR
 check if any bit other than the catalog-only bit is set (`rc & ~2`), since a new-product signal is
 informational, not a regression (`.github/workflows/live_check.yml`). A separate step fails the
