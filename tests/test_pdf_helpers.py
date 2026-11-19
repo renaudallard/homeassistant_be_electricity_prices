@@ -54,6 +54,7 @@ from custom_components.be_electricity_prices.providers._parse import (
     numeric_row,
     parse_brussels_osp,
     parse_sign,
+    to_float,
 )
 from custom_components.be_electricity_prices.providers._pdf import (
     MAX_RESPONSE_BYTES,
@@ -597,6 +598,31 @@ async def test_non_empty_exception_message_is_passed_through() -> None:
 
 
 # ---- vat_multiplier ----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "value"),
+    [("15,93", 15.93), ("0.102", 0.102), ("5\u202f029", 5029.0), ("-0,5", -0.5)],
+)
+def test_to_float_reads_a_figure_as_cards_print_it(text: str, value: float) -> None:
+    assert to_float(text) == value
+
+
+@pytest.mark.parametrize(
+    "text", ["inf", "-Infinity", "nan", pytest.param("9" * 400, id="400 digits")]
+)
+def test_to_float_refuses_what_is_no_finite_figure(text: str) -> None:
+    """float() reads an infinity and a NaN, and makes an infinity of a run of
+    digits too long for it."""
+    with pytest.raises(ValueError, match="not a finite figure"):
+        to_float(text)
+
+
+def test_a_vat_rate_too_long_to_be_finite_is_refused() -> None:
+    """A card printing a rate of 400 digits gave a multiplier of infinity,
+    which no bound held: every price grossed by it was infinite."""
+    with pytest.raises(ValueError):
+        vat_multiplier("TVA " + "9" * 400 + "%", r"TVA\s*(\d+)\s*%")
 
 
 def test_vat_multiplier_single_pattern_matches() -> None:

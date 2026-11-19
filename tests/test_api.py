@@ -543,6 +543,16 @@ def test_energy_charts_skips_a_null_slot_rather_than_zeroing_it() -> None:
         # The timestamp side too: datetime.fromtimestamp raises ValueError on
         # NaN and OverflowError on inf, neither of which the caller catches.
         ("nan timestamp", '{"unix_seconds":[NaN],"price":[100.0]}'),
+        # An integer of 309 digits or more is read as an int no float holds,
+        # and float() raised OverflowError on it out of the fallback.
+        (
+            "long integer price",
+            '{"unix_seconds":[1788127200],"price":[1%s]}' % ("0" * 400),
+        ),
+        (
+            "long integer timestamp",
+            '{"unix_seconds":[1%s],"price":[100.0]}' % ("0" * 400),
+        ),
     ],
 )
 def test_energy_charts_rejects_a_non_finite_point(label: str, body: str) -> None:

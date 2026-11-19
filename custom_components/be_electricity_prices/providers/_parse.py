@@ -179,7 +179,13 @@ def to_float(text: str) -> float:
     cleaned = text.strip()
     for sep in _NUMERIC_SEPARATORS:
         cleaned = cleaned.replace(sep, "")
-    return float(cleaned.replace(",", "."))
+    value = float(cleaned.replace(",", "."))
+    if not math.isfinite(value):
+        # float() reads "inf" and "nan", and makes an infinity of a run of
+        # digits too long for it: no figure a card prints, and a bound such
+        # as a VAT rate's does not hold to it.
+        raise ValueError("not a finite figure")
+    return value
 
 
 def finite_number(value: object) -> float | None:

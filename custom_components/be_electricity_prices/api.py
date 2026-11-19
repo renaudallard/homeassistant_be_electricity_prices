@@ -59,6 +59,7 @@ from .const import (
     SMARD_BE_URL,
     SMARD_QUARTERS_FROM,
 )
+from .providers._parse import finite_number
 from .providers._pdf import checked_request, error_text, read_text_capped
 from .providers.base import ExtractorError
 
@@ -685,29 +686,25 @@ def _bucket_slots(
     sums: dict[datetime, float] = {}
     counts: dict[datetime, int] = {}
     for raw_when, raw_price in points:
-        if not isinstance(raw_when, (int, float)) or not isinstance(
-            raw_price, (int, float)
-        ):
+        stamp, price = finite_number(raw_when), finite_number(raw_price)
+        if stamp is None or price is None:
             # A gap is published as null. Skipping leaves the slot absent,
             # which every caller already reads as "no data for that slot".
-            continue
-        if not math.isfinite(raw_when) or not math.isfinite(raw_price):
-            # json.loads accepts the NaN / Infinity / -Infinity literals by
-            # default, and overflows a long numeric literal like 1e400 to inf,
-            # so a malformed price reaches the cache as a real-looking number.
-            # The XML parser rejects these (see parse_day_ahead_xml) and this
-            # one has to as well, because the two sources are interchangeable
-            # to every caller downstream: the value spreads through
-            # factor*spot + base, through _mean_of_month into a spot-monthly
-            # contract's whole flat rate, and through the backfill into
-            # recorder statistics, which outlive the response that carried it.
-            # Skipped rather than raised, matching the rule one line up: an
-            # unusable point costs its own slot, not the whole window.
+            # json.loads also accepts the NaN / Infinity / -Infinity literals,
+            # overflows a long float literal like 1e400 to inf, and reads an
+            # integer literal of 309 digits or more as an int no float holds,
+            # which float() raised OverflowError on, out of the fallback and
+            # the tick. The XML parser rejects these (see parse_day_ahead_xml)
+            # and this one has to as well, because the two sources are
+            # interchangeable to every caller downstream: the value spreads
+            # through factor*spot + base, through _mean_of_month into a
+            # spot-monthly contract's whole flat rate, and through the
+            # backfill into recorder statistics, which outlive the response
+            # that carried it. Each is skipped like a gap: an unusable point
+            # costs its own slot, not the whole window.
             continue
         try:
-            when = datetime.fromtimestamp(
-                float(raw_when) / (1000.0 if millis else 1.0), UTC
-            )
+            when = datetime.fromtimestamp(stamp / (1000.0 if millis else 1.0), UTC)
         except (OverflowError, OSError, ValueError):
             # Finite but not an instant the platform can represent (1e18, or
             # a negative year): skipped like a null gap, so the point costs
@@ -720,7 +717,7 @@ def _bucket_slots(
             continue
         quarter = quarter_hourly and (quarters_from is None or when >= quarters_from)
         slot = when if quarter else when.replace(minute=0, second=0, microsecond=0)
-        sums[slot] = sums.get(slot, 0.0) + float(raw_price) / 1000.0
+        sums[slot] = sums.get(slot, 0.0) + price / 1000.0
         counts[slot] = counts.get(slot, 0) + 1
     return {slot: sums[slot] / counts[slot] for slot in sums}
 

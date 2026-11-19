@@ -218,8 +218,11 @@ Five properties are load-bearing:
   of the slots inside it. Both go through the same `_bucket_slots` (`api.py`).
 - **It rejects the same non-finite points the XML parser does.** `json.loads`
   accepts the `NaN` / `Infinity` / `-Infinity` literals by default and overflows
-  a long numeric literal such as `1e400` to `inf`, so without a `math.isfinite`
-  test a malformed response reaches the spot cache as a real-looking number.
+  a long numeric literal such as `1e400` to `inf`, so without a finiteness
+  test (`finite_number`) a malformed response reaches the spot cache as a
+  real-looking number. An integer literal of 309 digits or more it reads as an
+  int no float holds, on which `float()` raised OverflowError out of the
+  fallback and the tick: it is skipped the same way.
   Since the two sources are interchangeable to every caller, the value then
   spreads exactly as `parse_day_ahead_xml` warns: through `factor*spot + base`,
   through `_mean_of_month` into a spot-monthly contract's whole flat rate, and
