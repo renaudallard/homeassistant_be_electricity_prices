@@ -1907,7 +1907,11 @@ The OCR issues and the failure issue run in two small jobs after these, `ocr` an
 The `ocr` job holds `github.token` alone and takes the walk's list of cards the OCR could not read,
 and of the glyphs its library lacks (`ocr-price-cards unlearnt`, run in the walk without a token),
 as an artifact, so that token does not share a runner with the readers and the engine either; the
-same test holds `github.token` to the rule the cards token follows.
+same test holds `github.token` to the rule the cards token follows. The glyph step has thirty
+minutes of its own, since it runs before the uploads that hand the walk over: a card the tool never
+returned on held the job to its seven hours and lost a walk that had succeeded. Stopped at its
+limit it fails like a crash, which `continue-on-error` lets pass, and the walk is handed over
+(`test_the_glyph_check_cannot_hold_the_hand_over`).
 
 The `Keep the cards themselves` step (`.github/workflows/archive_cards.yml`) uploads the
 PDFs the script wrote under `tmp/pdfs` to releases of `renaudallard/be_price_cards`, a repository

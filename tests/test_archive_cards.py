@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -4744,6 +4745,27 @@ def test_the_walk_s_lists_stay_in_their_code_block(
         "- ```",
         "- @renaudallard [x](https://evil.example) ![](https://evil.example/p.png)",
     ]
+
+
+def test_the_glyph_check_cannot_hold_the_hand_over() -> None:
+    """The check runs the OCR tool on the cards before the uploads that hand
+    the walk over. With no limit of its own, a card the tool never returned
+    on held the job to its limit: nothing was uploaded and a walk that had
+    succeeded was lost. Stopped at its limit the step fails, which
+    continue-on-error lets pass, and the longest walk still leaves it room."""
+    walk = _archive_jobs()["walk"]
+    names = [step.get("name") or step.get("uses", "") for step in walk["steps"]]
+    find = next(n for n, name in enumerate(names) if name.startswith("Find glyphs"))
+    uploads = [
+        n for n, name in enumerate(names) if name.startswith("actions/upload-artifact")
+    ]
+    assert len(uploads) == 3 and find < min(uploads)
+    step = walk["steps"][find]
+    assert step["continue-on-error"] is True
+    store = next(s for s in walk["steps"] if s.get("id") == "store")
+    budgets = store["timeout-minutes"].split("&&")[-1]
+    longest = max(int(n) for n in re.findall(r"\b\d+\b", budgets))
+    assert 0 < step["timeout-minutes"] < walk["timeout-minutes"] - longest
 
 
 def test_a_failed_upload_still_records_what_landed(tmp_path: Path) -> None:

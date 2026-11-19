@@ -160,6 +160,15 @@ jobs:
         # third-party code, run on what the suppliers serve.
         if: steps.store.outcome == 'success'
         continue-on-error: true
+        # A limit of its own, since the uploads below are what hands the walk
+        # over: a card the tool never returned on held the job to its seven
+        # hours, and a walk that had succeeded was lost with it. It reads
+        # only the PDFs this run stored, one at a time, and half an hour
+        # still ends inside the job's limit after a walk of six hours. A
+        # step stopped at its limit fails like any other, which
+        # continue-on-error lets pass: the cards it did not reach are not
+        # checked that day, and nothing is filed.
+        timeout-minutes: 30
         run: |
           [ -d tmp/pdfs ] || exit 0
           mapfile -d '' cards < <(find tmp/pdfs -name '*.pdf' -print0 | sort -z)
