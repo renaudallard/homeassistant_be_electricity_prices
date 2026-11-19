@@ -1597,6 +1597,81 @@ def test_november_2026_fixed_and_indexed_cards_are_not_interchangeable(
         parse_snapshot(layout, "t://x", contract, plain=plain)
 
 
+_FIXED_PRICE = "18,26 looptijd van het contract .\n(c€/kWh)"
+_ZONNESTROOM = "3,43 een variabele terugleververgoeding volgens de formule:\n(c€/kWh)"
+
+
+@pytest.mark.parametrize(
+    ("name", "contract", "printed", "restated"),
+    [
+        (
+            "energiebe_fixed_aug.pdf",
+            "energiebe_fixed",
+            _FIXED_PRICE,
+            _FIXED_PRICE.replace("18,26", "0,1826").replace("(c€/kWh)", "(€/kWh)"),
+        ),
+        ("energiebe_fixed_aug.pdf", "energiebe_fixed", _FIXED_PRICE, "18,26 looptijd"),
+        (
+            "energiebe_fixed_aug.pdf",
+            "energiebe_fixed",
+            _ZONNESTROOM,
+            _ZONNESTROOM.replace("3,43", "0,0343").replace("(c€/kWh)", "(€/kWh)"),
+        ),
+        (
+            "energiebe_variable_aug.pdf",
+            "energiebe_variable",
+            _ZONNESTROOM,
+            _ZONNESTROOM.replace("3,43", "0,0343").replace("(c€/kWh)", "(€/kWh)"),
+        ),
+    ],
+    ids=["fixed price", "fixed price unsaid", "fixed feed-in", "variable feed-in"],
+)
+def test_a_price_restated_in_another_unit_is_refused(
+    name: str, contract: str, printed: str, restated: str
+) -> None:
+    """The bracket under a price is the only statement of its unit: read
+    without it, a price restated in €/kWh was a hundredth of itself."""
+    text = fixture_text(name, layout=True)
+    assert printed in text
+    parse_snapshot(text, "t://x", contract)
+    with pytest.raises(ExtractorError, match="expected 'c€/kWh'"):
+        parse_snapshot(text.replace(printed, restated), "t://x", contract)
+
+
+_ROW = "23,12 35 4,83 1,17 0,39\nc€/kWh €/jaar c€/kWh c€/kWh c€/kWh"
+
+
+@pytest.mark.parametrize(
+    "restated",
+    [
+        "0,2312 35 4,83 1,17 0,39\n€/kWh €/jaar c€/kWh c€/kWh c€/kWh",
+        "23,12 2,92 4,83 1,17 0,39\nc€/kWh €/maand c€/kWh c€/kWh c€/kWh",
+        "23,12 35 0,0483 1,17 0,39\nc€/kWh €/jaar €/kWh c€/kWh c€/kWh",
+        "23,12 35 4,83 1,17 0,39\nc€/kWh €/jaar c€/kWh c€/kWh",
+    ],
+    ids=["price", "fee", "feed-in", "unit missing"],
+)
+def test_a_november_2026_row_restated_in_another_unit_is_refused(
+    restated: str,
+) -> None:
+    """The line under the price row is the only statement of its units."""
+    layout, plain = _nov("energiebe_fixed_nov.pdf")
+    assert _ROW in layout
+    with pytest.raises(ExtractorError, match="price row is in"):
+        parse_snapshot(
+            layout.replace(_ROW, restated), "t://x", "energiebe_fixed", plain=plain
+        )
+
+
+def test_a_november_2026_row_s_fee_unit_is_held_to_a_year_alone() -> None:
+    """As the older template's standing charge is: a render dropping the
+    € of "€/jaar" leaves the card read."""
+    layout, plain = _nov("energiebe_fixed_nov.pdf")
+    text = layout.replace(_ROW, _ROW.replace("€/jaar", "?/jaar"))
+    snap = parse_snapshot(text, "t://x", "energiebe_fixed", plain=plain)
+    assert snap.energy.yearly_fixed_fee == pytest.approx(35.0)
+
+
 def test_a_november_2026_card_without_its_plain_text_is_refused() -> None:
     layout, _plain = _nov("energiebe_dynamic_nov.pdf")
     with pytest.raises(ExtractorError, match="plain text"):

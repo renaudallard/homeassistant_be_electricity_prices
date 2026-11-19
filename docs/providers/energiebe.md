@@ -295,6 +295,17 @@ EUR/MWh it would parse clean with its base ten times too large. The formula's un
 follow the parenthesis itself, because the layout reading puts the price column's own
 `(c€/kWh)` heading on the next line.
 
+The printed figures are held to their units too, since each is stated once and a figure
+restated in €/kWh would read a hundredth of itself. Up to October 2026 the fixed card's
+price opens the line under "Energieprijs" (`18,26 looptijd van het contract .`) and the
+"Zonnestroom" feed-in indicative the line under its label, each with `(c€/kWh)` on the line
+under it (`_require_unit_below`). The November 2026 price row has its units on the line
+under its values, `c€/kWh €/jaar c€/kWh c€/kWh c€/kWh`, the last wrapped onto the next line
+on the dynamic and variable cards (`_require_row_units`); the standing charge's is held to
+`/jaar` alone, as `_FEE_RE` holds the older template's. A figure stating another unit, or
+none, is refused with the units found and those expected. Every card from December 2025 to
+November 2026 states them so.
+
 ## Energy formula
 
 `_extract_energy` (`providers/energiebe.py`) parses the formula row with `_ENERGY_RE`
@@ -682,6 +693,7 @@ contribution 0), so the pair covers both sides of that change.
 | "energie.be: injection indicative row not found" | `_INJECTION_CURRENT_RE` | the variable card's "Zonnestroom" column label changed |
 | Variable price plausible but consistently off | the `spot_monthly` mean, not the parser | the month is still filling in, or the ENTSO-E cache has gaps; the rate firms up as the month completes |
 | "energie.be: the energy formula's unit is ..." (or "index unit", or the injection formula's) | `_FORMULA_UNIT_RE`, `_INDEX_UNIT_RE` | the card states a formula or its index in another unit, or no longer prints the unit where it did; rescale the reader before accepting a new spelling |
+| "energie.be: the fixed energy price is in ..." (or the feed-in indicative), "the price row is in ..." | `_UNIT_BELOW_RE`, `_ROW_UNITS` | the card states a price, the standing charge or the feed-in in another unit, or moved the line that states it; rescale the reader before accepting a new spelling |
 | Wrong per-kWh price after a card update | the c€/kWh conversion in `_extract_energy` | energie.be changed a formula's scale without restating its unit, or the VAT treatment changed |
 | "energie.be: vaste vergoeding row not found" | `_FEE_RE` | the "Vaste vergoeding ... (€/jaar)" label reworded |
 | Solar credit wrong or "injection formula row not found" | `_INJECTION_RE` | the "Terugleveringsvergoeding" section header reworded, or the sign dropped |

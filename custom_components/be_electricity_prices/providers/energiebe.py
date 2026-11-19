@@ -287,6 +287,44 @@ _INDEX_UNIT_RE = re.compile(
 # ABSENCE of an indexation formula.
 _FIXED_ENERGY_RE = re.compile(rf"Energieprijs\s+{_NUM}", re.IGNORECASE)
 _VASTE_PRIJS_RE = re.compile(r"energieprijs\s+is\s+een\s+vaste\s+prijs", re.IGNORECASE)
+# A figure that opens its line has its unit in the bracket on the line under
+# it: "20,05 looptijd van het contract ." over "(c€/kWh)" under the fixed
+# card's "Energieprijs", and "3,97 een variabele terugleververgoeding ..."
+# over "(c€/kWh)" under every card's "Zonnestroom", up to October 2026. It is
+# the only statement of either's unit, and a price restated in €/kWh would
+# read a hundredth of itself, so only "c€/kWh" is taken.
+_UNIT_BELOW_RE = re.compile(r"[^\n]*\n[ \t]*\(([^()\n]{0,30})\)")
+# The units of the November 2026 price row, on the line under its values:
+# the price, the standing charge, the feed-in and the two levies, "c€/kWh
+# €/jaar c€/kWh c€/kWh c€/kWh", the last wrapped onto the line after on the
+# dynamic and variable cards. The standing charge's is held to "/jaar" alone,
+# as _FEE_RE holds it, so a render dropping its € leaves the card read.
+_ROW_UNITS = ("c€/kWh", "/jaar", "c€/kWh", "c€/kWh", "c€/kWh")
+_ROW_UNITS_REACH = 200
+
+
+def _require_unit_below(text: str, figure: re.Match[str], what: str) -> None:
+    """Refuse ``figure`` unless the line under its own states "(c€/kWh)"."""
+    below = _UNIT_BELOW_RE.match(text, figure.end())
+    unit = None if below is None else below.group(1)
+    if unit != "c€/kWh":
+        raise ExtractorError(
+            f"energie.be: the {what} is in {unit!r}, expected 'c€/kWh'"
+        )
+
+
+def _require_row_units(text: str, row: re.Match[str]) -> None:
+    """Refuse the price row unless the lines under it state its units."""
+    lines = text[row.end() : row.end() + _ROW_UNITS_REACH].split("\n")[1:3]
+    units = " ".join(lines).split()[: len(_ROW_UNITS)]
+    if len(units) < len(_ROW_UNITS) or not all(
+        unit == want or (want == "/jaar" and unit.endswith(want))
+        for unit, want in zip(units, _ROW_UNITS, strict=True)
+    ):
+        raise ExtractorError(
+            f"energie.be: the price row is in {units!r}, expected {_ROW_UNITS!r}"
+        )
+
 
 # The printed monthly indicative, left of the formula in its own column. The
 # sign is captured: this formula (0,60 x Belpex_SPP - 0,80) prints NEGATIVE
@@ -549,6 +587,7 @@ def parse_snapshot(
     if row is not None:
         if plain is None:
             raise ExtractorError("energie.be: card read without its plain text")
+        _require_row_units(section, row)
         formulas, levies = _residential(plain), (_ROW_GSC_RE, _ROW_WKK_RE)
     if fixed:
         energy: EnergyRates = _extract_fixed_energy(formulas, row)
@@ -724,6 +763,7 @@ def _extract_fixed_energy(text: str, row: re.Match[str] | None) -> FixedRates:
     m = _FIXED_ENERGY_RE.search(text)
     if not m:
         raise ExtractorError("could not parse energie.be fixed energy price")
+    _require_unit_below(text, m, "fixed energy price")
     return FixedRates(
         single=to_float(m.group(1)) / 100.0,
         yearly_fixed_fee=_yearly_fee(text),
@@ -765,6 +805,7 @@ def _extract_monthly_injection(
     if indicative is None:
         current = _INJECTION_CURRENT_RE.search(text)
         if current is not None:
+            _require_unit_below(text, current, "feed-in indicative")
             indicative = parse_sign(current.group(1)) * to_float(current.group(2))
     if formula and not formula.group("spp"):
         raise ExtractorError(
