@@ -2748,13 +2748,42 @@ def test_each_field_of_a_cross_reference_stream_s_entry_counts(
         extract_pdf_text(_object_stream_pdf(0, free=1000))
 
 
+def _undefined_pdf(references: int, padding: int) -> bytes:
+    """A PDF of ``padding`` bytes and more whose page tree names
+    ``references`` times an object it does not define."""
+    return _pdf_from(
+        (
+            b"<</Type/Catalog/Pages 2 0 R>>",
+            b"<</Type/Pages/Kids[3 0 R" + b" 9 0 R" * references + b"]/Count 1>>",
+            b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>",
+            b"<</Length %d>>\nstream\n%s\nendstream" % (padding, b"x" * padding),
+        )
+    )
+
+
+def test_a_search_of_the_whole_file_counts_its_length(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pypdf answers a reference to an object its table lacks by copying
+    the whole file and searching it, and keeps no note that it found none,
+    so the read cost its references times its size with each counting as
+    one object parsed: 2000 of them took 60 s in a file of 2 MB. Each
+    search counts the file's length."""
+    monkeypatch.setattr(_pdf_bound, "_MAX_DECODED_STREAM_BYTES", 1 << 20)
+    refused = r"^PDF streams decode to more than 1048576"
+    with pytest.raises(ExtractorError, match=refused):
+        extract_pdf_text(_undefined_pdf(40, 50_000))
+    with pytest.raises(CardNotReadableError, match="no text layer"):
+        extract_pdf_text(_undefined_pdf(5, 50_000))
+
+
 def test_the_reader_count_is_put_over_wrappers_that_lack_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Like the character count, the count of what pypdf's reader module
-    passes over and reads of a cross-reference stream goes in over the
-    wrappers a release from before put in place without it, once, and
-    leaves them as they are."""
+    passes over, reads of a cross-reference stream and searches goes in
+    over the wrappers a release from before put in place without it, once,
+    and leaves them as they are."""
     from pypdf.generic import EncodedStreamObject
 
     reader = vars(_pdf_bound.pypdf_reader)
@@ -2764,6 +2793,7 @@ def test_the_reader_count_is_put_over_wrappers_that_lack_it(
         "skip_over_whitespace",
         "skip_over_comment",
         "convert_to_int",
+        "re",
     )
     for name in names:
         monkeypatch.setitem(reader, name, lambda *args: None)

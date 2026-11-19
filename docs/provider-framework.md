@@ -782,8 +782,13 @@ Internals worth knowing:
   stream served 16 pages kept pdfplumber busy for 100 s); each inflate counts,
   every step of a stream inflated more than once, and is held to what is left
   of the bound before it is held, the cross-reference and object streams the
-  readers inflate opening the file included; and a stream counts what its
-  decoding hands back past its last inflate. A check made beforehand, on a
+  readers inflate opening the file included; a stream counts what its
+  decoding hands back past its last inflate; and a search pypdf makes of
+  the whole file, which it copies and searches for each reference to an
+  object its table lacks or misplaces, counts the file's length (2000
+  references to an object not defined took 60 s in a file of 2 MB, each
+  counting as one object parsed; no shipped fixture has pypdf make one).
+  A check made beforehand, on a
   reading of the file, missed what the readers do: pypdf counted nothing for a
   page's content written into the page (a 175 kB file decoded 60 MB), a form
   once however often it was drawn (a 934 B file took 77 s) and a ToUnicode map

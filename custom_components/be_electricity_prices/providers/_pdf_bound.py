@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import re
 import sys
 import threading
 import zlib
@@ -515,6 +516,26 @@ def _passed_over(skip: Any) -> Any:
     return counted
 
 
+class _FileSearch:
+    """``re`` as pypdf's reader module sees it, which only searches the
+    whole file with it, a copy it makes each time, for an object its table
+    lacks or misplaces, and keeps no note of one it did not find: while a
+    card is read each search counts the file's length as bytes decoded.
+    2000 references to an object not defined took 60 s in a file of 2 MB,
+    each counting as one object parsed. No shipped fixture, nor any of
+    the 4879 cards the archive held on 2026-11-19, has pypdf make one."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(re, name)
+
+    @staticmethod
+    def search(pattern: Any, string: Any, *args: Any, **kwargs: Any) -> Any:
+        reading = _READING.get()
+        if reading is not None:
+            reading.charge(len(string))
+        return re.search(pattern, string, *args, **kwargs)
+
+
 def _font_range(*args: SupportsIndex) -> range:
     """``range``, as the readers' font modules find it ahead of the builtin
     one, every loop of theirs building a font going through it: counted
@@ -660,16 +681,18 @@ def _count_pypdf_reader() -> None:
     reader module passes over a byte at a time, through its
     ``read_non_whitespace``, ``skip_over_whitespace`` and
     ``skip_over_comment``, and each field of an entry it reads of a
-    cross-reference stream, through its ``convert_to_int``. Done once
-    whatever the copy of this module, over the other wrappers too where a
-    release of either integration from before put them in place without
-    these."""
+    cross-reference stream, through its ``convert_to_int``, and as decoded
+    the file's length for each search it makes of the whole file, through
+    its ``re``. Done once whatever the copy of this module, over the other
+    wrappers too where a release of either integration from before put them
+    in place without these."""
     reader = vars(pypdf_reader)
     if hasattr(reader["skip_over_whitespace"], _MARK):
         return
     for name in ("read_non_whitespace", "skip_over_whitespace", "skip_over_comment"):
         reader[name] = _passed_over(reader[name])
     reader["convert_to_int"] = _parsed(reader["convert_to_int"])
+    reader["re"] = _FileSearch()
     setattr(reader["skip_over_whitespace"], _MARK, True)
 
 
@@ -861,7 +884,9 @@ def bounded_pypdf() -> Iterator[None]:
     pypdf inflates opening the file included; a damaged FlateDecode
     stream, which pypdf recovers a byte at a time to its end, counts again
     as pdfminer's does, its length too; a stream counts what its decoding
-    hands back past its last inflate; and a font load counts
+    hands back past its last inflate; a search of the whole file, which
+    pypdf makes for each reference to an object its table lacks or
+    misplaces, counts the file's length; and a font load counts
     :data:`_FONT_LOAD_BYTES`, pypdf loading the same dictionary to the same
     font once a read. LZW, run length, CCITT fax and JBIG2 are refused,
     since pypdf never decodes an image to read text, and ASCII85 past
