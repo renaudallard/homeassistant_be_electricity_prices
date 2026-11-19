@@ -43,6 +43,7 @@ import argparse
 import asyncio
 import importlib
 import importlib.util as iu
+import io
 import itertools
 import json
 import re
@@ -6660,18 +6661,18 @@ async def _run(texts: Path | None = None) -> int:
     # process CWD so a developer running this script from any directory
     # gets the file alongside the existing logs (CI happens to invoke
     # from repo root, so behaviour there is unchanged).
-    (ROOT / "catalog_report.md").write_text(_render_report(catalog_checks))
+    _hand_over(ROOT / "catalog_report.md", _render_report(catalog_checks))
     # Its own file, so the workflow can title the issue after what actually
     # failed. A tax block that disagrees is a supplier printing a levy the
     # month's other cards do not, which is neither a new product nor
     # something a release here fixes.
-    (ROOT / "tax_report.md").write_text(_render_report(tax_checks))
+    _hand_over(ROOT / "tax_report.md", _render_report(tax_checks))
     # And network figures apart from both: they are billed as printed, so the
     # issue says a household pays the figure, which a tax row cannot say.
-    (ROOT / "network_report.md").write_text(_render_report(network_checks))
+    _hand_over(ROOT / "network_report.md", _render_report(network_checks))
     # And a card whose two editions disagree, which is neither: the French one
     # is billed, and the Dutch one only stands in when the French one breaks.
-    (ROOT / "edition_report.md").write_text(_render_report(edition_checks))
+    _hand_over(ROOT / "edition_report.md", _render_report(edition_checks))
     # What the workflow fingerprints those issues on: the failing labels.
     # Each report also carries its pass count and every passing row, so a
     # fingerprint over it changed with any unrelated row and the same open
@@ -6688,19 +6689,20 @@ async def _run(texts: Path | None = None) -> int:
     )
     failed_suppliers = _failed_suppliers(extractor_checks)
     drift_warnings = _drift_warnings(METRICS, failed_suppliers)
-    (ROOT / "drift_report.md").write_text(_render_drift(drift_warnings))
+    _hand_over(ROOT / "drift_report.md", _render_drift(drift_warnings))
     # Side-channel: what the workflow fingerprints the drift issue on. The
     # report above carries the measurements, and a fingerprint over it never
     # matched the previous day's.
-    (ROOT / "drift_fingerprint.txt").write_text(
-        _drift_fingerprint(METRICS, failed_suppliers)
+    _hand_over(
+        ROOT / "drift_fingerprint.txt", _drift_fingerprint(METRICS, failed_suppliers)
     )
     regressions = _extractor_regressions(extractor_checks)
     # Side-channel: this attempt's failing check labels for the workflow's
     # retry loop to intersect across attempts, and what it could not judge.
     # Written first, so a failure list on disk always has its scopes.
-    (ROOT / "unevaluated.txt").write_text(
-        "".join(f"{scope}\n" for scope in _unevaluated_scopes(extractor_checks))
+    _hand_over(
+        ROOT / "unevaluated.txt",
+        "".join(f"{scope}\n" for scope in _unevaluated_scopes(extractor_checks)),
     )
     _write_failure_labels(ROOT / "extractor_failures.txt", regressions)
     extractor_failed = bool(regressions)
@@ -6887,6 +6889,15 @@ def _catalog_gates_ci(checks: Iterable[Check]) -> bool:
     return any(not c.ok and not c.expected for c in checks)
 
 
+def _hand_over(path: Path, text: str) -> None:
+    """Write a file the workflow reads, as UTF-8 with what strict UTF-8
+    refuses written as an escape, the way stdout prints it: a label or a
+    detail can quote half a surrogate pair off a card, and the issue job
+    posts the labels and hashes the file, so it has to be UTF-8 and the
+    same bytes on every attempt."""
+    path.write_text(text, encoding="utf-8", errors="backslashreplace")
+
+
 def _write_failure_labels(path: Path, checks: Iterable[Check]) -> None:
     """Write one check label per line, sorted, for the workflow's retry loop
     and for the catalog and tax issues' fingerprints.
@@ -6904,7 +6915,7 @@ def _write_failure_labels(path: Path, checks: Iterable[Check]) -> None:
     definition, so feeding it in would intersect with itself and refile
     daily - the exact noise _extractor_regressions exists to drop.
     """
-    path.write_text("".join(f"{label}\n" for label in sorted(c.label for c in checks)))
+    _hand_over(path, "".join(f"{label}\n" for label in sorted(c.label for c in checks)))
 
 
 def _unevaluated_scopes(checks: Iterable[Check]) -> list[str]:
@@ -7061,8 +7072,20 @@ def brussels_clock() -> None:
     dt_util.set_default_time_zone(ZoneInfo("Europe/Brussels"))
 
 
+def escape_stdout() -> None:
+    """Have stdout print as an escape what strict UTF-8 refuses.
+
+    A failure can quote its card, and pypdf reads a font map naming half a
+    surrogate pair as just that. Printed to a strict stream it raised once
+    the work was done: the archive's walk failed after its rows were
+    written, and the live check exited as crashed and filed nothing."""
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(errors="backslashreplace")
+
+
 def main() -> int:
     brussels_clock()
+    escape_stdout()
     args = _parse_args(sys.argv[1:])
     try:
         return asyncio.run(_run(args.texts))

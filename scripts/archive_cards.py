@@ -97,7 +97,6 @@ import base64
 import binascii
 import functools
 import hashlib
-import io
 import json
 import re
 import sys
@@ -132,6 +131,7 @@ from homeassistant.helpers.json import json_dumps  # noqa: E402
 from live_check import (  # type: ignore[import-not-found]  # noqa: E402
     _fetch_with_retry,
     brussels_clock,
+    escape_stdout,
     label_month,
 )
 
@@ -2684,11 +2684,7 @@ def main() -> int:
         # links written by the walk before it point at files that now exist.
         _write_listings(args.out, args.pdf_base_url, args.archive_base_url)
         return 0
-    # A failure can quote its card, half a surrogate pair included, which a
-    # strict stream refuses: printed as an escape, it cannot fail a run whose
-    # rows are already written.
-    if isinstance(sys.stdout, io.TextIOWrapper):
-        sys.stdout.reconfigure(errors="backslashreplace")
+    escape_stdout()
     summary = asyncio.run(
         archive(
             args.out,

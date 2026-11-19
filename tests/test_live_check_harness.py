@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import io
 import json
 import os
 import re
@@ -2162,6 +2163,14 @@ def _drive_run(
     """The real _run with no supplier and its network phases stubbed, so
     what it records, and the side files it writes under ``tmp_path``, come
     from the stubs passed in."""
+    _stub_run(monkeypatch, tmp_path, **stubs)
+    return asyncio.run(lc._run())
+
+
+def _stub_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, **stubs: Callable[..., Any]
+) -> None:
+    """Stub what _drive_run stubs, for a test that runs main() itself."""
     monkeypatch.setattr(lc, "ROOT", tmp_path)
     monkeypatch.setattr(lc, "METRICS", {})
     monkeypatch.setattr(lc, "_load_providers", dict)
@@ -2186,7 +2195,35 @@ def _drive_run(
     for name, stub in {**phases, **stubs}.items():
         monkeypatch.setattr(lc, name, stub)
     lc.CHECKS.clear()
-    return asyncio.run(lc._run())
+
+
+def test_main_reports_a_failure_quoting_half_a_surrogate_pair(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """pypdf reads a font map naming half a surrogate pair as just that, and
+    a failure can quote its card. Strict UTF-8 refuses it: the report or a
+    file handed to the workflow raised, the run exited as crashed and
+    nothing was filed while the card was served. Both show it as an escape,
+    the same bytes on every attempt, which the workflow posts and hashes."""
+    label = "acme: acme_fix flanders card for 2026-1\ud83d"
+
+    async def catalogs(*_args: Any) -> None:
+        lc._record(label, False, "prints 0 EUR/year on \ud83d")
+
+    monkeypatch.setattr(sys, "argv", ["live_check.py"])
+    failing = []
+    for _attempt in range(2):
+        _stub_run(monkeypatch, tmp_path, _check_catalogs=catalogs)
+        printed = io.BytesIO()
+        monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(printed, encoding="utf-8"))
+        assert lc.main() == 1
+        sys.stdout.flush()
+        failing.append((tmp_path / "extractor_failures.txt").read_bytes())
+    report = printed.getvalue().decode("utf-8")
+    escaped = "acme: acme_fix flanders card for 2026-1\\ud83d"
+    assert failing == [f"{escaped}\n".encode()] * 2
+    assert escaped in report
+    assert "prints 0 EUR/year on \\ud83d" in report
 
 
 def test_the_products_and_tax_issues_are_fingerprinted_on_what_failed(

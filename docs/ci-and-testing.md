@@ -1069,6 +1069,13 @@ The exit code is bit-encoded (`scripts/live_check.py`):
 `rc=8` is deliberately outside the 1/2/4 bit space (`scripts/live_check.py`) so the workflow
 does not open a "supplier extractor broken" issue for what is actually a bug in the harness.
 
+A label or a detail can quote a card, and pypdf reads a font map naming half a surrogate pair as
+just that, which strict UTF-8 refuses: printing the report or writing a file the workflow reads
+raised, the run exited 8 and nothing was filed while the card was served. Both write it as an
+escape (`escape_stdout`, shared with the archive, and `_hand_over` for the files): the issue job
+posts the labels and hashes the files, so they stay UTF-8 and the same bytes on every attempt
+(`test_main_reports_a_failure_quoting_half_a_surrogate_pair`).
+
 All four parts of bit 1 run their step and then look at their own report: each begins with a
 `grep -q '^## Failures'` on it and exits quietly when its half is clean. Without that guard a
 run whose fifteen discovery rows all passed still opened an issue titled "new supplier products
