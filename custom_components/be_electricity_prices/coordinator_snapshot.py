@@ -226,6 +226,11 @@ class _SnapshotMixin:
         )
         self._snapshot_fetched_at = dt_util.utcnow()
         self._last_error = ""
+        # The user's own figures, never a reading of a picture of a card: an
+        # entry moved here from a supplier whose card was one keeps the
+        # notice through the reload otherwise.
+        self._card_read_by_ocr = False
+        self._sync_card_read_by_ocr_issue(False)
 
     def _shared_key(self) -> tuple[str, str, str]:
         return (

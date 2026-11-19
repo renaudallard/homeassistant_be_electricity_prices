@@ -748,6 +748,18 @@ which are plain text.
 The first four are failure states and clear on a successful refresh, as do
 `connection_fee_missing` and `prosumer_tariff_missing` once the supplier prints
 the row or the column again.
+
+The cards outlive an unload. A reload is an unload and a setup, and saving the
+settings is a reload: a card deleted at the unload lost the user's choice to
+ignore it, and the first tick raised it afresh. The ticks after the setup delete
+the cards that no longer hold instead: the extractor cards on a tick that
+served a card without an error (`_tick_spot_prices`), the ENTSO-E card and the
+per-tick syncs as they always do, and the picture notice once a readable card
+lands or the custom supplier's typed card is built
+(`_refresh_custom_snapshot`). Where no setup follows, the cards go with the
+entry: when it is disabled, on the signal Home Assistant sends as it stops,
+loaded or with its setup still retrying (`_entry_changed`, `__init__.py`), and
+when it is removed (`async_remove_entry`).
 `supplier_deprecated` is not: it is a lifecycle notice, evaluated first on every
 tick (`coordinator_tick.py`) straight off the registry flag, and it clears only
 when the entry is re-pointed at a supplier that has not

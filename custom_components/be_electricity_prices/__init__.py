@@ -184,9 +184,15 @@ async def async_setup(
 
     @callback
     def _entry_changed(_change: ConfigEntryChange, entry: ConfigEntry) -> None:
-        # An entry whose setup was retrying is not unloaded when it is
-        # disabled, only stopped: its Repairs cards go with it here.
-        if entry.domain == DOMAIN and entry.state is ConfigEntryState.NOT_LOADED:
+        # A disabled entry is stopped for good, loaded or with its setup
+        # still retrying, which is not unloaded: its Repairs cards go with
+        # it here. Any other unload is followed by a setup, whose ticks
+        # delete the cards that no longer hold.
+        if (
+            entry.domain == DOMAIN
+            and entry.state is ConfigEntryState.NOT_LOADED
+            and entry.disabled_by is not None
+        ):
             clear_issues(hass, entry.entry_id)
 
     async_dispatcher_connect(hass, SIGNAL_CONFIG_ENTRY_CHANGED, _entry_changed)
@@ -642,9 +648,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
     cached_key = coordinator._supplier_tuple if coordinator is not None else None
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        # Nothing resolves this entry's cards once it stops ticking; the next
-        # setup raises again whatever still holds.
-        clear_issues(hass, entry.entry_id)
+        # The Repairs cards stay: a reload is an unload too, and deleting a
+        # card drops the user's choice to ignore it, for the next tick to
+        # raise it afresh. A removal or a disabling clears them.
+        #
         # The ranking page's scratch belongs to this entry alone, so it goes
         # unconditionally - unlike the shared caches below, which are keyed by
         # supplier tuple and may still be referenced by a sibling entry.
@@ -687,8 +694,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: BePricesConfigEntry) ->
 async def async_remove_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> None:
     """Drop per-entry state when the user removes the entry.
 
-    The Repairs cards go here too: an entry removed while its setup was
-    retrying was never unloaded, which is where they are cleared otherwise.
+    The Repairs cards go here too, whether the entry was loaded or its setup
+    was still retrying: an unload keeps them, for the setup that follows.
 
     HA calls this hook after ``async_unload_entry`` for a removal (not
     for a reload). The persistent snapshot Store is also deleted so the

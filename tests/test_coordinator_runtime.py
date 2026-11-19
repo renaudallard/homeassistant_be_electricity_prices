@@ -5185,11 +5185,13 @@ async def test_unloading_an_entry_mutes_its_coordinator(
     assert coord._unloaded is True
 
 
-async def test_unloading_an_entry_clears_its_repairs_cards(
-    hass: HomeAssistant,
+@pytest.mark.parametrize("stop", ["disable", "remove"])
+async def test_an_entry_stopped_for_good_takes_its_repairs_cards_with_it(
+    hass: HomeAssistant, stop: str
 ) -> None:
-    """An unloaded or disabled entry no longer ticks, so nothing would ever
-    clear the cards it raised; the next setup raises again what still holds."""
+    """Disabled or removed, no setup follows, so no tick would ever delete the
+    cards the entry raised."""
+    from homeassistant.config_entries import ConfigEntryDisabler
 
     async def _textless_fetch(*args: Any, **kwargs: Any) -> None:
         raise CardNotReadableError(
@@ -5208,9 +5210,79 @@ async def test_unloading_an_entry_clears_its_repairs_cards(
     issue_id = f"extractor_unreadable_no_prices_{entry.entry_id}"
     assert registry.async_get_issue(DOMAIN, issue_id) is not None
 
-    assert await hass.config_entries.async_unload(entry.entry_id) is True
+    if stop == "disable":
+        await hass.config_entries.async_set_disabled_by(
+            entry.entry_id, ConfigEntryDisabler.USER
+        )
+    else:
+        await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     assert registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_a_reload_keeps_an_ignored_repairs_card_ignored(
+    hass: HomeAssistant,
+) -> None:
+    """A reload unloads the entry, and saving the settings reloads it. Its
+    cards were deleted there, which dropped the user's choice to ignore one,
+    and the first tick raised it afresh. They stay through the unload, and
+    the card the entry still holds stays ignored."""
+
+    async def _textless_fetch(*args: Any, **kwargs: Any) -> None:
+        raise CardNotReadableError(
+            "card has no text layer: 348 characters across 5 page(s)"
+        )
+
+    entry = _entry()
+    entry.add_to_hass(hass)
+    registry = ir.async_get(hass)
+    issue_id = f"extractor_unreadable_no_prices_{entry.entry_id}"
+    with patch(
+        "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor",
+        return_value=make_stub_extractor(fetch=_textless_fetch),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id) is True
+        await hass.async_block_till_done()
+        assert registry.async_get_issue(DOMAIN, issue_id) is not None
+        registry.async_ignore(DOMAIN, issue_id, True)
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    issue = registry.async_get_issue(DOMAIN, issue_id)
+    assert issue is not None and issue.dismissed_version is not None
+
+
+async def test_a_typed_card_clears_the_notice_of_a_picture_reading(
+    hass: HomeAssistant,
+) -> None:
+    """An entry moved onto the custom supplier from one whose card was read
+    off a picture keeps its Repairs cards through the reload, and its own
+    figures are no reading of a picture: the first tick clears the notice."""
+    from custom_components.be_electricity_prices.const import (
+        CUSTOM_CONTRACT_FIXED,
+        SUPPLIER_CUSTOM,
+    )
+
+    entry = make_entry(
+        supplier=SUPPLIER_CUSTOM,
+        contract=CUSTOM_CONTRACT_FIXED,
+        custom_energy_single=0.3,
+    )
+    entry.add_to_hass(hass)
+    issue_id = f"card_read_by_ocr_{entry.entry_id}"
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="card_read_by_ocr",
+    )
+    coord = BePricesCoordinator(hass, entry)
+    coord._card_read_by_ocr = True
+    coord._refresh_custom_snapshot()
+    assert not coord._card_read_by_ocr
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
 async def test_disabling_a_retrying_entry_clears_its_repairs_cards(
