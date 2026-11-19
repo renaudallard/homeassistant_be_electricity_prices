@@ -2413,20 +2413,22 @@ def test_what_a_reader_parses_is_held(
     numbers no operator takes held pypdf 238 s and 1,2 GB, and 3 MB of
     saved and restored states took pdfminer 56 s. Each operand and
     operator counts as the reader parses it, a form's each time it is
-    drawn."""
+    drawn. Each content shows a string, of nothing: pypdf parses none
+    that shows no text from 7.0.1."""
     monkeypatch.setattr(_pdf_bound, "_MAX_PARSED", 5000)
     refused = r"^PDF has a reader parse more than 5000 objects"
+    shown = b"() Tj "
     for content, form in (
-        (b"q Q " * 3000, b""),
-        (b"0 " * 6000, b""),
-        (b"/X0 Do " * 30, b"q Q " * 100),
+        (shown + b"q Q " * 3000, b""),
+        (shown + b"0 " * 6000, b""),
+        (b"/X0 Do " * 30, shown + b"q Q " * 100),
     ):
         with pytest.raises(ExtractorError, match=refused):
             extract(_drawn_pdf(content, form))
     for content, form in (
-        (b"q Q " * 1000, b""),
-        (b"0 " * 2000, b""),
-        (b"/X0 Do " * 10, b"q Q " * 100),
+        (shown + b"q Q " * 1000, b""),
+        (shown + b"0 " * 2000, b""),
+        (b"/X0 Do " * 10, shown + b"q Q " * 100),
     ):
         with pytest.raises(CardNotReadableError, match="no text layer"):
             extract(_drawn_pdf(content, form))

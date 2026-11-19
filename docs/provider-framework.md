@@ -876,7 +876,8 @@ Internals worth knowing:
   resolves (a 700-byte card naming an object that refers to itself had it
   resolve that for good) and each line it reads backwards from the end of
   the file (2 MB of line ends there took 4,7 s); under pypdf each operand
-  and operator of a content stream each time it is interpreted, each
+  and operator of a content stream each time it is interpreted, which
+  from 7.0.1 it does only to one that can show text, each
   element of an array or dictionary, each byte its reader module passes
   over one at a time, the blanks and comments ahead of an object's
   header or of an object an object stream lists (a table pointing 10 000
@@ -996,7 +997,7 @@ Internals worth knowing:
   handed the page's last character alone, all it reads of it, what it
   appends is put back on the page, and the space or line end counts as a
   character made. The check is wrapped only while it takes the line and
-  the page where pypdf 6.7.1 to 6.20.1 hand them, and is left as it is
+  the page where pypdf 6.7.1 to 7.1.1 hand them, and is left as it is
   otherwise. The most a shipped fixture makes is 17 037 under pdfminer and
   17 321 under pypdf, both on Cociter's dynamic card of April 2026, the
   longest text the archive held on 2026-11-06 being the same card's of

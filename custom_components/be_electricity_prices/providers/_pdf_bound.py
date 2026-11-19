@@ -126,7 +126,8 @@ _MAX_CARD_OBJECTS = 180_000
 # procedure set of a page's or form's resources it walks for each draw, the
 # kinds it reads of them, each reference it resolves and each line it reads
 # backwards from the end of the file; under pypdf every operand and operator
-# of a content stream each time it is interpreted, every element of an
+# of a content stream each time it is interpreted, which from 7.0.1 it does
+# only to one that can show text, every element of an
 # array or dictionary, each byte its reader module passes over one at a
 # time, the blanks and comments ahead of an object's header or of an object
 # an object stream lists, each field of an entry it reads of a
@@ -656,7 +657,7 @@ def _show(reading: _Reading, characters: int) -> None:
 
 
 # What pypdf's check of a move is handed first and where it takes what the
-# page holds, from pypdf 6.7.1 to 6.20.1 at least. The check is left as it
+# page holds, from pypdf 6.7.1 to 7.1.1 at least. The check is left as it
 # is should a release name other arguments there, or have none.
 _PAGE_ARGUMENT = 6
 _CHECK_ARGUMENTS = {0: "text", _PAGE_ARGUMENT: "output"}
