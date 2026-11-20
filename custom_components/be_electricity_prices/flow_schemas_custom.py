@@ -62,11 +62,18 @@ from .const import (
     CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR,
     CONF_CUSTOM_DSO_TRANSPORT,
     CONF_CUSTOM_ENERGY_BASE,
+    CONF_CUSTOM_ENERGY_BASE_EXCLUSIVE_NIGHT,
+    CONF_CUSTOM_ENERGY_BASE_OFFPEAK,
+    CONF_CUSTOM_ENERGY_BASE_PEAK,
     CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
     CONF_CUSTOM_ENERGY_FACTOR,
+    CONF_CUSTOM_ENERGY_FACTOR_EXCLUSIVE_NIGHT,
+    CONF_CUSTOM_ENERGY_FACTOR_OFFPEAK,
+    CONF_CUSTOM_ENERGY_FACTOR_PEAK,
     CONF_CUSTOM_ENERGY_OFFPEAK,
     CONF_CUSTOM_ENERGY_PEAK,
     CONF_CUSTOM_ENERGY_QUARTER_HOURLY,
+    CONF_CUSTOM_ENERGY_RLP_WEIGHTED,
     CONF_CUSTOM_ENERGY_SINGLE,
     CONF_CUSTOM_INJECTION_BASE,
     CONF_CUSTOM_INJECTION_CURRENT,
@@ -143,6 +150,38 @@ def _add_custom_num(
     )
 
 
+def _add_monthly_bands(fields: dict[Any, Any], defaults: dict[str, Any]) -> None:
+    """The monthly-average mode's formula per meter and its RLP box.
+
+    The meter rule is the fixed mode's: a digital meter registers the
+    day/night split as a bi-hourly one does. Every box falls back, blank
+    taking the energy factor or base, so none may carry a default.
+    """
+    meter = defaults.get(CONF_METER, METER_MONO)
+    if meter in (METER_BI, METER_DYNAMIC):
+        keys: tuple[str, ...] = (
+            CONF_CUSTOM_ENERGY_FACTOR_PEAK,
+            CONF_CUSTOM_ENERGY_BASE_PEAK,
+            CONF_CUSTOM_ENERGY_FACTOR_OFFPEAK,
+            CONF_CUSTOM_ENERGY_BASE_OFFPEAK,
+        )
+    elif meter == METER_EXCLUSIVE_NIGHT:
+        keys = (
+            CONF_CUSTOM_ENERGY_FACTOR_EXCLUSIVE_NIGHT,
+            CONF_CUSTOM_ENERGY_BASE_EXCLUSIVE_NIGHT,
+        )
+    else:
+        keys = ()
+    for key in keys:
+        _add_custom_num(fields, defaults, key, negative=True, fallback=True)
+    fields[
+        vol.Optional(
+            CONF_CUSTOM_ENERGY_RLP_WEIGHTED,
+            default=bool(defaults.get(CONF_CUSTOM_ENERGY_RLP_WEIGHTED, False)),
+        )
+    ] = BooleanSelector()
+
+
 def _custom_energy_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Energy formula fields for the chosen custom mode.
 
@@ -178,6 +217,8 @@ def _custom_energy_schema(defaults: dict[str, Any]) -> vol.Schema:
     else:
         _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_FACTOR, 1.0, negative=True)
         _add_custom_num(fields, defaults, CONF_CUSTOM_ENERGY_BASE, negative=True)
+        if contract == CUSTOM_CONTRACT_MONTHLY:
+            _add_monthly_bands(fields, defaults)
         if contract == CUSTOM_CONTRACT_DYNAMIC:
             fields[
                 vol.Optional(

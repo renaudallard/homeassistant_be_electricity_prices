@@ -73,6 +73,7 @@ machinery.
 | `tests/test_bolt.py` | Bolt extractor (`providers/bolt.py`) |
 | `tests/test_cociter.py` | Cociter extractor |
 | `tests/test_custom.py` | Expert custom-formula supplier: its config flow, snapshot build and pricing |
+| `tests/test_custom_monthly_meters.py` | The custom monthly-average mode's formula per meter and its Belpex RLP index, on TotalEnergies' group-purchase card |
 | `tests/test_dats24.py` | DATS 24 extractor |
 | `tests/test_dats24_transferred.py` | DATS 24's withdrawn product for the households EnergyVision took over: setup and its refused signing months, a kept entry, the signing card, the network after the last card |
 | `tests/test_dots.py` | Dots Energy extractor |

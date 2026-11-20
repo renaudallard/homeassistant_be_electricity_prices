@@ -69,11 +69,18 @@ from ..const import (
     CONF_CUSTOM_DSO_PROSUMER_EUR_PER_KVA_YEAR,
     CONF_CUSTOM_DSO_TRANSPORT,
     CONF_CUSTOM_ENERGY_BASE,
+    CONF_CUSTOM_ENERGY_BASE_EXCLUSIVE_NIGHT,
+    CONF_CUSTOM_ENERGY_BASE_OFFPEAK,
+    CONF_CUSTOM_ENERGY_BASE_PEAK,
     CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT,
     CONF_CUSTOM_ENERGY_FACTOR,
+    CONF_CUSTOM_ENERGY_FACTOR_EXCLUSIVE_NIGHT,
+    CONF_CUSTOM_ENERGY_FACTOR_OFFPEAK,
+    CONF_CUSTOM_ENERGY_FACTOR_PEAK,
     CONF_CUSTOM_ENERGY_OFFPEAK,
     CONF_CUSTOM_ENERGY_PEAK,
     CONF_CUSTOM_ENERGY_QUARTER_HOURLY,
+    CONF_CUSTOM_ENERGY_RLP_WEIGHTED,
     CONF_CUSTOM_ENERGY_SINGLE,
     CONF_CUSTOM_INJECTION_BASE,
     CONF_CUSTOM_INJECTION_CURRENT,
@@ -184,17 +191,57 @@ def _build_energy(data: Mapping[str, Any], contract: str) -> EnergyRates:
             quarter_hourly=bool(data.get(CONF_CUSTOM_ENERGY_QUARTER_HOURLY, False)),
         )
     if contract == CUSTOM_CONTRACT_MONTHLY:
-        return SpotMonthlyRates(
-            factor=_num(data, CONF_CUSTOM_ENERGY_FACTOR),
-            base=_num(data, CONF_CUSTOM_ENERGY_BASE),
-            yearly_fixed_fee=fee,
-        )
+        return _build_monthly_energy(data, fee)
     return FixedRates(
         single=_num(data, CONF_CUSTOM_ENERGY_SINGLE),
         peak=_opt(data, CONF_CUSTOM_ENERGY_PEAK),
         offpeak=_opt(data, CONF_CUSTOM_ENERGY_OFFPEAK),
         exclusive_night=_opt(data, CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT),
         yearly_fixed_fee=fee,
+    )
+
+
+def _build_monthly_energy(data: Mapping[str, Any], fee: float) -> SpotMonthlyRates:
+    """The monthly-average leg, with a formula per meter where one is typed.
+
+    A box left blank takes the energy factor or base. The bi-hourly pair is
+    set as a pair, because pricing bills the pair only when both halves are
+    there: a card printing a peak formula alone would otherwise lose it.
+    """
+    factor = _num(data, CONF_CUSTOM_ENERGY_FACTOR)
+    base = _num(data, CONF_CUSTOM_ENERGY_BASE)
+
+    def band(factor_key: str, base_key: str) -> tuple[float, float] | None:
+        f, b = _opt(data, factor_key), _opt(data, base_key)
+        if f is None and b is None:
+            return None
+        return (factor if f is None else f, base if b is None else b)
+
+    peak = band(CONF_CUSTOM_ENERGY_FACTOR_PEAK, CONF_CUSTOM_ENERGY_BASE_PEAK)
+    offpeak = band(CONF_CUSTOM_ENERGY_FACTOR_OFFPEAK, CONF_CUSTOM_ENERGY_BASE_OFFPEAK)
+    night = band(
+        CONF_CUSTOM_ENERGY_FACTOR_EXCLUSIVE_NIGHT,
+        CONF_CUSTOM_ENERGY_BASE_EXCLUSIVE_NIGHT,
+    )
+    if peak is not None or offpeak is not None:
+        peak = peak or (factor, base)
+        offpeak = offpeak or (factor, base)
+    rlp = bool(data.get(CONF_CUSTOM_ENERGY_RLP_WEIGHTED, False))
+    return SpotMonthlyRates(
+        factor=factor,
+        base=base,
+        factor_peak=peak[0] if peak else None,
+        base_peak=peak[1] if peak else None,
+        factor_offpeak=offpeak[0] if offpeak else None,
+        base_offpeak=offpeak[1] if offpeak else None,
+        factor_exclusive_night=night[0] if night else None,
+        base_exclusive_night=night[1] if night else None,
+        yearly_fixed_fee=fee,
+        # The column blend: the profile averaged over every operator's
+        # column, which is how TotalEnergies defines its Belpex_M_RLP and the
+        # blend its cards solve to.
+        rlp_indexed=rlp,
+        rlp_blend="columns" if rlp else "distinct",
     )
 
 

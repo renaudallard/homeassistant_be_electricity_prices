@@ -738,6 +738,19 @@ CONF_CUSTOM_ENERGY_SINGLE: Final = "custom_energy_single"
 CONF_CUSTOM_ENERGY_PEAK: Final = "custom_energy_peak"
 CONF_CUSTOM_ENERGY_OFFPEAK: Final = "custom_energy_offpeak"
 CONF_CUSTOM_ENERGY_EXCLUSIVE_NIGHT: Final = "custom_energy_exclusive_night"
+# The monthly-average mode's formula per meter, for a card that prints one per
+# meter column; a blank box takes the energy factor or base.
+CONF_CUSTOM_ENERGY_FACTOR_PEAK: Final = "custom_energy_factor_peak"
+CONF_CUSTOM_ENERGY_BASE_PEAK: Final = "custom_energy_base_peak"
+CONF_CUSTOM_ENERGY_FACTOR_OFFPEAK: Final = "custom_energy_factor_offpeak"
+CONF_CUSTOM_ENERGY_BASE_OFFPEAK: Final = "custom_energy_base_offpeak"
+CONF_CUSTOM_ENERGY_FACTOR_EXCLUSIVE_NIGHT: Final = (
+    "custom_energy_factor_exclusive_night"
+)
+CONF_CUSTOM_ENERGY_BASE_EXCLUSIVE_NIGHT: Final = "custom_energy_base_exclusive_night"
+# Opt-in for the monthly-average mode: the index is the month's mean weighted
+# by Synergrid's residential load profile (a Belpex RLP), not the plain mean.
+CONF_CUSTOM_ENERGY_RLP_WEIGHTED: Final = "custom_energy_rlp_weighted"
 CONF_CUSTOM_YEARLY_FIXED_FEE: Final = "custom_yearly_fixed_fee"
 
 # Injection formula inputs. "current" = a flat EUR/kWh value; "formula" =

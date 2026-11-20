@@ -383,6 +383,13 @@ closes.
 | `base` | `float` | required | Additive term, EUR/kWh. |
 | `yearly_fixed_fee` | `float` | `0.0` | Yearly standing charge. |
 
+The custom mode also fills the per-meter pairs (`factor_peak` / `base_peak`,
+`factor_offpeak` / `base_offpeak`, `factor_exclusive_night` /
+`base_exclusive_night`) when the entry types them, the bi-hourly pair always
+whole since pricing bills it only then, and `rlp_indexed` with the `columns`
+blend when its **Belpex RLP** box is ticked (`_build_monthly_energy`,
+`providers/custom.py`).
+
 ### InjectionRates
 
 `providers/_rates.py`. Solar feed-in compensation, in EUR/kWh. Belgian

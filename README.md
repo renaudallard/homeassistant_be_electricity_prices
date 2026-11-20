@@ -294,7 +294,18 @@ the month's residential rate. The spot and the base
 are both in EUR/kWh, so a formula printed in c€/kWh on a Belpex in EUR/MWh has to
 be converted: (0.1068 × Belpex + 1.5) c€/kWh is a factor of 1.068 and a base of
 0.015. An injection formula works the same way and keeps the sign of its base:
-(0.07 × Belpex − 2) c€/kWh is a factor of 0.7 and a base of −0.02. A fixed
+(0.07 × Belpex − 2) c€/kWh is a factor of 0.7 and a base of −0.02. In the
+monthly-average mode a card that prints one formula per meter takes each in its
+own boxes, peak and off-peak on a bi-hourly or digital meter and exclusive
+night on a night circuit, a box left blank taking the energy factor or base.
+Tick **Index on the residential load profile (Belpex RLP)** when the card's
+index is a Belpex RLP (Belpex_M_RLP, Belpex-RLP-M) rather than the plain monthly
+mean: the month is then weighted by Synergrid's residential load profile,
+averaged over every network operator's column, the blend TotalEnergies' cards
+solve to. The profile is fetched live and the plain mean stands in until it is
+read. TotalEnergies' Groepsaankooptarief variabel 10-2026 card is the case: its
+October indicative rates solve to 181,85 EUR/MWh, the weighted mean comes to
+181,6 and the plain one to 174,2. A fixed
 contract takes a flat feed-in rate or a formula, which it settles on the
 delivery month's mean as the monthly-average mode does: a fixed price for
 consumption often comes with a feed-in credit on the month's average spot.
