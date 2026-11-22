@@ -367,6 +367,10 @@ formula itself does not say, so the readers check what the card states around it
   another unit is not bound, and its leg keeps the printed price, as when no block
   reproduces it. The index needs no sentence of its own: its value is only read with
   "€/MWh" after it (`_INDEX_VALUE_RES`).
+  The January 2024 cards write the index "EPEX DAM", with a space, in the formulas
+  and in the sentence naming its value; every card since writes "EPEXDAM", and the
+  readers take both (`_EPEXDAM`). Read as EPEXDAM only, that month kept the printed
+  figures, on December's 69,40 EUR/MWh, rather than settling at January's 78,56.
 
 The result sentence is the only statement of the formula's own unit: the heading gives
 the printed prices' unit, which a formula restated in €/MWh would leave true. Every card
@@ -714,6 +718,7 @@ re-index monthly, so they are frozen snapshots, not forever-facts.
 | `engie_empower_flextime_w.pdf` | Empower Flextime, Wallonia (7-price TOU triplet, per-slot injection). |
 | `engie_empower_variable_v.pdf` | Empower Variable, Flanders (7-price row, Flextime columns skipped). |
 | `engie_empty_house_v.pdf` | Empty House, Flanders (mono-only, `sans domicile` energy fund). |
+| `engie_empty_house_v_2024-01.pdf` | Empty House, Flanders, **January 2024**, the one card that spells the index "EPEX DAM" (`test_the_january_2024_card_spells_the_index_epex_dam`). |
 | `engie_empty_house_w_2026-10.pdf` | Empty House, Wallonia, **October 2026**, the last card under the `00` slug, printed at September's EPEXDAM (156,41). |
 | `engie_empty_house_w_2026-11.pdf` | Empty House, Wallonia, **November 2026**, the first under `36` ("durée de 3 ans"), naming October's EPEXDAM (174,40). |
 | `engie_easy_fixed_w_2025-11.pdf` | Easy Fixed, Wallonia, **November 2025**. The seven-column Walloon table printed before the Impact bands. |

@@ -640,14 +640,20 @@ _RESULT_SINCE = date(2025, 10, 1)
 # formula found from a blank or from inside a number is the one found from
 # where these start, but each place of a long run was a start of its own and
 # read the rest of the run again: the square of the run.
+#
+# The January 2024 cards write the index "EPEX DAM", with a space, in the
+# formulas and in the sentence naming its value; every card since writes
+# "EPEXDAM".
+_EPEXDAM = r"EPEX\s?DAM"
+_INDEX_SPELLINGS: dict[str, str] = {"EPEXDAM": _EPEXDAM, "ENDEX101": "ENDEX101"}
 _INDEX_FORMULA_RES: dict[str, re.Pattern[str]] = {
     index: re.compile(
         rf"(?:[-\u2013]\s*([^=\s][^=\n]{{0,43}}?)\s*=\s*)?"
         rf"(?:([{SIGN_CHARS}])\s*)?(?<!\d)(\d+[,.]\d+)\s*\+\s*"
-        rf"\((\d+[,.]\d+)\s*x\s*{index}\)",
+        rf"\((\d+[,.]\d+)\s*x\s*{spelling}\)",
         re.IGNORECASE,
     )
-    for index in ("EPEXDAM", "ENDEX101")
+    for index, spelling in _INDEX_SPELLINGS.items()
 }
 # Exact labels, never a substring. The Empower card prints SEVEN energy rows,
 # and "Flextime Heures pleines" contains "heures pleines": a substring match
@@ -699,7 +705,7 @@ def _card_index(text: str, index: str) -> float | None:
 # of an optional sign, each read its run again from every place in it.
 _INDEX_VALUE_RES: dict[str, re.Pattern[str]] = {
     "EPEXDAM": re.compile(
-        r"EPEXDAM\s+connue\s*\((?:(?!EPEXDAM\s+connue\s*\()[^)])*?"
+        rf"{_EPEXDAM}\s+connue\s*\((?:(?!{_EPEXDAM}\s+connue\s*\()[^)])*?"
         r"(?<!\d)(\d+[,.]\d+)\s*(?:€\s*)?/\s*MWh",
         re.IGNORECASE,
     ),
@@ -711,7 +717,7 @@ _INDEX_VALUE_RES: dict[str, re.Pattern[str]] = {
 # The same sentence with the month it names: "connue (Septembre 2026: 156,41
 # EUR/MWh)", with or without a space before the colon.
 _EPEXDAM_NAMED_RE = re.compile(
-    r"EPEXDAM\s+connue\s*\(\s*([^\W\d_]+)\s+(20\d{2})\s*:\s*(\d+[,.]\d+)"
+    rf"{_EPEXDAM}\s+connue\s*\(\s*([^\W\d_]+)\s+(20\d{{2}})\s*:\s*(\d+[,.]\d+)"
     r"\s*(?:€\s*)?/\s*MWh",
     re.IGNORECASE,
 )

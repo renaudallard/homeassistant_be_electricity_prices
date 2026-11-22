@@ -979,6 +979,45 @@ def test_empty_house_energy_carries_its_bare_epexdam_formula() -> None:
     assert energy.formula_factor_peak is None
 
 
+def test_the_january_2024_card_spells_the_index_epex_dam() -> None:
+    """The January 2024 Empty House card writes "Normal = -0,1000 + (0,0500 x
+    EPEX DAM)" and "derniere valeur du EPEX DAM connue (Decembre 2023 : 69,40
+    EUR/MWh)", with a space. Read as EPEXDAM only, both legs lost their
+    formula and the month was billed on December's index for good."""
+    from custom_components.be_electricity_prices.providers import _engie_cards
+    from custom_components.be_electricity_prices.providers._rates import VariableRates
+    from custom_components.be_electricity_prices.providers._settle import (
+        settled_energy,
+        settled_injection,
+    )
+
+    text = fixture_text("engie_empty_house_v_2024-01.pdf")
+    assert "x EPEX DAM)" in text and "EPEXDAM" not in text
+    assert _engie_cards.published_index(text) == (
+        date(2023, 12, 1),
+        pytest.approx(0.0694),
+    )
+    snap = parse_snapshot("engie_empty_house", {REGION_FLANDERS: text})
+    energy = snap.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.month_indexed is True
+    assert energy.formula_factor == pytest.approx(0.2150 * 10.0 * 1.06)
+    assert energy.formula_base == pytest.approx(3.2150 / 100.0 * 1.06)
+    injection = snap.injection
+    assert injection is not None
+    assert injection.month_indexed is True
+    assert injection.factor == pytest.approx(0.5)
+    assert injection.base == pytest.approx(-0.001)
+    # The February 2024 card names January at 78,56 EUR/MWh and prints 21,312
+    # and 3,828 for it, the same formulas at that index.
+    settled = settled_energy(energy, 0.07856)
+    assert isinstance(settled, VariableRates)
+    assert settled.current == pytest.approx(0.21312, abs=1e-5)
+    assert settled_injection(injection, 0.07856).current == pytest.approx(
+        0.03828, abs=1e-5
+    )
+
+
 def test_endex_indexed_card_keeps_its_printed_rate() -> None:
     """Easy Variable indexes on ENDEX101, which is published in ADVANCE, so
     its printed rate is the month's price and must not be swept into the
@@ -1090,6 +1129,9 @@ _FEE_ROW = "65,00 €/an Type d'usage "
             "index", "EPEXDAM connue (0,0" + "\xa0" * 100_000, id="index blanks"
         ),
         pytest.param("index", "EPEXDAM connue (0,0€ " * 10_000, id="index headings"),
+        pytest.param(
+            "index", "EPEX DAM connue (0,0€ " * 10_000, id="spaced index headings"
+        ),
         pytest.param(
             "endex", "ENDEX101 du mois = 0,0 " + "\xa0" * 100_000, id="endex blanks"
         ),

@@ -514,7 +514,9 @@ class _MigratingStore(Store[dict[str, Any]]):
 # estimate.
 # v92: OCTA+'s variable cards up to 2025 read their printed feed-in figure off
 # the injection column, where a v91 row carried the consumption estimate.
-_SNAPSHOT_SCHEMA_VERSION = 92
+# v93: Engie's January 2024 cards spell the index "EPEX DAM", so their
+# formulas and month index read, where a v92 row kept the printed figures.
+_SNAPSHOT_SCHEMA_VERSION = 93
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is
