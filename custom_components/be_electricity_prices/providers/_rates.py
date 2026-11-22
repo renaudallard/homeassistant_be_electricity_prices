@@ -935,9 +935,11 @@ class InjectionRates:
     # on Zen, and on Cosy two from its August 2026 card, one before). Trevion
     # Groene Energie Vast prints its Injectie column under "1 jaar vast", and
     # EnergyVision's fixed-injection card says *"Het injectietarief van 4,00
-    # EURcent/kWh ligt vast voor een bepaalde duur van 3 jaar"*. A signing
-    # cohort then keeps the figure its own card printed, where a printed
-    # figure with no such statement tracks each month's card.
+    # EURcent/kWh ligt vast voor een bepaalde duur van 3 jaar"*. Engie's
+    # fixed cards print only the figure, and its injection conditions make it
+    # *"toujours du meme type (variable ou fixe) que le prix d'electricite"*.
+    # A signing cohort then keeps the figure its own card printed, where a
+    # printed figure with no such statement tracks each month's card.
     fixed_for_term: bool = False
     # True when the card taxes injection (professional cards do, at 21%).
     # None of these rates passes through the pricing engine's per-component

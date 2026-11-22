@@ -5661,11 +5661,17 @@ def test_a_feed_in_price_fixed_for_the_term_is_gated_both_ways() -> None:
 
     lc._CONTRACTS_BY_ID["mega_harness_fixed"] = SimpleNamespace(kind="fixed")
     lc._CONTRACTS_BY_ID["mega_harness_flex"] = SimpleNamespace(kind="variable")
+    lc._CONTRACTS_BY_ID["engie_harness_fixed"] = SimpleNamespace(kind="fixed")
+    lc._CONTRACTS_BY_ID["engie_harness_variable"] = SimpleNamespace(kind="variable")
     try:
         assert not _fails("mega_harness_fixed", True)
         assert _fails("mega_harness_fixed", False)
         assert not _fails("mega_harness_flex", False)
         assert _fails("mega_harness_flex", True)
+        assert not _fails("engie_harness_fixed", True)
+        assert _fails("engie_harness_fixed", False)
+        assert not _fails("engie_harness_variable", False)
+        assert _fails("engie_harness_variable", True)
         assert not _fails("groene_energie_vast", True)
         assert _fails("groene_energie_vast", False)
         assert not _fails("energyvision_fixed_injection_3y", True)
@@ -5674,6 +5680,8 @@ def test_a_feed_in_price_fixed_for_the_term_is_gated_both_ways() -> None:
     finally:
         lc._CONTRACTS_BY_ID.pop("mega_harness_fixed", None)
         lc._CONTRACTS_BY_ID.pop("mega_harness_flex", None)
+        lc._CONTRACTS_BY_ID.pop("engie_harness_fixed", None)
+        lc._CONTRACTS_BY_ID.pop("engie_harness_variable", None)
         lc.CHECKS.clear()
 
 

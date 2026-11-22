@@ -467,6 +467,15 @@ def _extract_injection(
         # professional card, against "n'est pas soumis a la TVA" on the
         # residential one.
         vat_applies=professional,
+        # The card only prints the figure. The injection conditions fix it:
+        # "Le prix d'injection de votre Contrat est toujours du meme type
+        # (variable ou fixe) que le prix d'electricite de votre contrat de
+        # fourniture" (art. 7.1, version 202510), and engie.be says a fixed
+        # contract keeps both prices "pour la duree de votre contrat". So a
+        # signing cohort keeps the figure its own card printed (issue #177).
+        # Read off the heading, so a redesign that drops it falls back to a
+        # figure that tracks each month's card.
+        fixed_for_term=kind == "fixed" and bool(_FIXED_PRICES_RE.search(text)),
     )
 
 
@@ -583,6 +592,12 @@ _ROW_HEADER_RE = re.compile(
 )
 _FEE_HEADER_RE = re.compile(r"Redevance\s+fixe\(\d+\)\s*([^\s()]{1,30})")
 _FEE_UNIT = "€/an"
+# The heading of every fixed card, Easy and Empower, residential and pro, on
+# every archived month since November 2023: "Prix fixes électricité pour les
+# contrats conclus en Août 2026". The variable cards read "Prix variables".
+_FIXED_PRICES_RE = re.compile(
+    r"Prix\s+fixes\s+[ée]lectricit[ée]\s+pour\s+les\s+contrats\s+conclus"
+)
 # The footnote under the table quotes the index "Les cotations eSpot_15 sont
 # exprimées en €/MWh" ("eSpot" up to September 2025), the card's only sentence
 # of the kind, which ends 1811 to 3658 characters after the formulas.

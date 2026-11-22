@@ -560,7 +560,22 @@ contract:
   column (`_engie_cards.py`, divided by 100). The second `Injection(3)` row is the
   annual estimate and is ignored. The fixed contracts carry only this (test
   `test_easy_fixed_extracts_bihourly_rates` `tests/test_engie.py`: `current`
-  set, `factor`/`base` None).
+  set, `factor`/`base` None). On those it is the contract's price for the term
+  (`fixed_for_term`, issue #177): the card prints no such sentence, but Engie's
+  injection conditions (version 202510, art. 7.1) say "Le prix d'injection de
+  votre Contrat est toujours du même type (variable ou fixe) que le prix
+  d'électricité de votre contrat de fourniture", and art. 7.3.4 moves a
+  fixed-term contract's prices only at the end of its term. The flag is read
+  off the heading every fixed card prints, Easy and Empower, residential and
+  pro, on every archived month since November 2023 ("Prix fixes électricité
+  pour les contrats conclus en"), so a signing cohort keeps its own card's
+  figure: an Easy Fixed contract signed in August 2026 is credited 3,190
+  c€/kWh for the term, not November's 4,635. Empower Fixed is open-ended, so
+  Engie may change its prices with two months' notice (art. 7.3.3), which the
+  integration does not see, as for its energy price. Tests
+  `test_a_fixed_card_fixes_its_feed_in_price_for_the_term`,
+  `test_a_fixed_card_without_its_heading_tracks_each_month` and
+  `test_a_fixed_cohort_keeps_its_signing_cards_feed_in_price`.
 - Forward-indexed (`current` plus `factor` / `base`, `forward_indexed`): both Easy
   Variable editions. Their energy and feed-in formulas read ENDEX101, the ICE Endex
   month-ahead base-load futures averaged over the month BEFORE delivery, and the
@@ -703,6 +718,10 @@ re-index monthly, so they are frozen snapshots, not forever-facts.
 | `engie_empty_house_w_2026-11.pdf` | Empty House, Wallonia, **November 2026**, the first under `36` ("durée de 3 ans"), naming October's EPEXDAM (174,40). |
 | `engie_easy_fixed_w_2025-11.pdf` | Easy Fixed, Wallonia, **November 2025**. The seven-column Walloon table printed before the Impact bands. |
 | `engie_dynamic_w_2025-12.pdf` | Dynamic, Wallonia, **December 2025**. The same table in six columns, without the prosumer tariff. |
+| `engie_easy_fixed_w_2026-08.pdf` | Easy Fixed, Wallonia, **August 2026**: the signing card of issue #177, feed-in 3,190 c€/kWh. |
+| `engie_easy_fixed_w_2026-11.pdf` | Easy Fixed, Wallonia, **November 2026**: the card that issue's cohort was wrongly credited on, feed-in 4,635 c€/kWh. |
+| `engie_empower_fixed_w_2026-11.pdf` | Empower Fixed, Wallonia, **November 2026** ("durée indéterminée"). |
+| `engie_pro_easy_fixed_w_2026-11.pdf` | Easy Fixed pro, Wallonia, **November 2026**. |
 
 ## When the card changes, look here
 

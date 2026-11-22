@@ -506,7 +506,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v89: OCTA+'s November 2026 cards put up again on 5 November print their
 # feed-in factor for the parameter in c€/kWh under the same €/kWh wording;
 # read like the first ones, every feed-in credit came out ten times too high.
-_SNAPSHOT_SCHEMA_VERSION = 89
+# v90: Engie's fixed cards carry InjectionRates.fixed_for_term, so a signing
+# cohort keeps the feed-in price of its own card; a v89 row tracked each
+# month's card.
+_SNAPSHOT_SCHEMA_VERSION = 90
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

@@ -341,6 +341,87 @@ def test_endex_injection_keeps_its_printed_rate() -> None:
     assert not _injection_is_spot_formula(inj, snap.energy)
 
 
+@pytest.mark.parametrize(
+    ("fixture", "contract", "region", "fixed"),
+    [
+        ("engie_easy_fixed_w_2026-08.pdf", "engie_easy_fixed", REGION_WALLONIA, True),
+        ("engie_easy_fixed_w_2026-11.pdf", "engie_easy_fixed", REGION_WALLONIA, True),
+        ("engie_easy_fixed_w_2025-11.pdf", "engie_easy_fixed", REGION_WALLONIA, True),
+        ("engie_easy_fixed_v.pdf", "engie_easy_fixed", REGION_FLANDERS, True),
+        (
+            "engie_empower_fixed_w_2026-11.pdf",
+            "engie_empower_fixed",
+            REGION_WALLONIA,
+            True,
+        ),
+        (
+            "engie_pro_easy_fixed_w_2026-11.pdf",
+            "engie_pro_easy_fixed",
+            REGION_WALLONIA,
+            True,
+        ),
+        ("engie_easy_indexed_v.pdf", "engie_easy_variable", REGION_FLANDERS, False),
+        (
+            "engie_pro_empower_variable_v.pdf",
+            "engie_pro_empower_variable",
+            REGION_FLANDERS,
+            False,
+        ),
+        (
+            "engie_empower_flextime_w.pdf",
+            "engie_empower_flextime",
+            REGION_WALLONIA,
+            False,
+        ),
+    ],
+)
+def test_a_fixed_card_fixes_its_feed_in_price_for_the_term(
+    fixture: str, contract: str, region: str, fixed: bool
+) -> None:
+    """Engie's injection conditions make the feed-in price "toujours du meme
+    type (variable ou fixe) que le prix d'electricite", so every fixed card,
+    and no other, keeps its printed figure for the term (issue #177)."""
+    snap = parse_snapshot(contract, {region: fixture_text(fixture)})
+    assert snap.injection is not None
+    assert snap.injection.fixed_for_term is fixed
+
+
+def test_a_fixed_card_without_its_heading_tracks_each_month() -> None:
+    """The flag is read off the heading, so a redesign that drops it falls
+    back to a figure that follows each month's card."""
+    text = re.sub(
+        r"Prix\s+fixes\s+électricité",
+        "Prix électricité",
+        fixture_text("engie_easy_fixed_w_2026-08.pdf"),
+    )
+    snap = parse_snapshot("engie_easy_fixed", {REGION_WALLONIA: text})
+    assert snap.injection is not None
+    assert snap.injection.fixed_for_term is False
+
+
+def test_a_fixed_cohort_keeps_its_signing_cards_feed_in_price() -> None:
+    """Issue #177: an Easy Fixed contract signed on the August 2026 card is
+    credited that card's 3,190 c/kWh for the term, not the 4,635 November's
+    card prints."""
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _cohort_injection_from_archived,
+    )
+
+    august = parse_snapshot(
+        "engie_easy_fixed",
+        {REGION_WALLONIA: fixture_text("engie_easy_fixed_w_2026-08.pdf")},
+    )
+    november = parse_snapshot(
+        "engie_easy_fixed",
+        {REGION_WALLONIA: fixture_text("engie_easy_fixed_w_2026-11.pdf")},
+    )
+    assert november.injection is not None
+    assert november.injection.current == pytest.approx(0.04635)
+    frozen = _cohort_injection_from_archived(august, november)
+    assert frozen is not None
+    assert frozen.current == pytest.approx(0.0319)
+
+
 def test_empower_flextime_dsos_match_wallonia_set() -> None:
     snap = parse_snapshot(
         "engie_empower_flextime",

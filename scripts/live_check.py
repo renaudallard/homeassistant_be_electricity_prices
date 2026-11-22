@@ -5582,9 +5582,10 @@ def _validate_snapshot(
 
 def _feed_in_fixed_for_term(contract_id: str) -> bool:
     """Whether this contract's card fixes its printed feed-in price for the
-    term. Every Mega fixed card says so, so those follow the registry kind;
-    the other two are one product each."""
-    if contract_id.startswith("mega_"):
+    term. Every Mega fixed card says so, and Engie's injection conditions
+    tie every Engie fixed card's, so those follow the registry kind; the
+    other two are one product each."""
+    if contract_id.startswith(("mega_", "engie_")):
         contract = _CONTRACTS_BY_ID.get(contract_id)
         return getattr(contract, "kind", "") == "fixed"
     return contract_id in ("groene_energie_vast", "energyvision_fixed_injection_3y")
