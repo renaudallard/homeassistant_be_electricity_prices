@@ -769,10 +769,22 @@ def _extract_publication_month(text: str) -> str:
 
 
 def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
-    # Injection rate sits next to the consumption rate on the
-    # 'Compteur monohoraire' line.
-    match = re.search(r"Compteur monohoraire\s+[\d.,]+\s+([\d.,]+)", text)
-    current = to_float(match.group(1)) / 100.0 if match else None
+    # The 'Compteur monohoraire' line prints the consumption columns, then
+    # the injection ones: "17,47 5,37" on the 2026 cards. Up to 2025 a
+    # variable card prints its consumption twice, "Prix mensuels" and "Prix
+    # estimés", and a fixed card its one price, followed up to April 2025 by
+    # the injection twice too. The figure is the first injection column, the
+    # one a fixed card of the same month prints: "12,09 16,23 5,92 8,73" on
+    # Smart Variable's November 2023 card, 5,92 as on Fixed's. Read as the
+    # second figure, the variable cards credited the price their consumption
+    # was estimated at. A figure can be negative, "14,99 -0,49 1,73" in May
+    # 2025.
+    match = re.search(r"Compteur monohoraire((?:[ \t]+-?[\d.,]+)+)", text)
+    figures = match.group(1).split() if match else []
+    consumption = 2 if kind == "variable" and len(figures) >= 3 else 1
+    current = (
+        to_float(figures[consumption]) / 100.0 if len(figures) > consumption else None
+    )
 
     factor: float | None = None
     base: float | None = None

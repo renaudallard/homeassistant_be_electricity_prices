@@ -306,11 +306,20 @@ Both raises are covered by `test_missing_regional_renewables_raises`.
 ### Injection (`_extract_injection`, `octaplus.py`)
 
 Injection taxonomy: **month-indexed formula** on fixed/variable/Impact,
-**hourly factor*spot+base** on dynamic. `current` is the second number on the
-`Compteur monohoraire` line (the injection column next to the consumption rate),
-divided by 100, pinned illustrative `0.0472`
-(`test_fixed_wallonia_extracts_meter_rates`). On a non-dynamic card that number
-sits under the card's own **Prix estimés** heading and is not the rate: *"Le prix
+**hourly factor*spot+base** on dynamic. `current` is the first injection column
+on the `Compteur monohoraire` line, divided by 100, pinned illustrative `0.0472`
+(`test_fixed_wallonia_extracts_meter_rates`). The line prints the consumption
+columns first: one on the 2026 cards and on every fixed card, two (*Prix
+mensuels*, *Prix estimés*) on the variable cards of 2023 to 2025, so a variable
+card printing three figures or more reads the third. Up to April 2025 the
+injection is printed twice as well, and its first column is the figure the Fixed
+card of the same month prints: *"12,09 16,23 5,92 8,73"* on Smart Variable's
+November 2023 card. Read as the second figure, those cards gave the consumption
+estimate as the feed-in. A figure can be negative, *"10,23 11,89 -0,99 1,23"* in
+May 2025 (`test_the_printed_feed_in_figure_is_the_first_injection_column`).
+
+On a non-dynamic card that number sits under the card's own **Prix estimés**
+heading, or **Prix mensuels** where both are printed, and is not the rate: *"Le prix
 de votre injection est indexé mensuellement sur base du paramètre d'indexation de
 la Epex SPP ... La valeur de la Epex du mois en cours ne sera connue qu'en fin de
 mois"*. `_SPP_FORMULA_RE` (`_octaplus_formulas.py`) parses the stated formula, in the
@@ -736,6 +745,8 @@ cards unless the row names another month):
 | `octaplus_fixed_w_nov2023.pdf` | OCTA+ Fixed, Wallonia, **November 2023**, from the card archive. Feed-in on `Belpex * 0,915 – 19,83`, its estimate on October's 86,4, and the AMR clause's `Belpex * 1,02 + 9,21`. |
 | `octaplus_fixed_w_mar2025.pdf` | OCTA+ Fixed, Wallonia, **March 2025**, from the card archive, the last card on `Belpex M * 0,915 – 19,83` before the SPP formulas. |
 | `octaplus_smartvariable_w_jul2024.pdf` | OCTA+ Smart Variable, Wallonia, **July 2024**, from the card archive. Feed-in on `Belpex M * 0,915 – 19,83`. |
+| `octaplus_flux_w_jul2025.pdf` | OCTA+ Flux, Wallonia, **July 2025**, from the card archive. Meter line `8,07 11,14 1,92`: consumption twice, injection once. |
+| `octaplus_smartvariable_w_may2025.pdf` | OCTA+ Smart Variable, Wallonia, **May 2025**, from the card archive. Meter line `10,23 11,89 -0,99 1,23`, a negative injection figure. |
 | `octaplus_boostfix_w_oct.pdf` | OCTA+ Boost Fix, Wallonia, **October 2026**, the first card of the Boost range. Also parsed as Boost Fix Impact. |
 | `octaplus_boostflex_w_oct.pdf` | OCTA+ Boost Flex, Wallonia, **October 2026**. Impact rows and one `Epex RLP` formula per CWaPE band beside the per-meter ones. |
 | `octaplus_ecoboostflex_v_oct.pdf` | OCTA+ Eco Boost Flex, Flanders, **October 2026**. `Epex RLP M` formula per meter, `Epex SPP M * 0,8790 – 16,15` feed-in. |

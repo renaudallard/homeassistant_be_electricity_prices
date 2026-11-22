@@ -512,7 +512,9 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v91: OCTA+'s monthly cards up to March 2025 read their feed-in formula on the
 # monthly Belpex (``month_indexed``); a v90 row carried only the printed
 # estimate.
-_SNAPSHOT_SCHEMA_VERSION = 91
+# v92: OCTA+'s variable cards up to 2025 read their printed feed-in figure off
+# the injection column, where a v91 row carried the consumption estimate.
+_SNAPSHOT_SCHEMA_VERSION = 92
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

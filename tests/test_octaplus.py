@@ -312,6 +312,53 @@ def test_a_cohort_signed_before_april_2025_keeps_its_belpex_formula() -> None:
     assert _injection_is_spot_formula(leg, august.energy) is False
 
 
+@pytest.mark.parametrize(
+    ("contract_id", "fixture", "line", "figure"),
+    [
+        # Consumption twice, injection twice: the first injection column, the
+        # 3,49 the Fixed card of July 2024 prints.
+        (
+            "octaplus_smartvariable",
+            "octaplus_smartvariable_w_jul2024.pdf",
+            "Compteur monohoraire 8,39 11,54 3,49 4,90",
+            0.0349,
+        ),
+        # Consumption twice, injection once: the 1,92 of Fixed's July 2025.
+        (
+            "octaplus_flux",
+            "octaplus_flux_w_jul2025.pdf",
+            "Compteur monohoraire 8,07 11,14 1,92",
+            0.0192,
+        ),
+        (
+            "octaplus_smartvariable",
+            "octaplus_smartvariable_w_may2025.pdf",
+            "Compteur monohoraire 10,23 11,89 -0,99 1,23",
+            -0.0099,
+        ),
+        # One fixed price, injection twice.
+        (
+            "octaplus_fixed",
+            "octaplus_fixed_w_nov2023.pdf",
+            "Compteur monohoraire 19,77 5,92 8,73",
+            0.0592,
+        ),
+    ],
+)
+def test_the_printed_feed_in_figure_is_the_first_injection_column(
+    contract_id: str, fixture: str, line: str, figure: float
+) -> None:
+    """Up to 2025 the variable cards print their consumption twice, "Prix
+    mensuels" and "Prix estimés", ahead of the injection columns. Read as the
+    meter line's second figure, they credited the consumption estimate as
+    the feed-in wherever the formula could not be resolved."""
+    text = _text(fixture)
+    assert line in text
+    inj = parse_snapshot(contract_id, text, "wallonia").injection
+    assert inj is not None
+    assert inj.current == pytest.approx(figure)
+
+
 def test_august_redesign_formula_is_parsed() -> None:
     """OCTA+ reissued every card in August 2026 renaming the parameter to
     "Epex SPP M" and swapping the x for a star. The regex required a literal
