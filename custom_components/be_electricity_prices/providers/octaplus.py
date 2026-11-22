@@ -63,6 +63,7 @@ from ._octaplus_formulas import (
     _RLP_IMPACT_RES,
     _RLP_METER_RES,
     _SPP_FORMULA_RE,
+    _belpex_month_feed_in_rows,
     _dynamic_consumption_formula,
     _formula_coefficients,
     _injection_formula,
@@ -777,6 +778,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
     base: float | None = None
     formula: str | None = None
     spp_indexed = False
+    month_indexed = False
     if kind == "dynamic":
         # Injection formula appears after the prose
         # "Le prix de votre injection est indexé ..."
@@ -803,16 +805,26 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # splits them keeps the estimate rather than billing two meter types
         # on a third one's formula. A row in a unit no card has used is one
         # that does not agree.
+        #
+        # The cards up to March 2025 index it on the plain monthly Belpex
+        # instead. Left unread, a contract signed on one kept only the card's
+        # estimate, and from April 2025 was credited the later cards' SPP
+        # formulas, on an index and terms its own card does not name.
         rows = list(_SPP_FORMULA_RE.finditer(text))
+        on_spp = bool(rows)
+        if not on_spp:
+            rows = _belpex_month_feed_in_rows(text)
         distinct = {_formula_coefficients(text, row, feed_in=True) for row in rows}
         pair = distinct.pop() if len(distinct) == 1 else None
         if pair is not None:
             factor, base = pair
             formula = rows[0].group(0)
-            # Epex SPP is the solar-weighted mean. The flag routes the
-            # coefficients to the delivery month's own weighted mean and keeps
-            # them off the hourly spot, which they are not coefficients for.
-            spp_indexed = True
+            # Epex SPP is the solar-weighted mean, the Belpex the plain one.
+            # The flag routes the coefficients to the delivery month's own
+            # mean and keeps them off the hourly spot, which they are not
+            # coefficients for.
+            spp_indexed = on_spp
+            month_indexed = not on_spp
 
     if current is None and factor is None:
         return None
@@ -822,6 +834,7 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         base=base,
         formula=formula,
         spp_indexed=spp_indexed,
+        month_indexed=month_indexed,
     )
 
 

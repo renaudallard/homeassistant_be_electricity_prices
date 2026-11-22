@@ -231,6 +231,87 @@ def test_every_non_dynamic_kind_gets_the_spp_formula() -> None:
     assert dyn.injection.spp_indexed is False
 
 
+@pytest.mark.parametrize(
+    ("contract_id", "fixture", "formula"),
+    [
+        ("octaplus_fixed", "octaplus_fixed_w_nov2023.pdf", "Belpex * 0,915 – 19,83"),
+        ("octaplus_ecofixed", "octaplus_fixed_w_nov2023.pdf", "Belpex * 0,915 – 19,83"),
+        ("octaplus_fixed", "octaplus_fixed_w_mar2025.pdf", "Belpex M * 0,915 – 19,83"),
+        (
+            "octaplus_smartvariable",
+            "octaplus_smartvariable_w_jul2024.pdf",
+            "Belpex M * 0,915 – 19,83",
+        ),
+    ],
+)
+def test_a_card_before_april_2025_reads_its_monthly_belpex_formula(
+    contract_id: str, fixture: str, formula: str
+) -> None:
+    """Up to March 2025 the feed-in sentence names the Belpex itself, "Le prix
+    de votre injection est indexé mensuellement sur base du paramètre
+    d'indexation de la Belpex ... monohoraire : Belpex M * 0,915 – 19,83", the
+    plain monthly mean. Read with no formula, a contract signed on one was
+    credited the SPP formulas of the cards from April 2025."""
+    inj = parse_snapshot(contract_id, _text(fixture), "wallonia").injection
+    assert inj is not None
+    assert inj.factor == pytest.approx(0.915)
+    assert inj.base == pytest.approx(-19.83 / 1000.0)
+    assert inj.formula == formula
+    assert inj.month_indexed is True
+    assert inj.spp_indexed is False
+
+
+def test_the_monthly_belpex_formula_gives_the_cards_own_estimate() -> None:
+    """The November 2023 card prices its estimate "sur base de la dernière
+    valeur de la Belpex connue (86,4 €/MWh HTVA)", October's plain mean, and
+    prints 5,92 c€/kWh: the formula read is that one, on that index."""
+    text = _text("octaplus_fixed_w_nov2023.pdf")
+    assert "(86,4 €/MWh HTVA)" in " ".join(text.split())
+    inj = parse_snapshot("octaplus_fixed", text, "wallonia").injection
+    assert inj is not None and inj.factor is not None and inj.base is not None
+    assert inj.current == pytest.approx(0.0592)
+    assert inj.factor * 0.0864 + inj.base == pytest.approx(0.0592, abs=5e-5)
+
+
+def test_the_amr_clause_is_not_read_as_the_monthly_feed_in() -> None:
+    """The same card quotes the AMR consumption formula as "Belpex * 1,02 +
+    9,21". Without the feed-in sentence nothing is read, rather than that."""
+    text = _text("octaplus_fixed_w_nov2023.pdf")
+    assert re.search(r"Belpex \* 1,02 \+ 9,21", text)
+    cut = re.sub(r"Le\s+prix\s+de\s+votre\s+injection", "Le prix", text)
+    inj = parse_snapshot("octaplus_fixed", cut, "wallonia").injection
+    assert inj is not None
+    assert inj.factor is None and inj.base is None
+    assert inj.month_indexed is False
+    assert inj.current == pytest.approx(0.0592)
+
+
+def test_a_cohort_signed_before_april_2025_keeps_its_belpex_formula() -> None:
+    """A contract signed on the March 2025 card is credited its own formula
+    on the plain monthly mean in August 2026, not that card's SPP one."""
+    from custom_components.be_electricity_prices.cohort_legs import (
+        _cohort_injection_from_archived,
+    )
+    from custom_components.be_electricity_prices.injection import (
+        _injection_is_spot_formula,
+    )
+
+    signed = parse_snapshot(
+        "octaplus_fixed", _text("octaplus_fixed_w_mar2025.pdf"), "wallonia"
+    )
+    august = parse_snapshot(
+        "octaplus_fixed", _text("octaplus_fixed_w_aug.pdf"), "wallonia"
+    )
+    assert august.injection is not None and august.injection.spp_indexed
+    leg = _cohort_injection_from_archived(signed, august)
+    assert leg is not None
+    assert leg.factor == pytest.approx(0.915)
+    assert leg.base == pytest.approx(-19.83 / 1000.0)
+    assert leg.month_indexed is True
+    assert leg.spp_indexed is False
+    assert _injection_is_spot_formula(leg, august.energy) is False
+
+
 def test_august_redesign_formula_is_parsed() -> None:
     """OCTA+ reissued every card in August 2026 renaming the parameter to
     "Epex SPP M" and swapping the x for a star. The regex required a literal

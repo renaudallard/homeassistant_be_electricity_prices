@@ -509,7 +509,10 @@ class _MigratingStore(Store[dict[str, Any]]):
 # v90: Engie's fixed cards carry InjectionRates.fixed_for_term, so a signing
 # cohort keeps the feed-in price of its own card; a v89 row tracked each
 # month's card.
-_SNAPSHOT_SCHEMA_VERSION = 90
+# v91: OCTA+'s monthly cards up to March 2025 read their feed-in formula on the
+# monthly Belpex (``month_indexed``); a v90 row carried only the printed
+# estimate.
+_SNAPSHOT_SCHEMA_VERSION = 91
 
 # The oldest stored schema a rejected blob may still be replayed from when no
 # fetch can ever replace it (see _SnapshotMixin._replay_stale_snapshot). v16 is

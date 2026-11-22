@@ -190,7 +190,7 @@ unit tests. It dispatches by `contract.kind` and by region. Fields pulled:
 | snapshot field | source function | notes |
 | --- | --- | --- |
 | `energy` | `_extract_energy` | shape depends on kind (see below) |
-| `injection` | `_extract_injection` | flat current on non-dynamic, factor/base on dynamic |
+| `injection` | `_extract_injection` | printed estimate plus the month formula on non-dynamic (Belpex SPP, or the monthly Belpex up to March 2025), factor/base on dynamic |
 | `publication_label` | `_extract_publication_month` | MM/YYYY |
 | `taxes.federal_excise`, `taxes.energy_contribution` | `_extract_taxes` | first federal tier, the one from 0 kWh |
 | `taxes.federal_excise_bands` | `_extract_taxes` | the four tiers from that row on, until July 2026 (`excise_tier_bands`, `_parse.py`), including the editions whose aligned text mangles the unit on later rows ("kWhW", "k h": Ecoflux Wallonia January to May 2026, Flux Wallonia October and December 2025, Dynamic and Eco Dynamic Flanders November 2025); None from August 2026 |
@@ -321,6 +321,23 @@ while that mean is unpublished
 (`test_fixed_injection_carries_the_monthly_spp_formula`,
 `test_fixed_injection_is_never_priced_per_hour`,
 `test_every_non_dynamic_kind_gets_the_spp_formula`).
+
+The cards up to March 2025 name the Belpex itself: *"... sur base du paramètre
+d'indexation de la Belpex ... monohoraire : Belpex M * 0,915 – 19,83"*, written
+`Belpex *` in late 2023. That index is the plain monthly mean of the day-ahead:
+the November 2023 card prices its estimate on *"la dernière valeur de la Belpex
+connue (86,4 €/MWh HTVA)"*, October's mean to the cent, and prints the 5,92 the
+formula gives on it. `_belpex_month_feed_in_rows` (`_octaplus_formulas.py`) reads
+the rows only inside that sentence, which ends at *"La valeur de la Belpex"*,
+since the same cards quote the AMR consumption formula as `Belpex * 1,02 + 9,21`,
+and the leg is marked `month_indexed` rather than `spp_indexed`. Read with the
+estimate only, a contract signed on one was credited the later cards' SPP
+formulas from April 2025; OCTA+'s general conditions bill *"la carte tarifaire en
+vigueur à la date de signature du Contrat"* (art. 7.1)
+(`test_a_card_before_april_2025_reads_its_monthly_belpex_formula`,
+`test_the_monthly_belpex_formula_gives_the_cards_own_estimate`,
+`test_the_amr_clause_is_not_read_as_the_monthly_feed_in`,
+`test_a_cohort_signed_before_april_2025_keeps_its_belpex_formula`).
 
 The card states the formula three times, once per meter configuration
 (`monohoraire`, `bihoraire heures pleines`, `bihoraire heures creuses`). They are
@@ -716,6 +733,9 @@ cards unless the row names another month):
 | `octaplus_ecofixed_w_dec2025.pdf` | OCTA+ Eco Fixed, Wallonia, **December 2025**, from the archive endpoint. The same seven-column table, whole in the aligned text, so every row reads. |
 | `octaplus_fixed_v_mar.pdf` | OCTA+ Fixed, Flanders, **March 2026**, the card the archive lists as `FIXEDD`. Fetched from the archive endpoint. |
 | `octaplus_fixed_v_jan.pdf` | OCTA+ Fixed, Flanders, **January 2026**. The monthly feed-in formula reads `Belpex SPP x 0,852 - 13,39`. The same bytes as the card archive's row for the month. |
+| `octaplus_fixed_w_nov2023.pdf` | OCTA+ Fixed, Wallonia, **November 2023**, from the card archive. Feed-in on `Belpex * 0,915 – 19,83`, its estimate on October's 86,4, and the AMR clause's `Belpex * 1,02 + 9,21`. |
+| `octaplus_fixed_w_mar2025.pdf` | OCTA+ Fixed, Wallonia, **March 2025**, from the card archive, the last card on `Belpex M * 0,915 – 19,83` before the SPP formulas. |
+| `octaplus_smartvariable_w_jul2024.pdf` | OCTA+ Smart Variable, Wallonia, **July 2024**, from the card archive. Feed-in on `Belpex M * 0,915 – 19,83`. |
 | `octaplus_boostfix_w_oct.pdf` | OCTA+ Boost Fix, Wallonia, **October 2026**, the first card of the Boost range. Also parsed as Boost Fix Impact. |
 | `octaplus_boostflex_w_oct.pdf` | OCTA+ Boost Flex, Wallonia, **October 2026**. Impact rows and one `Epex RLP` formula per CWaPE band beside the per-meter ones. |
 | `octaplus_ecoboostflex_v_oct.pdf` | OCTA+ Eco Boost Flex, Flanders, **October 2026**. `Epex RLP M` formula per meter, `Epex SPP M * 0,8790 – 16,15` feed-in. |

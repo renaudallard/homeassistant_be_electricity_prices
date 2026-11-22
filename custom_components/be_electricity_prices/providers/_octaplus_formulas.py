@@ -65,6 +65,36 @@ _SPP_FORMULA_RE = re.compile(
     rf"(\d+(?:[.,]\d+)?)",
     re.IGNORECASE,
 )
+# Up to March 2025 the monthly cards index the feed-in credit on the Belpex
+# itself, the plain monthly mean of the day-ahead (October 2023 settled at
+# 86,40 EUR/MWh, the "86,4" the November card quotes), one row per meter:
+#   November 2023 "monohoraire : Belpex * 0,915 – 19,83"
+#   February 2024 "monohoraire : Belpex M * 0,915 – 19,83"
+# The same cards quote the AMR consumption formula as "Belpex * 1,02 + 9,21",
+# so the rows are read only inside the feed-in sentence, which ends where the
+# card says when the month's value is known. "Belpex SPP" keeps out of both.
+_BELPEX_MONTH_FORMULA_RE = re.compile(
+    rf"Belpex\s*(?:M\s*)?\*\s*(\d+(?:[.,]\d+)?)\s*([{SIGN_CHARS}])\s*"
+    rf"(\d+(?:[.,]\d+)?)"
+)
+_BELPEX_MONTH_SENTENCE_RE = re.compile(
+    r"Le\s+prix\s+de\s+votre\s+injection\s+est\s+index[ée]\s+mensuellement\s+sur"
+    r"\s+base\s+du\s+param[èe]tre\s+d['’]indexation\s+de\s+la\s+Belpex\s*\."
+    r"(.{0,600}?)La\s+valeur\s+de\s+la\s+Belpex",
+    re.S,
+)
+
+
+def _belpex_month_feed_in_rows(text: str) -> list[re.Match[str]]:
+    """The per-meter feed-in rows of a card indexed on the monthly Belpex."""
+    sentence = _BELPEX_MONTH_SENTENCE_RE.search(text)
+    if sentence is None:
+        return []
+    return list(
+        _BELPEX_MONTH_FORMULA_RE.finditer(text, sentence.start(1), sentence.end(1))
+    )
+
+
 # The monthly index the variable cards bill CONSUMPTION on, one row per meter
 # configuration. Both card generations, same as the SPP sibling above:
 #   April  "compteur monohoraire : Epex RLP * 1,15 + 10"
