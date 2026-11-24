@@ -36,6 +36,8 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import (
     BooleanSelector,
     EntitySelector,
@@ -60,6 +62,7 @@ from .const import (
     CONF_DAY_CONSUMPTION_KWH,
     CONF_DAY_INJECTION_KWH,
     CONF_DOUBLE_FLOW_METER,
+    CONF_ENECO_BILL,
     CONF_EV_HOME_CHARGING_RATE,
     CONF_INJECTION_KWH,
     CONF_NIGHT_CONSUMPTION_KWH,
@@ -67,16 +70,19 @@ from .const import (
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
+    CONF_SUPPLIER,
     CONF_WHATIF_CONSUMPTION_KWH,
     CONF_WHATIF_INJECTION_KWH,
     DEFAULT_CARD_ARCHIVE,
     DEFAULT_DAILY_COMPARE,
     DEFAULT_EV_HOME_CHARGING_RATE,
+    ENECO_INTEGRATION,
     METER_SENSOR_KEYS,
     REGION_WALLONIA,
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_NONE,
     SOLAR_REGIMES,
+    SUPPLIER_ENECO,
 )
 from .flow_decimal import DecimalSelector, decimal_text
 from .fluvius import capacity_floor_kw
@@ -259,7 +265,35 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
             ),
         )
     ] = BooleanSelector()
+    # An Eneco household can hold its last bill against these prices, as the
+    # eneco_be integration reads it. A suggestion, so it can be cleared.
+    if defaults.get(CONF_SUPPLIER) == SUPPLIER_ENECO:
+        bill = defaults.get(CONF_ENECO_BILL)
+        key = (
+            vol.Optional(CONF_ENECO_BILL, description={"suggested_value": bill})
+            if bill
+            else vol.Optional(CONF_ENECO_BILL)
+        )
+        fields[key] = EntitySelector(
+            EntitySelectorConfig(domain="sensor", integration=ENECO_INTEGRATION)
+        )
     return vol.Schema(fields)
+
+
+def _not_a_bill(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]:
+    """An error on the bill picker unless it names a last bill sensor of the
+    eneco_be integration: any other of its sensors carries no bill lines."""
+    entity_id = data.get(CONF_ENECO_BILL)
+    if not entity_id:
+        return {}
+    entity = er.async_get(hass).async_get(entity_id)
+    if (
+        entity is None
+        or entity.platform != ENECO_INTEGRATION
+        or not entity.unique_id.endswith("_last_bill")
+    ):
+        return {CONF_ENECO_BILL: "eneco_bill_not_a_bill"}
+    return {}
 
 
 def _regime_options(region: Any) -> list[str]:

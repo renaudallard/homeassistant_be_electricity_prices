@@ -433,6 +433,13 @@ DEFAULT_CARD_ARCHIVE: Final = True
 CONF_EV_HOME_CHARGING_RATE: Final = "ev_home_charging_rate"
 DEFAULT_EV_HOME_CHARGING_RATE: Final = False
 
+# The last bill sensor of the eneco_be integration whose unit prices this
+# entry's own are held against (bill_check.py), offered on an Eneco entry.
+# Unset, nothing is compared.
+CONF_ENECO_BILL: Final = "eneco_bill"
+ENECO_INTEGRATION: Final = "eneco_be"
+SUPPLIER_ENECO: Final = "eneco"
+
 # The scheduled sweep runs once a day at a minute derived from the entry id,
 # so installs land all over the clock instead of stampeding every supplier at
 # midnight. Derived rather than random: an install that runs at a different

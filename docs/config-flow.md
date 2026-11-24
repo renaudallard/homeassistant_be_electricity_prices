@@ -941,7 +941,11 @@ current card, as they were before the archive existed. The last box,
 `CONF_EV_HOME_CHARGING_RATE` (default off), creates the
 `ev_home_charging_rate` sensor and is the only thing that lets the entry
 contact creg.be: the tick fetches the CREG's file only for an entry that
-ticked it (`creg_ev.py`).
+ticked it (`creg_ev.py`). On an Eneco entry the step ends with
+`CONF_ENECO_BILL`, an entity picker limited to the eneco_be integration's
+sensors, held to a last bill sensor on submit (`_not_a_bill`,
+`flow_schemas_meters.py`) and dropped like a cleared meter picker; it creates
+the `bill_check` sensor (`bill_check.py`).
  `async_run_daily_compare` (`compare_sweep_flow.py`) drives
 `run_full_sweep` (`compare_engine.py`) and parks the result on
 `coordinator.daily_compare`, which is all the delivery the sensor needs: it is

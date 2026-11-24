@@ -39,6 +39,7 @@ from .cohort import ytd_window_start
 from .const import (
     CONF_API_KEY,
     CONF_CONTRACT,
+    CONF_ENECO_BILL,
     CONF_REGION,
     CONF_SUPPLIER,
     MEASURED_FULL_YEAR_DAYS,
@@ -64,8 +65,9 @@ from .snapshot_store import (
 
 # The meters the household reads are its own entity ids: not needed to debug
 # a price, they should not travel with an issue report. The dump names a
-# sensor by the setting that holds it instead, as the log does.
-TO_REDACT = {CONF_API_KEY, *METER_SETTINGS}
+# sensor by the setting that holds it instead, as the log does. The Eneco
+# bill sensor's id is named after the meter's EAN.
+TO_REDACT = {CONF_API_KEY, CONF_ENECO_BILL, *METER_SETTINGS}
 
 
 def _scrub_secret(text: str, secret: str | None) -> str:

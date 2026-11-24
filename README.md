@@ -500,6 +500,7 @@ All sensors share one device per config entry.
 | `rolling_year_injection` | Compensation or injection regime | The same as `rolling_year_consumption` for feed-in, read off your injection meter. |
 | `contract_end_date` | A contract end date is set | Timestamp of your contract's end date (`device_class: timestamp`), so an automation can remind you to renew before it rolls over. Changes no billed rate. It does bound the projections: `projected_year_cost` reads it to report how much of the 365 days it prices today's contract still covers, and `projected_year_end_cost` how much of the rest of this year. Stays available even when a supplier fetch fails. |
 | `potential_saving` | *Compare every supplier daily* is ticked, and your contract has an alternative of its kind in your region to rank against | EUR a year the cheapest alternative would save you against your own contract, from the nightly ranking. Negative means nothing on the market beats what you have. Attributes carry the whole ranking, each row with its annual cost and, where the same months could be replayed for it, a year-to-date figure. A row whose feed-in credit is left out for want of a full year of day-ahead and of your export (a feed-in that follows the spot price per slot) carries `feed_in_uncredited: true`, and the ranking page tags it `NO FEED-IN`: its figure is high by a year of that credit. A row whose card rewards paying by direct debit, when your own card never asked how you pay, is priced as not paying by direct debit, carries `direct_debit_assumed: true` and is tagged `NO DIRECT DEBIT`; the one-off comparison asks instead. A row whose card weights an index by a Synergrid profile the installation does not hold is priced on the plain monthly mean for an energy index, or on the figure the card prints for a feed-in one, carries `profile_missing: true` and is tagged `NO PROFILE`. A row whose card is indexed on the running month or quarter, priced on its printed rate or the running mean until the period settles, carries `provisional: true` and is marked `~`, as the gas integration marks a provisional price; without an ENTSO-E key and the keyless setting, every feed-in that settles on a month of the day-ahead price is credited at the figure its card prints, your own contract's too when its feed-in is one of them, which the ranking page says once under the table. Survives a restart, unless you changed a setting of the entry since the ranking ran (the supplier, the meter, the solar regime or any other): it is then discarded until the next nightly ranking. A night on which Home Assistant's recorder does not answer keeps the previous ranking, and one on which it fails only for the year-to-date figures publishes the ranking without them. See [docs/entities.md](./docs/entities.md). |
+| `bill_check` | An Eneco entry with an *Eneco bill* picked on the meters step | How many lines of the last Eneco bill this entry prices otherwise, beyond the bill's rounding. Each line is in the unrecorded `lines` attribute with the price billed and the price this entry uses for the same dates. See [Checking an Eneco bill](#checking-an-eneco-bill). |
 | `ev_home_charging_rate` | *Publish the CREG home charging rate for a company car* is ticked | For a company car charged at home: the most an employer may reimburse per metered kWh, free of tax and social contributions, when it pays a flat rate (circular 2024/C/77), in EUR/kWh for your region and the running quarter. Computed from the CREG's monthly prices the way the SPF Finances does in the circular's quarterly addenda, and read once a quarter. It is a ceiling, not what every employer pays: an employer may pay less, must pay the lowest of the three regions if it ignores where its staff live, or may reimburse your actual cost instead. Attributes carry the quarter and every quarter the CREG's file covers, so last quarter's kWh can be settled at last quarter's rate. Not part of `current_price`. |
 
 ## Installation
@@ -871,7 +872,12 @@ dropped rather than billed on the new card.
      cleared stays cleared.
    - The step ends with three boxes: *Compare every supplier daily* (off
      by default), *Read past cards from the project's archive* (on) and
-     *Publish the CREG home charging rate for a company car* (off).
+     *Publish the CREG home charging rate for a company car* (off). On an
+     Eneco entry it also offers *Eneco bill*: pick the last bill sensor of
+     the [eneco integration](https://github.com/renaudallard/homeassistant_eneco)
+     and its unit prices are checked against this entry's (see
+     [Checking an Eneco bill](#checking-an-eneco-bill)). Left empty, nothing
+     is compared.
 
 ### Getting an ENTSO-E API key
 
@@ -1891,6 +1897,48 @@ are credited nothing rather than a guess, and `injection_hours_uncredited`
 appears and counts them, so the bill reads high by their feed-in. Past
 hours are only fetched with an ENTSO-E API key or the keyless setting, which
 is what these contracts need.
+
+### Checking an Eneco bill
+
+The [eneco integration](https://github.com/renaudallard/homeassistant_eneco)
+reads each meter's newest settlement bill and publishes its lines on a last
+bill sensor: what was billed, over which days, at what unit price before VAT.
+Pick that sensor as *Eneco bill* on the meters step of an Eneco entry and a
+`bill_check` sensor holds each line against what this entry bills for the
+same days. Each month of a line is priced the way the year-to-date walk
+prices it: on the card or the cohort that applies to that month (the tariff
+card month you set, the card of the month for the network and the levies),
+with your meter, network operator and VAT, and the project's card archive
+for a month the supplier no longer serves. Nothing is read from the
+recorder, so a bill older than your history is checked too.
+
+The state is the number of lines off. The `lines` attribute, kept out of
+the recorder, lists every line with its `label`, `section`, `start` and
+`end`, the unit price `billed`, the one this entry uses (`priced`, EUR per
+kWh or per year before VAT, or `[low, high]` when the entry bills those
+dates at more than one rate) and a `status`:
+
+- `ok`: within the bill's rounding. The bill prints prices per kWh to
+  0,01 c€ and prices per year to 0,01 €, so its rounding moves a price by
+  up to half a unit, and the card this entry reads prints its figures to
+  the same digits including VAT, which moves it by less than another half
+  once VAT is taken off. A gap of up to one unit (0,01 c€/kWh, 0,01 €/year)
+  is put down to printing.
+- `off`: further than that. Where the entry bills the line's dates at more
+  than one rate, the line is off only when every one of them is beyond the
+  rounding on the same side; no blend of them can then give the bill's.
+- `not_compared`, with a `reason`: a line with no matching charge here, a
+  flat amount (the prosumer tariff cap depends on the period's volumes), a
+  line whose dates the entry bills at rates on both sides of the bill's, a
+  month with no card of its own (the current card would stand in for it,
+  which is not what that month cost), a meter set up differently from the
+  bill's registers, or a network line on a bill from outside Wallonia.
+
+Lines are matched on the line type Eneco hides in its electricity bills
+(the same in every language), else on the French label printed on the
+bill; a line neither names is left out rather than guessed. The check runs
+when Home Assistant has started, whenever the bill sensor or this entry's card
+changes, and once a day, since the months a bill covers settle after it.
 
 ## Dashboard cards
 

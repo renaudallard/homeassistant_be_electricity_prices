@@ -55,6 +55,7 @@ from .const import (
     CONF_DAY_HOURS,
     CONF_DIRECT_DEBIT,
     CONF_DSO_TARIFF_MODE,
+    CONF_ENECO_BILL,
     CONF_INCLUDE_VAT,
     CONF_KEYLESS_SPOTS,
     CONF_QUARTER_HOURLY,
@@ -116,6 +117,7 @@ from .flow_schemas_meters import (
     _capacity_schema,
     _incomplete_register_pairs,
     _meters_schema,
+    _not_a_bill,
     _reused_meter_sensors,
     _solar_schema,
 )
@@ -796,7 +798,7 @@ class _WizardStepsMixin:
         if user_input is not None:
             # Same as the capacity step: a blanked picker never reaches
             # user_input, so drop it explicitly to allow unwiring a meter.
-            for key in _METER_SENSOR_KEYS:
+            for key in (*_METER_SENSOR_KEYS, CONF_ENECO_BILL):
                 if key not in user_input:
                     self._data.pop(key, None)
             self._data.update(user_input)
@@ -808,6 +810,7 @@ class _WizardStepsMixin:
             # the same for one sensor picked twice, which bills its kWh twice.
             errors = _incomplete_register_pairs(self._data)
             errors.update(_reused_meter_sensors(self._data))
+            errors.update(_not_a_bill(self.hass, self._data))
             if errors:
                 defaults = dict(self._data)
                 return self.async_show_form(

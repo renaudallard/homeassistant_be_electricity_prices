@@ -81,6 +81,9 @@
       },
       "rolling_year_injection": {
         "default": "mdi:solar-power-variant"
+      },
+      "bill_check": {
+        "default": "mdi:receipt-text-check"
       }
     },
     "binary_sensor": {
