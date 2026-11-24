@@ -2057,3 +2057,36 @@ def test_the_published_quarters_are_read_once_and_again_when_a_month_lacks(
         failing = False
         assert index(date(2026, 10, 1)) is None
         assert len(reads) == 5
+
+
+def test_a_contract_on_the_october_2022_card_has_no_first_year_cut_off(
+    freezer: Any,
+) -> None:
+    """Zon & Wind Flex runs for an indefinite term ("contract van onbepaalde
+    duur"), and nothing ends the cohort after a year: every month of 2026
+    whose quarter is listed still bills the October 2022 formula and fee,
+    more than three years on, keyless and keyed alike."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from custom_components.be_electricity_prices.const import CONF_API_KEY
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+
+    freezer.move_to("2026-11-24 12:00:00+01:00")
+    quarters = {1: 99.22, 4: 98.20, 7: 137.15}
+    months = [date(2026, m, 1) for m in range(1, 10)]
+    for data in ({}, {CONF_API_KEY: "k"}):
+        billed = _billed_on_the_october_2022_card(months, data)
+        for month in months:
+            index = quarters[(month.month - 1) // 3 * 3 + 1]
+            energy = billed[month].energy
+            assert isinstance(energy, SpotMonthlyRates), month
+            assert energy.yearly_fixed_fee == pytest.approx(52.56)
+            noon = datetime(
+                month.year, month.month, 15, 12, tzinfo=ZoneInfo("Europe/Brussels")
+            )
+            cents = energy_eur_per_kwh(energy, noon, None, "mono") / 1.06 * 100
+            assert cents == pytest.approx(0.1 * index + 5.966, abs=1e-6), month
