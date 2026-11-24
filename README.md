@@ -1937,8 +1937,10 @@ dates at more than one rate) and a `status`:
   flat amount (the prosumer tariff cap depends on the period's volumes), a
   line whose dates the entry bills at rates on both sides of the bill's, a
   month with no card of its own (the current card would stand in for it,
-  which is not what that month cost), a meter set up differently from the
-  bill's registers, or a network line on a bill from outside Wallonia.
+  which is not what that month cost), a day before a supplier switch
+  recorded on this entry (billed on the earlier contract), a meter set up
+  differently from the bill's registers, or a network line on a bill from
+  outside Wallonia.
 
 Lines are matched on the line type Eneco hides in its electricity bills
 (the same in every language), else on the French label printed on the

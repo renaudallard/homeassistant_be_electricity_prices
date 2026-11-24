@@ -345,6 +345,30 @@ def test_a_month_without_a_card_of_its_own_is_left_out(freezer: Any) -> None:
     assert old["reason"] == "no tariff card for 2022-12"
 
 
+def test_a_line_before_the_last_supplier_switch_is_left_out(freezer: Any) -> None:
+    """Those days were billed on the contract the entry held before, which
+    the entry's own cards do not price."""
+    freezer.move_to("2026-11-24 12:00:00+01:00")
+    earlier = {
+        "previous_contracts": [
+            {
+                "until": "2025-07-01",
+                "data": {"supplier": "luminus", "contract": "x", "region": "wallonia"},
+            }
+        ]
+    }
+    results = _checked(_BILL[2:4], **earlier)
+    assert results is not None
+    assert [(r["start"], r["status"], r["reason"]) for r in results] == [
+        (
+            "2025-04-01",
+            "not_compared",
+            "billed under an earlier contract of this entry",
+        ),
+        ("2025-07-01", "ok", None),
+    ]
+
+
 def test_a_line_that_does_not_read_is_left_out(freezer: Any) -> None:
     freezer.move_to("2026-11-24 12:00:00+01:00")
     broken = _line(
@@ -463,14 +487,32 @@ async def test_the_card_goes_with_the_bill_sensor(hass: HomeAssistant) -> None:
         severity=ir.IssueSeverity.WARNING,
         translation_key="bill_check_off",
     )
-    bill_check.clear_unless_checked(hass, entry)
-    bill_check.clear_unless_checked(hass, picked)
+    moved = make_entry(**_DATA, eneco_bill=_BILL_ENTITY, supplier="cociter")
+    moved.add_to_hass(hass)
+    gone = f"bill_check_off_{moved.entry_id}"
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        gone,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="bill_check_off",
+    )
+    for each in (entry, picked, moved):
+        bill_check.clear_unless_checked(hass, each)
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
     assert ir.async_get(hass).async_get_issue(DOMAIN, kept) is not None
+    # A switch away from Eneco leaves the picked sensor, which checks nothing.
+    assert ir.async_get(hass).async_get_issue(DOMAIN, gone) is None
 
 
 @pytest.mark.parametrize(
-    ("picked", "count"), [({}, 0), ({"eneco_bill": _BILL_ENTITY}, 1)]
+    ("picked", "count"),
+    [
+        ({}, 0),
+        ({"eneco_bill": _BILL_ENTITY}, 1),
+        ({"eneco_bill": _BILL_ENTITY, "supplier": "cociter"}, 0),
+    ],
 )
 async def test_the_sensor_exists_only_with_a_bill_picked(
     picked: dict[str, str], count: int

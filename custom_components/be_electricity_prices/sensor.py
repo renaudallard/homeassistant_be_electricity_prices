@@ -45,13 +45,12 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from . import creg_ev
-from .bill_check import BillCheckSensor
+from .bill_check import BillCheckSensor, bill_checked
 from .const import (
     CONF_CONTRACT,
     CONF_CONTRACT_END_DATE,
     CONF_DAILY_COMPARE,
     CONF_DSO_TARIFF_MODE,
-    CONF_ENECO_BILL,
     CONF_EV_HOME_CHARGING_RATE,
     CONF_METER,
     CONF_QUARTER_HOURLY,
@@ -476,7 +475,7 @@ async def async_setup_entry(
     ):
         entities.append(PotentialSavingSensor(coordinator))
     # Only once a bill sensor is picked: nothing is compared otherwise.
-    if bill := entry.data.get(CONF_ENECO_BILL):
+    if bill := bill_checked(entry.data):
         entities.append(BillCheckSensor(coordinator, bill))
     coordinator.intended_unique_ids["sensor"] = {
         e.unique_id for e in entities if e.unique_id

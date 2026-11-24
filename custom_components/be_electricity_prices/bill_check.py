@@ -69,6 +69,7 @@ from .const import (
     CONF_ENECO_BILL,
     CONF_METER,
     CONF_REGION,
+    CONF_SUPPLIER,
     DOMAIN,
     DSO_MODE_IMPACT,
     DSO_MODE_SIMPLE,
@@ -77,7 +78,9 @@ from .const import (
     METER_EXCLUSIVE_NIGHT,
     METER_MONO,
     REGION_WALLONIA,
+    SUPPLIER_ENECO,
 )
+from .contract_periods import current_period_start
 from .coordinator import BePricesCoordinator, supplier_device_info
 from .fees import _walloon_fixed_term_applies
 from .markdown_text import escape_markdown
@@ -155,6 +158,15 @@ CHECK_INTERVAL: Final = timedelta(days=1)
 _LONGEST_LINE: Final = timedelta(days=3 * 366)
 
 MonthSnapshot = Callable[[date], Awaitable[SupplierSnapshot | None]]
+
+
+def bill_checked(data: Mapping[str, Any]) -> str | None:
+    """The bill sensor an entry checks: the one picked, on an Eneco entry.
+    One picked before a switch to another supplier checks nothing."""
+    bill = data.get(CONF_ENECO_BILL)
+    if data.get(CONF_SUPPLIER) != SUPPLIER_ENECO or not isinstance(bill, str):
+        return None
+    return bill or None
 
 
 @dataclass(frozen=True, slots=True)
@@ -372,8 +384,11 @@ async def check_lines(
     """Every line of a bill, held to what ``entry`` bills for it.
 
     ``snapshot_for`` gives the snapshot the entry bills a day of a month on,
-    or None where no card of that month can be had.
+    or None where no card of that month can be had. A day before the last
+    supplier switch the entry recorded was billed on an earlier contract,
+    which the walk below does not price.
     """
+    since = current_period_start(entry.data, date.min)
     results: list[dict[str, Any]] = []
     for raw in raw_lines:
         line = _read_line(raw)
@@ -392,6 +407,15 @@ async def check_lines(
         if kind is None:
             results.append(
                 _result(line, STATUS_NOT_COMPARED, reason="no matching charge")
+            )
+            continue
+        if line.start < since:
+            results.append(
+                _result(
+                    line,
+                    STATUS_NOT_COMPARED,
+                    reason="billed under an earlier contract of this entry",
+                )
             )
             continue
         results.append(await _check_line(line, kind, snapshot_for, entry))
@@ -458,7 +482,7 @@ async def check_bill(
 @callback
 def clear_unless_checked(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Take the Repairs card down once no bill is compared any more."""
-    if not entry.data.get(CONF_ENECO_BILL):
+    if bill_checked(entry.data) is None:
         ir.async_delete_issue(hass, DOMAIN, f"{ISSUE_KEY}_{entry.entry_id}")
 
 
