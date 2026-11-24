@@ -68,10 +68,20 @@ def _entities(module: Any) -> dict[str, bool]:
                     getattr(item, "device_class", None) is not None
                 )
             elif isinstance(item, type) and issubclass(item, Entity):
-                key = getattr(item, "_attr_translation_key", None)
+                key = _class_attr(item, "translation_key")
                 if isinstance(key, str):
-                    out[key] = getattr(item, "_attr_device_class", None) is not None
+                    out[key] = _class_attr(item, "device_class") is not None
     return out
+
+
+def _class_attr(cls: type, name: str) -> Any:
+    """An ``_attr_`` value a class sets. Home Assistant's entity metaclass
+    keeps it under ``__attr_`` and puts a property in its place, which a
+    plain getattr on the class returns instead."""
+    for klass in cls.__mro__:
+        if f"__attr_{name}" in vars(klass):
+            return vars(klass)[f"__attr_{name}"]
+    return None
 
 
 def test_every_entity_icon_names_an_entity_and_none_is_missing() -> None:
