@@ -52,6 +52,7 @@ from ..const import (
     REGION_FLANDERS,
     REGION_WALLONIA,
 )
+from ._eneco_index import published_quarters
 from ._eneco_overlays import _AREAS, _NUM, _WS, _extract_dsos, _extract_taxes
 from ._links import on_hosts
 from ._parse import (
@@ -988,4 +989,5 @@ EXTRACTOR = SupplierExtractor(
     fetch=fetch,
     probe=probe,
     fetch_for_month=fetch_for_month,
+    quarter_indices=published_quarters,
 )

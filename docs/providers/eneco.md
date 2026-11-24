@@ -231,6 +231,27 @@ Walloon caller gets the Flemish energy fund zeroed on the archived card too.
    `test_fetch_for_month_settles_a_fixed_cards_feed_in_on_the_next_card` a
    Fix month's credit.
 
+6. A quarterly card (before April 2023, see Energy formula per kind) is
+   settled on no month's footnote. Eneco still bills a contract signed on one
+   on that card's formula at the delivery quarter's Belpex-RLP, which no later
+   card prints. Its indexation document lists it, one row per month beside
+   Belpex-RLP-M and Belpex - Injectie, left out until the quarter is over
+   (`indexatieparameters-elek.pdf`, with the months before 2024 in
+   `indexatieparameters-elek-oud.pdf`). `published_quarters`
+   (`_eneco_index.py`) reads both, only rows with a figure in every column,
+   and is the extractor's `quarter_indices`. The cohort takes each month's
+   value off it (`quarter_indices.py`) where the month's own Belpex-RLP-M on
+   the list lies within 5 % of the one the month's card footnotes, which ties
+   the list to the card's "€/MWh". The January 2026 card footnotes December
+   2025's Belpex-RLP-M and Belpex-injectie the other way round from the
+   document (85,3520 and 87,1650 against 87,16 and 85,35); the other 34
+   months archived from November 2023 to September 2026 agree to the
+   rounding. A quarter not listed yet bills as any running quarter: with a
+   key on its RLP-weighted mean to date, without one on the month card's
+   printed rate with the signing card's standing charge.
+   `test_a_contract_on_a_quarterly_card_bills_each_month_on_its_quarter`
+   reproduces a 2025 bill on the October 2022 card month by month.
+
 ### `discover`
 
 `discover` (`eneco.py`) returns the set of `power_<name>` slugs advertised
@@ -728,6 +749,9 @@ Fixtures live under `tests/fixtures/` and are loaded via `fixture_text(...)`.
 | `eneco_flex_oct22.pdf` | Power Flex, October 2022 (quarterly Belpex-RLP, a formula per register on different bases, the 0 to 20.000 kWh excise row) |
 | `eneco_flex_mar23.pdf` | Power Flex, March 2023 (the last quarterly card, one formula in every column) |
 | `eneco_flex_apr23.pdf` | Power Flex, April 2023 (the first monthly card, whose footnote names March's Belpex-RLP-M) |
+| `eneco_indexatieparameters_elek_2026-11.pdf` | the indexation document of November 2026, January 2024 to October 2026, the fourth quarter not yet listed |
+| `eneco_indexatieparameters_elek_oud_2026-10.pdf` | the older indexation document of October 2026, from January 2023, Belpex-RLP-M from March 2023 |
+| `tests/fixtures/archive_rows_eneco_power_flex_wallonia_2025_02_to_2026_11.json` | the card archive's Walloon Flex rows of February 2025 to November 2026 as held on 23 November 2026 |
 
 ## When the card changes, look here
 

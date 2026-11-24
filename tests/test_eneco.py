@@ -1686,3 +1686,374 @@ def test_a_quarterly_card_is_not_settled_on_the_next_cards_month_index() -> None
     assert energy.index_realised is None
     assert energy.current == pytest.approx(0.2856)
     assert energy.yearly_fixed_fee == pytest.approx(65.0)
+
+
+_INDEX_DOCUMENTS = {
+    "indexatieparameters-elek.pdf": "eneco_indexatieparameters_elek_2026-11.pdf",
+    "indexatieparameters-elek-oud.pdf": "eneco_indexatieparameters_elek_oud_2026-10.pdf",
+}
+
+
+def _index_document(
+    failing: str = "",
+) -> Callable[[Any, str], Coroutine[Any, Any, str]]:
+    """The two indexation documents as Eneco served them in November 2026,
+    ``failing`` the one that answers an error."""
+
+    async def pdf(_session: Any, url: str) -> str:
+        name = url.rsplit("/", 1)[1]
+        if failing and name == failing:
+            raise eneco_mod.ExtractorError(f"HTTP 503 fetching {url}")
+        return fixture_text(_INDEX_DOCUMENTS[name])
+
+    return pdf
+
+
+def test_the_indexation_documents_give_each_quarters_belpex_rlp() -> None:
+    """Belpex-RLP is the quarter's, repeated over its months and left out
+    until it is over; a short row says nothing of which figure is missing."""
+    from custom_components.be_electricity_prices.providers._eneco_index import (
+        parse_index_document,
+    )
+
+    current = parse_index_document(
+        fixture_text("eneco_indexatieparameters_elek_2026-11.pdf")
+    )
+    older = parse_index_document(
+        fixture_text("eneco_indexatieparameters_elek_oud_2026-10.pdf")
+    )
+    assert min(current) == date(2024, 1, 1)
+    assert current[date(2025, 2, 1)] == pytest.approx((0.11385, 0.13141))
+    assert current[date(2026, 9, 1)] == pytest.approx((0.13715, 0.16288))
+    # October 2026 prints its Belpex-RLP-M and Belpex - Injectie only.
+    assert date(2026, 10, 1) not in current
+    # The older document has no Belpex-RLP-M before March 2023, and three
+    # more columns.
+    assert min(older) == date(2023, 3, 1)
+    assert older[date(2023, 3, 1)] == pytest.approx((0.13127, 0.11262))
+    assert older[date(2026, 9, 1)] == current[date(2026, 9, 1)]
+    with pytest.raises(eneco_mod.ExtractorError):
+        parse_index_document(fixture_text("eneco_flex_oct22.pdf"))
+
+
+def test_the_older_indexation_document_is_read_where_it_answers() -> None:
+    from custom_components.be_electricity_prices.providers import _eneco_index
+
+    target = "custom_components.be_electricity_prices.providers._eneco_index"
+    with patch(f"{target}.fetch_pdf_text", new=_index_document()):
+        both = _run(_eneco_index.published_quarters(None))  # type: ignore[arg-type]
+    assert min(both) == date(2023, 3, 1) and max(both) == date(2026, 9, 1)
+    with patch(
+        f"{target}.fetch_pdf_text",
+        new=_index_document("indexatieparameters-elek-oud.pdf"),
+    ):
+        current = _run(_eneco_index.published_quarters(None))  # type: ignore[arg-type]
+    assert min(current) == date(2024, 1, 1)
+    with (
+        patch(
+            f"{target}.fetch_pdf_text",
+            new=_index_document("indexatieparameters-elek.pdf"),
+        ),
+        pytest.raises(eneco_mod.ExtractorError),
+    ):
+        _run(_eneco_index.published_quarters(None))  # type: ignore[arg-type]
+
+
+def _archived_flex_months() -> dict[date, Any]:
+    """The Flex rows the card archive held for Wallonia on 23 November 2026,
+    February 2025 to November 2026."""
+    import json
+
+    from custom_components.be_electricity_prices.snapshot_codec import (
+        _archived_snapshot_from_dict,
+    )
+    from tests import FIXTURES
+
+    rows = json.loads(
+        (
+            FIXTURES / "archive_rows_eneco_power_flex_wallonia_2025_02_to_2026_11.json"
+        ).read_text(encoding="utf-8")
+    )
+    return {
+        date.fromisoformat(f"{month}-01"): _archived_snapshot_from_dict(row)
+        for month, row in rows.items()
+    }
+
+
+def _billed_on_the_october_2022_card(
+    months: list[date], data: dict[str, Any], *, failing: str = ""
+) -> dict[date, Any]:
+    """Each month as ``_effective_snapshot_for_month`` bills it for a Walloon
+    Flex contract signed on the October 2022 card, on the months' archived
+    rows and the indexation documents."""
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices import cohort
+    from custom_components.be_electricity_prices.const import (
+        CONF_CONTRACT,
+        CONF_METER,
+        CONF_REGION,
+        CONF_SUPPLIER,
+        CONF_TARIFF_CARD_DATE,
+    )
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+
+    signing = _quarterly_card(
+        {"012210": fixture_text("eneco_flex_oct22.pdf")}, date(2022, 10, 1)
+    )
+    archived = _archived_flex_months()
+    current = archived[date(2026, 11, 1)]
+
+    async def _signing(*args: Any, **_k: object) -> Any:
+        assert args[5] == date(2022, 10, 1)
+        return signing
+
+    async def _month(*args: Any, **_k: object) -> Any:
+        return archived[args[5]]
+
+    entry = SimpleNamespace(
+        data={
+            CONF_SUPPLIER: "eneco",
+            CONF_CONTRACT: "power_flex",
+            CONF_REGION: REGION_WALLONIA,
+            CONF_METER: "mono",
+            CONF_TARIFF_CARD_DATE: "2022-10-01",
+        }
+        | data
+    )
+    hass = SimpleNamespace(data={})
+
+    async def _walk() -> dict[date, Any]:
+        return {
+            month: await cohort._effective_snapshot_for_month(
+                hass,  # type: ignore[arg-type]
+                None,  # type: ignore[arg-type]
+                EXTRACTORS["eneco"],
+                "power_flex",
+                REGION_WALLONIA,
+                month,
+                current,
+                entry,  # type: ignore[arg-type]
+            )
+            for month in months
+        }
+
+    with (
+        patch.object(cohort, "month_card", new=_signing),
+        patch.object(cohort, "_snapshot_for_month", new=_month),
+        patch(
+            "custom_components.be_electricity_prices.providers._eneco_index.fetch_pdf_text",
+            new=_index_document(failing),
+        ),
+    ):
+        return _run(_walk())
+
+
+# The energy price of each month of the yearly bill of a Walloon Flex contract
+# signed on the October 2022 card, in c€/kWh excluding VAT, and the quarter's
+# Belpex-RLP it prints with it: "0,1 x BELPEX-RLP + 5,966".
+_BILLED = {
+    date(2025, 2, 1): (17.35, 113.85),
+    date(2025, 3, 1): (17.35, 113.85),
+    date(2025, 4, 1): (12.91, 69.41),
+    date(2025, 5, 1): (12.91, 69.41),
+    date(2025, 6, 1): (12.91, 69.41),
+    date(2025, 7, 1): (13.42, 74.51),
+    date(2025, 8, 1): (13.42, 74.51),
+    date(2025, 9, 1): (13.42, 74.51),
+    date(2025, 10, 1): (14.50, 85.31),
+    date(2025, 11, 1): (14.50, 85.31),
+    date(2025, 12, 1): (14.50, 85.31),
+    date(2026, 1, 1): (15.89, 99.22),
+}
+
+
+@pytest.mark.parametrize("keyed", [False, True], ids=["keyless", "keyed"])
+def test_a_contract_on_a_quarterly_card_bills_each_month_on_its_quarter(
+    freezer: Any, keyed: bool
+) -> None:
+    """Eneco bills a Flex contract signed on the October 2022 card on that
+    card's formula at the quarter's Belpex-RLP from its indexation document,
+    in 2025 still: 17,35 c€/kWh in February where the month's own card and
+    its Belpex-RLP-M give 19,11 on the same formula. Each month comes out at
+    the bill's figure, with the card's standing charge, key or not.
+    December 2025 is held to a card footnoting its Belpex-RLP-M at 85,3520,
+    where the document lists 87,16."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from custom_components.be_electricity_prices.const import CONF_API_KEY
+    from custom_components.be_electricity_prices.pricing import energy_eur_per_kwh
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+
+    freezer.move_to("2026-11-24 12:00:00+01:00")
+    billed = _billed_on_the_october_2022_card(
+        list(_BILLED), {CONF_API_KEY: "k"} if keyed else {}
+    )
+    for month, (price, index) in _BILLED.items():
+        energy = billed[month].energy
+        assert isinstance(energy, SpotMonthlyRates), month
+        assert energy.quarter_indexed
+        assert energy.index_realised == pytest.approx(index / 1000), month
+        assert energy.yearly_fixed_fee == pytest.approx(52.56)
+        noon = datetime(
+            month.year, month.month, 15, 12, tzinfo=ZoneInfo("Europe/Brussels")
+        )
+        cents = energy_eur_per_kwh(energy, noon, None, "mono") / 1.06 * 100
+        assert cents == pytest.approx(price, abs=0.005), month
+
+
+def test_a_quarter_not_yet_published_bills_as_the_quarter_logic_does(
+    freezer: Any,
+) -> None:
+    """October 2026's quarter is not on the document yet: keyless, the
+    month's printed rate with the standing charge signed for; keyed, the
+    quarter's own mean to date, which no published value pins. A month whose
+    card names another index than the document is billed so too, and the
+    document failing to read leaves every month so."""
+    from custom_components.be_electricity_prices.const import CONF_API_KEY
+    from custom_components.be_electricity_prices.providers._rates import (
+        SpotMonthlyRates,
+    )
+
+    freezer.move_to("2026-11-24 12:00:00+01:00")
+    months = [date(2026, 9, 1), date(2026, 10, 1)]
+    keyless = _billed_on_the_october_2022_card(months, {})
+    printed = keyless[date(2026, 10, 1)].energy
+    assert isinstance(printed, VariableRates)
+    assert printed.current == pytest.approx(
+        _archived_flex_months()[date(2026, 10, 1)].energy.current
+    )
+    assert printed.yearly_fixed_fee == pytest.approx(52.56)
+    keyed = _billed_on_the_october_2022_card(months, {CONF_API_KEY: "k"})
+    leg = keyed[date(2026, 10, 1)].energy
+    assert isinstance(leg, SpotMonthlyRates) and leg.quarter_indexed
+    assert leg.index_realised is None
+    settled = keyed[date(2026, 9, 1)].energy
+    assert isinstance(settled, SpotMonthlyRates)
+    assert settled.index_realised == pytest.approx(0.13715)
+    unread = _billed_on_the_october_2022_card(
+        months, {CONF_API_KEY: "k"}, failing="indexatieparameters-elek.pdf"
+    )
+    assert all(
+        isinstance(s.energy, SpotMonthlyRates) and s.energy.index_realised is None
+        for s in unread.values()
+    )
+
+
+def test_the_published_quarter_is_held_to_the_months_own_card(freezer: Any) -> None:
+    """The document prints no unit. Its Belpex-RLP-M for the month has to be
+    the one the month's card footnotes in €/MWh, or nothing on it is billed:
+    a document read on another scale, here ten times the card's, gives no
+    index. The swapped December 2025 footnote still passes."""
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.quarter_indices import (
+        published_quarter_index,
+    )
+
+    freezer.move_to("2026-11-24 12:00:00+01:00")
+    archived = _archived_flex_months()
+    september = archived[date(2026, 9, 1)]
+    hass = SimpleNamespace(data={})
+
+    def index(card: Any, month: date) -> float | None:
+        return _run(
+            published_quarter_index(
+                hass,  # type: ignore[arg-type]
+                None,  # type: ignore[arg-type]
+                EXTRACTORS["eneco"],
+                card,
+                month,
+            )
+        )
+
+    with patch(
+        "custom_components.be_electricity_prices.providers._eneco_index.fetch_pdf_text",
+        new=_index_document(),
+    ):
+        assert index(september, date(2026, 9, 1)) == pytest.approx(0.13715)
+        assert index(archived[date(2025, 12, 1)], date(2025, 12, 1)) == (
+            pytest.approx(0.08531)
+        )
+        off = replace(
+            september, energy=replace(september.energy, index_realised=0.016288)
+        )
+        assert index(off, date(2026, 9, 1)) is None
+        unsettled = replace(
+            september, energy=replace(september.energy, index_realised=None)
+        )
+        assert index(unsettled, date(2026, 9, 1)) is None
+
+
+def test_the_published_quarters_are_read_once_and_again_when_a_month_lacks(
+    freezer: Any,
+) -> None:
+    """One read for every month listed; a month not listed asks again a day
+    later, and a failed read half an hour later, keeping what it had."""
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    from custom_components.be_electricity_prices.providers import EXTRACTORS
+    from custom_components.be_electricity_prices.quarter_indices import (
+        published_quarter_index,
+    )
+
+    freezer.move_to("2026-11-24 12:00:00+01:00")
+    archived = _archived_flex_months()
+    # October settled on November's card, as the month cache settles it; the
+    # document lists its Belpex-RLP-M, not yet the fourth quarter's value.
+    october = archived[date(2026, 10, 1)]
+    archived[date(2026, 10, 1)] = replace(
+        october, energy=replace(october.energy, index_realised=0.1741873)
+    )
+    hass = SimpleNamespace(data={})
+    reads: list[str] = []
+    serve = _index_document()
+    failing = False
+
+    async def pdf(session: Any, url: str) -> str:
+        reads.append(url)
+        if failing:
+            raise eneco_mod.ExtractorError(f"HTTP 503 fetching {url}")
+        return await serve(session, url)
+
+    def index(month: date) -> float | None:
+        return _run(
+            published_quarter_index(
+                hass,  # type: ignore[arg-type]
+                None,  # type: ignore[arg-type]
+                EXTRACTORS["eneco"],
+                archived[month],
+                month,
+            )
+        )
+
+    with patch(
+        "custom_components.be_electricity_prices.providers._eneco_index.fetch_pdf_text",
+        new=pdf,
+    ):
+        for month in (date(2025, 2, 1), date(2025, 7, 1), date(2026, 9, 1)):
+            assert index(month) is not None
+        assert len(reads) == 2
+        assert index(date(2026, 10, 1)) is None
+        assert len(reads) == 2
+        freezer.tick(3600)
+        assert index(date(2026, 10, 1)) is None
+        assert len(reads) == 2
+        freezer.tick(23 * 3600)
+        failing = True
+        assert index(date(2026, 10, 1)) is None
+        assert len(reads) == 3
+        assert index(date(2025, 2, 1)) == pytest.approx(0.11385)
+        freezer.tick(20 * 60)
+        assert index(date(2026, 10, 1)) is None
+        assert len(reads) == 3
+        freezer.tick(11 * 60)
+        failing = False
+        assert index(date(2026, 10, 1)) is None
+        assert len(reads) == 5

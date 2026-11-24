@@ -77,6 +77,7 @@ from .providers.base import (
     SupplierExtractor,
     SupplierSnapshot,
 )
+from .quarter_indices import on_published_quarters, published_quarter_index
 from .signing_month import _parse_iso_date, _tariff_card_month
 from .snapshot_months import (
     _month_card_retrievable,
@@ -352,6 +353,17 @@ async def _cohort_legs(
             cohort = _cohort_energy_from_archived(
                 _on_settled_quarter(snap_start, month_snapshot or current_snapshot)
             )
+            if (
+                cohort is not None
+                and month_snapshot is not None
+                and year_month is not None
+                and on_published_quarters(extractor, cohort, month_snapshot)
+            ):
+                # Signed on a quarterly card, billed on a month's: the month's
+                # index is another one, and the quarter's is the supplier's.
+                settled = await published_quarter_index(
+                    hass, session, extractor, month_snapshot, year_month
+                )
             # A SpotMonthlyRates leg bills at the current month's mean spot,
             # which needs an ENTSO-E key. Only the dynamic and spot-monthly
             # contract kinds are asked for one, so a variable cohort can reach
@@ -748,10 +760,14 @@ async def _effective_snapshot_for_month(
     if signed and getattr(snap_m.energy, "settled_as_stated", False):
         energy = None
     if energy is not None:
-        if isinstance(energy, SpotMonthlyRates):
+        if isinstance(energy, SpotMonthlyRates) and not on_published_quarters(
+            extractor, energy, snap_m
+        ):
             # The month's own archived card may carry the value its index
             # settled at (Eneco prints it on the next card). The cohort leg
-            # holds the contract's coefficients; the month supplies the index.
+            # holds the contract's coefficients; the month supplies the index,
+            # unless the leg is on a quarter's the card does not carry, which
+            # _cohort_legs looked up.
             energy = replace(
                 energy,
                 index_realised=getattr(snap_m.energy, "index_realised", None),

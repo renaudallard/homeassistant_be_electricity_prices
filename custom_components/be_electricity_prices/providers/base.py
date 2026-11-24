@@ -522,6 +522,13 @@ MonthSettler = Callable[
     Awaitable["SupplierSnapshot"],
 ]
 
+# Published quarter indices: every month a supplier lists apart from its
+# cards, with the index of its quarter and its own month's, in EUR/kWh.
+# Raises ExtractorError when the list cannot be read.
+QuarterIndexFetcher = Callable[
+    [aiohttp.ClientSession], Awaitable[dict[date, tuple[float, float]]]
+]
+
 # Stand-in reference: given a contract, a closed month no archive holds a card
 # of and today, the contract and month whose card prints the indices that
 # month settled at, or None while no such card can be out yet.
@@ -590,6 +597,11 @@ class SupplierExtractor:
     # another card of the supplier (Bolt: the fixed card of the quarter after
     # prints the variable cards' SPP table). See ``snapshot_feed_in``.
     stand_in_reference: StandInReference | None = None
+    # Set where a quarter-indexed card's index is published apart from the
+    # cards (Eneco: the Flex cards up to March 2023, billed on the quarter's
+    # Belpex-RLP, which only its indexation document lists). A contract signed
+    # on one is billed each month on it (``quarter_indices.py``).
+    quarter_indices: QuarterIndexFetcher | None = None
     # Set when the supplier has announced it is leaving the residential
     # market: the date its contracts stop being supplied, and the registry
     # id of the supplier taking them over. Two effects, both deliberate:
