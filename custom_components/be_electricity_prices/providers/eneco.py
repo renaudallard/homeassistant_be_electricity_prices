@@ -311,8 +311,10 @@ async def _settle_on_published_index(
     names some other month is left alone: nothing on it settles this one.
     """
     energy = snap.energy
+    # A quarterly card is on its quarter, which no month's footnote settles.
     settles_energy = (
         isinstance(energy, VariableRates)
+        and not energy.quarter_indexed
         and energy.formula_factor is not None
         and energy.formula_base is not None
     )
@@ -328,7 +330,8 @@ async def _settle_on_published_index(
         return replace(snap, provisional=True)
     published = published_index(found[1])
     if (
-        isinstance(energy, VariableRates)
+        settles_energy
+        and isinstance(energy, VariableRates)
         and energy.formula_factor is not None
         and energy.formula_base is not None
         and published is not None
@@ -504,6 +507,27 @@ class _Statements(NamedTuple):
 
 
 _FLEX_UNITS = _Statements(_ENERGY_UNIT_RE, 260, _footnote_re("Belpex-RLP-M"), 4500)
+# Until March 2023 Flex was indexed per quarter: a "Kwartaalprijs" row, and a
+# formula per register on the quarter's Belpex-RLP, footnoted "Belpex-RLP (3de
+# kwartaal 2022: €375,9488/MWh)", sometimes over two lines. The cards of March
+# 2022 to March 2023 read so. January 2022 wraps its connection fee's label,
+# February 2022 that footnote's figure, and the cards before are on Belpex-S21.
+_QUARTER_FEE_RE = re.compile(
+    r"\(€/jaar\)(?:\s++|(?!\(€/jaar\))\S)*?" + LINE_BREAK + _NUM + r"[^\S\n]*\n"
+)
+_QUARTER_ROW_RE = re.compile(rf"{_ROW_START}{_FIGURE * 4}{_BULLET}Kwartaalprijs")
+_QUARTER_FORMULA_RE = re.compile(
+    rf"\((0,\d+)\s*X\s*BELPEX-RLP\s*([{SIGN_CHARS}])\s*(\d+(?:,\d+)?)\)"
+    r"\s*X\s*(\d+,\d+)"
+)
+_QUARTER_UNITS = _Statements(
+    _ENERGY_UNIT_RE,
+    260,
+    re.compile(
+        r"Belpex-RLP\s*\((?:\d(?:ste|de)\s+kwartaal\s+\d{4}:\s*)?([^()\n]{1,40})\)"
+    ),
+    4500,
+)
 _DYNAMIC_UNITS = _Statements(_ENERGY_UNIT_RE, 260, _footnote_re("Belpex-H"), 4500)
 _INJECTION_UNITS = _Statements(
     _INJECTION_UNIT_RE, 400, _footnote_re(r"Belpex(?:-injectie|-H)?"), 1400
@@ -641,6 +665,10 @@ def _extract_variable(text: str) -> VariableRates:
     monthly_match = re.search(
         rf"{_ROW_START}{_FIGURE * 4}{_BULLET}Maandprijs", consumption
     )
+    if monthly_match is None:
+        quarterly = _extract_quarterly(text, consumption)
+        if quarterly is not None:
+            return quarterly
     # Accept any sign character between the BELPEX factor and the base
     # so a future card flipping to '-' or to a Unicode minus doesn't
     # silently drop the formula display string, and an integer base as
@@ -686,6 +714,49 @@ def _extract_variable(text: str) -> VariableRates:
         formula_base=f_base,
         month_indexed=f_factor is not None,
         rlp_indexed=f_factor is not None,
+    )
+
+
+def _extract_quarterly(text: str, consumption: str) -> VariableRates | None:
+    """The quarterly Flex block of a card up to March 2023, or None: a formula
+    per column, single, day, night and exclusive night, each grossed by the
+    multiplier it prints, which has to be the footer's. Flagged
+    ``quarter_indexed``, as Bolt's, to bill the delivery quarter's index."""
+    fee = _QUARTER_FEE_RE.search(consumption)
+    row = _QUARTER_ROW_RE.search(consumption)
+    formulas = list(_QUARTER_FORMULA_RE.finditer(consumption))
+    if fee is None or row is None or len(formulas) != 4:
+        return None
+    vat = vat_multiplier(text, _VAT_RE)
+    if any(abs(to_float(f.group(4)) - vat) > 1e-9 for f in formulas):
+        return None
+    if _unit_mismatch(text, formulas[0].span(1), _QUARTER_UNITS):
+        return None
+    rates = [to_float(n) / 100.0 for n in re.findall(_NUM, row.group(0))]
+    pairs = [
+        (
+            to_float(f.group(1)) * vat * 10.0,
+            parse_sign(f.group(2)) * to_float(f.group(3)) * vat / 100.0,
+        )
+        for f in formulas
+    ]
+    return VariableRates(
+        current=rates[0],
+        peak=rates[1],
+        offpeak=rates[2],
+        exclusive_night=rates[3],
+        yearly_fixed_fee=to_float(fee.group(1)),
+        formula=" ".join(formulas[0].group(0).split()),
+        formula_factor=pairs[0][0],
+        formula_base=pairs[0][1],
+        formula_factor_peak=pairs[1][0],
+        formula_base_peak=pairs[1][1],
+        formula_factor_offpeak=pairs[2][0],
+        formula_base_offpeak=pairs[2][1],
+        formula_factor_exclusive_night=pairs[3][0],
+        formula_base_exclusive_night=pairs[3][1],
+        rlp_indexed=True,
+        quarter_indexed=True,
     )
 
 

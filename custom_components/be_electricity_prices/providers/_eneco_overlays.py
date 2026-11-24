@@ -52,7 +52,13 @@ from ..const import (
     DSO_REW,
     REGION_FLANDERS,
 )
-from ._parse import excise_tier_bands, numeric_row, ores_sub_areas_split, to_float
+from ._parse import (
+    TIER_BOUND,
+    excise_tier_bands,
+    numeric_row,
+    ores_sub_areas_split,
+    to_float,
+)
 from .base import DsoOverlay, ExtractorError, TaxOverlay
 
 # Wallonia DSO labels (column layout: 4 distribution + optional [MEDIUM PIC ECO]
@@ -200,9 +206,11 @@ def _levy_row(label: str) -> str:
 def _extract_taxes(text: str, region: str) -> TaxOverlay:
     # Each run of blanks is read as one, line breaks included: spelt as runs
     # either side of optional line breaks, a run of blank lines was split
-    # between the three in every way.
+    # between the three in every way. The first row starts at 0 whatever its
+    # bound: 3.000 kWh from April 2023, 20.000 on the cards before.
     tier_match = re.search(
-        rf"(?:Verbruik tussen{_WS}*0{_WS}+en{_WS}+3\.000{_WS}+kWh|Alle verbruik){_WS}*"
+        rf"(?:Verbruik tussen{_WS}*0{_WS}+en{_WS}+{TIER_BOUND}{_WS}+kWh|Alle verbruik)"
+        rf"{_WS}*"
         + _NUM
         # The optional second figure is the energy contribution printed on
         # the SAME row. Horizontal whitespace only: with a class that matched

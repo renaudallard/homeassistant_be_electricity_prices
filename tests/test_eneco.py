@@ -1576,6 +1576,16 @@ def _discover_on(listing: str) -> None:
             "Belpex-injectie (" * 10_000,
             id="index statements",
         ),
+        pytest.param(
+            eneco_mod._QUARTER_FORMULA_RE.search,
+            "(0," + "1" * 100_000,
+            id="quarterly formula",
+        ),
+        pytest.param(
+            eneco_mod._QUARTER_UNITS.footnote.search,
+            "Belpex-RLP (" * 10_000,
+            id="quarterly index statements",
+        ),
     ],
 )
 def test_a_crafted_card_is_read_in_time_linear_in_its_length(
@@ -1598,3 +1608,81 @@ def test_crafted_rows_before_a_real_card_leave_its_reading_alone() -> None:
     assert time.perf_counter() - started < 2.0
     own = parse_snapshot(real, "power_fix", "test://fix", REGION_FLANDERS)
     assert (snap.energy, snap.taxes) == (own.energy, own.taxes)
+
+
+def _quarterly_card(cards: dict[str, str], month: date) -> Any:
+    head, pdf = _archive_of(cards)
+    with (
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.head_or_raise",
+            new=head,
+        ),
+        patch(
+            "custom_components.be_electricity_prices.providers.eneco.fetch_pdf_text",
+            new=pdf,
+        ),
+    ):
+        return _run(fetch_for_month(None, "power_flex", "wallonia", month))  # type: ignore[arg-type]
+
+
+def test_fetch_for_month_reads_the_quarterly_flex_cards_before_april_2023() -> None:
+    """Until March 2023 Flex was indexed per quarter on Belpex-RLP, a formula
+    per meter register and a "Kwartaalprijs" row where later cards print
+    "Maandprijs", and its excise table started with 0 to 20.000 kWh. Every
+    such month came back None, so a contract signed on one of these cards
+    was billed on the card of each month instead. The October 2022 card:"""
+    october = _quarterly_card(
+        {"012210": fixture_text("eneco_flex_oct22.pdf")}, date(2022, 10, 1)
+    )
+    assert october is not None
+    assert october.publication_label == "oktober 2022"
+    energy = october.energy
+    assert isinstance(energy, VariableRates)
+    assert energy.quarter_indexed and energy.rlp_indexed
+    assert not energy.month_indexed
+    assert energy.index_realised is None
+    assert energy.formula == "(0,1 X BELPEX-RLP + 5,966) X 1,06"
+    assert energy.yearly_fixed_fee == pytest.approx(52.56)
+    # The Kwartaalprijs row, single, day, night and exclusive night.
+    printed = (energy.current, energy.peak, energy.offpeak, energy.exclusive_night)
+    assert printed == pytest.approx((0.4617, 0.4633, 0.4605, 0.4605))
+    # One formula per register, grossed by the 1,06 they print.
+    pairs = (
+        (energy.formula_factor, energy.formula_base),
+        (energy.formula_factor_peak, energy.formula_base_peak),
+        (energy.formula_factor_offpeak, energy.formula_base_offpeak),
+        (energy.formula_factor_exclusive_night, energy.formula_base_exclusive_night),
+    )
+    for (factor, base), printed_base in zip(
+        pairs, (5.966, 6.109, 5.849, 5.849), strict=True
+    ):
+        assert factor == pytest.approx(0.1 * 1.06 * 10)
+        assert base == pytest.approx(printed_base * 1.06 / 100)
+    # Each formula at the third quarter's 375,9488 EUR/MWh is the price the
+    # card prints for its register.
+    for (factor, base), rate in zip(pairs, printed, strict=True):
+        assert factor is not None and base is not None
+        assert factor * 0.3759488 + base == pytest.approx(rate, abs=5e-5)
+    assert october.taxes.federal_excise == pytest.approx(0.014416)
+    assert october.taxes.energy_contribution == pytest.approx(0.002042)
+
+
+def test_a_quarterly_card_is_not_settled_on_the_next_cards_month_index() -> None:
+    """March 2023 is the last quarterly card and April's the first monthly
+    one, which footnotes March's Belpex-RLP-M (112,6165). That is a month's
+    index, not the first quarter's Belpex-RLP the March formula is on, so
+    the month keeps its printed rate and records no index."""
+    march = _quarterly_card(
+        {
+            "012303": fixture_text("eneco_flex_mar23.pdf"),
+            "012304": fixture_text("eneco_flex_apr23.pdf"),
+        },
+        date(2023, 3, 1),
+    )
+    assert march is not None
+    energy = march.energy
+    assert isinstance(energy, VariableRates) and energy.quarter_indexed
+    assert energy.formula == "(0,102 X BELPEX-RLP + 5,113) X 1,06"
+    assert energy.index_realised is None
+    assert energy.current == pytest.approx(0.2856)
+    assert energy.yearly_fixed_fee == pytest.approx(65.0)

@@ -335,6 +335,25 @@ falls inside a month, and each closed month on the value the next card publishes
 Belpex-injectie is the arithmetic one. `test_flex_is_month_indexed_on_the_rlp_weighted_mean`
 pins the flags and the re-price.
 
+Until March 2023 Flex was indexed per quarter, "driemaandelijks ...
+geïndexeerd op basis van de indexatieparameter Belpex-RLP", and those cards
+print a `Kwartaalprijs` row in place of `Maandprijs` and one formula per meter
+register, "(0,1 X BELPEX-RLP + 5,966) X 1,06" single, 6,109 day and 5,849
+night and exclusive night on the October 2022 card. When the `Maandprijs` row
+is missing, `_extract_quarterly` (`eneco.py`) reads that block: the four
+printed rates, the four pairs (each grossed by the multiplier it prints, which
+has to be the footer's), the fee on the first line holding a lone figure after
+`(€/jaar)`, and the index footnote "Belpex-RLP (3de kwartaal 2022:
+€375,9488/MWh)" for its unit (`_QUARTER_UNITS`). The leg is flagged
+`quarter_indexed` and `rlp_indexed`, not `month_indexed`, so
+`_settle_on_published_index` leaves its energy alone: the next card's footnote
+is a month's Belpex-RLP-M, which is not the quarter's Belpex-RLP. The cards of
+March 2022 to March 2023 read so (`tests/fixtures/eneco_flex_oct22.pdf`,
+`eneco_flex_mar23.pdf`). January 2022 wraps its connection fee's label and
+February 2022 the footnote's figure over three lines, and the cards before
+those are on Belpex-S21: all of them stay unread, so `fetch_for_month` returns
+None for them.
+
 Every card but Dynamic footnotes its consumption prices since January 2026:
 "(*) In het geval u kiest voor het tarief IMPACT (MEDIUM, PIC, ECO) in
 Wallonië, wat betreft de prijs van energie, zullen de “ECO”-uren overeenkomen
@@ -473,7 +492,7 @@ Illustrative Antwerpen values: `distribution_single = 0.0535`,
 
 | field | source token | line |
 | --- | --- | --- |
-| `federal_excise` | first number in the "Verbruik tussen 0 en 3.000 kWh" or "Alle verbruik" tier (Tiers are abolished 2026-08-01) | `eneco.py` |
+| `federal_excise` | first number in the "Verbruik tussen 0 en 3.000 kWh" (0 en 20.000 kWh before April 2023, any bound is read) or "Alle verbruik" tier (Tiers are abolished 2026-08-01) | `eneco.py` |
 | `federal_excise_bands` | the four "Verbruik tussen" tiers from that one, while they fall by volume (`excise_tier_bands`, `_parse.py`) | `eneco.py` |
 | `energy_contribution` | second number in that tier (0.0 default, abolished 2026-08-01) | `eneco.py` |
 | `flanders_renewables` | "Bijdrage groene stroom en WKK ... (€cent/kWh)" | `eneco.py` |
@@ -706,6 +725,9 @@ Fixtures live under `tests/fixtures/` and are loaded via `fixture_text(...)`.
 | `eneco_flex_dec25.pdf` | Power Flex, December 2025 (archive fixture for `fetch_for_month` validity checks; also the one fixture that prints the Energiefonds label on one line, so a replacement must keep that layout) |
 | `eneco_flex_aug26.pdf` | Power Flex, August 2026 (archive fixture for federal tax excise update validity checks; wraps the Energiefonds label) |
 | `eneco_flex_jun25.pdf` | Power Flex, June 2025 (the last card to print the `>` bullet before every row label; archive fixture for the bullet anchors, and the one card carrying both halves of that defect) |
+| `eneco_flex_oct22.pdf` | Power Flex, October 2022 (quarterly Belpex-RLP, a formula per register on different bases, the 0 to 20.000 kWh excise row) |
+| `eneco_flex_mar23.pdf` | Power Flex, March 2023 (the last quarterly card, one formula in every column) |
+| `eneco_flex_apr23.pdf` | Power Flex, April 2023 (the first monthly card, whose footnote names March's Belpex-RLP-M) |
 
 ## When the card changes, look here
 
@@ -713,7 +735,7 @@ Fixtures live under `tests/fixtures/` and are loaded via `fixture_text(...)`.
 | --- | --- | --- |
 | every snapshot fails to fetch | `_resolve_url` / `_fetch_listing` (listing HTML or URL pattern changed) | `eneco.py` |
 | fixed energy parse error | `_extract_fixed` (`DAG NACHT` header or column count changed) | `eneco.py` |
-| variable energy or yearly fee wrong | `_extract_variable` anchors (`(€/jaar)`, `Geschatte jaarprijs`, `Maandprijs`) | `eneco.py` |
+| variable energy or yearly fee wrong | `_extract_variable` anchors (`(€/jaar)`, `Geschatte jaarprijs`, `Maandprijs`), or `_extract_quarterly` on a card before April 2023 (`Kwartaalprijs`) | `eneco.py` |
 | dynamic factor / base wrong | `_extract_dynamic` formula regex or VAT multiplier | `eneco.py` |
 | a DSO row missing | its label string in `_WALLONIA_LABELS` / `_FLUVIUS_LABELS`, or the row column count | `_eneco_overlays.py` |
 | Impact bands swapped | column-order mapping in `_find_wallonia_row` | `_eneco_overlays.py` |
