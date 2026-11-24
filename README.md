@@ -575,7 +575,11 @@ dropped rather than billed on the new card.
    and the **Bill the year-to-date from the contract start date** box. Left
    unticked, the year-to-date counts the months before the start date too.
    Those and any before the tariff card month (a renewal re-signs onto a later
-   card) each bill on their own month's card. Ticked, a contract indexed on
+   card) each bill on their own month's card. On Eneco Zon & Wind Flex, set the
+   tariff card month from "Carte tarifaire version: 01YYMM" on your bill, or
+   from the [eneco integration](https://github.com/renaudallard/homeassistant_eneco)'s
+   tariff card sensor (its `card_month` attribute): 012210 is October 2022.
+   Ticked, a contract indexed on
    the month's mean still bills the start month at the whole month's index
    (Bolt's variable cards the quarter's), and the comparison pages price the
    other cards the same way, so the day-ahead prices are fetched from the
