@@ -56,6 +56,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from .backfill import backfill_if_missing
+from .bill_check import clear_unless_checked
 from .compare_engine import evict_sweep_rows
 from .const import (
     CONF_CONTRACT,
@@ -467,6 +468,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BePricesConfigEntry) -> 
         )
 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+    clear_unless_checked(hass, entry)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _remove_unprovided_entities(hass, entry, coordinator)

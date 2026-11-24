@@ -972,6 +972,10 @@
     "brussels_power_term_indicative": {
       "title": "{supplier} ({contract}) wordt aangerekend met de indicatieve vermogensterm van Brugel",
       "description": "De jaarlijkse vaste vergoeding van Sibelga bestaat uit twee gereglementeerde delen, een voor de meting en een voor het ter beschikking gestelde vermogen. De kaart van {contract} drukt enkel de meethelft af, dus vult de integratie de rest aan met het cijfer dat Brugel publiceert. Brugel heeft de definitieve tariefkaart van dit jaar nog niet gepubliceerd, dus komt het vermogensdeel uit zijn tariefrooster 2025-2027, dat het cijfer van dit jaar als indicatief vermeldt.\n\nHet definitieve cijfer kan licht afwijken. De definitieve fiche wordt om de zes uur opnieuw geprobeerd; ze vervangt het indicatieve cijfer zodra ze gelezen kan worden, en deze melding verdwijnt dan vanzelf."
+    },
+    "bill_check_off": {
+      "title": "De Eneco-factuur van {issued} wijkt af van {supplier} ({contract})",
+      "description": "{count} eenheidsprijzen op de factuur wijken meer dan de afronding van de factuur af van wat deze invoer voor dezelfde data rekent: {lines}.\n\nDe sensor Factuurcontrole toont elke lijn met de gefactureerde prijs en die van deze invoer. Controleer eerst de tariefkaartmaand, de netbeheerder en de meter van deze invoer tegen de factuur. Kloppen die, dan zit de fout in de tariefgegevens die deze invoer leest of in de factuur, en een issue met die lijnen helpt dat uit te zoeken. Deze melding verdwijnt zodra geen lijn meer afwijkt."
     }
   },
   "entity": {

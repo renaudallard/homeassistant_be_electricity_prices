@@ -41,6 +41,8 @@ import pytest
 from homeassistant import data_entry_flow
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockEntityPlatform
 
 from custom_components.be_electricity_prices import bill_check, snapshot_months
@@ -48,7 +50,9 @@ from custom_components.be_electricity_prices.bill_check import (
     BillCheckSensor,
     check_bill,
 )
+from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+from custom_components.be_electricity_prices.markdown_text import escape_markdown
 from custom_components.be_electricity_prices.sensor import async_setup_entry
 from tests import fixture_text, make_entry, make_snapshot
 from tests.test_eneco import (
@@ -383,9 +387,12 @@ _ATTRIBUTES = {
 }
 
 
-async def test_the_sensor_counts_the_lines_off(hass: HomeAssistant) -> None:
-    """The state counts the lines off and the lines ride unrecorded; a bill
-    sensor with nothing read leaves it unknown."""
+async def test_the_sensor_counts_the_lines_off_and_raises_a_repair(
+    hass: HomeAssistant,
+) -> None:
+    """The state counts the lines off, the lines ride unrecorded, and the
+    Repairs card is up while any line is off and down once none is."""
+    assert await async_setup_component(hass, "repairs", {})
     entry = make_entry(**_DATA, eneco_bill=_BILL_ENTITY)
     entry.add_to_hass(hass)
     coordinator = BePricesCoordinator(hass, entry)
@@ -403,17 +410,63 @@ async def test_the_sensor_counts_the_lines_off(hass: HomeAssistant) -> None:
         assert state.attributes["period_end"] == "2026-01-31"
         assert state.attributes["lines"] == _RESULTS
         assert "lines" in sensor._unrecorded_attributes
+        issue_id = f"bill_check_off_{entry.entry_id}"
+        issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
+        assert issue is not None
+        assert issue.translation_key == "bill_check_off"
+        assert issue.translation_placeholders is not None
+        assert issue.translation_placeholders == {
+            "supplier": "Eneco",
+            "contract": issue.translation_placeholders["contract"],
+            # Bill text, so escaped for the markdown the card renders.
+            "issued": escape_markdown("2026-02-12"),
+            "count": "1",
+            "lines": escape_markdown("Coûts énergie verte 2025-02-01/2026-01-31"),
+        }
+
+        # A bill sensor with nothing read, as while the eneco integration
+        # starts: unknown, and the card stays, so one ignored stays ignored.
+        checked.return_value = None
+        hass.states.async_set(_BILL_ENTITY, "unavailable", {})
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert hass.states.get(sensor.entity_id).state == "unknown"  # type: ignore[union-attr]
+        assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
 
         checked.return_value = [_RESULTS[0]]
         hass.states.async_set(_BILL_ENTITY, "1074.88", _ATTRIBUTES)
         await hass.async_block_till_done(wait_background_tasks=True)
         assert hass.states.get(sensor.entity_id).state == "0"  # type: ignore[union-attr]
+        assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
-        # A bill sensor with nothing read: unknown.
-        checked.return_value = None
-        hass.states.async_set(_BILL_ENTITY, "unknown", {})
-        await hass.async_block_till_done(wait_background_tasks=True)
-        assert hass.states.get(sensor.entity_id).state == "unknown"  # type: ignore[union-attr]
+
+async def test_the_card_goes_with_the_bill_sensor(hass: HomeAssistant) -> None:
+    """Clearing the picker takes the Repairs card down at the next setup."""
+    entry = make_entry(**_DATA)
+    entry.add_to_hass(hass)
+    issue_id = f"bill_check_off_{entry.entry_id}"
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="bill_check_off",
+    )
+    picked = make_entry(**_DATA, eneco_bill=_BILL_ENTITY)
+    picked.add_to_hass(hass)
+    kept = f"bill_check_off_{picked.entry_id}"
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        kept,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="bill_check_off",
+    )
+    bill_check.clear_unless_checked(hass, entry)
+    bill_check.clear_unless_checked(hass, picked)
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+    assert ir.async_get(hass).async_get_issue(DOMAIN, kept) is not None
 
 
 @pytest.mark.parametrize(

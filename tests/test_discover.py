@@ -810,8 +810,9 @@ def test_readme_documents_every_repairs_issue() -> None:
         18: "Eighteen",
         19: "Nineteen",
         20: "Twenty",
+        21: "Twenty-one",
     }
-    stated = re.search(r"(\w+) repair issues surface", readme)
+    stated = re.search(r"([\w-]+) repair issues surface", readme)
     assert stated is not None, "the README sentence counting the issues is gone"
     assert stated.group(1) == words[len(raised)], (
         f"README says {stated.group(1)} repair issues; there are {len(raised)}"

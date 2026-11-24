@@ -972,6 +972,10 @@
     "brussels_power_term_indicative": {
       "title": "{supplier} ({contract}) is billed on Brugel's indicative power term",
       "description": "Sibelga's yearly fixed charge has two regulated parts, a metering one and a power one (\"puissance mise a disposition\"). The card for {contract} prints only the metering half, so the integration completes it from the figure Brugel publishes. Brugel has not published this year's final tariff sheet yet, so the power part comes from its 2025-2027 tariff grid, which gives this year's figure as indicative.\n\nThe final figure may differ slightly. The final sheet is retried every six hours; it replaces the indicative figure as soon as it can be read, and this notice then clears by itself."
+    },
+    "bill_check_off": {
+      "title": "The Eneco bill of {issued} differs from {supplier} ({contract})",
+      "description": "{count} unit prices on the bill differ from what this entry prices for the same dates, by more than the bill's rounding: {lines}.\n\nThe Bill check sensor lists every line with the price billed and the price this entry uses. First check this entry's tariff card month, network operator and meter against the bill. If they match, either the tariff data this entry reads or the bill is off, and an issue quoting those lines helps tell which. This notice clears once no line differs."
     }
   },
   "entity": {

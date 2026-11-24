@@ -1363,7 +1363,7 @@ attributes on `sensor.<...>_current_price`. `last_error` always names the
 failing exception, so a CDN timeout reads `network error fetching <url>:
 TimeoutError` rather than trailing off after the colon. Where a Repairs card
 or the compare page quotes that error, it is shown as plain text: whatever a
-supplier's server answered cannot turn into a link or an image there. Twenty repair issues surface
+supplier's server answered cannot turn into a link or an image there. Twenty-one repair issues surface
 under **Settings → System → Repairs** so problems are visible without
 inspecting attributes; the fetch-related ones auto-clear on the next
 successful refresh:
@@ -1590,6 +1590,12 @@ successful refresh:
   capacity is filled in, the direct-debit one as soon as the question is
   answered, the Brussels one as soon as Brugel's sheet can be read, and the
   register one as soon as both halves report again.
+- **`bill_check_off_<entry>`** *(an Eneco entry with an Eneco bill picked)*
+  — a unit price on the last Eneco bill differs from what this entry bills
+  for the same dates by more than the bill's rounding. The card names the
+  lines and the `bill_check` sensor carries both prices; it clears once no
+  line differs, or once the picker is cleared. See
+  [Checking an Eneco bill](#checking-an-eneco-bill).
 
 ### `be_electricity_prices.refresh` service
 
@@ -1936,8 +1942,9 @@ dates at more than one rate) and a `status`:
 
 Lines are matched on the line type Eneco hides in its electricity bills
 (the same in every language), else on the French label printed on the
-bill; a line neither names is left out rather than guessed. The check runs
-when Home Assistant has started, whenever the bill sensor or this entry's card
+bill; a line neither names is left out rather than guessed. A Repairs card
+(`bill_check_off`) is up while any line is off. The check runs when Home
+Assistant has started, whenever the bill sensor or this entry's card
 changes, and once a day, since the months a bill covers settle after it.
 
 ## Dashboard cards

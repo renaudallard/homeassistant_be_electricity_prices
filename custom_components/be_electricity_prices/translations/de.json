@@ -972,6 +972,10 @@
     "brussels_power_term_indicative": {
       "title": "{supplier} ({contract}) wird mit Brugels Richtwert für das Leistungsentgelt berechnet",
       "description": "Sibelgas jährliche Grundgebühr besteht aus zwei regulierten Teilen, einem für die Messung und einem für die bereitgestellte Leistung. Die Karte von {contract} druckt nur die Messhälfte, daher ergänzt die Integration den Rest mit der von Brugel veröffentlichten Zahl. Brugel hat das endgültige Tarifblatt dieses Jahres noch nicht veröffentlicht, daher stammt der Leistungsteil aus seinem Tarifraster 2025-2027, das die Zahl dieses Jahres als Richtwert angibt.\n\nDie endgültige Zahl kann leicht abweichen. Das endgültige Blatt wird alle sechs Stunden erneut versucht; es ersetzt den Richtwert, sobald es gelesen werden kann, und dieser Hinweis verschwindet dann von selbst."
+    },
+    "bill_check_off": {
+      "title": "Die Eneco-Rechnung vom {issued} weicht von {supplier} ({contract}) ab",
+      "description": "{count} Einzelpreise der Rechnung weichen um mehr als die Rundung der Rechnung von dem ab, was dieser Eintrag für dieselben Tage berechnet: {lines}.\n\nDer Sensor Rechnungsprüfung listet jede Zeile mit dem berechneten Preis und dem dieses Eintrags. Prüfen Sie zuerst den Monat der Tarifkarte, den Netzbetreiber und den Zähler dieses Eintrags anhand der Rechnung. Stimmen sie, liegt der Fehler in den Tarifdaten, die dieser Eintrag liest, oder in der Rechnung, und ein Issue mit diesen Zeilen hilft, das zu klären. Dieser Hinweis verschwindet, sobald keine Zeile mehr abweicht."
     }
   },
   "entity": {

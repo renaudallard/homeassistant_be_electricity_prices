@@ -54,6 +54,7 @@ import aiohttp
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
@@ -65,6 +66,7 @@ from .cohort import _effective_snapshot_for_month
 from .const import (
     CONF_DSO,
     CONF_DSO_TARIFF_MODE,
+    CONF_ENECO_BILL,
     CONF_METER,
     CONF_REGION,
     DOMAIN,
@@ -78,6 +80,7 @@ from .const import (
 )
 from .coordinator import BePricesCoordinator, supplier_device_info
 from .fees import _walloon_fixed_term_applies
+from .markdown_text import escape_markdown
 from .pricing import (
     StaticBand,
     renewables_eur_per_kwh,
@@ -93,6 +96,8 @@ from .snapshot_months import month_card
 STATUS_OK: Final = "ok"
 STATUS_OFF: Final = "off"
 STATUS_NOT_COMPARED: Final = "not_compared"
+
+ISSUE_KEY: Final = "bill_check_off"
 
 # The bill's line types, which its electricity bills carry in hidden text the
 # same in every language, and the printed labels of its French bills for the
@@ -450,12 +455,19 @@ async def check_bill(
     return await check_lines(lines, _month_snapshots(coordinator), coordinator.entry)
 
 
+@callback
+def clear_unless_checked(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Take the Repairs card down once no bill is compared any more."""
+    if not entry.data.get(CONF_ENECO_BILL):
+        ir.async_delete_issue(hass, DOMAIN, f"{ISSUE_KEY}_{entry.entry_id}")
+
+
 class BillCheckSensor(SensorEntity):
     """How many unit prices of the last Eneco bill this entry prices otherwise.
 
     Checked when Home Assistant has started, when the bill sensor changes,
     when the entry's card changes and once a day, since the months a bill
-    covers settle after it.
+    covers settle after it. A Repairs card is up while any line is off.
     """
 
     _attr_has_entity_name = True
@@ -526,6 +538,27 @@ class BillCheckSensor(SensorEntity):
                 else {}
             )
             self.async_write_ha_state()
+            if lines is None:
+                # Nothing read yet, as while the eneco integration starts: a
+                # card taken down now would come back fresh, ignored or not.
+                return
+            off = [line for line in lines if line["status"] == STATUS_OFF]
+            self.coordinator._sync_issue(
+                ISSUE_KEY,
+                bool(off),
+                extra={
+                    "issued": escape_markdown(
+                        str(self._dates.get("issued") or self._dates.get("period_end"))
+                    ),
+                    "count": str(len(off)),
+                    "lines": escape_markdown(
+                        ", ".join(
+                            f"{line['label']} {line['start']}/{line['end']}"
+                            for line in off
+                        )
+                    ),
+                },
+            )
 
     @property
     def native_value(self) -> int | None:

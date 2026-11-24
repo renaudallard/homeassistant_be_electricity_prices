@@ -4083,6 +4083,7 @@ _REPAIR_ISSUE_KINDS = (
     "compensation_kva_missing",
     "excise_law_unread",
     "recorder_missing",
+    "bill_check_off",
 )
 
 

@@ -110,6 +110,7 @@ _ISSUE_KINDS: Final = (
     "brussels_power_term_missing",
     "excise_law_unread",
     "recorder_missing",
+    "bill_check_off",
 )
 
 
