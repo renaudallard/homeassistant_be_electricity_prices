@@ -70,7 +70,6 @@ from .const import (
     CONF_REGION,
     CONF_SOLAR_KVA,
     CONF_SOLAR_REGIME,
-    CONF_SUPPLIER,
     CONF_WHATIF_CONSUMPTION_KWH,
     CONF_WHATIF_INJECTION_KWH,
     DEFAULT_CARD_ARCHIVE,
@@ -82,7 +81,6 @@ from .const import (
     SOLAR_REGIME_COMPENSATION,
     SOLAR_REGIME_NONE,
     SOLAR_REGIMES,
-    SUPPLIER_ENECO,
 )
 from .flow_decimal import DecimalSelector, decimal_text
 from .fluvius import capacity_floor_kw
@@ -265,24 +263,50 @@ def _meters_schema(defaults: dict[str, Any]) -> vol.Schema:
             ),
         )
     ] = BooleanSelector()
-    # An Eneco household can hold its last bill against these prices, as the
-    # eneco_be integration reads it. A suggestion, so it can be cleared.
-    if defaults.get(CONF_SUPPLIER) == SUPPLIER_ENECO:
-        bill = defaults.get(CONF_ENECO_BILL)
-        key = (
-            vol.Optional(CONF_ENECO_BILL, description={"suggested_value": bill})
-            if bill
-            else vol.Optional(CONF_ENECO_BILL)
-        )
-        fields[key] = EntitySelector(
-            EntitySelectorConfig(domain="sensor", integration=ENECO_INTEGRATION)
-        )
     return vol.Schema(fields)
+
+
+def _bill_schema(bill: Any) -> vol.Schema:
+    """The picker of the Eneco bill an Eneco household holds against these
+    prices, as the eneco_be integration reads it. A suggestion, so it can be
+    cleared."""
+    key = (
+        vol.Optional(CONF_ENECO_BILL, description={"suggested_value": bill})
+        if bill
+        else vol.Optional(CONF_ENECO_BILL)
+    )
+    return vol.Schema(
+        {
+            key: EntitySelector(
+                EntitySelectorConfig(domain="sensor", integration=ENECO_INTEGRATION)
+            )
+        }
+    )
+
+
+def _meter_energy(hass: HomeAssistant, entity: er.RegistryEntry) -> str | None:
+    """The energy of the Eneco meter an eneco_be sensor belongs to, as its
+    subentry names it ("Electricity" or "Gas"), or None where it cannot be
+    told: the sensor's entry or subentry is gone, or the key is missing."""
+    entry = (
+        hass.config_entries.async_get_entry(entity.config_entry_id)
+        if entity.config_entry_id
+        else None
+    )
+    subentry = (
+        entry.subentries.get(entity.config_subentry_id)
+        if entry is not None and entity.config_subentry_id
+        else None
+    )
+    energy = None if subentry is None else subentry.data.get("energy_type")
+    return energy if isinstance(energy, str) else None
 
 
 def _not_a_bill(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]:
     """An error on the bill picker unless it names a last bill sensor of the
-    eneco_be integration: any other of its sensors carries no bill lines."""
+    eneco_be integration: any other of its sensors carries no bill lines.
+    One of a gas meter is refused too, whose lines no electricity rate
+    prices."""
     entity_id = data.get(CONF_ENECO_BILL)
     if not entity_id:
         return {}
@@ -293,6 +317,8 @@ def _not_a_bill(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]:
         or not entity.unique_id.endswith("_last_bill")
     ):
         return {CONF_ENECO_BILL: "eneco_bill_not_a_bill"}
+    if _meter_energy(hass, entity) == "Gas":
+        return {CONF_ENECO_BILL: "eneco_bill_other_energy"}
     return {}
 
 

@@ -97,14 +97,17 @@ from .const import (
     CONF_ANALOG_METER,
     CONF_CONTRACT,
     CONF_DSO,
+    CONF_ENECO_BILL,
     CONF_METER,
     CONF_REGION,
     CONF_SUPPLIER,
     CONF_SWITCH_DATE,
     DOMAIN,
     METER_EXCLUSIVE_NIGHT,
+    SUPPLIER_ENECO,
 )
 from .fees import bills_capacity
+from .flow_schemas_meters import _bill_schema, _not_a_bill
 from .flow_switch import (
     _another_contract,
     _record_switch,
@@ -290,7 +293,35 @@ class BePricesOptionsFlow(_WizardStepsMixin, _SweepStepsMixin, OptionsFlow):
                     if bills_capacity(self.config_entry.data)
                     else []
                 ),
+                # An Eneco bill, only an Eneco contract's own.
+                *(
+                    ["bill"]
+                    if self.config_entry.data.get(CONF_SUPPLIER) == SUPPLIER_ENECO
+                    else []
+                ),
             ],
+        )
+
+    async def async_step_bill(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pick the Last yearly bill sensor of the eneco_be integration whose
+        unit prices are held against this entry's, or clear it to check
+        none. A sensor that is not one, or a gas meter's, is refused."""
+        errors: dict[str, str] = {}
+        bill = self.config_entry.data.get(CONF_ENECO_BILL)
+        if user_input is not None:
+            self._data = self._seed_data()
+            bill = user_input.get(CONF_ENECO_BILL)
+            if bill:
+                self._data[CONF_ENECO_BILL] = bill
+                errors = _not_a_bill(self.hass, self._data)
+            else:
+                self._data.pop(CONF_ENECO_BILL, None)
+            if not errors:
+                return self._finalize()
+        return self.async_show_form(
+            step_id="bill", data_schema=_bill_schema(bill), errors=errors
         )
 
     async def async_step_switch(

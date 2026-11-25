@@ -161,8 +161,7 @@
           "injection_kwh": "Totale injectie (kWh)",
           "daily_compare": "Vergelijk elke leverancier dagelijks",
           "card_archive": "Oude tariefkaarten uit het projectarchief lezen",
-          "ev_home_charging_rate": "CREG-tarief voor thuisladen van een bedrijfswagen publiceren",
-          "eneco_bill": "Eneco-factuur"
+          "ev_home_charging_rate": "CREG-tarief voor thuisladen van een bedrijfswagen publiceren"
         },
         "data_description": {
           "day_consumption_kwh": "Cumulatieve meterstand in kWh, die alleen maar oploopt. Een sensor die terugvalt naar nul, zoals een totaal 'huidig jaar', wordt alleen juist gelezen als zijn state class total_increasing is of hij last_reset publiceert; elke andere daling telt als nul.",
@@ -173,8 +172,7 @@
           "injection_kwh": "Wordt gebruikt voor zijn kant wanneer de twee registers van die kant leeg zijn, en in de plaats van een paar dat uitvalt, bevriest of andere periodes rapporteert: een meter zonder dag/nacht-onderscheid, een klemmeter, of een omvormer die maar één totaal geeft. Zelfde regel, hij mag alleen oplopen.",
           "daily_compare": "Standaard uit. Eenmaal per dag, op een vast tijdstip afgeleid van deze invoer zodat installaties niet allemaal tegelijk ophalen, wordt elk contract van uw soort in uw regio berekend en de jaarlijkse besparing van het beste als sensor gepubliceerd. De meeste dagen kost dit slechts enkele controles, want tariefkaarten worden ongeveer één keer per maand opnieuw gepubliceerd.",
           "card_archive": "Standaard aan. Voor een voorbije maand waarvoor uw leverancier geen kaart meer publiceert, wordt de kaart opgehaald die het archief van dit project ervoor bewaarde: één klein bestand per maand vanaf GitHub, met enkel de leverancier, het contract, de regio en de maand. Leest ook, één keer per dag, het btw-tarief waarover de gearchiveerde kaarten het eens zijn, voor de prijzen die een kaart zonder tarief vermeldt, de federale accijns die het archief bewaarde voor de maanden die de wet op Justel niet meer geeft, en, voor een invoer met de leverancier 'Expert: custom formula' die zijn net van de tarieflijst van een regulator overneemt, het net dat het archief bewaarde voor een maand die de lijst niet meer geeft, en levert de lezing van dit project van een kaart die als paginafoto's verschijnt, zodat een leverancier die dat doet (Ecofix sinds augustus 2026) zonder prijzen zit als dit uit staat. Als de huidige kaart onleesbaar is en er geen kaart bewaard is, neemt de kaart van vorige maand uit het archief het over. Zet uit om te vermijden dat de integratie GitHub contacteert; die maanden worden dan op de huidige kaart berekend, en een btw-tarief dat een kaart niet vermeldt is het laatste dat gelezen werd toen dit aan stond, of anders 6% voor een gezin en 21% bij een professioneel contract.",
-          "ev_home_charging_rate": "Standaard uit. Voor een bedrijfswagen die thuis laadt: publiceert het maximum per kWh dat uw werkgever belastingvrij mag terugbetalen volgens de forfaitaire methode, voor uw regio en het lopende kwartaal, zoals de FOD Financiën het vastlegt op basis van de prijzen van de CREG. Uw werkgever mag minder betalen, of uw werkelijke kost terugbetalen. Aangevinkt leest de integratie één keer per kwartaal een klein bestand van creg.be.",
-          "eneco_bill": "De sensor Laatste jaarfactuur van de Eneco-integratie (eneco_be). Zijn eenheidsprijzen worden vergeleken met die van deze invoer voor dezelfde data, in een sensor Factuurcontrole. Laat leeg om niets te vergelijken."
+          "ev_home_charging_rate": "Standaard uit. Voor een bedrijfswagen die thuis laadt: publiceert het maximum per kWh dat uw werkgever belastingvrij mag terugbetalen volgens de forfaitaire methode, voor uw regio en het lopende kwartaal, zoals de FOD Financiën het vastlegt op basis van de prijzen van de CREG. Uw werkgever mag minder betalen, of uw werkelijke kost terugbetalen. Aangevinkt leest de integratie één keer per kwartaal een klein bestand van creg.be."
         }
       },
       "custom_energy": {
@@ -273,8 +271,7 @@
       "meter_sensor_reused": "Deze sensor is al gekozen in een ander veld. Elk veld heeft zijn eigen meter nodig, anders worden de kWh dubbel geteld.",
       "compensation_kva_missing": "Het Waalse prosumententarief van het compensatieregime wordt op het omvormervermogen berekend: vul het in kVA in.",
       "invalid_number": "Typ een getal met een decimale komma of punt, zoals 0,25, binnen wat dit veld aanneemt. Een prijs in EUR/kWh getypt in c€/kWh is honderd keer te hoog.",
-      "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio.",
-      "eneco_bill_not_a_bill": "Kies de sensor Laatste jaarfactuur van de Eneco-integratie: de andere sensoren dragen geen factuur."
+      "supplier_region_unavailable": "Deze leverancier biedt geen residentiele elektriciteit aan in de gekozen regio. Kies een andere leverancier of regio."
     }
   },
   "options": {
@@ -309,7 +306,8 @@
       "switch_date_before_last": "De wisseldatum moet na de laatste geregistreerde wissel van dit jaar liggen.",
       "switch_date_before_start": "De wisseldatum moet na de startdatum liggen van het contract dat u verlaat.",
       "analog_replaced_in_future": "De dag waarop de meter vervangen werd, kan niet in de toekomst liggen.",
-      "eneco_bill_not_a_bill": "Kies de sensor Laatste jaarfactuur van de Eneco-integratie: de andere sensoren dragen geen factuur."
+      "eneco_bill_not_a_bill": "Kies de sensor Laatste jaarfactuur van de Eneco-integratie: de andere sensoren dragen geen factuur.",
+      "eneco_bill_other_energy": "Dat is de factuur van een gasmeter: kies de sensor Laatste jaarfactuur van de elektriciteitsmeter."
     },
     "step": {
       "init": {
@@ -320,7 +318,8 @@
           "remove_switch": "Laatste leverancierswissel verwijderen",
           "compare": "Andere leverancier vergelijken (eenmalige offerte)",
           "compare_all": "Alle contracten van uw soort vergelijken (rangschikking)",
-          "reset_monthly_peak": "Maandpiek resetten"
+          "reset_monthly_peak": "Maandpiek resetten",
+          "bill": "Een Eneco-factuur controleren"
         }
       },
       "switch": {
@@ -552,8 +551,7 @@
           "injection_kwh": "Totale injectie (kWh)",
           "daily_compare": "Vergelijk elke leverancier dagelijks",
           "card_archive": "Oude tariefkaarten uit het projectarchief lezen",
-          "ev_home_charging_rate": "CREG-tarief voor thuisladen van een bedrijfswagen publiceren",
-          "eneco_bill": "Eneco-factuur"
+          "ev_home_charging_rate": "CREG-tarief voor thuisladen van een bedrijfswagen publiceren"
         },
         "data_description": {
           "day_consumption_kwh": "Cumulatieve meterstand in kWh, die alleen maar oploopt. Een sensor die terugvalt naar nul, zoals een totaal 'huidig jaar', wordt alleen juist gelezen als zijn state class total_increasing is of hij last_reset publiceert; elke andere daling telt als nul.",
@@ -564,8 +562,7 @@
           "injection_kwh": "Wordt gebruikt voor zijn kant wanneer de twee registers van die kant leeg zijn, en in de plaats van een paar dat uitvalt, bevriest of andere periodes rapporteert: een meter zonder dag/nacht-onderscheid, een klemmeter, of een omvormer die maar één totaal geeft. Zelfde regel, hij mag alleen oplopen.",
           "daily_compare": "Standaard uit. Eenmaal per dag, op een vast tijdstip afgeleid van deze invoer zodat installaties niet allemaal tegelijk ophalen, wordt elk contract van uw soort in uw regio berekend en de jaarlijkse besparing van het beste als sensor gepubliceerd. De meeste dagen kost dit slechts enkele controles, want tariefkaarten worden ongeveer één keer per maand opnieuw gepubliceerd.",
           "card_archive": "Standaard aan. Voor een voorbije maand waarvoor uw leverancier geen kaart meer publiceert, wordt de kaart opgehaald die het archief van dit project ervoor bewaarde: één klein bestand per maand vanaf GitHub, met enkel de leverancier, het contract, de regio en de maand. Leest ook, één keer per dag, het btw-tarief waarover de gearchiveerde kaarten het eens zijn, voor de prijzen die een kaart zonder tarief vermeldt, de federale accijns die het archief bewaarde voor de maanden die de wet op Justel niet meer geeft, en, voor een invoer met de leverancier 'Expert: custom formula' die zijn net van de tarieflijst van een regulator overneemt, het net dat het archief bewaarde voor een maand die de lijst niet meer geeft, en levert de lezing van dit project van een kaart die als paginafoto's verschijnt, zodat een leverancier die dat doet (Ecofix sinds augustus 2026) zonder prijzen zit als dit uit staat. Als de huidige kaart onleesbaar is en er geen kaart bewaard is, neemt de kaart van vorige maand uit het archief het over. Zet uit om te vermijden dat de integratie GitHub contacteert; die maanden worden dan op de huidige kaart berekend, en een btw-tarief dat een kaart niet vermeldt is het laatste dat gelezen werd toen dit aan stond, of anders 6% voor een gezin en 21% bij een professioneel contract.",
-          "ev_home_charging_rate": "Standaard uit. Voor een bedrijfswagen die thuis laadt: publiceert het maximum per kWh dat uw werkgever belastingvrij mag terugbetalen volgens de forfaitaire methode, voor uw regio en het lopende kwartaal, zoals de FOD Financiën het vastlegt op basis van de prijzen van de CREG. Uw werkgever mag minder betalen, of uw werkelijke kost terugbetalen. Aangevinkt leest de integratie één keer per kwartaal een klein bestand van creg.be.",
-          "eneco_bill": "De sensor Laatste jaarfactuur van de Eneco-integratie (eneco_be). Zijn eenheidsprijzen worden vergeleken met die van deze invoer voor dezelfde data, in een sensor Factuurcontrole. Laat leeg om niets te vergelijken."
+          "ev_home_charging_rate": "Standaard uit. Voor een bedrijfswagen die thuis laadt: publiceert het maximum per kWh dat uw werkgever belastingvrij mag terugbetalen volgens de forfaitaire methode, voor uw regio en het lopende kwartaal, zoals de FOD Financiën het vastlegt op basis van de prijzen van de CREG. Uw werkgever mag minder betalen, of uw werkelijke kost terugbetalen. Aangevinkt leest de integratie één keer per kwartaal een klein bestand van creg.be."
         }
       },
       "custom_energy": {
@@ -674,6 +671,13 @@
         },
         "data_description": {
           "quarter_hourly": "Alleen zichtbaar als je leverancier de keuze laat. Frank Energie: uit voor de uurprijzen die de tariefkaart afdrukt, aan als je je account in de app op kwartierprijzen hebt gezet. Bolt: uit voor variabel afrekenen, waarbij je maand op het RLP-gewogen maandgemiddelde wordt afgerekend, aan voor dynamisch afrekenen, waarbij elk kwartier tegen zijn eigen Belpex-waarde wordt afgerekend. De formule blijft dezelfde, alleen de marktprijs die ze leest verandert."
+        }
+      },
+      "bill": {
+        "title": "Eneco-factuur",
+        "description": "Kies de sensor Laatste jaarfactuur van de Eneco-integratie om elke lijn van die factuur te vergelijken met het tarief dat deze integratie voor de eigen periode van die lijn rekent. Een sensor Factuurcontrole telt dan de lijnen die afwijken. Laat het leeg om niets te controleren.",
+        "data": {
+          "eneco_bill": "Eneco-factuur"
         }
       }
     },

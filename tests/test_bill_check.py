@@ -39,11 +39,15 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant import data_entry_flow
+from homeassistant.config_entries import ConfigSubentryDataWithId
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockEntityPlatform
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    MockEntityPlatform,
+)
 
 from custom_components.be_electricity_prices import bill_check, snapshot_months
 from custom_components.be_electricity_prices.bill_check import (
@@ -561,20 +565,31 @@ async def _to_meters(
     return result
 
 
+async def _to_bill(hass: HomeAssistant, entry: Any) -> Any:
+    """The options menu's Check an Eneco bill item."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert "bill" in result["menu_options"]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "bill"}
+    )
+    assert result["step_id"] == "bill"
+    return result
+
+
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_the_meters_step_takes_a_last_bill_sensor_only(
+async def test_the_bill_item_takes_a_last_bill_sensor_only(
     hass: HomeAssistant,
 ) -> None:
     """Offered on an Eneco entry; another sensor of the eneco integration
-    is refused, a last bill sensor is kept, and a blank picker clears it."""
+    is refused, a last bill sensor is kept, shown again, and a blank picker
+    clears it. The meters step leaves it alone."""
     registry = er.async_get(hass)
     bill = registry.async_get_or_create("sensor", "eneco_be", "meter_last_bill")
     status = registry.async_get_or_create("sensor", "eneco_be", "meter_status")
     entry = make_entry(**_DATA)
     entry.add_to_hass(hass)
 
-    result = await _to_meters(hass, entry, "eneco")
-    assert "eneco_bill" in result["data_schema"].schema
+    result = await _to_bill(hass, entry)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"eneco_bill": status.entity_id}
     )
@@ -586,9 +601,70 @@ async def test_the_meters_step_takes_a_last_bill_sensor_only(
     assert entry.data["eneco_bill"] == bill.entity_id
 
     result = await _to_meters(hass, entry, "eneco")
+    assert "eneco_bill" not in result["data_schema"].schema
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["eneco_bill"] == bill.entity_id
+
+    result = await _to_bill(hass, entry)
+    key = next(iter(result["data_schema"].schema))
+    assert key.description == {"suggested_value": bill.entity_id}
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert "eneco_bill" not in entry.data
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_the_bill_of_a_gas_meter_is_refused(hass: HomeAssistant) -> None:
+    """The Eneco meter behind the sensor says which energy it bills: a gas
+    meter's lines are refused, and an electricity meter's taken."""
+    eneco = MockConfigEntry(
+        domain="eneco_be",
+        subentries_data=[
+            ConfigSubentryDataWithId(
+                data={"ean": "541449000000000001", "energy_type": "Electricity"},
+                subentry_id="power",
+                subentry_type="meter",
+                title="Electricity",
+                unique_id=None,
+            ),
+            ConfigSubentryDataWithId(
+                data={"ean": "541449000000000002", "energy_type": "Gas"},
+                subentry_id="gas",
+                subentry_type="meter",
+                title="Gas",
+                unique_id=None,
+            ),
+        ],
+    )
+    eneco.add_to_hass(hass)
+    registry = er.async_get(hass)
+    power, gas = (
+        registry.async_get_or_create(
+            "sensor",
+            "eneco_be",
+            f"{ean}_last_bill",
+            config_entry=eneco,
+            config_subentry_id=subentry,
+        )
+        for ean, subentry in (
+            ("541449000000000001", "power"),
+            ("541449000000000002", "gas"),
+        )
+    )
+    entry = make_entry(**_DATA)
+    entry.add_to_hass(hass)
+
+    result = await _to_bill(hass, entry)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"eneco_bill": gas.entity_id}
+    )
+    assert result["errors"] == {"eneco_bill": "eneco_bill_other_energy"}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"eneco_bill": power.entity_id}
+    )
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.data["eneco_bill"] == power.entity_id
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -598,10 +674,12 @@ async def test_another_supplier_is_offered_no_bill_and_drops_one(
     entry = make_entry(**(_DATA | {"eneco_bill": _BILL_ENTITY}))
     entry.add_to_hass(hass)
     result = await _to_meters(hass, entry, "cociter", "cociter_variable")
-    assert "eneco_bill" not in result["data_schema"].schema
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert "eneco_bill" not in entry.data
+    # And its menu has no Eneco bill to pick.
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert "bill" not in result["menu_options"]
 
 
 def test_the_bill_sensor_stays_out_of_the_diagnostics() -> None:
