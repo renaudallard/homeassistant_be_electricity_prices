@@ -873,7 +873,7 @@ dropped rather than billed on the new card.
    - The step ends with three boxes: *Compare every supplier daily* (off
      by default), *Read past cards from the project's archive* (on) and
      *Publish the CREG home charging rate for a company car* (off). On an
-     Eneco entry it also offers *Eneco bill*: pick the last bill sensor of
+     Eneco entry it also offers *Eneco bill*: pick the Last yearly bill sensor of
      the [eneco integration](https://github.com/renaudallard/homeassistant_eneco)
      and its unit prices are checked against this entry's (see
      [Checking an Eneco bill](#checking-an-eneco-bill)). Left empty, nothing
@@ -1933,8 +1933,9 @@ is what these contracts need.
 ### Checking an Eneco bill
 
 The [eneco integration](https://github.com/renaudallard/homeassistant_eneco)
-reads each meter's newest settlement bill and publishes its lines on a last
-bill sensor: what was billed, over which days, at what unit price before VAT.
+reads each meter's last full year of bills and publishes their lines on a
+Last yearly bill sensor: what was billed, over which days, at what unit price
+before VAT.
 Pick that sensor as *Eneco bill* on the meters step of an Eneco entry and a
 `bill_check` sensor holds each line against what this entry bills for the
 same days. Each month of a line is priced the way the year-to-date walk

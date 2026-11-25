@@ -174,7 +174,7 @@
           "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois.",
           "card_archive": "Activé par défaut. Pour un mois passé dont votre fournisseur ne publie plus la carte, récupère celle que l'archive du projet a conservée pour ce mois : un petit fichier par mois depuis GitHub, ne nommant que le fournisseur, le contrat, la région et le mois. Lit aussi, une fois par jour, le taux de TVA sur lequel les cartes archivées s'accordent, pour les prix qu'une carte donne sans taux, l'accise fédérale que l'archive a conservée pour les mois que la loi sur Justel ne donne plus, et, pour une entrée avec le fournisseur « Expert: custom formula » qui reprend son réseau de la fiche tarifaire d'un régulateur, le réseau que l'archive a conservé pour un mois que la fiche ne donne plus, et fournit la lecture par le projet d'une carte publiée en images de page, si bien qu'un fournisseur qui publie ainsi (Ecofix depuis août 2026) n'a pas de prix si elle est désactivée. Quand la carte actuelle est illisible et qu'aucune carte n'est conservée, la carte du mois précédent tirée de l'archive prend le relais. Désactivez pour que l'intégration ne contacte pas GitHub ; ces mois sont alors calculés sur la carte actuelle, et un taux de TVA qu'une carte n'indique pas est le dernier lu quand l'option était active, ou sinon 6 % pour un ménage et 21 % sur un contrat professionnel.",
           "ev_home_charging_rate": "Désactivé par défaut. Pour une voiture de société rechargée à domicile : publie le montant maximal par kWh que votre employeur peut rembourser sans impôt selon la méthode forfaitaire, pour votre région et le trimestre en cours, tel que le SPF Finances le fixe à partir des prix de la CREG. Votre employeur peut payer moins, ou rembourser votre coût réel. L'activer permet à l'intégration de lire un petit fichier sur creg.be une fois par trimestre.",
-          "eneco_bill": "Le capteur de dernière facture de l'intégration Eneco (eneco_be). Ses prix unitaires sont comparés à ceux de cette entrée aux mêmes dates, dans un capteur Contrôle de la facture. Laissez vide pour ne rien comparer."
+          "eneco_bill": "Le capteur Dernière facture annuelle de l'intégration Eneco (eneco_be). Ses prix unitaires sont comparés à ceux de cette entrée aux mêmes dates, dans un capteur Contrôle de la facture. Laissez vide pour ne rien comparer."
         }
       },
       "custom_energy": {
@@ -274,7 +274,7 @@
       "compensation_kva_missing": "Le tarif prosumer wallon du régime de compensation est calculé sur la puissance de l'onduleur : indiquez-la en kVA.",
       "invalid_number": "Saisissez un nombre avec une virgule ou un point décimal, par exemple 0,25, dans les limites de ce champ. Un prix en EUR/kWh saisi en c€/kWh est cent fois trop élevé.",
       "supplier_region_unavailable": "Ce fournisseur ne vend pas d'électricité résidentielle dans la région sélectionnée. Choisissez un autre fournisseur ou une autre région.",
-      "eneco_bill_not_a_bill": "Choisissez le capteur de dernière facture de l'intégration Eneco : ses autres capteurs ne portent aucune facture."
+      "eneco_bill_not_a_bill": "Choisissez le capteur Dernière facture annuelle de l'intégration Eneco : ses autres capteurs ne portent aucune facture."
     }
   },
   "options": {
@@ -309,7 +309,7 @@
       "switch_date_before_last": "La date du changement doit suivre le dernier changement enregistré cette année.",
       "switch_date_before_start": "La date du changement doit suivre la date de début du contrat que vous quittez.",
       "analog_replaced_in_future": "Le jour du remplacement du compteur ne peut pas être dans le futur.",
-      "eneco_bill_not_a_bill": "Choisissez le capteur de dernière facture de l'intégration Eneco : ses autres capteurs ne portent aucune facture."
+      "eneco_bill_not_a_bill": "Choisissez le capteur Dernière facture annuelle de l'intégration Eneco : ses autres capteurs ne portent aucune facture."
     },
     "step": {
       "init": {
@@ -565,7 +565,7 @@
           "daily_compare": "Désactivé par défaut. Une fois par jour, à une heure fixe dérivée de cette entrée pour que les installations ne téléchargent pas toutes en même temps, calcule chaque contrat du même type vendu dans votre région et publie l'économie annuelle du meilleur comme capteur. La plupart des jours cela ne coûte que quelques vérifications, les cartes tarifaires étant republiées environ une fois par mois.",
           "card_archive": "Activé par défaut. Pour un mois passé dont votre fournisseur ne publie plus la carte, récupère celle que l'archive du projet a conservée pour ce mois : un petit fichier par mois depuis GitHub, ne nommant que le fournisseur, le contrat, la région et le mois. Lit aussi, une fois par jour, le taux de TVA sur lequel les cartes archivées s'accordent, pour les prix qu'une carte donne sans taux, l'accise fédérale que l'archive a conservée pour les mois que la loi sur Justel ne donne plus, et, pour une entrée avec le fournisseur « Expert: custom formula » qui reprend son réseau de la fiche tarifaire d'un régulateur, le réseau que l'archive a conservé pour un mois que la fiche ne donne plus, et fournit la lecture par le projet d'une carte publiée en images de page, si bien qu'un fournisseur qui publie ainsi (Ecofix depuis août 2026) n'a pas de prix si elle est désactivée. Quand la carte actuelle est illisible et qu'aucune carte n'est conservée, la carte du mois précédent tirée de l'archive prend le relais. Désactivez pour que l'intégration ne contacte pas GitHub ; ces mois sont alors calculés sur la carte actuelle, et un taux de TVA qu'une carte n'indique pas est le dernier lu quand l'option était active, ou sinon 6 % pour un ménage et 21 % sur un contrat professionnel.",
           "ev_home_charging_rate": "Désactivé par défaut. Pour une voiture de société rechargée à domicile : publie le montant maximal par kWh que votre employeur peut rembourser sans impôt selon la méthode forfaitaire, pour votre région et le trimestre en cours, tel que le SPF Finances le fixe à partir des prix de la CREG. Votre employeur peut payer moins, ou rembourser votre coût réel. L'activer permet à l'intégration de lire un petit fichier sur creg.be une fois par trimestre.",
-          "eneco_bill": "Le capteur de dernière facture de l'intégration Eneco (eneco_be). Ses prix unitaires sont comparés à ceux de cette entrée aux mêmes dates, dans un capteur Contrôle de la facture. Laissez vide pour ne rien comparer."
+          "eneco_bill": "Le capteur Dernière facture annuelle de l'intégration Eneco (eneco_be). Ses prix unitaires sont comparés à ceux de cette entrée aux mêmes dates, dans un capteur Contrôle de la facture. Laissez vide pour ne rien comparer."
         }
       },
       "custom_energy": {
