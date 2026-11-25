@@ -822,6 +822,24 @@
           "description": "Destructif: supprime toutes les lignes existantes de la série cible (pas seulement la plage demandée), puis le re-import ne repeuple que la plage demandée. À utiliser UNIQUEMENT pour re-exécuter toute la fenêtre du coût de l'année ; une fenêtre qui commence après le début de la fenêtre du coût de l'année pour l'année de fin (le 1er janvier, ou la date de début du contrat si l'entrée, ou un contrat conservé lors d'un changement de fournisseur enregistré, facture à partir de celle-ci) est refusée avec clear actif, sauf si la fenêtre se termine au plus tard au début de la fenêtre du coût de l'année (la série de coût est alors exclue de l'effacement comme du re-import). Pour des fenêtres plus étroites, laissez cette option inactive: l'import effectue un upsert sur (statistic_id, hour) et écrase déjà les heures demandées sans toucher au reste."
         }
       }
+    },
+    "bill_cost": {
+      "name": "Coût d'une facture",
+      "description": "Calcule ce que les compteurs ont enregistré sur une suite de jours révolus comme le coût depuis le début de l'année, pour le comparer à la facture d'un fournisseur : chaque mois sur sa propre carte tarifaire, et une compensation réglée sur l'ensemble de la période. Renvoie le coût TVA comprise, si l'historique des compteurs couvre chaque jour, et le détail du calcul. Ne modifie rien.",
+      "fields": {
+        "entry_id": {
+          "name": "ID de l'entrée",
+          "description": "L'entrée dont le contrat sert au calcul."
+        },
+        "start": {
+          "name": "Date de début",
+          "description": "Le premier jour facturé. Pas avant le 1er février 2022, ni avant le dernier changement de contrat enregistré."
+        },
+        "end": {
+          "name": "Date de fin",
+          "description": "Le dernier jour facturé, avant aujourd'hui, au plus deux ans après le début."
+        }
+      }
     }
   },
   "exceptions": {
@@ -854,6 +872,21 @@
     },
     "backfill_start_too_early": {
       "message": "Le backfill ne peut pas commencer avant le {earliest} : aucune carte que cette intégration lit ne remonte plus loin, de sorte qu'un jour antérieur ne pourrait être tarifé que sur la carte d'aujourd'hui."
+    },
+    "window_reversed": {
+      "message": "La date de fin précède la date de début."
+    },
+    "window_not_closed": {
+      "message": "La date de fin doit précéder aujourd'hui : seuls des jours entiers enregistrés par les compteurs sont calculés."
+    },
+    "window_too_early": {
+      "message": "La date de début ne peut pas précéder le {earliest} : aucune carte lue par cette intégration ne remonte plus loin."
+    },
+    "window_too_long": {
+      "message": "Les jours demandés dépassent {days} jours ; demandez une facture à la fois."
+    },
+    "window_before_switch": {
+      "message": "Ces jours commencent avant le {switched}, jour où le contrat actuel a pris le relais : seuls ses propres jours sont calculés."
     }
   },
   "issues": {

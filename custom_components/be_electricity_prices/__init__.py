@@ -85,6 +85,7 @@ from .coordinator_profiles import async_remove_profile_store
 from .creg_ev import async_remove_store as async_remove_creg_store
 from .services import (
     _async_backfill_service,
+    _async_bill_cost_service,
     _async_cheapest_window_service,
     _async_most_expensive_window_service,
     _async_refresh_service,
@@ -132,6 +133,7 @@ SERVICE_REFRESH = "refresh"
 SERVICE_CHEAPEST_WINDOW = "cheapest_window"
 SERVICE_MOST_EXPENSIVE_WINDOW = "most_expensive_window"
 SERVICE_BACKFILL_STATISTICS = "backfill_statistics"
+SERVICE_BILL_COST = "bill_cost"
 
 WINDOW_SCHEMA = vol.Schema(
     {
@@ -163,6 +165,14 @@ BACKFILL_SCHEMA = vol.Schema(
         vol.Optional("start"): cv.datetime,
         vol.Optional("end"): cv.datetime,
         vol.Optional("clear", default=False): cv.boolean,
+    }
+)
+
+BILL_COST_SCHEMA = vol.Schema(
+    {
+        vol.Required("entry_id"): cv.string,
+        vol.Required("start"): cv.date,
+        vol.Required("end"): cv.date,
     }
 )
 
@@ -229,6 +239,16 @@ async def async_setup(
         _async_backfill_service,
         schema=BACKFILL_SCHEMA,
         supports_response=SupportsResponse.OPTIONAL,
+    )
+    # Administrators only: it reads the meters' history, which says when a
+    # household is away, and fetches the cards and prices of the days asked.
+    async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_BILL_COST,
+        _async_bill_cost_service,
+        schema=BILL_COST_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
     )
     return True
 

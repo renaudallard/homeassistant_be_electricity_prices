@@ -197,3 +197,37 @@ most_expensive_window:
       example: "2026-05-01T08:00:00+02:00"
       selector:
         datetime:
+
+bill_cost:
+  name: Bill cost
+  description: >-
+    Price what the meters recorded over a closed run of days as the
+    year-to-date cost prices it, to hold a supplier's bill against: each
+    month on its own card, and a compensation net settled over the whole
+    run. Returns the cost with VAT, whether the meters' history covers
+    every day, and the walk's breakdown. Changes nothing.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: The entry whose contract prices the days.
+      required: true
+      example: 4f3c8...
+      selector:
+        config_entry:
+          integration: be_electricity_prices
+    start:
+      name: Start date
+      description: >-
+        The first day billed. No earlier than 1 February 2022, nor than the
+        last recorded change of contract.
+      required: true
+      example: "2025-02-01"
+      selector:
+        date:
+    end:
+      name: End date
+      description: The last day billed, before today, at most two years after the start.
+      required: true
+      example: "2026-01-31"
+      selector:
+        date:

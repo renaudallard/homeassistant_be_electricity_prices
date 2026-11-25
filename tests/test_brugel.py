@@ -464,16 +464,18 @@ async def test_a_backfill_fetches_the_term_for_every_year_it_prices() -> None:
     """
     import inspect
 
-    from custom_components.be_electricity_prices import backfill
+    from custom_components.be_electricity_prices import backfill, backfill_window
 
     source = inspect.getsource(backfill._build_context)
-    assert "ensure_power_term(" in source, (
+    sheets = inspect.getsource(backfill_window.ensure_year_sheets)
+    assert "ensure_year_sheets(" in source
+    assert "ensure_power_term(" in sheets, (
         "the backfill never fetches the term, so a past-year window prices "
         "Brussels rows without it"
     )
     # Every year the hours span, not today's.
     assert "for hour in hours" in source
-    assert "REGION_BRUSSELS" in source, "fetched for every region, not just Brussels"
+    assert "REGION_BRUSSELS" in sheets, "fetched for every region, not just Brussels"
 
 
 def _sheet_text() -> str:

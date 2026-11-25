@@ -1775,6 +1775,32 @@ States history (the per-entity timeline shown in the **History**
 view) is append-only by design and is not affected; only the
 long-term statistics tables are written.
 
+### `be_electricity_prices.bill_cost` service
+
+For holding a supplier's bill against what this entry prices: it only
+answers (tick *Return response* under *Developer tools > Actions*) and
+changes nothing. Only an administrator can call it, since it reads the
+meters' history.
+
+```yaml
+service: be_electricity_prices.bill_cost
+data:
+  entry_id: 01H...
+  start: "2025-02-01"   # the first day billed
+  end: "2026-01-31"     # the last day billed, before today
+```
+
+The days are one window of the year-to-date bill: each month on its own
+card, fees over the days held, and a compensation net settled over the whole
+window, as the meter readout that closes a bill settles it, whichever years
+the days fall in. Each hour is weighted on the load and solar profiles of its
+own year. The answer has the cost VAT included (`cost`), `covered`, true when
+the meters have a reading for every day, and the walk's `breakdown` (the
+kWh, the energy, network, tax and fee legs, and the days or hours it saw and
+priced). A start before 1 February 2022 or before the last recorded change of
+contract is refused, and so is a window of more than two years: past a year,
+a day of the profile weights both of its dates on the later one's curve.
+
 ### Diagnostics
 
 **Settings → Devices & services → Belgian Electricity Prices →** three-dot

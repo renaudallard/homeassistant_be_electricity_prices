@@ -36,7 +36,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from custom_components.be_electricity_prices import fluvius
+from custom_components.be_electricity_prices import backfill_window, fluvius
 from tests import FakeBody
 
 _FIXTURES = Path(__file__).parent / "fixtures"
@@ -504,10 +504,13 @@ def test_the_sheet_is_read_before_the_card_is_resolved() -> None:
     resolver = inspect.getsource(snapshot_resolve._resolve_snapshot)
     assert "cached_network_ceiling(month.year)" in resolver
     # A backfill asks for every year its window prices, not just this one.
-    context = inspect.getsource(backfill._build_context)
-    assert "ensure_tariff_sheet(coordinator._session, year)" in context
-    assert "coordinator._session, year, str(entry.data[CONF_DSO])" in context
-    assert "ensure_custom_network(coordinator._session, entry.data, year)" in context
+    assert "ensure_year_sheets(" in inspect.getsource(backfill._build_context)
+    context = inspect.getsource(backfill_window.ensure_year_sheets)
+    assert "ensure_tariff_sheet(session, year)" in context
+    assert (
+        "ensure_analog_surcharge(session, year, str(entry.data[CONF_DSO]))" in context
+    )
+    assert "ensure_custom_network(session, entry.data, year)" in context
 
 
 async def test_a_restart_puts_the_ceiling_on_the_stored_card(hass: Any) -> None:

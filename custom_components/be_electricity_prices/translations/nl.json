@@ -822,6 +822,24 @@
           "description": "Destructief: verwijdert elke bestaande rij van de doelreeks (niet alleen het gevraagde bereik), waarna de herimport alleen het gevraagde bereik opnieuw vult. Gebruik dit ALLEEN om het volledige venster van dit jaar opnieuw te draaien; een venster dat begint na het begin van het venster van het eindjaar (1 januari, of de startdatum van het contract als de invoer, of een contract bewaard bij een geregistreerde leverancierswissel, daarvan uitgaat) wordt met clear aan geweigerd, tenzij het venster eindigt op of vóór het begin van het venster van dit jaar (daar blijft de kostenreeks buiten zowel het wissen als de herimport). Voor smallere vensters: laat dit uit; de import doet upsert op (statistic_id, uur) en overschrijft de gevraagde uren al zonder iets buiten het bereik aan te raken."
         }
       }
+    },
+    "bill_cost": {
+      "name": "Kosten van een factuur",
+      "description": "Berekent wat de meters over een reeks afgesloten dagen registreerden zoals de kosten sinds het begin van het jaar, om de factuur van een leverancier ermee te vergelijken: elke maand op haar eigen tariefkaart, en een compensatie verrekend over de hele periode. Geeft de kosten incl. btw, of de geschiedenis van de meters elke dag dekt, en de opbouw van de berekening. Wijzigt niets.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry-ID",
+          "description": "De invoer waarvan het contract de dagen berekent."
+        },
+        "start": {
+          "name": "Startdatum",
+          "description": "De eerste gefactureerde dag. Niet vroeger dan 1 februari 2022, noch dan de laatst vastgelegde contractwissel."
+        },
+        "end": {
+          "name": "Einddatum",
+          "description": "De laatste gefactureerde dag, vóór vandaag, hoogstens twee jaar na de start."
+        }
+      }
     }
   },
   "exceptions": {
@@ -854,6 +872,21 @@
     },
     "backfill_start_too_early": {
       "message": "Het aanvullen kan niet vroeger beginnen dan {earliest}: geen enkele kaart die deze integratie leest gaat verder terug, dus een dag daarvoor kon alleen op de kaart van vandaag geprijsd worden."
+    },
+    "window_reversed": {
+      "message": "De einddatum ligt vóór de startdatum."
+    },
+    "window_not_closed": {
+      "message": "De einddatum moet vóór vandaag liggen: alleen volledige dagen die de meters registreerden worden berekend."
+    },
+    "window_too_early": {
+      "message": "De startdatum mag niet vroeger zijn dan {earliest}: geen kaart die deze integratie leest gaat verder terug."
+    },
+    "window_too_long": {
+      "message": "De gevraagde dagen beslaan meer dan {days} dagen; vraag één factuur tegelijk."
+    },
+    "window_before_switch": {
+      "message": "Die dagen beginnen vóór {switched}, de dag waarop het huidige contract het overnam: alleen de eigen dagen ervan worden berekend."
     }
   },
   "issues": {

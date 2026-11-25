@@ -822,6 +822,24 @@
           "description": "Destructive: deletes every existing row of the target series (not just the requested range), then the re-import repopulates only the requested range. Use ONLY to re-run the whole year-to-date window; a window that starts after the end year's year-to-date start (Jan 1, or the contract start date if the entry, or a contract kept by a recorded supplier switch, bills from it) is rejected with clear on, unless the window ends on or before the current year-to-date start (the cost series is left out of both the wipe and the re-import there). For narrower windows, leave this off: the import upserts on (statistic_id, hour) and already overwrites the requested hours without touching anything outside the range."
         }
       }
+    },
+    "bill_cost": {
+      "name": "Bill cost",
+      "description": "Price what the meters recorded over a closed run of days as the year-to-date cost prices it, to hold a supplier's bill against: each month on its own card, and a compensation net settled over the whole run. Returns the cost with VAT, whether the meters' history covers every day, and the walk's breakdown. Changes nothing.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry ID",
+          "description": "The entry whose contract prices the days."
+        },
+        "start": {
+          "name": "Start date",
+          "description": "The first day billed. No earlier than 1 February 2022, nor than the last recorded change of contract."
+        },
+        "end": {
+          "name": "End date",
+          "description": "The last day billed, before today, at most two years after the start."
+        }
+      }
     }
   },
   "exceptions": {
@@ -854,6 +872,21 @@
     },
     "backfill_start_too_early": {
       "message": "The backfill can start no earlier than {earliest}: no card this integration reads reaches further back, so a day before it could only be priced on today's card."
+    },
+    "window_reversed": {
+      "message": "The end date comes before the start date."
+    },
+    "window_not_closed": {
+      "message": "The end date has to be before today: only whole days the meters have recorded are priced."
+    },
+    "window_too_early": {
+      "message": "The start date can be no earlier than {earliest}: no card this integration reads reaches further back."
+    },
+    "window_too_long": {
+      "message": "The days asked run over {days} days; ask for one bill at a time."
+    },
+    "window_before_switch": {
+      "message": "The days start before {switched}, the day the current contract took over: only its own days are priced."
     }
   },
   "issues": {

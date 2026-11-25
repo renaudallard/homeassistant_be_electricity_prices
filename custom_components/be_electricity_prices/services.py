@@ -39,6 +39,7 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.util import dt as dt_util
 
 from .backfill import backfill_range
+from .bill_cost import window_cost
 from .const import DOMAIN, RESOLUTION_HOURLY
 from .coordinator import BePricesCoordinator
 from .pricing import PriceBreakdown, slot_delta, slot_start, slots_per_hour
@@ -350,3 +351,10 @@ async def _async_backfill_service(call: ServiceCall) -> ServiceResponse:
         call.data.get("end"),
         clear=bool(call.data.get("clear", False)),
     )
+
+
+async def _async_bill_cost_service(call: ServiceCall) -> ServiceResponse:
+    """What the targeted entry prices the meters' days from ``start`` to
+    ``end`` at, for a supplier's bill to be held against."""
+    coordinator = _resolve_target_coordinator(call)
+    return await window_cost(coordinator, call.data["start"], call.data["end"])

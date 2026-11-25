@@ -524,18 +524,6 @@ async def _build_context(
     # and rebuilt those rows without the term, disagreeing with the live
     # sensor beside them. The coordinator tick only ever fetches this year.
     years = sorted({dt_util.as_local(hour).year for hour in hours})
-    if region == REGION_BRUSSELS:
-        for year in years:
-            await ensure_power_term(coordinator._session, year)
-    # The VREG network ceiling of a Flemish entry, for the same reason, and an
-    # analog meter's kWh rate off its area's sheet for every year it billed in.
-    if region == REGION_FLANDERS:
-        for year in years:
-            await ensure_tariff_sheet(coordinator._session, year)
-            if analog_meter(entry.data, date(year, 1, 1)):
-                await ensure_analog_surcharge(
-                    coordinator._session, year, str(entry.data[CONF_DSO])
-                )
     # The card each contract's own was resolved from, so a month no archive
     # holds bills its own levies, as the live sensor bills it.
     raw = (
@@ -543,12 +531,7 @@ async def _build_context(
         if snapshot is None
         else snapshot_raw
     )
-    # An entry's network off its region's sheet, a custom one's or a
-    # withdrawn product's, for the same reason, and that year's sheet for a
-    # card of another year standing in for a month no archive holds.
-    for year in years:
-        await ensure_custom_network(coordinator._session, entry.data, year)
-        await ensure_delivery_year_sheet(coordinator._session, entry.data, raw, year)
+    await ensure_year_sheets(coordinator._session, entry, raw, years)
     return _BackfillContext(
         region=region,
         day_start=day_start_for(entry.data),
@@ -590,6 +573,35 @@ async def _build_context(
         annual_injection_kwh=entry_annual_injection_kwh(entry, coordinator),
         first_year=first_year,
     )
+
+
+async def ensure_year_sheets(
+    session: aiohttp.ClientSession,
+    entry: ConfigEntry,
+    raw: SupplierSnapshot | None,
+    years: list[int],
+) -> None:
+    """Fetch the sheets each of ``years`` is billed off, which the coordinator
+    tick only fetches for the running year: Brussels' power term, the Flemish
+    network ceiling and analog rate, and an entry's network off its region's
+    sheet. ``raw`` is the card the entry's own was resolved from."""
+    region = entry.data.get(CONF_REGION, "")
+    if region == REGION_BRUSSELS:
+        for year in years:
+            await ensure_power_term(session, year)
+    # The VREG network ceiling of a Flemish entry, for the same reason, and an
+    # analog meter's kWh rate off its area's sheet for every year it billed in.
+    if region == REGION_FLANDERS:
+        for year in years:
+            await ensure_tariff_sheet(session, year)
+            if analog_meter(entry.data, date(year, 1, 1)):
+                await ensure_analog_surcharge(session, year, str(entry.data[CONF_DSO]))
+    # An entry's network off its region's sheet, a custom one's or a
+    # withdrawn product's, for the same reason, and that year's sheet for a
+    # card of another year standing in for a month no archive holds.
+    for year in years:
+        await ensure_custom_network(session, entry.data, year)
+        await ensure_delivery_year_sheet(session, entry.data, raw, year)
 
 
 # A piece of the window on one contract: its entry, card and the card that

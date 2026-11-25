@@ -822,6 +822,24 @@
           "description": "Destruktiv: löscht jede vorhandene Zeile der Zielreihe (nicht nur den angeforderten Bereich); der erneute Import füllt anschließend nur den angeforderten Bereich. NUR verwenden, um den ganzen Zeitraum dieses Jahres neu zu befüllen; ein Fenster, das nach dem Beginn des Zeitraums im Endjahr beginnt (1. Januar, oder der Vertragsbeginn, wenn der Eintrag oder ein bei einem erfassten Lieferantenwechsel behaltener Vertrag ab dann abrechnet), wird mit clear abgelehnt, außer das Fenster endet spätestens am Beginn des Zeitraums dieses Jahres (dort bleibt die Kostenreihe sowohl beim Löschen als auch beim erneuten Import außen vor). Für schmalere Fenster: deaktiviert lassen; der Import macht einen Upsert auf (statistic_id, Stunde) und überschreibt die angeforderten Stunden bereits, ohne etwas außerhalb des Bereichs anzurühren."
         }
       }
+    },
+    "bill_cost": {
+      "name": "Rechnungskosten",
+      "description": "Berechnet, was die Zähler über eine Reihe abgeschlossener Tage erfasst haben, wie die Kosten seit Jahresbeginn, um die Rechnung eines Lieferanten damit zu vergleichen: jeden Monat auf seiner eigenen Tarifkarte und eine Kompensation über den ganzen Zeitraum verrechnet. Gibt die Kosten inkl. MwSt. zurück, ob die Zählerhistorie jeden Tag abdeckt, und die Aufschlüsselung der Berechnung. Ändert nichts.",
+      "fields": {
+        "entry_id": {
+          "name": "Entry-ID",
+          "description": "Der Eintrag, dessen Vertrag die Tage berechnet."
+        },
+        "start": {
+          "name": "Startdatum",
+          "description": "Der erste abgerechnete Tag. Nicht vor dem 1. Februar 2022 und nicht vor dem zuletzt erfassten Vertragswechsel."
+        },
+        "end": {
+          "name": "Enddatum",
+          "description": "Der letzte abgerechnete Tag, vor heute, höchstens zwei Jahre nach dem Start."
+        }
+      }
     }
   },
   "exceptions": {
@@ -854,6 +872,21 @@
     },
     "backfill_start_too_early": {
       "message": "Der Backfill kann nicht vor dem {earliest} beginnen: Keine Karte, die diese Integration liest, reicht weiter zurück, daher könnte ein Tag davor nur mit der heutigen Karte bepreist werden."
+    },
+    "window_reversed": {
+      "message": "Das Enddatum liegt vor dem Startdatum."
+    },
+    "window_not_closed": {
+      "message": "Das Enddatum muss vor heute liegen: nur ganze Tage, die die Zähler erfasst haben, werden berechnet."
+    },
+    "window_too_early": {
+      "message": "Das Startdatum darf nicht vor dem {earliest} liegen: keine Karte, die diese Integration liest, reicht weiter zurück."
+    },
+    "window_too_long": {
+      "message": "Die angefragten Tage umfassen mehr als {days} Tage; fragen Sie eine Rechnung nach der anderen an."
+    },
+    "window_before_switch": {
+      "message": "Diese Tage beginnen vor dem {switched}, dem Tag, an dem der aktuelle Vertrag übernommen hat: nur seine eigenen Tage werden berechnet."
     }
   },
   "issues": {
