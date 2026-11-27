@@ -6066,6 +6066,13 @@ def test_the_endpoint_probe_installs_what_it_imports(tmp_path: Path) -> None:
     steps = workflow["jobs"]["probe"]["steps"]
     install = next(s["run"] for s in steps if "pip install" in s.get("run", ""))
     installed = set(install.split("-c requirements-dev.txt", 1)[1].split())
+    if "scripts/install_requirements.sh" in installed:
+        from packaging.requirements import Requirement
+
+        manifest = json.loads(
+            (root / "custom_components/be_electricity_prices/manifest.json").read_text()
+        )
+        installed |= {Requirement(line).name for line in manifest["requirements"]}
     if "homeassistant" in installed:
         installed.add("voluptuous")
     blocked = {

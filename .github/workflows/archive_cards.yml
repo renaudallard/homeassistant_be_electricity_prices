@@ -75,12 +75,15 @@ jobs:
           # The script imports the integration package itself (for the
           # snapshot codec the Store uses), so it needs what the package
           # imports at module level: homeassistant, defusedxml for api.py
-          # and the two PDF readers. Versions come from requirements-dev.txt
-          # so this runs against what the test suite proved.
-          # freezegun pins the clock to a row's capture day while a stored
-          # month is replayed through the current parser.
-          pip install -c requirements-dev.txt \
-            pypdf pdfplumber aiohttp defusedxml homeassistant freezegun
+          # and the two PDF readers. freezegun pins the clock to a row's
+          # capture day while a stored month is replayed through the current
+          # parser. Their versions come from requirements-dev.txt; the
+          # integration's own requirements are installed as Home Assistant
+          # installs them, the newest the manifest allows, so the texts
+          # stored are those a new installation reads, as the suite's newest
+          # job does.
+          pip install -c requirements-dev.txt aiohttp homeassistant freezegun
+          scripts/install_requirements.sh newest
           # The reader for cards published as page images. Installed here and
           # nowhere else: an installation never runs OCR, it reads the rows
           # this walk writes. The walk runs it on what every supplier serves,
@@ -88,7 +91,10 @@ jobs:
           # commit, the head of its main branch on 6 November 2026 (release
           # 0.4.2), and so are the numpy and pypdfium2 it reads with, at the
           # versions that day's walk installed. The parser stamp records all
-          # three, so moving a pin reads those cards again.
+          # three, so moving a pin reads those cards again. pdfplumber asks
+          # for a newer pypdfium2 from 0.11.11, which pip notes and installs
+          # past: it only draws pages with it, and the readers take its
+          # text, never its pictures.
           pip install \
             "ocr-price-cards @ git+https://github.com/renaudallard/ocr_price_cards@a5c8a17ccad7768d3bee97c19ed17c8daffbd2ac" \
             numpy==2.5.4 pypdfium2==5.14.0
@@ -490,8 +496,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -c requirements-dev.txt \
-            pypdf pdfplumber aiohttp defusedxml homeassistant freezegun
+          pip install -c requirements-dev.txt aiohttp homeassistant freezegun
+          scripts/install_requirements.sh newest
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

@@ -1588,26 +1588,27 @@ which their repositories move, so both jobs keep a read-only token.
 
 ### test.yml - Tests
 
-Runs on push to `main`, on every pull request, and on manual dispatch (`.github/workflows/test.yml`).
-It pins Python 3.13 and installs the toolchain from `requirements-dev.txt`
-(`.github/workflows/test.yml`), where every version is pinned: `homeassistant==2026.2.3`,
-`pytest-homeassistant-custom-component==0.13.316`, `ruff==0.16.0`, `pytest-freezer==0.4.9`,
-`pypdf`, `pdfplumber`, `defusedxml` and `pyxlsb`, so an upstream HA-core, test-shim or linter
-release cannot silently turn the suite red on `main`. The live check and the endpoint probe take
-their versions from that same file with pip's `-c`, so a version is written down once. The
-other side of the pin: the manifest asks only for a floor (`pypdf>=6.16.2`), so a fresh install
-gets the newest pypdf and an older one keeps the pypdf it has. The pin is the newest, 7.2.0 on
-27 November 2026, and the suite is also run by hand on the last release of the 6 series, 6.21.4,
-and `tests/test_pdf_helpers.py` on the floor, each installed alone in a directory put ahead of the
-venv (`pip install --target <dir> --no-deps pypdf==<version>`, then `PYTHONPATH=<dir>`). Both
-matter between releases: the readers' bounds wrap pypdf's internals by name, and its plain text
-moves. pypdf 6.20.0 changed how plain text breaks its lines (headings and their hours run
-together on Luminus's Wallonia cards) while every workflow was still on 6.18.0, and only a suite
-run on the new release showed it; 7 sets a space between those headings and their hours and
-prints Cociter's `HOURL Y` and `BEL PEX` whole; 7.2 keeps the pieces drawn on one line together
-where 7.1 put each on a line of its own, which broke every Mega card. The lint
-rule set is itself
-pinned in `pyproject.toml` (`[tool.ruff.lint] select`: pycodestyle, pyflakes, isort, pyupgrade
+Runs on push to `main`, on every pull request, daily, and on manual dispatch
+(`.github/workflows/test.yml`). It pins Python 3.13 and installs the toolchain from
+`requirements-dev.txt`, where every version is pinned: `homeassistant==2026.2.3`,
+`pytest-homeassistant-custom-component==0.13.316`, `ruff==0.16.0`, `pytest-freezer==0.4.9`, so an
+upstream HA-core, test-shim or linter release cannot silently turn the suite red on `main`. The
+live check and the endpoint probe take their versions from that same file with pip's `-c`, so a
+version is written down once. The integration's own requirements (`pypdf`, `pdfplumber`,
+`defusedxml`, `pyxlsb`) are not in it, since an installation does not pin them either. Home
+Assistant installs a requirement only when no installed release meets the manifest, with `uv pip
+install --upgrade <requirement> --constraint package_constraints.txt`, so a fresh install reads
+its cards with the newest release the manifest allows and an older one keeps what it had, down to
+the floor (`pypdf>=6.16.2`). `scripts/install_requirements.sh` installs them the same way,
+`newest` as the manifest writes them under the constraints of the Home Assistant installed,
+`floor` at each `>=`, and the suite runs on both as two jobs; the live check, the endpoint probe
+and the card archive read with the newest. Both ends matter: the readers' bounds wrap pypdf's
+internals by name, and its plain text moves. pypdf 6.20.0 changed how plain text breaks its lines
+(headings and their hours run together on Luminus's Wallonia cards) while every workflow was still
+on 6.18.0, and only a suite run on the new release showed it; 7 sets a space between those
+headings and their hours and prints Cociter's `HOURL Y` and `BEL PEX` whole; 7.2 keeps the pieces
+drawn on one line together where 7.1 put each on a line of its own, which broke every Mega card
+while CI still read with a pinned 6.21.4. The lint rule set is itself pinned in `pyproject.toml` (`[tool.ruff.lint] select`: pycodestyle, pyflakes, isort, pyupgrade
 for Python 3.13, bugbear, simplify and ruff's own rules, the set the gas integration lints for,
 with line length left to the formatter and the ambiguous-Unicode rules off because the parsers
 match the dash and space variants the cards print), so a ruff upgrade cannot expand what is
@@ -2094,7 +2095,7 @@ maintainer.
 `scripts/gate.sh` runs all of them in one go and is what to use before a push:
 
 ```
-scripts/gate.sh                     # the whole suite, about 13 minutes on a Pi alone
+scripts/gate.sh                     # the whole suite on both ends, about 13 minutes a run on a Pi alone
 scripts/gate.sh tests/test_ebem.py  # one file, for a quick pass
 ```
 
@@ -2129,11 +2130,15 @@ commit, cold caches, with maci7, an eight-thread Intel MacBook Air, as the remot
 | everything at once | 763 s | 547 s |
 | pytest on maci7, the rest on the Pi at the same time | about 365 s | |
 
-Unset, everything runs locally. The remote needs a venv at `~/be_gate/.venv`, which the
-gate refreshes with uv whenever `requirements-dev.txt` changes, GNU `date` first in its
-`PATH` for the tests of `scripts/file_ci_issue.sh`, and GNU `timeout`. A remote that cannot be
-reached, or drops mid-run, costs a local pytest, never a gate result. pytest gets an hour, three
-times a run on a Pi with an empty text cache, under `timeout` on the host it runs on, so a suite
+Unset, everything runs locally. Before the checks start, the integration's own requirements are
+brought to the newest the manifest allows, and the suite runs on them and then on their floor,
+kept in `tmp/floor` (`~/be_gate/floor` on the remote) and installed again only when the manifest
+changes, as the two jobs of `test.yml` do (`scripts/gate_pytest.sh`). The remote needs a venv at
+`~/be_gate/.venv`, which the gate refreshes with uv whenever `requirements-dev.txt` changes, GNU
+`date` first in its `PATH` for the tests of `scripts/file_ci_issue.sh`, and GNU `timeout`. A remote
+that cannot be reached, or drops mid-run, costs a local pytest, never a gate result. pytest gets
+an hour and a half, more than twice the two runs on a Pi with an empty text cache, under
+`timeout` on the host it runs on, so a suite
 that hangs is stopped there and fails the gate with a line saying so, rather than holding it for
 good. An ssh keepalive notices a remote that went
 away without closing the connection, a Mac put to sleep for one, within about 15 s, and on a Mac

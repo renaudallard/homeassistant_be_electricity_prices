@@ -67,7 +67,9 @@ def test_the_pdfplumber_floor_leaves_out_the_cmaps_it_unpickled() -> None:
     CMap file a card's font names, from any folder the name reaches, and
     0.11.8 one that still unpickles it from its own: Home Assistant keeps
     whichever installed release the manifest allows. 0.11.9 pins one that
-    reads them as JSON, and CI runs it."""
+    reads them as JSON, and CI runs on it as well as on the newest."""
+    from importlib.metadata import version
+
     from packaging.requirements import Requirement
     from packaging.version import Version
 
@@ -82,7 +84,4 @@ def test_the_pdfplumber_floor_leaves_out_the_cmaps_it_unpickled() -> None:
         if Requirement(line).name == "pdfplumber"
     )
     assert not floor.contains(Version("0.11.8"))
-    requirements = (_ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
-    pinned = re.search(r"^pdfplumber==([0-9.]+)$", requirements, re.MULTILINE)
-    assert pinned is not None, "requirements-dev.txt no longer pins pdfplumber"
-    assert floor.contains(Version(pinned.group(1)))
+    assert floor.contains(Version(version("pdfplumber")))

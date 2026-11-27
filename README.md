@@ -2187,6 +2187,7 @@ supplier that publishes a card. Start with [`docs/README.md`](./docs/README.md).
 
 ```bash
 pip install -r requirements-dev.txt
+scripts/install_requirements.sh newest   # the integration's own, as Home Assistant installs them
 ruff check .
 ruff format --check .
 mypy --strict custom_components/be_electricity_prices
@@ -2206,8 +2207,11 @@ first. It refuses to start unless pip, reading `requirements-dev.txt` in a
 dry run that looks nothing up, finds nothing to install in `.venv`, and
 prints what pip found; a URL or editable line there would still be fetched. When `GATE_REMOTE` names a host that answers over ssh
 (it needs a venv at `~/be_gate/.venv`), pytest runs there on the same
-snapshot while the rest runs locally: about 6 minutes with an eight-thread
-Mac, against 13 on a Raspberry Pi alone. Unset, everything runs locally.
+snapshot while the rest runs locally: about 6 minutes a run of the suite
+with an eight-thread Mac, against 13 on a Raspberry Pi alone. Unset,
+everything runs locally. `requirements-dev.txt` pins the harness only: the suite runs on the newest
+of the integration's own requirements the manifest allows and again on their
+floor, in the gate as in CI.
 Pass a test file (`scripts/gate.sh tests/test_ebem.py`) for a quick pass.
 
 Tests run against fixture PDFs and HTML snippets in

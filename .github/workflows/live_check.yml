@@ -85,10 +85,12 @@ jobs:
           # defusedxml is required because api.py imports it at module
           # level, and the spot-fallback check loads api.py for the
           # client it exercises.
-          # Versions come from requirements-dev.txt so this runs against what
-          # the test suite proved, without a second copy of the numbers.
-          pip install -c requirements-dev.txt \
-            pypdf pdfplumber aiohttp defusedxml homeassistant
+          # Home Assistant's version comes from requirements-dev.txt; the
+          # integration's own requirements are installed as Home Assistant
+          # installs them, the newest the manifest allows, so the cards are
+          # read as a new installation reads them.
+          pip install -c requirements-dev.txt aiohttp homeassistant
+          scripts/install_requirements.sh newest
 
       - name: Resolve names through nsec.arnor.org over TLS
         # Fluvius serves fluvius.be from two nameservers that never answer
