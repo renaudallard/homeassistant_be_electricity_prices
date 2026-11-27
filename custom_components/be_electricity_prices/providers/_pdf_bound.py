@@ -663,7 +663,7 @@ def _show(reading: _Reading, characters: int) -> None:
 
 
 # What pypdf's check of a move is handed first and where it takes what the
-# page holds, from pypdf 6.7.1 to 7.1.1 at least. The check is left as it
+# page holds, from pypdf 6.7.1 to 7.2.0 at least. The check is left as it
 # is should a release name other arguments there, or have none.
 _PAGE_ARGUMENT = 6
 _CHECK_ARGUMENTS = {0: "text", _PAGE_ARGUMENT: "output"}

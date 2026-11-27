@@ -44,7 +44,7 @@ from dataclasses import replace
 from datetime import date
 from typing import Any
 
-from ._parse import LINE_BREAK, SIGN_CHARS, parse_sign, stated_unit, to_float
+from ._parse import GAP, SIGN_CHARS, parse_sign, stated_unit, to_float
 from ._pdf import (
     FR_MONTHS,
     vat_multiplier,
@@ -749,25 +749,25 @@ def _with_unstated_bands(
 def _extract_impact_tier(text: str, tier: str) -> float | None:
     """Pull one ECO / MEDIUM / PIC rate from an Off-peak Impact card.
 
-    The energy block prints ``Tarif <TIER>\\n<consumption>\\n<injection>``;
-    we want the first number after the label. The cards in circulation
-    use bare ``PIC`` (not ``Tarif PIC``) on the last row, and lowercase
-    ``tarif`` in the footnote formula, so the regex is intentionally
-    permissive on the ``Tarif`` prefix.
+    The energy block prints ``Tarif <TIER>\\n<consumption>\\n<injection>``,
+    on one line from pypdf 7.2; we want the first number after the label.
+    The cards in circulation use bare ``PIC`` (not ``Tarif PIC``) on the
+    last row, and lowercase ``tarif`` in the footnote formula, so the regex
+    is intentionally permissive on the ``Tarif`` prefix.
     """
-    match = re.search(rf"(?:Tarif\s+)?{tier}{LINE_BREAK}([\d.,]+)", text)
+    match = re.search(rf"(?:Tarif\s+)?{tier}{GAP}([\d.,]+)", text)
     return to_float(match.group(1)) / 100.0 if match else None
 
 
 def _extract_meter_value(text: str, label: str) -> float | None:
     """Pull the consumption rate that follows a meter-type label.
 
-    Mega prints labels and values on separate lines; the consumption rate
-    is the first number after the label and the injection rate is the
-    second. Tarif jour / Tarif nuit / Exclusif nuit are only meaningful
-    under the ``Compteur bi-horaire`` header; anchor on it so a later
-    mention in dynamic-formula footnotes can't shadow the energy-block
-    value.
+    pypdf puts labels and values on separate lines up to 7.1 and on one from
+    7.2; the consumption rate is the first number after the label and the
+    injection rate is the second. Tarif jour / Tarif nuit / Exclusif nuit
+    are only meaningful under the ``Compteur bi-horaire`` header; anchor on
+    it so a later mention in dynamic-formula footnotes can't shadow the
+    energy-block value.
     """
     scope = text
     if label in ("Tarif jour", "Tarif nuit", "Exclusif nuit"):
@@ -778,7 +778,7 @@ def _extract_meter_value(text: str, label: str) -> float | None:
         if anchor_match is not None:
             scope = text[anchor_match.start() :]
     match = re.search(
-        rf"{re.escape(label)}{LINE_BREAK}([\d.,]+)",
+        rf"{re.escape(label)}{GAP}([\d.,]+)",
         scope,
     )
     return to_float(match.group(1)) / 100.0 if match else None
@@ -856,13 +856,13 @@ def _extract_injection(text: str, kind: TariffKind) -> InjectionRates | None:
         # labels (all three rows print the same value, so pick the first
         # one we find).
         inj_match = re.search(
-            rf"(?:Tarif\s+)?(?:ECO|MEDIUM|PIC){LINE_BREAK}[\d.,]+{LINE_BREAK}([\d.,]+)",
+            rf"(?:Tarif\s+)?(?:ECO|MEDIUM|PIC){GAP}[\d.,]+{GAP}([\d.,]+)",
             text,
         )
         current = to_float(inj_match.group(1)) / 100.0 if inj_match else None
     else:
         pattern = re.compile(
-            rf"Compteur mono-horaire{LINE_BREAK}[\d.,]+{LINE_BREAK}([\d.,]+)",
+            rf"Compteur mono-horaire{GAP}[\d.,]+{GAP}([\d.,]+)",
         )
         match = pattern.search(text)
         current = to_float(match.group(1)) / 100.0 if match else None

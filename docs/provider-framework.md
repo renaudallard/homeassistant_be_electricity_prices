@@ -1012,7 +1012,7 @@ Internals worth knowing:
   handed the page's last character alone, all it reads of it, what it
   appends is put back on the page, and the space or line end counts as a
   character made. The check is wrapped only while it takes the line and
-  the page where pypdf 6.7.1 to 7.1.1 hand them, and is left as it is
+  the page where pypdf 6.7.1 to 7.2.0 hand them, and is left as it is
   otherwise. The most a shipped fixture makes is 17 037 under pdfminer and
   17 321 under pypdf, both on Cociter's dynamic card of April 2026, the
   longest text the archive held on 2026-11-06 being the same card's of

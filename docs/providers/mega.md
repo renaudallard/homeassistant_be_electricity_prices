@@ -373,8 +373,13 @@ fallback so a wrong guess raises instead of applying the wrong region's overlays
 It then dispatches on the contract's `TariffKind` and the configured region, then
 assembles a `SupplierSnapshot`. All rates are printed in c€/kWh on the card and
 divided by 100 to reach EUR/kWh. The general pypdf hazard on these cards is
-that labels and their values land on separate lines, so nearly every parser anchors
-on a label token and takes the first number on the following line.
+that labels and their values land on separate lines up to pypdf 7.1, and on the
+label's own line from 7.2, which keeps the pieces drawn on one line together
+(`Compteur mono-horaire 17.12 1.67`). An installation keeps the pypdf it has, so
+nearly every parser anchors on a label token and takes the first number after
+it across blanks of either kind (`GAP` in `_parse.py`). Three cards are kept as
+both versions put them (`*.pypdf6.txt`, `*.pypdf72.txt`) and must read to the
+same snapshot: `test_a_card_reads_alike_from_either_pypdf_layout`.
 
 Fields pulled and their helpers:
 
@@ -650,9 +655,12 @@ month (Mega cards are valid for the printed month).
   `Cotisation Verte` line that already folds in cogeneration, so no separate
   cogénération row appears, `_mega_overlays.py`), `wallonia_renewables`, or
   `brussels_renewables`, per region. Each raises on a miss in its own region.
-  The value is read as the region's name and a number on two lines of their own
-  anywhere after the heading and before the next one (`_green_levy_value`), not
-  within a character budget:
+  The value is read as the region's name at the start of a line, or run into the
+  `Certificat vert` label before it as some cards come out of pypdf 7.2
+  (`Certificat vertBruxelles 2.482`), and the number after it, on the next line
+  or from pypdf 7.2 on the same one, where it can run into the footnote
+  (`Flandre 1.554(1) Ces prix`), anywhere after the heading and
+  before the next one (`_green_levy_value`), not within a character budget:
   a page break under the heading puts the page footer in between, 407 characters
   on the October 2026 Cosy Flex Flanders card, which failed it under the old
   400-character window.

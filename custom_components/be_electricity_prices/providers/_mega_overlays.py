@@ -58,7 +58,7 @@ from ..const import (
     WELCOME_CREDIT_PRO_RATA,
 )
 from ._parse import (
-    LINE_BREAK,
+    GAP,
     parse_brussels_osp,
     tier_bound_kwh,
     to_float,
@@ -94,10 +94,10 @@ def _extract_energy_fund(text: str, region: str, *, professional: bool) -> float
     window = block.group(0)
     if not professional:
         reduced = re.search(
-            r"Montant réduit \(résidentiel avec domicile\)\s*\n\s*([\d.,]+)", window
+            rf"Montant réduit \(résidentiel avec domicile\){GAP}([\d.,]+)", window
         )
         return to_float(reduced.group(1)) if reduced else 0.0
-    base = re.search(r"Montant de base\s*\n\s*([\d.,]+)", window)
+    base = re.search(rf"Montant de base{GAP}([\d.,]+)", window)
     return to_float(base.group(1)) if base else 0.0
 
 
@@ -182,7 +182,7 @@ def _extract_pro_excise_tiers(text: str) -> list[tuple[str, str, str, str]]:
 # Four rows on every Mega residential card from January to July 2026, the
 # same schedule and the same rates Engie's cards print.
 _RESIDENTIAL_TIER_RE = re.compile(
-    rf"Consommation\s+entre\s+([\d.]+)\s+et\s*([\d.]+)\s*kWh{LINE_BREAK}([\d.,]+)",
+    rf"Consommation\s+entre\s+([\d.]+)\s+et\s*([\d.]+)\s*kWh{GAP}([\d.,]+)",
     re.IGNORECASE,
 )
 
@@ -234,7 +234,7 @@ def _extract_federal_excise(
         )
         return bands[0][1], bands
     match = re.search(
-        rf"Consommation entre\s*0\s*et\s*3000\s*kWh{LINE_BREAK}([\d.,]+)",
+        rf"Consommation entre\s*0\s*et\s*3000\s*kWh{GAP}([\d.,]+)",
         text,
     )
     if match is None:
@@ -539,7 +539,7 @@ def _extract_energy_contribution(text: str) -> float:
     offline.
     """
     match = re.search(
-        rf"Consommation entre\s*0\s*et\s*3000\s*kWh{LINE_BREAK}[\d.,]+{LINE_BREAK}([\d.,]+)",
+        rf"Consommation entre\s*0\s*et\s*3000\s*kWh{GAP}[\d.,]+{GAP}([\d.,]+)",
         text,
     )
     if match is None:
@@ -553,7 +553,7 @@ def _extract_connection_fee(text: str) -> float:
     Called only for Wallonia, where it is a mandatory charge; raise on a
     miss rather than silently zero it (matching the federal block).
     """
-    match = re.search(rf"Redevance de raccordement{LINE_BREAK}([\d.,]+)", text)
+    match = re.search(rf"Redevance de raccordement{GAP}([\d.,]+)", text)
     if match is None:
         raise ExtractorError("Mega: Wallonia connection fee (raccordement) not found")
     return to_float(match.group(1)) / 100.0
@@ -563,13 +563,17 @@ def _green_levy_value(text: str, region_label: str) -> float | None:
     """The figure under the "Cotisation Verte (c€/kWh)" heading for a region.
 
     The region's name and its value sit on two lines of their own somewhere
-    after the heading, and what lies between moves with the layout: a page
-    footer (address, VAT number, IBAN) lands there whenever the card breaks
-    its page under the heading. A character budget was the wrong bound. The
-    October 2026 Cosy Flex Flanders card put 407 characters between them
-    against 33 on its siblings, past the 400 that had been allowed, and the
-    whole card failed. So the region and the number are matched as whole
-    lines, which nothing else after the heading prints.
+    after the heading, or from pypdf 7.2 on one ("Wallonie 3.008"), and what
+    lies between moves with the layout: a page footer (address, VAT number,
+    IBAN) lands there whenever the card breaks its page under the heading.
+    A character budget was the wrong bound. The October 2026 Cosy Flex
+    Flanders card put 407 characters between them against 33 on its
+    siblings, past the 400 that had been allowed, and the whole card failed.
+    So the region is matched from the start of a line, or right after the
+    "Certificat vert" label it runs into on some cards under pypdf 7.2
+    ("Certificat vertBruxelles 2.482"), which nothing else after the heading
+    prints. The number may end its line or, from pypdf 7.2, run into the
+    footnote after it ("Flandre 1.554(1) Ces prix").
 
     The gap stops at the next heading, which reads the same lines: run on
     past it, a card of headings with no region after them was read to its
@@ -577,8 +581,8 @@ def _green_levy_value(text: str, region_label: str) -> float | None:
     """
     head = r"Cotisation Verte\s*\(c€/kWh\)"
     match = re.search(
-        rf"{head}(?:(?!{head}).)*?^[ \t]*{region_label}[ \t]*\n"
-        r"[ \t]*([\d.,]+)[ \t]*$",
+        rf"{head}(?:(?!{head}).)*?"
+        rf"(?:^|(?<=Certificat vert))[ \t]*{region_label}{GAP}([\d.,]+)",
         text,
         re.S | re.M,
     )
@@ -658,14 +662,14 @@ def _extract_flanders_dsos(text: str) -> dict[str, DsoOverlay]:
     if prosumer_block:
         block = prosumer_block.group(0)
         for label, key in _FLANDERS_LABELS.items():
-            pmatch = re.search(rf"{re.escape(label)}{LINE_BREAK}(\d+[.,]\d+)", block)
+            pmatch = re.search(rf"{re.escape(label)}{GAP}(\d+[.,]\d+)", block)
             if pmatch:
                 prosumer_by_key[key] = to_float(pmatch.group(1))
     out: dict[str, DsoOverlay] = {}
     for label, key in _FLANDERS_LABELS.items():
         match = re.search(
-            rf"{re.escape(label)}{LINE_BREAK}([\d.,]+){LINE_BREAK}([\d.,]+)"
-            rf"(?:{LINE_BREAK}([\d.,]+))?",
+            rf"{re.escape(label)}{GAP}([\d.,]+){GAP}([\d.,]+)"
+            rf"(?:{GAP}([\d.,]+))?",
             text,
             re.IGNORECASE,
         )
@@ -710,13 +714,13 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     # Mega lists prosumer rates in a separate small table further down.
     prosumer_by_key: dict[str, float] = {}
     prosumer_block = re.search(
-        rf"Tarif Prosumer{LINE_BREAK}\(€/kW/an\).+?(?=\(3\)|$)", text, re.S
+        rf"Tarif Prosumer{GAP}\(€/kW/an\).+?(?=\(3\)|$)", text, re.S
     )
     if prosumer_block:
         prosumer_text = prosumer_block.group(0)
         for label, key in _WALLONIA_LABELS.items():
             match = re.search(
-                rf"{re.escape(label)}{LINE_BREAK}([\d.,]+)",
+                rf"{re.escape(label)}{GAP}([\d.,]+)",
                 prosumer_text,
                 re.IGNORECASE,
             )
@@ -725,7 +729,7 @@ def _extract_wallonia_dsos(text: str) -> dict[str, DsoOverlay]:
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
         match = re.search(
-            rf"{re.escape(label)}" + rf"{LINE_BREAK}([\d.,]+)" * 9,
+            rf"{re.escape(label)}" + rf"{GAP}([\d.,]+)" * 9,
             text,
             re.IGNORECASE,
         )
@@ -771,9 +775,7 @@ def _wallonia_2025_rows(
     out: dict[str, DsoOverlay] = {}
     for label, key in _WALLONIA_LABELS.items():
         match = re.search(
-            rf"{re.escape(label)}"
-            + rf"{LINE_BREAK}([\d.,]+)" * 6
-            + r"(?![\d.,])(?!\s*\d)",
+            rf"{re.escape(label)}" + rf"{GAP}([\d.,]+)" * 6 + r"(?![\d.,])(?!\s*\d)",
             text,
             re.IGNORECASE,
         )
@@ -802,7 +804,7 @@ def _extract_brussels_dsos(text: str) -> dict[str, DsoOverlay]:
             terme_fixe_>13kVA (€/an)
     """
     match = re.search(
-        "Sibelga" + rf"{LINE_BREAK}([\d.,]+)" * 8,
+        "Sibelga" + rf"{GAP}([\d.,]+)" * 8,
         text,
     )
     if not match:

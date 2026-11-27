@@ -1596,15 +1596,16 @@ It pins Python 3.13 and installs the toolchain from `requirements-dev.txt`
 release cannot silently turn the suite red on `main`. The live check and the endpoint probe take
 their versions from that same file with pip's `-c`, so a version is written down once. The
 other side of the pin: the manifest asks only for a floor (`pypdf>=6.16.2`), so a fresh install
-gets the newest pypdf, which no workflow reads a card with: the pin is the last release of the 6
-series, 6.21.4, and the suite is also run by hand on the newest, 7.1.1 on 19 November 2026, and
-`tests/test_pdf_helpers.py` on the floor, each installed alone in a directory put ahead of the
+gets the newest pypdf and an older one keeps the pypdf it has. The pin is the newest, 7.2.0 on
+27 November 2026, and the suite is also run by hand on the last release of the 6 series, 6.21.4,
+and `tests/test_pdf_helpers.py` on the floor, each installed alone in a directory put ahead of the
 venv (`pip install --target <dir> --no-deps pypdf==<version>`, then `PYTHONPATH=<dir>`). Both
 matter between releases: the readers' bounds wrap pypdf's internals by name, and its plain text
 moves. pypdf 6.20.0 changed how plain text breaks its lines (headings and their hours run
 together on Luminus's Wallonia cards) while every workflow was still on 6.18.0, and only a suite
 run on the new release showed it; 7 sets a space between those headings and their hours and
-prints Cociter's `HOURL Y` and `BEL PEX` whole. The lint
+prints Cociter's `HOURL Y` and `BEL PEX` whole; 7.2 keeps the pieces drawn on one line together
+where 7.1 put each on a line of its own, which broke every Mega card. The lint
 rule set is itself
 pinned in `pyproject.toml` (`[tool.ruff.lint] select`: pycodestyle, pyflakes, isort, pyupgrade
 for Python 3.13, bugbear, simplify and ruff's own rules, the set the gas integration lints for,

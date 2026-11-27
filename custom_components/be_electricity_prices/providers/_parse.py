@@ -737,6 +737,13 @@ what ``\\s*\\n\\s*`` reads, read one way. Spelt with two runs of ``\\s``, a
 run of blank lines was split between them in every way before what follows
 it failed, the square of the run."""
 
+GAP = r"(?>\s+)"
+"""Drop into a pattern where blanks part a label from its figure on a card
+pypdf 7.2 may lay out on one line: a line break up to 7.1, which put every
+piece a card draws on a line of its own, a space from 7.2, which keeps the
+pieces of one line together. Taken whole, before a field that cannot begin
+with a blank."""
+
 # One row of a degressive excise table, by its volume range rather than its
 # label, which OCTA+'s Flemish cards mangle: "Verbruik tussen 0 en 3.000 kWh
 # 5,0329", "Verbruik tussen 0 – 20.000 kWh", "Consommation entre 0 & 3 000

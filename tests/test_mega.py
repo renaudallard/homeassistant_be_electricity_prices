@@ -581,9 +581,47 @@ def test_green_levy_is_found_past_a_page_footer() -> None:
     400-character window failed the whole card on it."""
     text = fixture_text("mega_cosy_flex_v_2026-10.pdf")
     heading = text.index("Cotisation Verte (c€/kWh)")
-    assert text.index("\nFlandre\n", heading) - heading > 400
+    assert text.index("\nFlandre", heading) - heading > 400
     snap = parse_snapshot("mega_cosy_flex", text, "flanders")
     assert snap.taxes.flanders_renewables == pytest.approx(0.01554)
+
+
+def test_green_levy_is_found_run_into_its_label() -> None:
+    """pypdf 7.2 runs the region into the label before it on some cards, the
+    August 2026 Brussels Cosy Fixed card among them: "Certificat
+    vertBruxelles 2.482"."""
+    text = (FIXTURES / "mega_offpeak_impact_w.pypdf72.txt").read_text(encoding="utf-8")
+    joined = text.replace(
+        "Certificat vert\nWallonie 3.008", "Certificat vertWallonie 3.008"
+    )
+    assert joined != text
+    snap = parse_snapshot("mega_offpeak_impact_var", joined, "wallonia")
+    assert snap.taxes.wallonia_renewables == pytest.approx(0.03008)
+
+
+@pytest.mark.parametrize(
+    ("contract", "name", "region"),
+    [
+        ("mega_cosy_flex", "mega_cosy_flex_v_2026-10", "flanders"),
+        ("mega_offpeak_impact_var", "mega_offpeak_impact_w", "wallonia"),
+        ("mega_smart_fixed", "mega_smart_fixed_b", "brussels"),
+    ],
+)
+def test_a_card_reads_alike_from_either_pypdf_layout(
+    contract: str, name: str, region: str
+) -> None:
+    """pypdf up to 7.1 puts every piece a card draws on a line of its own,
+    7.2 keeps the pieces of one line together. An install keeps the pypdf it
+    has, so both are read, to the same figures, kept as 6.21.4 and 7.2.0 put
+    them whatever pypdf the suite runs on."""
+    old = (FIXTURES / f"{name}.pypdf6.txt").read_text(encoding="utf-8")
+    new = (FIXTURES / f"{name}.pypdf72.txt").read_text(encoding="utf-8")
+    # The yearly fee under its label, or beside it.
+    assert re.search(r"\(€/an\)\n[\d.,]+\n", old)
+    assert re.search(r"\(€/an\) [\d.,]+ ", new)
+    snap = parse_snapshot(contract, fixture_text(f"{name}.pdf"), region)
+    assert parse_snapshot(contract, old, region) == snap
+    assert parse_snapshot(contract, new, region) == snap
 
 
 def test_wrong_region_card_is_rejected() -> None:
