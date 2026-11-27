@@ -2691,11 +2691,16 @@ def test_what_pypdf_puts_between_strings_counts(
     """A move to the right has pypdf put a space in, and one down end the
     line, with no glyph shown, so moves alone grew a page by a character
     each, every line ended copying the page: 80 000 pairs of them took 15 s
-    on a Raspberry Pi. Each counts as a character made."""
+    on a Raspberry Pi. Each counts as a character made. Each move is
+    followed by an empty string: from 7.2 pypdf makes nothing of a move no
+    text follows."""
     monkeypatch.setattr(_pdf_bound, "_MAX_CHARACTERS", 10_000)
 
     def moved(pairs: int) -> bytes:
-        content = b"BT /F1 9 Tf 10 700 Td (a) Tj\n" + b"20 0 Td 0 -20 Td\n" * pairs
+        content = (
+            b"BT /F1 9 Tf 10 700 Td (a) Tj\n"
+            + b"20 0 Td () Tj 0 -20 Td () Tj\n" * pairs
+        )
         return _pdf_of(content + b"ET", attrs=b"")
 
     with pytest.raises(
