@@ -1270,8 +1270,6 @@ async def test_an_easy_variable_cohort_is_billed_without_a_key(
     formulas at August's ENDEX101 on both, a static rate no spot reaches."""
     from unittest.mock import AsyncMock, MagicMock, patch
 
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
     from custom_components.be_electricity_prices.cohort import (
         _cohort_legs,
         _effective_snapshot_for_month,
@@ -1284,6 +1282,7 @@ async def test_an_easy_variable_cohort_is_billed_without_a_key(
     from custom_components.be_electricity_prices.snapshot_store import (
         _monthly_snapshots,
     )
+    from tests.harness import MockConfigEntry
 
     freezer.move_to("2026-08-20 12:00:00+02:00")
     april = parse_snapshot(

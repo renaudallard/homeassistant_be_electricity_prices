@@ -39,8 +39,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-
 from custom_components.be_electricity_prices import fluvius
 from custom_components.be_electricity_prices.const import (
     DOMAIN,
@@ -63,6 +61,7 @@ from custom_components.be_electricity_prices.providers.base import (
     TaxOverlay,
 )
 from scripts.card_texts import readers_line
+from tests.harness import MockConfigEntry
 
 FIXTURES = Path(__file__).parent / "fixtures"
 # The maximumtarief each year's Fluvius tariff sheet prints, EUR/kWh excl. VAT,

@@ -519,7 +519,6 @@ async def test_a_restart_puts_the_ceiling_on_the_stored_card(hass: Any) -> None:
     ceiling is stamped, the tick that reads it keeps the card as it booted,
     on the ceiling the card prints, until the volume next moves."""
     from homeassistant.util import dt as dt_util
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     from custom_components.be_electricity_prices.const import (
         DOMAIN,
@@ -533,6 +532,7 @@ async def test_a_restart_puts_the_ceiling_on_the_stored_card(hass: Any) -> None:
         TaxOverlay,
     )
     from tests import make_snapshot
+    from tests.harness import MockConfigEntry
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -603,8 +603,6 @@ def test_a_card_printing_no_ceiling_stays_capped_into_the_next_year() -> None:
     low-volume connection on a high peak its capacity uncapped until then."""
     from datetime import date
 
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
     from custom_components.be_electricity_prices.const import (
         DOMAIN,
         DSO_FLUVIUS_ANTWERPEN,
@@ -618,6 +616,7 @@ def test_a_card_printing_no_ceiling_stays_capped_into_the_next_year() -> None:
         _resolve_snapshot,
     )
     from tests import FLUVIUS_CEILINGS, make_snapshot
+    from tests.harness import MockConfigEntry
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -712,7 +711,6 @@ async def test_a_restart_without_fluvius_bills_the_sheet_last_read(
     from unittest.mock import AsyncMock, patch
 
     from homeassistant.util import dt as dt_util
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     from custom_components.be_electricity_prices.const import (
         DOMAIN,
@@ -726,6 +724,7 @@ async def test_a_restart_without_fluvius_bills_the_sheet_last_read(
         TaxOverlay,
     )
     from tests import make_snapshot
+    from tests.harness import MockConfigEntry
 
     entry = MockConfigEntry(
         domain=DOMAIN,

@@ -39,7 +39,6 @@ from homeassistant import data_entry_flow
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import (
     compare_household,
@@ -57,6 +56,7 @@ from custom_components.be_electricity_prices.const import (
 from custom_components.be_electricity_prices.flow_switch import _validate_contract_dates
 from custom_components.be_electricity_prices.signing_month import _parse_iso_date
 from tests import FakeBody, dats24_leaving, make_entry
+from tests.harness import MockConfigEntry
 
 
 @pytest.fixture(autouse=True)

@@ -42,7 +42,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import snapshot_resolve
 from custom_components.be_electricity_prices.api import (
@@ -93,6 +92,7 @@ from tests import (
     make_snapshot,
     make_stub_extractor,
 )
+from tests.harness import MockConfigEntry
 
 _SPOTS = "custom_components.be_electricity_prices.coordinator_spots"
 _API = "custom_components.be_electricity_prices.api"
@@ -11229,7 +11229,7 @@ async def test_the_refresh_service_is_not_dropped_behind_a_long_tick(
     """The debouncer drops a request whose cooldown ends while a tick still
     holds its lock, so the refresh service asked during a long card parse did
     nothing until the next hourly tick. It now runs once that tick is done."""
-    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    from tests.harness import async_fire_time_changed
 
     entry = make_entry()
     entry.add_to_hass(hass)

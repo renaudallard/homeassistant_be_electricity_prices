@@ -38,7 +38,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import const, energy_meters, synergrid
 from custom_components.be_electricity_prices.coordinator import (
@@ -68,6 +67,7 @@ from custom_components.be_electricity_prices.ytd_cost import (
     _compute_current_year_cost,
 )
 from tests import fixture_text, make_snapshot, make_stub_extractor
+from tests.harness import MockConfigEntry
 
 # ---- minimal xlsx fixture (built with the stdlib, no openpyxl) ---------------
 

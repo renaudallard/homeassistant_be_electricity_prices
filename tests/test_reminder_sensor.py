@@ -33,7 +33,6 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
@@ -42,6 +41,7 @@ from custom_components.be_electricity_prices.sensor import (
     async_setup_entry,
 )
 from tests import make_entry
+from tests.harness import MockConfigEntry
 
 
 def _entry(end_date: str | None = "2027-11-14") -> MockConfigEntry:

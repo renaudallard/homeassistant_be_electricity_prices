@@ -22,7 +22,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import backfill as bf
 from custom_components.be_electricity_prices import (
@@ -89,6 +88,7 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.snapshot_months import ArchivedCard
 from tests import make_entry, make_recorder, make_snapshot, make_stub_extractor
+from tests.harness import MockConfigEntry
 
 _TICK = "custom_components.be_electricity_prices.coordinator_tick"
 _COSTS = "custom_components.be_electricity_prices.coordinator_costs"

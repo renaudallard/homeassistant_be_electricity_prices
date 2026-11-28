@@ -49,15 +49,15 @@ from homeassistant.components.recorder.tasks import CompileMissingStatisticsTask
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.components.recorder.common import (
-    async_wait_recording_done,
-    do_adhoc_statistics,
-)
 
 from custom_components.be_electricity_prices import backfill_window
 from custom_components.be_electricity_prices.backfill_window import (
     _compiled_until,
     _hour_iter,
+)
+from tests.harness import (
+    async_wait_recording_done,
+    do_adhoc_statistics,
 )
 
 SID = "sensor.be_current_price"

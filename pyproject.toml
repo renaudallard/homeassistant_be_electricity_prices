@@ -38,6 +38,10 @@ module = [
     # that imports its MockConfigEntry.
     "pytest_homeassistant_custom_component",
     "pytest_homeassistant_custom_component.*",
+    # Home Assistant's own harness, installed only by the job on a current
+    # release (tests/harness.py).
+    "pytest_homeassistant",
+    "pytest_homeassistant.*",
 ]
 ignore_missing_imports = true
 

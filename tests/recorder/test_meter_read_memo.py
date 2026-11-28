@@ -49,11 +49,11 @@ from homeassistant.components.recorder.statistics import (
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.components.recorder.common import (
-    async_wait_recording_done,
-)
 
 from custom_components.be_electricity_prices import energy_meters as em
+from tests.harness import (
+    async_wait_recording_done,
+)
 
 # Writing these tests' statistics into a real recorder took 8 s on the x86
 # runner at load 6 and 60 s on a Raspberry Pi 4 at load 11.

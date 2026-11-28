@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import (
     archive_table,
@@ -28,6 +27,7 @@ from custom_components.be_electricity_prices.const import CONF_CARD_ARCHIVE, DOM
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.providers.base import ExtractorError
 from tests import make_snapshot
+from tests.harness import MockConfigEntry
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import archive_cards as ac  # type: ignore[import-not-found]

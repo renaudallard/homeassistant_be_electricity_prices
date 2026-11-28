@@ -40,7 +40,6 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError, Unauthorized
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import bill_cost, energy_meters, ytd_cost
 from custom_components.be_electricity_prices.const import (
@@ -50,6 +49,7 @@ from custom_components.be_electricity_prices.const import (
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.providers._rates import FixedRates
 from tests import make_entry, make_snapshot, make_stub_extractor
+from tests.harness import MockConfigEntry
 
 SNAP = make_snapshot(energy=FixedRates(single=0.30))
 

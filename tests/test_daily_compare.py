@@ -37,7 +37,6 @@ import pytest
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.compare_table import (
     DailyCompare,
@@ -51,6 +50,7 @@ from custom_components.be_electricity_prices.sensor import (
     async_setup_entry,
 )
 from tests import make_entry
+from tests.harness import MockConfigEntry
 
 _RAN_AT = datetime(2026, 8, 30, 3, 17, tzinfo=dt_util.UTC)
 

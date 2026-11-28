@@ -34,7 +34,6 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import fluvius
 from custom_components.be_electricity_prices.const import (
@@ -57,6 +56,7 @@ from custom_components.be_electricity_prices.snapshot_resolve import (
     _resolve_snapshot,
 )
 from tests import FIXTURES, fixture_text, fluvius_network
+from tests.harness import MockConfigEntry
 
 _VOL = "wasewind_vol_dynamisch"
 _VAST_DYNAMISCH = "wasewind_vast_dynamisch"

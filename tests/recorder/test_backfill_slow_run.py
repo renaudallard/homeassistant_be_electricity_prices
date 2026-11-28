@@ -44,11 +44,11 @@ from homeassistant.components.recorder.models import StatisticData
 from homeassistant.components.recorder.statistics import async_import_statistics
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.components.recorder.common import (
-    async_wait_recording_done,
-)
 
 from custom_components.be_electricity_prices.backfill_cost import _import_cost_rows
+from tests.harness import (
+    async_wait_recording_done,
+)
 from tests.recorder.test_backfill_year_join import META, NEW, OLD, _hours, _live
 
 

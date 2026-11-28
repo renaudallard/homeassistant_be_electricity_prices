@@ -352,7 +352,7 @@ async def test_a_close_still_running_at_midnight_does_not_swallow_the_rebuild(
     debouncer, a close that takes two minutes."""
     import asyncio
 
-    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+    from tests.harness import async_fire_time_changed
 
     entry = make_entry()
     entry.add_to_hass(hass)

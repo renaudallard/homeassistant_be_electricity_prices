@@ -577,10 +577,9 @@ async def _signed_legs(
     """The cohort legs of an entry on ``contract`` that started on ``start``."""
     from unittest.mock import MagicMock
 
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
     from custom_components.be_electricity_prices.cohort import _cohort_legs
     from custom_components.be_electricity_prices.const import DOMAIN
+    from tests.harness import MockConfigEntry
 
     entry = MockConfigEntry(
         domain=DOMAIN,

@@ -42,7 +42,6 @@ import pytest
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers.json import json_dumps
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import (
     cohort,
@@ -165,6 +164,7 @@ from custom_components.be_electricity_prices.ytd_legs import (
     _ytd_static_fees,
 )
 from tests import FLUVIUS_CEILINGS, make_entry, make_snapshot, make_stub_extractor
+from tests.harness import MockConfigEntry
 
 
 def _snapshot(

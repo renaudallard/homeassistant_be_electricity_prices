@@ -46,10 +46,6 @@ from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant, State
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import (
-    MockConfigEntry,
-    async_fire_time_changed,
-)
 
 from custom_components.be_electricity_prices import snapshot_months
 from custom_components.be_electricity_prices.api import EntsoeError
@@ -61,6 +57,10 @@ from custom_components.be_electricity_prices.providers._rates import (
 )
 from custom_components.be_electricity_prices.providers.frank import parse_snapshot
 from tests import fixture_text, let_the_fetch_interval_pass, make_snapshot
+from tests.harness import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 _SPOTS = "custom_components.be_electricity_prices.coordinator_spots"
 _API = "custom_components.be_electricity_prices.api"

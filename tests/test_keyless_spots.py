@@ -39,7 +39,6 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.api import (
     EntsoeAuthError,
@@ -60,6 +59,7 @@ from custom_components.be_electricity_prices.providers._rates import DynamicRate
 from custom_components.be_electricity_prices.providers.cociter import parse_snapshot
 from custom_components.be_electricity_prices.spot_stats import spots_available
 from tests import fixture_text, make_entry, make_snapshot
+from tests.harness import MockConfigEntry
 from tests.test_api import _FakeSession, _quarters, _smard
 
 _API = "custom_components.be_electricity_prices.api"

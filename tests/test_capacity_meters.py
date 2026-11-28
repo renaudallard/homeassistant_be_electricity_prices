@@ -40,7 +40,6 @@ from typing import Any
 
 import pytest
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
 from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
@@ -60,6 +59,7 @@ from custom_components.be_electricity_prices.snapshot_resolve import (
     analog_meter,
 )
 from tests import make_entry, make_recorder, make_snapshot
+from tests.harness import MockConfigEntry
 from tests.test_config_flow_energy_defaults import _add_dsmr_monthly_peak, _shown
 
 _PEAK = "sensor.house_power"

@@ -15,7 +15,6 @@ import aiohttp
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import const, synergrid
 from custom_components.be_electricity_prices.coordinator import (
@@ -31,6 +30,7 @@ from custom_components.be_electricity_prices.spot_stats import (
 )
 from custom_components.be_electricity_prices.synergrid import RLP_BLENDS
 from tests import FakeBody
+from tests.harness import MockConfigEntry
 
 
 def _rlp_weights_from_rows(rows: Iterable[list[Any]], blend: str = "distinct") -> Any:

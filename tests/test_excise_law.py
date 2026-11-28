@@ -16,7 +16,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import excise_law
 from custom_components.be_electricity_prices.const import (
@@ -58,6 +57,7 @@ from custom_components.be_electricity_prices.snapshot_resolve import (
     _resolve_snapshot,
 )
 from tests import fixture_text, make_snapshot
+from tests.harness import MockConfigEntry
 
 _PAGE = (
     Path(__file__).resolve().parent / "fixtures" / "justel_loi_programme_2004_fr.html"

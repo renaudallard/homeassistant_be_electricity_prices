@@ -41,7 +41,6 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import UpdateFailed
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import snapshot_store
 from custom_components.be_electricity_prices.api import EntsoeAuthError, EntsoeError
@@ -54,6 +53,7 @@ from custom_components.be_electricity_prices.providers._pdf import (
 )
 from custom_components.be_electricity_prices.providers._rates import DynamicRates
 from tests import FakeBody, make_snapshot, make_stub_extractor
+from tests.harness import MockConfigEntry
 
 # The cut, with the three dots that say so.
 _CUT = 503

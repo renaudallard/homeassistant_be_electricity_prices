@@ -41,7 +41,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import (
     energy_meters,
@@ -55,6 +54,7 @@ from custom_components.be_electricity_prices.coordinator_costs import _CostsMixi
 from custom_components.be_electricity_prices.energy_meters import meter_setting
 from custom_components.be_electricity_prices.providers._rates import FixedRates
 from tests import let_the_fetch_interval_pass, make_entry, make_snapshot
+from tests.harness import MockConfigEntry
 from tests.test_setup_meter_reads import _a_frank_entry, _Recorder, _settle
 from tests.test_supplier_switch import _held
 

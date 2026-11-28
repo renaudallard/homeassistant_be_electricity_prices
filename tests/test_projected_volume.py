@@ -10,7 +10,6 @@ from unittest.mock import patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import energy_meters
 from custom_components.be_electricity_prices.compare_quote import _annual_volume
@@ -21,6 +20,7 @@ from custom_components.be_electricity_prices.projected_volume import (
     _elapsed_share,
 )
 from tests import make_entry
+from tests.harness import MockConfigEntry
 from tests.test_bi_hourly_sensors import _added
 
 

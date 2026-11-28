@@ -206,8 +206,6 @@ async def test_engie_s_walloon_feed_in_pair_is_credited_by_band_on_impact() -> N
     3000 kWh of solar export over 2026. An entry on the bi-hourly tariff
     keeps its registers, and the two band sensors, which price a register,
     carry the credit of the slot instead of a constant on Impact."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
     from custom_components.be_electricity_prices.compare_weighting import (
         _compare_injection_credit,
     )
@@ -218,6 +216,7 @@ async def test_engie_s_walloon_feed_in_pair_is_credited_by_band_on_impact() -> N
     from custom_components.be_electricity_prices.snapshot_resolve import (
         _resolve_snapshot,
     )
+    from tests.harness import MockConfigEntry
 
     raw = await _engie_month(
         "creg_social_2026_q4.pdf", "engie_social_w_2026-10.pdf", OCT
@@ -331,12 +330,12 @@ async def test_nothing_is_published_until_the_law_is_read(
     card says why until the law is read."""
     from homeassistant.helpers import issue_registry as ir
     from homeassistant.helpers.update_coordinator import UpdateFailed
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     from custom_components.be_electricity_prices.const import DOMAIN
     from custom_components.be_electricity_prices.coordinator import (
         BePricesCoordinator,
     )
+    from tests.harness import MockConfigEntry
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -482,13 +481,12 @@ async def test_the_day_and_night_feed_in_sensors_show_what_is_credited(
     """The two band sensors are the rates the Energy dashboard prices each
     return register at, so they read the leg the tick credits, baked on the
     month, not the printed pair (last month's index)."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
     from custom_components.be_electricity_prices.cohort import _CohortLegs
     from custom_components.be_electricity_prices.const import DOMAIN
     from custom_components.be_electricity_prices.coordinator import (
         BePricesCoordinator,
     )
+    from tests.harness import MockConfigEntry
 
     freezer.move_to("2026-10-14 12:00:00+02:00")
     card = _card("creg_social_2026_q4.pdf")

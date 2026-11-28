@@ -598,10 +598,9 @@ async def test_a_restart_does_not_bill_a_brussels_entry_without_the_term(
     the term never arrived: 50,07 EUR a year short on a Brussels entry, and on
     one with no meter configured, never healed at all.
     """
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
     from custom_components.be_electricity_prices.const import DOMAIN
     from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+    from tests.harness import MockConfigEntry
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -664,13 +663,13 @@ async def test_a_brussels_entry_billing_without_the_term_says_so(hass: Any) -> N
     sum prints the band on all of its rows, Bolt on none of its 44.
     """
     from homeassistant.helpers import issue_registry as ir
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     from custom_components.be_electricity_prices.const import DOMAIN
     from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
     from custom_components.be_electricity_prices.providers._resolve import (
         resolve_brussels_power_term,
     )
+    from tests.harness import MockConfigEntry
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -733,13 +732,13 @@ async def test_an_indicative_power_term_is_disclosed(hass: Any, freezer: Any) ->
     """Billing on the grid's indicative figure is priced, but the household is
     told so until the final sheet is read, under the same issue id."""
     from homeassistant.helpers import issue_registry as ir
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     from custom_components.be_electricity_prices.const import DOMAIN
     from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
     from custom_components.be_electricity_prices.providers._resolve import (
         resolve_brussels_power_term,
     )
+    from tests.harness import MockConfigEntry
 
     freezer.move_to("2027-01-05 12:00:00+01:00")
     entry = MockConfigEntry(
@@ -785,10 +784,10 @@ async def test_the_power_term_notice_is_silent_outside_brussels(hass: Any) -> No
     """Sibelga is Brussels only, so a Flemish or Walloon entry has no term to
     miss and raising there would be noise on most of the fleet."""
     from homeassistant.helpers import issue_registry as ir
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     from custom_components.be_electricity_prices.const import DOMAIN
     from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+    from tests.harness import MockConfigEntry
 
     entry = MockConfigEntry(
         domain=DOMAIN,

@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import (
     const,
@@ -17,6 +16,7 @@ from custom_components.be_electricity_prices import (
 )
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.coordinator import BePricesCoordinator
+from tests.harness import MockConfigEntry
 
 _ORES = {
     "distribution_single": 0.113026,

@@ -42,7 +42,6 @@ from zoneinfo import ZoneInfo
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.cohort import ytd_window_start
 from custom_components.be_electricity_prices.const import (
@@ -56,6 +55,7 @@ from custom_components.be_electricity_prices.coordinator_data import (
     ytd_window_reset,
 )
 from custom_components.be_electricity_prices.flow_switch import _record_switch
+from tests.harness import MockConfigEntry
 from tests.recorder.test_backfill_year_join import _hours, _live
 
 BXL = ZoneInfo("Europe/Brussels")

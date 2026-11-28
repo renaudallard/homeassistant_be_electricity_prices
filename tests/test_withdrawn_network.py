@@ -17,7 +17,6 @@ from unittest.mock import AsyncMock, call, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import (
     brugel,
@@ -40,6 +39,7 @@ from custom_components.be_electricity_prices.snapshot_resolve import (
     _proxy_for_month,
     _resolve_snapshot,
 )
+from tests.harness import MockConfigEntry
 
 from . import fixture_text
 

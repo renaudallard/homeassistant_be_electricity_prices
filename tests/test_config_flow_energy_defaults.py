@@ -33,7 +33,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import const
 from custom_components.be_electricity_prices.flow_prefill import (
@@ -42,6 +41,7 @@ from custom_components.be_electricity_prices.flow_prefill import (
     _classify_tariff,
 )
 from tests import make_entry
+from tests.harness import MockConfigEntry
 
 
 def _grid_prefs(

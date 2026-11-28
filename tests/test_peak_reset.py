@@ -38,10 +38,10 @@ from homeassistant.auth.const import GROUP_ID_USER
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import CLIENT_ID, MockConfigEntry
 
 from custom_components.be_electricity_prices.const import DOMAIN
 from tests import make_entry
+from tests.harness import CLIENT_ID, MockConfigEntry
 from tests.test_init import _setup_with_ev_box
 
 _OPTIONS = "/api/config/config_entries/options/flow"

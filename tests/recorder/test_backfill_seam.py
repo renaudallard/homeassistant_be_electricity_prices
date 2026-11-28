@@ -60,16 +60,16 @@ from homeassistant.components.recorder.statistics import (
 from homeassistant.components.recorder.tasks import RecorderTask
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.components.recorder.common import (
-    async_wait_recording_done,
-    do_adhoc_statistics,
-)
 
 from custom_components.be_electricity_prices.backfill_cost import (
     UNJOINED,
     _import_cost_rows,
 )
 from custom_components.be_electricity_prices.coordinator_data import ytd_window_reset
+from tests.harness import (
+    async_wait_recording_done,
+    do_adhoc_statistics,
+)
 from tests.recorder.test_backfill_year_join import META, NEW, OLD, _hours, _live
 
 

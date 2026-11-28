@@ -44,10 +44,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import (
-    MockConfigEntry,
-    MockEntityPlatform,
-)
 
 from custom_components.be_electricity_prices import bill_check, snapshot_months
 from custom_components.be_electricity_prices.bill_check import (
@@ -59,6 +55,10 @@ from custom_components.be_electricity_prices.coordinator import BePricesCoordina
 from custom_components.be_electricity_prices.markdown_text import escape_markdown
 from custom_components.be_electricity_prices.sensor import async_setup_entry
 from tests import fixture_text, make_entry, make_snapshot
+from tests.harness import (
+    MockConfigEntry,
+    MockEntityPlatform,
+)
 from tests.test_eneco import (
     _archived_flex_months,
     _index_document,

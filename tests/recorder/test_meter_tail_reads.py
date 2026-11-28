@@ -52,9 +52,6 @@ from homeassistant.components.recorder.statistics import (
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.components.recorder.common import (
-    async_wait_recording_done,
-)
 
 from custom_components.be_electricity_prices import energy_meters as em
 from custom_components.be_electricity_prices import meter_warm as mw
@@ -63,6 +60,9 @@ from custom_components.be_electricity_prices.const import (
     CONF_NIGHT_CONSUMPTION_KWH,
     CONF_SOLAR_REGIME,
     SOLAR_REGIME_NONE,
+)
+from tests.harness import (
+    async_wait_recording_done,
 )
 
 # Two tests record a year and a half of hourly statistics into a real

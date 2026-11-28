@@ -33,7 +33,6 @@ from datetime import date
 from unittest.mock import AsyncMock
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import fluvius
 from custom_components.be_electricity_prices.const import (
@@ -57,6 +56,7 @@ from custom_components.be_electricity_prices.providers.base import (
 )
 from custom_components.be_electricity_prices.snapshot_resolve import _resolve_snapshot
 from tests import FIXTURES, fixture_text, make_text_session
+from tests.harness import MockConfigEntry
 
 _DYNAMISCH = "belvus_dynamisch"
 _FLEX = "belvus_flex_online"

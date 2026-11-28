@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import fluvius
 from custom_components.be_electricity_prices.const import DOMAIN, FLUVIUS_KEYS
@@ -37,6 +36,7 @@ from custom_components.be_electricity_prices.snapshot_resolve import (
     _resolve_snapshot,
 )
 from tests import fixture_text
+from tests.harness import MockConfigEntry
 
 _GS = "energyvision_goedkope_stroom"
 _FIXTURE = "energyvision_goedkope_stroom_sep2025.pdf"

@@ -46,7 +46,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import backfill as bf
 from custom_components.be_electricity_prices import (
@@ -88,6 +87,7 @@ from tests import (
     make_snapshot,
     make_stub_extractor,
 )
+from tests.harness import MockConfigEntry
 
 # Belgian integration: tests pin Europe/Brussels via conftest, but
 # tz-sensitive constants in this file spell it out so the intent is

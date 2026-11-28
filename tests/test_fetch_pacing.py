@@ -43,14 +43,14 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import (
-    MockConfigEntry,
-    async_fire_time_changed,
-)
 
 from custom_components.be_electricity_prices.const import DOMAIN
 from custom_components.be_electricity_prices.providers.base import CardNotReadableError
 from tests import make_entry, make_snapshot, make_stub_extractor
+from tests.harness import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 _SPOTS = "custom_components.be_electricity_prices.coordinator_spots"
 _GET = "custom_components.be_electricity_prices.coordinator_snapshot.get_extractor"

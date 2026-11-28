@@ -34,7 +34,6 @@ from typing import Any
 
 import pytest
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices.coordinator_data import CoordinatorData
 from custom_components.be_electricity_prices.diagnostics import (
@@ -42,6 +41,7 @@ from custom_components.be_electricity_prices.diagnostics import (
 )
 from custom_components.be_electricity_prices.pricing import PriceBreakdown
 from tests import make_entry
+from tests.harness import MockConfigEntry
 
 
 def _entry_with_data(api_key: str = "secret-token") -> MockConfigEntry:

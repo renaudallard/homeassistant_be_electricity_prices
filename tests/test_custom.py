@@ -34,7 +34,6 @@ from unittest.mock import patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.be_electricity_prices import const
 from custom_components.be_electricity_prices.compare_flow import (
@@ -71,6 +70,7 @@ from custom_components.be_electricity_prices.spot_stats import (
     _mean_of_month,
 )
 from tests import dats24_leaving, make_entry
+from tests.harness import MockConfigEntry
 
 WHEN = datetime(2026, 7, 15, 12, 0, tzinfo=UTC)
 
