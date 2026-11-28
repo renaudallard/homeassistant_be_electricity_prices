@@ -54,7 +54,9 @@ pytest-timeout's thread method, which ends the process: a test stopped while a w
 waits on the recorder would otherwise hang in its teardown.
 
 The integration is a Home Assistant custom component, so the suite depends on
-`pytest-homeassistant-custom-component` (which supplies the `hass` fixture and `MockConfigEntry`)
+`pytest-homeassistant-custom-component`, or on a current release Home Assistant's own
+`pytest-homeassistant` (they supply the `hass` fixture, and `MockConfigEntry` through
+`tests/harness.py`; see [test.yml](#testyml---tests))
 and, for time-pinned tests, `pytest-freezer` (the `freezer` fixture). `tests/conftest.py`
 inserts the repo root onto `sys.path` (`tests/conftest.py`) so
 `custom_components.be_electricity_prices` imports without an installed package, and an autouse
@@ -278,8 +280,8 @@ call site with `# type: ignore[arg-type]`, never to relax the production functio
 accept the stub. `pyproject.toml` sets `explicit_package_bases = true` (`pyproject.toml`) so
 mypy treats `custom_components/be_electricity_prices` and `tests/` as separate package roots
 (neither carries a root `__init__.py`), matching how pytest collects them, and it silences
-missing stubs for `pypdf`, `pdfplumber`, `pyxlsb`, and `pytest_homeassistant_custom_component`
-(`pyproject.toml`).
+missing stubs for `pypdf`, `pdfplumber`, `pyxlsb`, `pytest_homeassistant_custom_component` and
+`pytest_homeassistant` (`pyproject.toml`).
 
 ## scripts/doc_ref_check.py
 
@@ -1625,6 +1627,16 @@ linted for; `[tool.ruff.format] exclude` keeps the formatter off Markdown. The s
 `concurrency` cancels a stale push/PR run when a new commit lands (`.github/workflows/test.yml`).
 The non-strict pass over `tests/` and `scripts/` is why the `# type: ignore[arg-type]` convention
 described above exists.
+
+Both jobs run on the Home Assistant release `hacs.json` names, 2026.2.3, whose constraints hold
+Pillow at 12 and so pdfplumber at 0.11.9. A third, `test-current-ha`, runs the suite on a current
+release (`HA_VERSION` in the workflow, 2026.11.3) on the newest requirements, as a new installation
+of it gets them: pdfplumber 0.11.11 and Pillow 13. Home Assistant publishes its test harness,
+`pytest-homeassistant`, with each release under the same version, while
+`pytest-homeassistant-custom-component`, which the other two use, stops at 2026.10, so the tests
+take the harness's helpers from `tests/harness.py`, which imports them from whichever is installed.
+That job runs no type check: 2026.11 types its schemas with probatio, which the integration is not
+written against yet.
 
 ### validate.yml - Validate
 

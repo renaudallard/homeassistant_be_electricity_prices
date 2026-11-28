@@ -102,3 +102,34 @@ jobs:
         # is why this is on the full suite and not in addopts: it would make
         # a single-file run during iteration slower, not faster.
         run: pytest tests/ -q -n auto --dist loadfile
+
+  # The job above runs the Home Assistant release hacs.json names, which is
+  # what an upgrade must not break, while users run the current one, whose
+  # constraints also pick what a new installation reads its cards with:
+  # pdfplumber 0.11.11 and Pillow 13 under 2026.11, where the floor's stop at
+  # 0.11.9. This runs the suite there too, on the newest requirements as on a
+  # new installation of that release. Home Assistant publishes its test
+  # harness with each release, under the same version, so HA_VERSION moves
+  # both. The type check stays above: 2026.11 types its schemas with
+  # probatio, which the integration is not written against yet.
+  test-current-ha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HA_VERSION: "2026.11.3"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          # What this Home Assistant requires.
+          python-version: "3.14"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "homeassistant==$HA_VERSION" \
+            "pytest-homeassistant==$HA_VERSION" pytest-timeout==2.4.0
+          scripts/install_requirements.sh newest
+      - name: Tests
+        # respx's own plugin would import httpx before Home Assistant
+        # aliases it; the harness asks for it to be left out.
+        run: pytest tests/ -q -n auto --dist loadfile -p no:respx

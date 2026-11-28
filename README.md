@@ -53,7 +53,8 @@ mis-prices a bill quietly. Reviewing that costs more than writing it. There is a
 form that asks for the four things it takes: the supplier, the product, a link
 to the card, and the regions it is sold in.
 
-> Targets Home Assistant **2026.2.3 or newer** (the minimum declared in `hacs.json`).
+> Targets Home Assistant **2026.2.3 or newer** (the minimum declared in `hacs.json`). CI runs the
+> suite on a current release as well.
 
 ## Highlights
 
@@ -2211,7 +2212,7 @@ snapshot while the rest runs locally: about 6 minutes a run of the suite
 with an eight-thread Mac, against 13 on a Raspberry Pi alone. Unset,
 everything runs locally. `requirements-dev.txt` pins the harness only: the suite runs on the newest
 of the integration's own requirements the manifest allows and again on their
-floor, in the gate as in CI.
+floor, in the gate as in CI, and CI runs it on a current Home Assistant release too.
 Pass a test file (`scripts/gate.sh tests/test_ebem.py`) for a quick pass.
 
 Tests run against fixture PDFs and HTML snippets in
