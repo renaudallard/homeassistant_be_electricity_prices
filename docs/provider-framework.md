@@ -1036,8 +1036,8 @@ Internals worth knowing:
   reader cannot open is left to it to fail on.
   The bound needs pypdf 6.7.1 or later, the first release that maps
   at most 100 000 codes for a font, which the bound counts once the map is
-  built, and the manifest asks for 6.16.2, the gas integration's floor
-  (see `docs/architecture.md`); 6.6.0 was the first whose text extraction loads its fonts through
+  built, and the manifest asks for 6.20.0, the gas integration's floor
+  too (see `docs/architecture.md`); 6.6.0 was the first whose text extraction loads its fonts through
   `Font.from_font_resource`, which the bound counts too. pypdf 6.20.0 moved
   its font module into its `generic` package, and the bound takes it from
   either place.

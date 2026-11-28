@@ -1599,7 +1599,7 @@ version is written down once. The integration's own requirements (`pypdf`, `pdfp
 Assistant installs a requirement only when no installed release meets the manifest, with `uv pip
 install --upgrade <requirement> --constraint package_constraints.txt`, so a fresh install reads
 its cards with the newest release the manifest allows and an older one keeps what it had, down to
-the floor (`pypdf>=6.16.2`). `scripts/install_requirements.sh` installs them the same way,
+the floor (`pypdf>=6.20.0`). `scripts/install_requirements.sh` installs them the same way,
 `newest` as the manifest writes them under the constraints of the Home Assistant installed,
 `floor` at each `>=`, and the suite runs on both as two jobs; the live check, the endpoint probe
 and the card archive read with the newest. Both ends matter: the readers' bounds wrap pypdf's
