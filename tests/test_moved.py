@@ -33,8 +33,10 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import logging
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -353,7 +355,7 @@ async def test_a_card_that_fails_otherwise_is_not_searched_for(
     [
         # html.unescape refuses a numeric entity of more than 4300 digits.
         ("elegant", "elegant_flex", "ValueError"),
-        # The JSON decoder runs out of stack on a list nested this deep.
+        # The JSON decoder runs out of stack on a list nested deep enough.
         ("luminus", "luminus_basicflex", "RecursionError"),
     ],
 )
@@ -386,7 +388,18 @@ async def test_a_search_that_trips_over_a_page_leaves_the_usual_answer(
         asked.append(url)
         return "[" * 100_000
 
+    def overflowed(_text: str) -> Any:
+        # Python 3.14 checks the C stack itself, so whether this many brackets
+        # overflow it depends on the stack the thread was given: 8 MB does,
+        # a GitHub runner's does not.
+        raise RecursionError("maximum recursion depth exceeded")
+
     monkeypatch.setattr(luminus, "fetch_text", nested)
+    monkeypatch.setattr(
+        luminus,
+        "json",
+        SimpleNamespace(loads=overflowed, JSONDecodeError=json.JSONDecodeError),
+    )
     caplog.set_level(logging.DEBUG, logger=_moved.__name__)
     fetch_or_moved = _moved._with_moved_fallback(supplier, fetch)
     if old == "404":
