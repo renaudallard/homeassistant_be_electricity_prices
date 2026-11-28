@@ -423,11 +423,14 @@ async def test_setup_reads_no_meter_and_the_figures_follow(
     with _a_frank_entry(hass, recorder) as entry:
         assert await hass.config_entries.async_setup(entry.entry_id)
         assert recorder.meter_reads(in_setup=True) == []
-        assert recorder.reads, "the recording stub is not reached"
         # Nothing priced yet: no figure is made up while the reads are due.
         assert all(value is None for value in _figures(entry).values())
 
         await _settle(hass, freezer)
+        # Only what setup leaves behind reads, and setup may return before
+        # any of it has run.
+        assert recorder.reads, "the recording stub is not reached"
+        assert recorder.meter_reads(in_setup=True) == []
         # Once per meter: every window the refresh asks for is answered from
         # one hourly read of each register.
         read = recorder.meter_reads(in_setup=False)
