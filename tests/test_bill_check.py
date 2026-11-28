@@ -465,6 +465,8 @@ async def test_the_sensor_counts_the_lines_off_and_raises_a_repair(
         await hass.async_block_till_done(wait_background_tasks=True)
         assert hass.states.get(sensor.entity_id).state == "0"  # type: ignore[union-attr]
         assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+    # Removed as an unload removes it, which stops its daily check.
+    await sensor.async_remove()
 
 
 async def test_the_card_goes_with_the_bill_sensor(hass: HomeAssistant) -> None:

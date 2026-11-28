@@ -6061,6 +6061,9 @@ async def _tick_with_credits(
     )
     coord._maybe_refresh_snapshot = AsyncMock()  # type: ignore[method-assign]
     coord._track_monthly_peak = AsyncMock()  # type: ignore[method-assign]
+    # A compensation entry's first tick fetches its load profile in the
+    # background, from Synergrid, which a test must not reach.
+    coord._fill_profiles = AsyncMock()  # type: ignore[method-assign]
     asked: list[tuple[Any, Any]] = []
 
     async def _bill(
@@ -11254,6 +11257,9 @@ async def test_the_refresh_service_is_not_dropped_behind_a_long_tick(
     await tick
     await hass.async_block_till_done()
     assert runs == 2
+    # The second run leaves the debouncer's cooldown running; an unload
+    # stops it.
+    await coord.async_shutdown()
 
 
 async def test_billed_peak_floors_at_the_minimum_fluvius_publishes(
